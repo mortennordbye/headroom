@@ -23,7 +23,7 @@ A personal finance tracker built for Norwegian users — and anyone else who wan
 Requires [Docker](https://docs.docker.com/get-docker/) and [Make](https://www.gnu.org/software/make/).
 
 ```bash
-git clone https://github.com/your-username/headroom.git
+git clone https://github.com/mortennordbye/headroom.git
 cd headroom
 make build
 ```
@@ -34,7 +34,7 @@ Open **http://localhost:8080**.
 
 | Command | Description |
 |---------|-------------|
-| `make build` | Build images and start (also rebuilds if already running) |
+| `make build` | Build image and start (also rebuilds if already running) |
 | `make up` | Start without rebuilding |
 | `make down` | Stop all containers |
 | `make restart` | Restart without rebuilding |
@@ -55,5 +55,5 @@ docker-compose down -v
 | Charts | Recharts |
 | Backend | Node.js, Express |
 | Database | SQLite (better-sqlite3) |
-| Serving | nginx |
+| Serving | Express (static files) |
 | Containers | Docker, Docker Compose |

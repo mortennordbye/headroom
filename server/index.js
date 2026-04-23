@@ -34,5 +34,11 @@ app.post('/api/data', (req, res) => {
   res.json({ ok: true });
 });
 
+const DIST = path.join(__dirname, 'dist');
+if (fs.existsSync(DIST)) {
+  app.use(express.static(DIST));
+  app.get('*', (req, res) => res.sendFile(path.join(DIST, 'index.html')));
+}
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`API running on :${PORT}`));
