@@ -9,18 +9,24 @@ A personal finance tracker built for Norwegian users — and anyone else who wan
 
 ## Features
 
-- **Budget** — monthly income tracking with variable-income support, fixed expenses, daily transaction log, and distribution charts
-- **Smart Recommendations** — automatic spend/invest split based on your income history and volatility; switches to conservative mode during low-income months
-- **Assets** — investment portfolio, property equity, crypto, and cash reserves with tax-aware net worth calculation and a 15-year growth projection
-- **Loan Calculator** — supports first-time buyer, homeowner, and buy-and-sell scenarios with full amortization schedules and tax benefit calculations
-- **Dashboard** — total equity, budget health, asset allocation, recent transactions, and a net worth history chart that builds up over time
-- **Multi-currency** — NOK, USD, or any custom currency (EUR, GBP, JPY, …) with configurable exchange rates
-- **Norwegian / English** — full UI translation
-- **Dark / light mode** — persisted preference, no flash on load
+Track monthly budgets with variable-income support, fixed expenses, a daily transaction log, and a spend/invest split that adapts automatically to your income history. The dashboard gives a live view of total equity, budget health, asset allocation, and a running net worth chart.
+
+Assets covers your investment portfolio, property equity, crypto, and cash reserves with tax-aware calculations and a 15-year growth projection. The loan calculator handles first-time buyer, homeowner, and buy-and-sell scenarios with full amortization schedules and tax benefit calculations. Supports NOK, USD, or any custom currency, and ships with full Norwegian and English translations.
 
 ## Quick start
 
-Requires [Docker](https://docs.docker.com/get-docker/) and [Make](https://www.gnu.org/software/make/).
+**Using the pre-built image** — the fastest way, no clone required:
+
+```bash
+docker run -d \
+  --name headroom \
+  -p 8080:3001 \
+  -v headroom_data:/data \
+  --restart unless-stopped \
+  ghcr.io/mortennordbye/headroom:latest
+```
+
+**Building from source** — requires [Docker](https://docs.docker.com/get-docker/) and [Make](https://www.gnu.org/software/make/):
 
 ```bash
 git clone https://github.com/mortennordbye/headroom.git
@@ -28,7 +34,7 @@ cd headroom
 make build
 ```
 
-Open **http://localhost:8080**.
+Open http://localhost:8080.
 
 ## Commands
 
