@@ -1,6 +1,6 @@
 # Headroom
 
-A personal finance tracker built for Norwegian users — and anyone else who wants to stay on top of their money. Track monthly budgets, manage assets and investments, model housing loans, and get smart spending recommendations. All data is stored server-side in a SQLite database via Docker. Zero browser storage.
+A self-hosted personal finance tracker. Track monthly budgets, manage assets and investments, model housing loans, and get smart spending recommendations. All data is stored server-side in a SQLite database via Docker — zero browser storage. Norwegian is natively supported.
 
 | Dark mode | Light mode |
 |-----------|------------|
