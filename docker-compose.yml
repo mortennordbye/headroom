@@ -1,0 +1,23 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    container_name: headroom-frontend
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    volumes:
+      - headroom_data:/data
+    restart: unless-stopped
+    container_name: headroom-backend
+
+volumes:
+  headroom_data:
