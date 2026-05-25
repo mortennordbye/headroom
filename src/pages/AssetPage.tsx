@@ -357,7 +357,7 @@ const AssetPage: React.FC = () => {
 
       {/* Growth Projection */}
       <div className={`${card} p-5 md:p-7 space-y-5`}>
-        <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
             <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
             <h3 className={sectionLabel}>{t.growthProjection}</h3>

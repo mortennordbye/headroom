@@ -140,7 +140,7 @@ const Layout: React.FC = () => {
 
       {/* ─── Mobile bottom nav ───────────────── */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex border-t backdrop-blur-xl"
+        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex overflow-x-auto no-scrollbar border-t backdrop-blur-xl"
         style={{
           background: 'color-mix(in srgb, var(--bg-card) 90%, transparent)',
           borderColor: 'var(--border)',
@@ -192,7 +192,7 @@ const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon, label }) => (
   <NavLink
     to={to}
     end={to === '/'}
-    className="flex-1 flex flex-col items-center gap-1 py-2.5 pb-3 text-[10px] font-medium transition-colors"
+    className="shrink-0 min-w-[68px] flex flex-col items-center gap-1 py-2.5 pb-3 text-[10px] font-medium transition-colors"
     style={({ isActive }) => ({
       color: isActive ? 'var(--accent)' : 'var(--text-3)',
     })}

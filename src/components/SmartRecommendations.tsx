@@ -193,7 +193,7 @@ export default function SmartRecommendations() {
       <div className="mt-4 flex flex-col md:flex-row gap-4 md:gap-6 items-start">
         {/* Left: pills + progress */}
         <div className="flex-1 space-y-4 min-w-0">
-          <div className="grid grid-cols-3 gap-2 md:gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
             <EditablePill
               label={t.canSpend}
               value={recommendedSpending}

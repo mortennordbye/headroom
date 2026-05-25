@@ -82,6 +82,15 @@ body {
   background: rgba(255, 255, 255, 0.16);
 }
 
+/* Hide scrollbar but keep scrolling — used by the mobile bottom nav. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--text-1);

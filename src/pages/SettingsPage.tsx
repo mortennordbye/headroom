@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
   Languages,
@@ -451,7 +451,7 @@ export default function SettingsPage() {
               value={savingsTargetPercent}
               onChange={setSavingsTargetPercent}
               min={0}
-              max={60}
+              max={95}
               step={1}
               suffix="%"
             />
@@ -460,7 +460,7 @@ export default function SettingsPage() {
               value={growthReturnRate}
               onChange={setGrowthReturnRate}
               min={0}
-              max={15}
+              max={30}
               step={0.5}
               suffix="%"
             />
@@ -469,7 +469,7 @@ export default function SettingsPage() {
               value={houseGrowthRate}
               onChange={setHouseGrowthRate}
               min={0}
-              max={10}
+              max={20}
               step={0.5}
               suffix="%"
             />
@@ -478,7 +478,7 @@ export default function SettingsPage() {
               value={cashGrowthRate}
               onChange={setCashGrowthRate}
               min={0}
-              max={10}
+              max={15}
               step={0.25}
               suffix="%"
             />
@@ -487,7 +487,7 @@ export default function SettingsPage() {
               value={cryptoGrowthRate}
               onChange={setCryptoGrowthRate}
               min={0}
-              max={30}
+              max={100}
               step={1}
               suffix="%"
             />
@@ -831,28 +831,45 @@ function RangeRow({
   step: number;
   suffix: string;
 }) {
+  const [draft, setDraft] = useState(value.toString());
+  useEffect(() => { setDraft(value.toString()); }, [value]);
+  const commitDraft = () => {
+    const n = parseFloat(draft);
+    if (Number.isFinite(n) && n >= 0) onChange(n);
+    else setDraft(value.toString());
+  };
+  // Slider clamps to its own range; the number input below it has no upper cap.
+  const sliderValue = Math.min(Math.max(value, min), max);
   return (
     <div>
-      <div className="flex items-baseline justify-between mb-2">
+      <div className="flex items-baseline justify-between mb-2 gap-2">
         <label
           className="text-[11px] font-semibold uppercase tracking-[0.12em]"
           style={{ color: 'var(--text-3)' }}
         >
           {label}
         </label>
-        <span className="text-[18px] font-semibold tabular-nums">
-          {value}
-          <span className="text-[12px] ml-1" style={{ color: 'var(--text-3)' }}>
-            {suffix}
-          </span>
-        </span>
+        <div className="flex items-baseline gap-1">
+          <input
+            type="number"
+            value={draft}
+            step={step}
+            min={0}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+            className="w-20 text-right text-[18px] font-semibold tabular-nums bg-transparent outline-none rounded px-1 hover:bg-[rgba(255,255,255,0.04)] focus:bg-[rgba(255,255,255,0.04)] transition-colors"
+            style={{ color: 'var(--text-1)' }}
+          />
+          <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>{suffix}</span>
+        </div>
       </div>
       <input
         type="range"
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={sliderValue}
         onChange={e => onChange(parseFloat(e.target.value))}
         className="w-full"
         style={{ accentColor: 'var(--accent)' }}
