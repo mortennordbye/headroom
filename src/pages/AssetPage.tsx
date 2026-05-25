@@ -49,8 +49,11 @@ const AssetPage: React.FC = () => {
     growthReturnRate,
     setGrowthReturnRate,
     houseGrowthRate,
+    setHouseGrowthRate,
     cashGrowthRate,
+    setCashGrowthRate,
     cryptoGrowthRate,
+    setCryptoGrowthRate,
     totalResidual,
     pension,
     updatePension,
@@ -102,13 +105,13 @@ const AssetPage: React.FC = () => {
     return val.toString();
   };
 
-  const editReturnRate = () => {
+  const editRate = (label: string, current: number, onCommit: (v: number) => void) => {
     openModal({
-      title: t.annualReturn,
-      fields: [{ key: 'rate', label: t.annualReturn, type: 'number', value: growthReturnRate.toString() }],
+      title: label,
+      fields: [{ key: 'rate', label: t.annualReturn, type: 'number', value: current.toString() }],
       onSave: (vals) => {
         const n = parseFloat(vals.rate);
-        if (!isNaN(n) && n >= 0 && n <= 100) setGrowthReturnRate(n);
+        if (!isNaN(n) && n >= 0 && n <= 100) onCommit(n);
         closeModal();
       },
     });
@@ -359,18 +362,11 @@ const AssetPage: React.FC = () => {
             <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
             <h3 className={sectionLabel}>{t.growthProjection}</h3>
           </div>
-          <div className="flex items-center gap-3 text-[11px] font-mono" style={{ color: 'var(--text-2)' }}>
-            <span title={t.settings.growthReturnRate}>{t.bucketStocks} {growthReturnRate}%</span>
-            <span title={t.settings.houseGrowthRate}>{t.bucketHouse} {houseGrowthRate}%</span>
-            <span title={t.settings.cashGrowthRate}>{t.bucketCash} {cashGrowthRate}%</span>
-            <span title={t.settings.cryptoGrowthRate}>{t.bucketCrypto} {cryptoGrowthRate}%</span>
-            <button
-              onClick={editReturnRate}
-              className="text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
-              aria-label={t.annualReturn}
-            >
-              <Edit2 size={11} />
-            </button>
+          <div className="flex items-center gap-2 text-[11px] font-mono flex-wrap" style={{ color: 'var(--text-2)' }}>
+            <RateChip label={t.bucketStocks} value={growthReturnRate} onClick={() => editRate(t.settings.growthReturnRate, growthReturnRate, setGrowthReturnRate)} />
+            <RateChip label={t.bucketHouse} value={houseGrowthRate} onClick={() => editRate(t.settings.houseGrowthRate, houseGrowthRate, setHouseGrowthRate)} />
+            <RateChip label={t.bucketCash} value={cashGrowthRate} onClick={() => editRate(t.settings.cashGrowthRate, cashGrowthRate, setCashGrowthRate)} />
+            <RateChip label={t.bucketCrypto} value={cryptoGrowthRate} onClick={() => editRate(t.settings.cryptoGrowthRate, cryptoGrowthRate, setCryptoGrowthRate)} />
           </div>
         </div>
 
@@ -488,6 +484,23 @@ function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, ic
         )}
       </div>
     </div>
+  );
+}
+
+function RateChip({ label, value, onClick }: { label: string; value: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-full border transition-colors"
+      style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}
+      onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent) 35%, transparent)'; }}
+      onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+    >
+      <span>{label}</span>
+      <span className="font-semibold tabular-nums">{value}%</span>
+      <Edit2 size={9} strokeWidth={2.5} />
+    </button>
   );
 }
 
