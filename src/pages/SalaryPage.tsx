@@ -318,6 +318,86 @@ const SalaryPage: React.FC = () => {
       .map(r => ({ ...r, total: r.base + r.onCall + r.bonus + r.overtime }));
   }, [series, bonuses, overtime]);
 
+  // ── Next-review context: current baseline + CPI baselines ──────
+  // The "baseline" is whatever currently sets your salary: a recent raise,
+  // a promotion, or — after a job change — the starting salary of the new
+  // role. Anything else would compare today's CPI against an old employer.
+  const reviewContext = useMemo(() => {
+    if (sortedSalaries.length === 0) return null;
+    const lastRaise = sortedSalaries[sortedSalaries.length - 1];
+
+    const nowMonth = currentMonthKey;
+    const [ry, rm] = lastRaise.effectiveDate.split('-').map(Number);
+    const [ny, nm] = nowMonth.split('-').map(Number);
+    const monthsSince = (ny - ry) * 12 + (nm - rm);
+
+    const cpiThen = cpiByMonth.get(lastRaise.effectiveDate) ?? null;
+    // Pick the latest CPI point we have (CPI publishes with a lag).
+    let cpiNow: number | null = null;
+    let cpiNowMonth: string | null = null;
+    for (const p of inflation) {
+      if (!cpiNowMonth || p.month > cpiNowMonth) {
+        cpiNowMonth = p.month;
+        cpiNow = p.cpiIndex;
+      }
+    }
+    const cpiSincePct = (cpiThen != null && cpiNow != null && cpiThen > 0)
+      ? ((cpiNow / cpiThen) - 1) * 100
+      : null;
+
+    // Rolling 12-month CPI from latest CPI point.
+    let cpiRolling12Pct: number | null = null;
+    if (cpiNowMonth && cpiNow != null) {
+      const priorMonth = addMonthsKey(cpiNowMonth, -12);
+      const priorCpi = cpiByMonth.get(priorMonth);
+      if (priorCpi && priorCpi > 0) {
+        cpiRolling12Pct = ((cpiNow / priorCpi) - 1) * 100;
+      }
+    }
+
+    const inflationOnlySalary = cpiSincePct != null
+      ? lastRaise.grossAnnual * (1 + cpiSincePct / 100)
+      : null;
+
+    return {
+      lastRaise,
+      monthsSince,
+      cpiSincePct,
+      cpiRolling12Pct,
+      cpiAsOf: cpiNowMonth,
+      inflationOnlySalary,
+    };
+  }, [sortedSalaries, cpiByMonth, inflation, currentMonthKey]);
+
+  // ── Per-entry % chips: salary vs prior entry, with CPI gap ─────
+  const salaryChipsById = useMemo(() => {
+    const out = new Map<string, { pct: number; cpiPct: number | null; gap: number | null }>();
+    // Build per-job ordered lists; chips are job-scoped so a job_change doesn't show a misleading delta.
+    const byJob = new Map<string, SalaryEntry[]>();
+    sortedSalaries.forEach(s => {
+      const list = byJob.get(s.jobId) ?? [];
+      list.push(s);
+      byJob.set(s.jobId, list);
+    });
+    byJob.forEach(list => {
+      for (let i = 1; i < list.length; i++) {
+        const cur = list[i];
+        const prev = list[i - 1];
+        if (cur.changeType === 'initial' || cur.changeType === 'job_change') continue;
+        if (prev.grossAnnual <= 0) continue;
+        const pct = ((cur.grossAnnual / prev.grossAnnual) - 1) * 100;
+        const cpiCur = cpiByMonth.get(cur.effectiveDate);
+        const cpiPrev = cpiByMonth.get(prev.effectiveDate);
+        const cpiPct = (cpiCur && cpiPrev && cpiPrev > 0)
+          ? ((cpiCur / cpiPrev) - 1) * 100
+          : null;
+        const gap = cpiPct != null ? pct - cpiPct : null;
+        out.set(cur.id, { pct, cpiPct, gap });
+      }
+    });
+    return out;
+  }, [sortedSalaries, cpiByMonth]);
+
   // ── Salary timeline data for Recharts step line ────────────────
   // Augment each sampled point with whether a salary change took effect there,
   // so we can color those dots and draw labels for the event.
@@ -764,6 +844,16 @@ const SalaryPage: React.FC = () => {
         />
       </div>
 
+      {/* Next salary review — forward-looking helper for negotiation moments. */}
+      {!isGeneric && reviewContext && (
+        <NextReviewCard
+          ctx={reviewContext}
+          t={t}
+          lang={lang}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
       {/* Hero chart: real hourly rate — hidden in generic region (no CPI source). */}
       {!isGeneric && (
         <div className={`${card} p-5 md:p-7 space-y-4`}>
@@ -1136,8 +1226,9 @@ const SalaryPage: React.FC = () => {
               icon={<TrendingUp size={14} className="text-[var(--text-2)]" />}
               onAdd={() => openSalaryModal()}
               empty={t.salary.noEntries}
-              items={sortedSalaries
+              items={[...sortedSalaries]
                 .filter(s => matchesFilter(s.jobId))
+                .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))
                 .map(s => {
                   const typeLabel = ({
                     initial: t.salary.changeTypeInitial,
@@ -1146,10 +1237,31 @@ const SalaryPage: React.FC = () => {
                     job_change: t.salary.changeTypeJobChange,
                     adjustment: t.salary.changeTypeAdjustment,
                   } as Record<SalaryChangeType, string>)[s.changeType];
+                  const chipData = salaryChipsById.get(s.id);
+                  const chip = chipData ? (() => {
+                    const { pct, gap } = chipData;
+                    const pctColor = pct >= 0 ? 'var(--positive)' : 'var(--negative)';
+                    const pctBg = pct >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
+                    return (
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap"
+                        style={{ color: pctColor, background: pctBg }}
+                        title={gap != null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(1)}pp ${t.salary.vsCpi}` : undefined}
+                      >
+                        {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
+                        {gap != null && (
+                          <span style={{ color: gap >= 0 ? 'var(--positive)' : 'var(--warning)', opacity: 0.85 }}>
+                            ({gap >= 0 ? '+' : ''}{gap.toFixed(1)} {t.salary.vsCpi})
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })() : undefined;
                   return {
                     id: s.id,
                     primary: `${formatCurrency(s.grossAnnual)} · ${typeLabel}`,
                     secondary: `${s.effectiveDate}${jobSuffix(s.jobId)}${s.notes ? ` · ${s.notes}` : ''}`,
+                    chip,
                     onEdit: () => openSalaryModal(s),
                     onDelete: () => confirmDelete(s.effectiveDate, () => removeSalary(s.id)),
                   };
@@ -1395,6 +1507,140 @@ const RealHourlyChart: React.FC<RealHourlyChartProps> = ({ series, formatCurrenc
             <Area type="monotone" dataKey="real" name={t.salary.real} stroke="var(--violet)" strokeWidth={2.5} strokeDasharray="5 3" fill="url(#realGradient)" activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--bg-card)' }} />
           </AreaChart>
         </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// ── Next Review Card ───────────────────────────────────────────────
+
+interface NextReviewCtx {
+  lastRaise: SalaryEntry;
+  monthsSince: number;
+  cpiSincePct: number | null;
+  cpiRolling12Pct: number | null;
+  cpiAsOf: string | null;
+  inflationOnlySalary: number | null;
+}
+
+interface NextReviewCardProps {
+  ctx: NextReviewCtx;
+  t: any;
+  lang: string;
+  formatCurrency: (v: number) => string;
+}
+
+const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, lang, formatCurrency }) => {
+  const [proposed, setProposed] = useState<string>('');
+  const proposedNum = (() => {
+    const n = parseFloat(proposed.replace(/\s/g, '').replace(',', '.'));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
+
+  const proposedPct = proposedNum != null && ctx.lastRaise.grossAnnual > 0
+    ? ((proposedNum / ctx.lastRaise.grossAnnual) - 1) * 100
+    : null;
+  const realVsSince = proposedPct != null && ctx.cpiSincePct != null
+    ? proposedPct - ctx.cpiSincePct
+    : null;
+  const realVsRolling = proposedPct != null && ctx.cpiRolling12Pct != null
+    ? proposedPct - ctx.cpiRolling12Pct
+    : null;
+
+  const fmtPct = (v: number | null) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+  const gapColor = (v: number | null) => v == null
+    ? 'var(--text-2)'
+    : v >= 0 ? 'var(--positive)' : 'var(--warning)';
+
+  return (
+    <div className={`${card} p-5 md:p-7 space-y-5`}>
+      <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+        <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+        <h3 className={sectionLabel}>{t.salary.nextReviewTitle}</h3>
+      </div>
+      <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.nextReviewDesc}</p>
+
+      {/* Metric grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <SummaryTile
+          label={t.salary.lastRaiseLabel}
+          value={formatCurrency(ctx.lastRaise.grossAnnual)}
+          sub={`${({
+            initial: t.salary.changeTypeInitial,
+            raise: t.salary.changeTypeRaise,
+            promotion: t.salary.changeTypePromotion,
+            job_change: t.salary.changeTypeJobChange,
+            adjustment: t.salary.changeTypeAdjustment,
+          } as Record<string, string>)[ctx.lastRaise.changeType] ?? ''} · ${ctx.lastRaise.effectiveDate}`}
+        />
+        <SummaryTile
+          label={t.salary.timeSinceLabel}
+          value={`${ctx.monthsSince} ${t.salary.monthsAgo}`}
+          sub={ctx.lastRaise.effectiveDate}
+        />
+        <SummaryTile
+          label={t.salary.cpiSinceLabel}
+          value={fmtPct(ctx.cpiSincePct)}
+          sub={ctx.cpiAsOf ? `${lang === 'nb' ? 'pr.' : 'as of'} ${ctx.cpiAsOf}` : ''}
+          color={ctx.cpiSincePct != null ? 'var(--accent)' : undefined}
+        />
+        <SummaryTile
+          label={t.salary.cpiRolling12Label}
+          value={fmtPct(ctx.cpiRolling12Pct)}
+          sub={ctx.cpiAsOf ?? ''}
+          color={ctx.cpiRolling12Pct != null ? 'var(--accent)' : undefined}
+        />
+      </div>
+
+      {/* Inflation-only target */}
+      {ctx.inflationOnlySalary != null && (
+        <div className="flex flex-wrap items-baseline gap-3 pt-1">
+          <div className={sectionLabel}>{t.salary.inflationOnlyTarget}</div>
+          <div className="text-[20px] md:text-[22px] font-semibold font-mono tabular-nums" style={{ color: 'var(--violet)' }}>
+            {formatCurrency(Math.round(ctx.inflationOnlySalary))}
+          </div>
+          <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+            {t.salary.inflationOnlyTargetDesc}
+          </div>
+        </div>
+      )}
+
+      {/* Calculator */}
+      <div className="pt-4 border-t border-[var(--border)] space-y-3">
+        <label className="block">
+          <div className={sectionLabel}>{t.salary.proposedSalaryLabel}</div>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={proposed}
+            onChange={e => setProposed(e.target.value)}
+            placeholder={t.salary.proposedSalaryHint}
+            className="mt-2 w-full md:w-72 h-10 px-3 rounded-lg bg-[var(--bg-elev)] border border-[var(--border)] text-[14px] font-mono tabular-nums text-[var(--text-1)] placeholder:text-[var(--text-3)] focus:outline-none focus:border-[var(--accent)]"
+          />
+        </label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+          <SummaryTile
+            label={t.salary.proposedIncreaseLabel}
+            value={fmtPct(proposedPct)}
+            sub={proposedNum != null
+              ? `${formatCurrency(Math.round(proposedNum - ctx.lastRaise.grossAnnual))}`
+              : ''}
+            color={proposedPct != null ? (proposedPct >= 0 ? 'var(--positive)' : 'var(--negative)') : undefined}
+          />
+          <SummaryTile
+            label={t.salary.realRaiseSinceLabel}
+            value={realVsSince != null ? `${realVsSince >= 0 ? '+' : ''}${realVsSince.toFixed(1)}pp` : '—'}
+            sub={ctx.cpiSincePct != null ? `KPI ${fmtPct(ctx.cpiSincePct)}` : ''}
+            color={gapColor(realVsSince)}
+          />
+          <SummaryTile
+            label={t.salary.realRaiseRollingLabel}
+            value={realVsRolling != null ? `${realVsRolling >= 0 ? '+' : ''}${realVsRolling.toFixed(1)}pp` : '—'}
+            sub={ctx.cpiRolling12Pct != null ? `KPI ${fmtPct(ctx.cpiRolling12Pct)}` : ''}
+            color={gapColor(realVsRolling)}
+          />
+        </div>
       </div>
     </div>
   );
