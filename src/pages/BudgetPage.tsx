@@ -20,24 +20,25 @@ import {
   Pie,
   Legend,
 } from 'recharts';
-import { format } from 'date-fns';
+import { format, isSameMonth, startOfMonth } from 'date-fns';
+import { nb, enUS } from 'date-fns/locale';
 import { useFinance, type TransactionTemplate } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 
 const CHART_COLORS = [
-  '#0ea5e9',
-  '#10b981',
-  '#f59e0b',
-  '#ef4444',
-  '#8b5cf6',
-  '#6366f1',
-  '#ec4899',
-  '#06b6d4',
+  '#6EE7FF', // accent
+  '#3ECF8E', // positive
+  '#FBBF24', // warning
+  '#F472B6', // pink
+  '#A78BFA', // violet
+  '#34D399', // emerald
+  '#F87171', // negative
+  '#6E6E78', // text-3
 ];
 
-const card = 'bg-white dark:bg-[#1a1a1a] rounded-2xl border border-[#e5e5e5] dark:border-[#2a2a2a] shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[#737373]';
+const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)] font-semibold';
 
 function getCategoryColor(category: string): string {
   let hash = 0;
@@ -68,6 +69,10 @@ const BudgetPage: React.FC = () => {
     currentMonth,
     monthlyIncomes,
     setMonthlyIncomeForMonth,
+    setCurrentMonth,
+    clearMonthlyIncomeForMonth,
+    derivedMonthlyIncome,
+    isMonthlyIncomeOverridden,
     effectiveIncome,
     averageIncome,
     monthlyBudget,
@@ -78,7 +83,6 @@ const BudgetPage: React.FC = () => {
     dailyTransactions,
     setDailyTransactions,
     formatCurrency,
-    isDarkMode
   } = useFinance();
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
@@ -243,18 +247,93 @@ const BudgetPage: React.FC = () => {
 
   const totalSpentThisMonth = dailyData.reduce((sum, d) => sum + d.spent, 0);
 
+  const dateLocale = lang === 'nb' ? nb : enUS;
+  const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: dateLocale });
+  const today = new Date();
+  const isCurrentMonth = isSameMonth(currentMonth, today);
+  const isPast = currentMonth < startOfMonth(today);
+  const incomeDiffPct = averageIncome > 0 ? ((effectiveIncome - averageIncome) / averageIncome) * 100 : 0;
+
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-6 md:space-y-7">
+      {/* Hero header */}
+      <header className="max-w-4xl">
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <span className="text-[12px] uppercase tracking-[0.16em] font-semibold" style={{ color: 'var(--accent)' }}>
+            {monthLabel}
+          </span>
+          <span
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em]"
+            style={{
+              background: isCurrentMonth ? 'var(--positive-bg)' : isPast ? 'rgba(255,255,255,0.05)' : 'var(--violet-bg)',
+              color: isCurrentMonth ? 'var(--positive)' : isPast ? 'var(--text-3)' : 'var(--violet)',
+            }}
+          >
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full"
+              style={{ background: isCurrentMonth ? 'var(--positive)' : isPast ? 'var(--text-3)' : 'var(--violet)' }}
+            />
+            {isCurrentMonth ? t.viewingCurrent : isPast ? t.viewingPast : t.viewingFuture}
+          </span>
+          {!isCurrentMonth && (
+            <button
+              onClick={() => setCurrentMonth(startOfMonth(today))}
+              className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full transition-colors"
+              style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
+            >
+              → {t.today}
+            </button>
+          )}
+        </div>
+        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+          {lang === 'nb' ? (
+            <>Månedsbudsjettet <em className="font-serif italic" style={{ color: 'var(--accent)' }}>ditt</em>.</>
+          ) : (
+            <>Your monthly <em className="font-serif italic" style={{ color: 'var(--accent)' }}>budget</em>.</>
+          )}
+        </h1>
+        <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
+          {lang === 'nb'
+            ? `Inntekt på ${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${incomeDiffPct >= 0 ? '+' : ''}${incomeDiffPct.toFixed(1)}% vs snitt)` : ''}. Følg med på faste utgifter, daglige transaksjoner og hvor mye du kan bruke.`
+            : `Income ${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${incomeDiffPct >= 0 ? '+' : ''}${incomeDiffPct.toFixed(1)}% vs avg)` : ''}. Track fixed costs, daily spending, and what's left in your budget.`}
+        </p>
+      </header>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card
           title={t.monthlyIncome}
           value={formatCurrency(effectiveIncome)}
-          sublabel={
-            Object.keys(monthlyIncomes).length > 0
-              ? `${lang === 'nb' ? 'snitt' : 'avg'}: ${formatCurrency(averageIncome)}`
-              : undefined
-          }
+          sublabel={(
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span style={{ color: isMonthlyIncomeOverridden ? 'var(--warning)' : 'var(--positive)' }}>
+                {isMonthlyIncomeOverridden ? t.salary.incomeOverride : t.salary.incomeAuto}
+              </span>
+              {isMonthlyIncomeOverridden && (
+                <>
+                  <span style={{ color: 'var(--text-3)' }}>·</span>
+                  <span style={{ color: 'var(--text-3)' }}>
+                    {lang === 'nb' ? 'auto' : 'auto'}: {formatCurrency(derivedMonthlyIncome)}
+                  </span>
+                  <button
+                    onClick={() => clearMonthlyIncomeForMonth(format(currentMonth, 'yyyy-MM'))}
+                    className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded transition-colors"
+                    style={{ color: 'var(--accent)', background: 'var(--accent-bg)' }}
+                  >
+                    {t.salary.incomeResetAuto}
+                  </button>
+                </>
+              )}
+              {!isMonthlyIncomeOverridden && Object.keys(monthlyIncomes).length > 0 && (
+                <>
+                  <span style={{ color: 'var(--text-3)' }}>·</span>
+                  <span style={{ color: 'var(--text-3)' }}>
+                    {lang === 'nb' ? 'snitt' : 'avg'}: {formatCurrency(averageIncome)}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
           editable
           onEdit={() => openModal({
             title: t.monthlyIncome,
@@ -281,34 +360,34 @@ const BudgetPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-start">
         {/* Fixed Expenses */}
         <div className={`lg:col-span-1 ${card} p-5 md:p-7 space-y-5`}>
-          <div className="flex items-center justify-between pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
+          <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
             <h2 className={sectionLabel}>{t.fixedCosts}</h2>
             <button
               onClick={addFixedExpense}
-              className="text-[#0ea5e9] dark:text-[#38bdf8] hover:opacity-70 transition-opacity"
+              className="text-[#0ea5e9] hover:opacity-70 transition-opacity"
             >
               <PlusCircle size={18} strokeWidth={2} />
             </button>
           </div>
           <div className="space-y-0">
             {fixedExpenses.map((expense) => (
-              <div key={expense.id} className="flex items-center justify-between group py-3 border-b border-[#f0f0f0] dark:border-[#222222] last:border-0">
+              <div key={expense.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0">
                 <span
-                  className="text-[13px] font-medium text-[#0a0a0a] dark:text-[#fafafa] cursor-pointer hover:text-[#0ea5e9] dark:hover:text-[#38bdf8] transition-colors"
+                  className="text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[#0ea5e9] transition-colors"
                   onClick={() => editFixedExpense(expense.id, expense.name, expense.amount)}
                 >
                   {expense.name}
                 </span>
                 <div className="flex items-center gap-3">
                   <span
-                    className="text-[13px] font-mono font-medium text-[#0a0a0a] dark:text-[#fafafa] cursor-pointer hover:text-[#0ea5e9] dark:hover:text-[#38bdf8] transition-colors"
+                    className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[#0ea5e9] transition-colors"
                     onClick={() => editFixedExpense(expense.id, expense.name, expense.amount)}
                   >
                     {formatCurrency(expense.amount)}
                   </span>
                   <button
                     onClick={() => removeFixedExpense(expense.id, expense.name)}
-                    className="text-[#737373] hover:text-[#ef4444] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                    className="text-[var(--text-2)] hover:text-[#ef4444] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -317,14 +396,14 @@ const BudgetPage: React.FC = () => {
             ))}
             <div className="pt-5 flex justify-between items-baseline">
               <span className={sectionLabel}>{t.aggregate}</span>
-              <span className="text-xl font-bold font-mono text-[#0a0a0a] dark:text-[#fafafa]">{formatCurrency(totalFixedExpenses)}</span>
+              <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(totalFixedExpenses)}</span>
             </div>
           </div>
         </div>
 
         {/* Charts */}
         <div className={`lg:col-span-2 ${card} p-5 md:p-7 space-y-5`}>
-          <h2 className={`${sectionLabel} pb-4 border-b border-[#f0f0f0] dark:border-[#222222]`}>
+          <h2 className={`${sectionLabel} pb-4 border-b border-[var(--border)]`}>
             {t.distributionAnalysis}
           </h2>
           <div className="h-[280px] md:h-[340px] w-full">
@@ -334,7 +413,7 @@ const BudgetPage: React.FC = () => {
                 layout="vertical"
                 margin={{ top: 0, right: 16, left: 16, bottom: 0 }}
               >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={isDarkMode ? '#222222' : '#f0f0f0'} />
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={'#2a2a2a'} />
                 <XAxis type="number" hide />
                 <YAxis
                   dataKey="name"
@@ -349,9 +428,9 @@ const BudgetPage: React.FC = () => {
                   formatter={(value) => [formatCurrency(Number(value ?? 0)), '']}
                   contentStyle={{
                     borderRadius: '10px',
-                    border: `1px solid ${isDarkMode ? '#2a2a2a' : '#e5e5e5'}`,
-                    backgroundColor: isDarkMode ? '#1a1a1a' : '#ffffff',
-                    color: isDarkMode ? '#fafafa' : '#0a0a0a',
+                    border: `1px solid ${'#2a2a2a'}`,
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-1)',
                     boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
                     padding: '10px 14px',
                     fontSize: '13px',
@@ -371,7 +450,7 @@ const BudgetPage: React.FC = () => {
           {/* Category pie chart — only shown when there's categorized data */}
           {categoryData.length > 0 && (
             <>
-              <div className={`${sectionLabel} pt-2 pb-3 border-t border-[#f0f0f0] dark:border-[#222222]`}>
+              <div className={`${sectionLabel} pt-2 pb-3 border-t border-[var(--border)]`}>
                 {t.category} — {t.operationalLog}
               </div>
               <div className="h-[200px] w-full">
@@ -394,9 +473,9 @@ const BudgetPage: React.FC = () => {
                       formatter={(value) => [formatCurrency(Number(value ?? 0)), '']}
                       contentStyle={{
                         borderRadius: '10px',
-                        border: `1px solid ${isDarkMode ? '#2a2a2a' : '#e5e5e5'}`,
-                        backgroundColor: isDarkMode ? '#1a1a1a' : '#ffffff',
-                        color: isDarkMode ? '#fafafa' : '#0a0a0a',
+                        border: `1px solid ${'#2a2a2a'}`,
+                        backgroundColor: 'var(--bg-card)',
+                        color: 'var(--text-1)',
                         fontSize: '13px',
                       }}
                     />
@@ -417,13 +496,13 @@ const BudgetPage: React.FC = () => {
 
       {/* Daily Tracker */}
       <div className={`${card} overflow-hidden`}>
-        <div className="px-5 py-4 md:px-7 md:py-5 border-b border-[#f0f0f0] dark:border-[#222222] flex items-center justify-between">
+        <div className="px-5 py-4 md:px-7 md:py-5 border-b border-[var(--border)] flex items-center justify-between">
           <h2 className={sectionLabel}>{t.operationalLog}</h2>
           <div className="flex items-center gap-2">
             {totalSpentThisMonth > 0 && (
               <button
                 onClick={exportCSV}
-                className="flex items-center gap-1.5 text-[11px] font-medium text-[#737373] hover:text-[#0a0a0a] dark:hover:text-[#fafafa] transition-colors px-2 py-1 rounded-lg hover:bg-[#f0f0f0] dark:hover:bg-[#222222]"
+                className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors px-2 py-1 rounded-lg hover:bg-[var(--bg-elev)]"
               >
                 <Download size={13} />
                 <span className="hidden sm:inline">{t.exportCSV}</span>
@@ -433,15 +512,15 @@ const BudgetPage: React.FC = () => {
         </div>
 
         {/* Mobile */}
-        <div className="md:hidden divide-y divide-[#f0f0f0] dark:divide-[#222222]">
+        <div className="md:hidden divide-y divide-[var(--border)]">
           {dailyData.map((day) => (
             <div key={day.dateStr} className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[13px] font-semibold font-mono text-[#0a0a0a] dark:text-[#fafafa]">
+                  <span className="text-[13px] font-semibold font-mono text-[var(--text-1)]">
                     {format(day.date, 'dd.MM.yyyy')}
                   </span>
-                  <span className="text-[11px] text-[#737373] ml-2">{t.days[day.date.getDay()]}</span>
+                  <span className="text-[11px] text-[var(--text-2)] ml-2">{t.days[day.date.getDay()]}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {day.spent > 0 && (
@@ -449,8 +528,8 @@ const BudgetPage: React.FC = () => {
                   )}
                   <span className={`text-[12px] font-mono font-bold px-2 py-0.5 rounded-md ${
                     day.balance >= 0
-                      ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-red-50 dark:bg-red-950/20 text-[#ef4444]'
+                      ? 'bg-[var(--positive-bg)] text-[var(--positive)]'
+                      : 'bg-red-50 text-[#ef4444]'
                   }`}>
                     {formatCurrency(day.balance)}
                   </span>
@@ -460,16 +539,16 @@ const BudgetPage: React.FC = () => {
               {day.transactions.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {day.transactions.map((tx) => (
-                    <span key={tx.id} className="inline-flex items-center gap-1.5 bg-[#fafafa] dark:bg-[#222222] border border-[#e5e5e5] dark:border-[#2a2a2a] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[#0a0a0a] dark:text-[#fafafa]">
+                    <span key={tx.id} className="inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
                       {tx.category && (
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getCategoryColor(tx.category) }} />
                       )}
                       <span>{tx.description}</span>
-                      <span className="font-mono text-[#737373]">{formatCurrency(tx.amount)}</span>
-                      <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[#737373] hover:text-[#0ea5e9] dark:hover:text-[#38bdf8]">
+                      <span className="font-mono text-[var(--text-2)]">{formatCurrency(tx.amount)}</span>
+                      <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[var(--text-2)] hover:text-[#0ea5e9]">
                         <Edit2 size={11} />
                       </button>
-                      <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[#737373] hover:text-[#ef4444]">
+                      <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[#ef4444]">
                         <Trash2 size={11} />
                       </button>
                     </span>
@@ -479,7 +558,7 @@ const BudgetPage: React.FC = () => {
 
               <button
                 onClick={() => addDailyTransaction(day.dateStr)}
-                className="flex items-center gap-1 text-[#0ea5e9] dark:text-[#38bdf8] text-[12px] font-medium"
+                className="flex items-center gap-1 text-[#0ea5e9] text-[12px] font-medium"
               >
                 <PlusCircle size={13} strokeWidth={2} />
                 <span>{lang === 'nb' ? 'Legg til' : 'Add'}</span>
@@ -487,9 +566,9 @@ const BudgetPage: React.FC = () => {
             </div>
           ))}
 
-          <div className="p-4 flex justify-between items-center bg-[#fafafa] dark:bg-[#1f1f1f]">
+          <div className="p-4 flex justify-between items-center bg-[var(--bg-raised)]">
             <span className={sectionLabel}>{t.endPeriodSurplus}</span>
-            <span className={`text-[15px] font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[#0ea5e9] dark:text-[#38bdf8]' : 'text-[#ef4444]'}`}>
+            <span className={`text-[15px] font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[#0ea5e9]' : 'text-[#ef4444]'}`}>
               {formatCurrency(dailyData[dailyData.length - 1]?.balance || 0)}
             </span>
           </div>
@@ -499,43 +578,43 @@ const BudgetPage: React.FC = () => {
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[#fafafa] dark:bg-[#1f1f1f] text-[10px] font-semibold uppercase tracking-[0.1em] text-[#737373]">
+              <tr className="bg-[var(--bg-raised)] text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">
                 <th className="px-7 py-3.5">{t.timestamp}</th>
                 <th className="px-7 py-3.5">{t.transactionDetails}</th>
                 <th className="px-7 py-3.5 text-right">{t.impact}</th>
                 <th className="px-7 py-3.5 text-right">{t.runningBalance}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f0f0f0] dark:divide-[#222222]">
+            <tbody className="divide-y divide-[var(--border)]">
               {dailyData.map((day) => (
-                <tr key={day.dateStr} className="hover:bg-[#fafafa] dark:hover:bg-[#1f1f1f] transition-colors group">
+                <tr key={day.dateStr} className="hover:bg-[var(--bg-raised)] transition-colors group">
                   <td className="px-7 py-4">
-                    <div className="font-mono font-medium text-[13px] text-[#0a0a0a] dark:text-[#fafafa]">{format(day.date, 'dd.MM.yyyy')}</div>
-                    <div className="text-[11px] text-[#737373] mt-0.5">{t.days[day.date.getDay()]}</div>
+                    <div className="font-mono font-medium text-[13px] text-[var(--text-1)]">{format(day.date, 'dd.MM.yyyy')}</div>
+                    <div className="text-[11px] text-[var(--text-2)] mt-0.5">{t.days[day.date.getDay()]}</div>
                   </td>
                   <td className="px-7 py-4">
                     <div className="flex flex-wrap gap-2">
                       {day.transactions.map((tx) => (
-                        <span key={tx.id} className="inline-flex items-center gap-2 bg-[#fafafa] dark:bg-[#222222] border border-[#e5e5e5] dark:border-[#2a2a2a] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[#0a0a0a] dark:text-[#fafafa]">
+                        <span key={tx.id} className="inline-flex items-center gap-2 bg-[var(--bg-raised)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
                           {tx.category && (
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: getCategoryColor(tx.category) }} />
                           )}
                           <span>{tx.description}</span>
-                          <span className="font-mono text-[#737373]">{formatCurrency(tx.amount)}</span>
+                          <span className="font-mono text-[var(--text-2)]">{formatCurrency(tx.amount)}</span>
                           {tx.category && (
-                            <span className="text-[10px] text-[#737373] hidden lg:inline">{tx.category}</span>
+                            <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{tx.category}</span>
                           )}
-                          <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[#737373] hover:text-[#0ea5e9] dark:hover:text-[#38bdf8] transition-colors">
+                          <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[var(--text-2)] hover:text-[#0ea5e9] transition-colors">
                             <Edit2 size={12} />
                           </button>
-                          <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[#737373] hover:text-[#ef4444] transition-colors">
+                          <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[#ef4444] transition-colors">
                             <Trash2 size={12} />
                           </button>
                         </span>
                       ))}
                       <button
                         onClick={() => addDailyTransaction(day.dateStr)}
-                        className="text-[#0ea5e9] dark:text-[#38bdf8] hover:opacity-70 p-1 transition-opacity"
+                        className="text-[#0ea5e9] hover:opacity-70 p-1 transition-opacity"
                       >
                         <PlusCircle size={18} strokeWidth={2} />
                       </button>
@@ -545,14 +624,14 @@ const BudgetPage: React.FC = () => {
                     {day.spent > 0 ? (
                       <span className="text-[#ef4444]">−{formatCurrency(day.spent)}</span>
                     ) : (
-                      <span className="text-[#e5e5e5] dark:text-[#2a2a2a]">—</span>
+                      <span className="text-[#e5e5e5]">—</span>
                     )}
                   </td>
                   <td className="px-7 py-4 text-right">
                     <span className={`text-[13px] font-mono font-bold px-2.5 py-1 rounded-md ${
                       day.balance >= 0
-                        ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-red-50 dark:bg-red-950/20 text-[#ef4444]'
+                        ? 'bg-[var(--positive-bg)] text-[var(--positive)]'
+                        : 'bg-red-50 text-[#ef4444]'
                     }`}>
                       {formatCurrency(day.balance)}
                     </span>
@@ -560,14 +639,14 @@ const BudgetPage: React.FC = () => {
                 </tr>
               ))}
             </tbody>
-            <tfoot className="bg-[#fafafa] dark:bg-[#1f1f1f] border-t border-[#e5e5e5] dark:border-[#2a2a2a]">
+            <tfoot className="bg-[var(--bg-raised)] border-t border-[var(--border)]">
               <tr>
-                <td colSpan={2} className="px-7 py-5 text-right text-[11px] font-semibold uppercase tracking-[0.1em] text-[#737373]">{t.endPeriodSurplus}</td>
-                <td className="px-7 py-5 text-right font-mono font-medium text-[13px] text-[#737373]">
+                <td colSpan={2} className="px-7 py-5 text-right text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">{t.endPeriodSurplus}</td>
+                <td className="px-7 py-5 text-right font-mono font-medium text-[13px] text-[var(--text-2)]">
                   {formatCurrency(totalSpentThisMonth)}
                 </td>
                 <td className="px-7 py-5 text-right">
-                  <span className={`text-xl font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[#0ea5e9] dark:text-[#38bdf8]' : 'text-[#ef4444]'}`}>
+                  <span className={`text-xl font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[#0ea5e9]' : 'text-[#ef4444]'}`}>
                     {formatCurrency(dailyData[dailyData.length - 1]?.balance || 0)}
                   </span>
                 </td>
@@ -595,39 +674,56 @@ const BudgetPage: React.FC = () => {
 interface CardProps {
   title: string;
   value: string;
-  sublabel?: string;
+  sublabel?: React.ReactNode;
   accent?: boolean;
   editable?: boolean;
   onEdit?: () => void;
 }
 
 function Card({ title, value, sublabel, accent, editable, onEdit }: CardProps) {
+  const accentStyle: React.CSSProperties = accent
+    ? {
+        background:
+          'radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 60%), linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--violet) 8%, transparent)), var(--bg-card)',
+        borderColor: 'color-mix(in srgb, var(--accent) 25%, transparent)',
+      }
+    : { background: 'var(--bg-card)', borderColor: 'var(--border)' };
+
   return (
-    <div className={`p-4 md:p-6 rounded-2xl border flex flex-col space-y-2 ${
-      accent
-        ? 'bg-[#0ea5e9] dark:bg-[#0ea5e9] border-transparent shadow-lg shadow-sky-500/20'
-        : 'bg-white dark:bg-[#1a1a1a] border-[#e5e5e5] dark:border-[#2a2a2a] shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none'
-    }`}>
-      <span className={`text-[10px] md:text-[11px] font-medium uppercase tracking-[0.1em] ${accent ? 'text-sky-100' : 'text-[#737373]'}`}>
+    <div
+      className="p-5 md:p-6 rounded-[20px] border flex flex-col gap-3 transition-all hover:-translate-y-px"
+      style={accentStyle}
+    >
+      <span
+        className="text-[11px] font-semibold uppercase tracking-[0.14em]"
+        style={{ color: accent ? 'var(--accent)' : 'var(--text-3)' }}
+      >
         {title}
       </span>
-      <div className="flex items-center gap-2">
-        <span className={`text-base md:text-xl font-bold font-mono tracking-tight ${accent ? 'text-white' : 'text-[#0a0a0a] dark:text-[#fafafa]'}`}>
+      <div className="flex items-baseline gap-2">
+        <span
+          className="text-[24px] md:text-[28px] font-semibold tracking-[-0.02em] leading-none tabular-nums"
+          style={{ color: 'var(--text-1)' }}
+        >
           {value}
         </span>
         {editable && (
           <button
             onClick={onEdit}
-            className={`p-0.5 transition-colors ${accent ? 'text-sky-200 hover:text-white' : 'text-[#737373] hover:text-[#0ea5e9] dark:hover:text-[#38bdf8]'}`}
+            className="p-1 rounded-md transition-colors"
+            style={{ color: 'var(--text-3)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
+            aria-label="Edit"
           >
             <Edit2 size={13} />
           </button>
         )}
       </div>
       {sublabel && (
-        <span className={`text-[10px] font-mono ${accent ? 'text-sky-200' : 'text-[#737373]'}`}>
+        <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
           {sublabel}
-        </span>
+        </div>
       )}
     </div>
   );

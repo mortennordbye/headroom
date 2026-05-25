@@ -1,59 +1,102 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 @theme {
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", ui-monospace, monospace;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Fira Mono", ui-monospace, monospace;
+  --font-serif: "Instrument Serif", Georgia, serif;
 }
 
 :root {
-  --bg-page: #f5f5f5;
-  --bg-card: #ffffff;
-  --bg-raised: #fafafa;
-  --text-primary: #0a0a0a;
-  --text-secondary: #737373;
-  --border-subtle: #e5e5e5;
-  --accent: #0ea5e9;
+  --bg-page: #08080A;
+  --bg-card: #131318;
+  --bg-raised: #1B1B22;
+  --bg-elev: #25252E;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+
+  --text-1: #F4F4F6;
+  --text-2: #A8A8B0;
+  --text-3: #6E6E78;
+
+  --positive: #3ECF8E;
+  --negative: #F87171;
+  --warning: #FBBF24;
+  --accent: #6EE7FF;
+  --violet: #A78BFA;
+  --pink: #F472B6;
+  --emerald: #34D399;
+
+  --positive-bg: color-mix(in srgb, var(--positive) 14%, transparent);
+  --negative-bg: color-mix(in srgb, var(--negative) 14%, transparent);
+  --warning-bg: color-mix(in srgb, var(--warning) 14%, transparent);
+  --accent-bg: color-mix(in srgb, var(--accent) 14%, transparent);
+  --violet-bg: color-mix(in srgb, var(--violet) 14%, transparent);
+  --pink-bg: color-mix(in srgb, var(--pink) 14%, transparent);
+
+  --chart-1: #6EE7FF;
+  --chart-2: #3ECF8E;
+  --chart-3: #A78BFA;
+  --chart-4: #FBBF24;
+  --chart-5: #F472B6;
+  --chart-6: #F87171;
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
 }
 
-.dark {
-  --bg-page: #111111;
-  --bg-card: #1a1a1a;
-  --bg-raised: #222222;
-  --text-primary: #fafafa;
-  --text-secondary: #737373;
-  --border-subtle: #2a2a2a;
-  --accent: #38bdf8;
+html, body {
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  background-color: var(--bg-page);
-  color: var(--text-primary);
+  background:
+    radial-gradient(ellipse 50% 40% at 15% 0%, color-mix(in srgb, var(--violet) 18%, transparent), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 85% 30%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    var(--bg-page);
+  background-attachment: fixed;
+  min-height: 100vh;
+  color: var(--text-1);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11", "tnum";
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.4;
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 120, 120, 0.2);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 10px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 120, 120, 0.3);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 ::selection {
-  background: rgba(14, 165, 233, 0.15);
-  color: inherit;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-1);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

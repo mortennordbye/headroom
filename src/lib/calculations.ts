@@ -131,24 +131,57 @@ export function calcHomeownerMortgageStatus(
   return { monthlyPaymentCalc, monthlyInterest, monthlyPrincipal, annualTaxDeduction, equityPercent };
 }
 
-export interface ProjectionPoint {
-  year: number;
-  netWorth: number;
+export interface BucketAmounts {
+  stocks: number;
+  crypto: number;
+  cash: number;
+  house: number;
 }
 
-export function calcNetWorthProjection(
-  currentNetWorth: number,
+export interface BucketRates {
+  stocks: number;
+  crypto: number;
+  cash: number;
+  house: number;
+}
+
+export interface BucketProjectionPoint {
+  year: number;
+  stocks: number;
+  crypto: number;
+  cash: number;
+  house: number;
+  total: number;
+}
+
+/**
+ * Project each asset bucket forward at its own annual growth rate.
+ * `annualSavings` accrues to the stocks bucket each year (assumption:
+ * discretionary savings flow into investments).
+ */
+export function calcNetWorthProjectionByBucket(
+  start: BucketAmounts,
   annualSavings: number,
-  annualReturnRate: number,
+  rates: BucketRates,
   years: number
-): ProjectionPoint[] {
-  const result: ProjectionPoint[] = [];
-  let netWorth = currentNetWorth;
+): BucketProjectionPoint[] {
+  const result: BucketProjectionPoint[] = [];
+  let { stocks, crypto, cash, house } = start;
   const currentYear = new Date().getFullYear();
 
   for (let y = 0; y <= years; y++) {
-    result.push({ year: currentYear + y, netWorth: Math.round(netWorth) });
-    netWorth = netWorth * (1 + annualReturnRate / 100) + annualSavings;
+    result.push({
+      year: currentYear + y,
+      stocks: Math.round(stocks),
+      crypto: Math.round(crypto),
+      cash: Math.round(cash),
+      house: Math.round(house),
+      total: Math.round(stocks + crypto + cash + house),
+    });
+    stocks = stocks * (1 + rates.stocks / 100) + annualSavings;
+    crypto = crypto * (1 + rates.crypto / 100);
+    cash = cash * (1 + rates.cash / 100);
+    house = house * (1 + rates.house / 100);
   }
   return result;
 }

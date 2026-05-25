@@ -1,8 +1,8 @@
 import { Smile } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 
-const card = 'bg-white dark:bg-[#1a1a1a] rounded-2xl border border-[#e5e5e5] dark:border-[#2a2a2a] shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[#737373]';
+const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 interface FunStatProps {
   label: string;
@@ -13,12 +13,12 @@ interface FunStatProps {
 
 function FunStat({ label, value, negative, highlight }: FunStatProps) {
   return (
-    <div className="flex flex-col gap-1.5 bg-[#fafafa] dark:bg-[#222222] border border-[#e5e5e5] dark:border-[#2a2a2a] rounded-xl p-3 md:p-4">
-      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#737373]">{label}</span>
+    <div className="flex flex-col gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] rounded-xl p-3 md:p-4">
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{label}</span>
       <span className={`text-[13px] md:text-[15px] font-bold font-mono tracking-tight ${
         negative ? 'text-[#ef4444]' :
         highlight ? 'text-[#ef4444]' :
-        'text-[#0a0a0a] dark:text-[#fafafa]'
+        'text-[var(--text-1)]'
       }`}>
         {negative ? '−' : ''}{value}
       </span>
@@ -45,12 +45,12 @@ export default function FunBudget() {
 
   return (
     <div className={`${card} p-5 md:p-7`}>
-      <div className="flex items-center justify-between pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
+      <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
-          <Smile size={13} className="text-[#737373]" />
+          <Smile size={13} className="text-[var(--text-2)]" />
           <h2 className={sectionLabel}>{t.funBudget}</h2>
         </div>
-        <span className="text-[11px] font-mono text-[#737373]">
+        <span className="text-[11px] font-mono text-[var(--text-2)]">
           {funExpense.name} — {formatCurrency(funBudget)}
         </span>
       </div>
@@ -70,7 +70,7 @@ export default function FunBudget() {
       </div>
 
       <div className="mt-5 space-y-1.5">
-        <div className="h-3 bg-[#f0f0f0] dark:bg-[#222222] rounded-full overflow-hidden">
+        <div className="h-3 bg-[var(--bg-elev)] rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-700 ${
               pct >= 100 ? 'bg-[#ef4444]' :
@@ -80,7 +80,7 @@ export default function FunBudget() {
             style={{ width: `${pct}%` }}
           />
         </div>
-        <div className="flex justify-between text-[10px] text-[#737373]">
+        <div className="flex justify-between text-[10px] text-[var(--text-2)]">
           <span>0</span>
           <span>{Math.round(pct)}% {lang === 'nb' ? 'brukt' : 'used'}</span>
           <span>{formatCurrency(funBudget)}</span>
@@ -94,7 +94,7 @@ export default function FunBudget() {
       )}
 
       {funSpent === 0 && (
-        <p className="mt-3 text-[11px] text-[#737373]">
+        <p className="mt-3 text-[11px] text-[var(--text-2)]">
           {lang === 'nb'
             ? 'Ingen morsomme utgifter enda. Legg til transaksjoner med kategori "Fun" for å spore dem her.'
             : 'No fun spending yet. Add transactions with category "Fun" to track them here.'}

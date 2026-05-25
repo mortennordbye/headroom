@@ -13,6 +13,8 @@ RUN apk add --no-cache python3 make g++
 COPY server/package.json ./
 RUN npm install --omit=dev
 COPY server/index.js ./
+COPY server/seed.js ./
+COPY server/ssb.js ./
 COPY --from=frontend-build /app/dist ./dist
 ENV DATA_DIR=/data
 EXPOSE 3001

@@ -3,8 +3,8 @@ import { AlertTriangle, TrendingUp, Edit2 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 
-const card = 'bg-white dark:bg-[#1a1a1a] rounded-2xl border border-[#e5e5e5] dark:border-[#2a2a2a] shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[#737373]';
+const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 interface EditablePillProps {
   label: string;
@@ -20,11 +20,11 @@ function EditablePill({ label, value, color, formatCurrency, onCommit }: Editabl
   const inputRef = useRef<HTMLInputElement>(null);
 
   const bg = color === 'sky'
-    ? 'bg-sky-50 dark:bg-sky-950/20 border-sky-100 dark:border-sky-900/40'
-    : 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/40';
+    ? 'bg-[var(--accent-bg)] border-[color-mix(in_srgb,var(--accent)_25%,transparent)]'
+    : 'bg-[var(--positive-bg)] border-[color-mix(in_srgb,var(--positive)_25%,transparent)]';
   const valueColor = color === 'sky'
-    ? 'text-sky-600 dark:text-sky-400'
-    : 'text-emerald-600 dark:text-emerald-400';
+    ? 'text-sky-600'
+    : 'text-emerald-600';
   const borderFocus = color === 'sky' ? 'border-sky-400' : 'border-emerald-400';
 
   useEffect(() => {
@@ -48,8 +48,8 @@ function EditablePill({ label, value, color, formatCurrency, onCommit }: Editabl
       onClick={() => { if (!editing) startEditing(); }}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#737373]">{label}</span>
-        <Edit2 size={11} className="opacity-40 hover:opacity-100 transition-opacity text-[#737373]" />
+        <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{label}</span>
+        <Edit2 size={11} className="opacity-40 hover:opacity-100 transition-opacity text-[var(--text-2)]" />
       </div>
       {editing ? (
         <input
@@ -142,21 +142,21 @@ export default function SmartRecommendations() {
   return (
     <div className={`${card} p-5 md:p-7`}>
       {conservativeMode && (
-        <div className="mb-4 flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl px-4 py-2.5 text-[12px] text-amber-700 dark:text-amber-400 font-medium">
+        <div className="mb-4 flex items-center gap-2 border bg-[var(--warning-bg)] border-[color-mix(in_srgb,var(--warning)_30%,transparent)] rounded-xl px-4 py-2.5 text-[12px] text-[var(--warning)] font-medium">
           <AlertTriangle size={13} className="shrink-0" />
           <span>{t.conservativeWarning}</span>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-start justify-between pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
+      <div className="flex items-start justify-between pb-4 border-b border-[var(--border)]">
         <div>
           <div className="flex items-center gap-2">
-            <TrendingUp size={13} className="text-[#737373]" />
+            <TrendingUp size={13} className="text-[var(--text-2)]" />
             <h2 className={sectionLabel}>{t.smartRecommendations}</h2>
           </div>
           {recordedMonthCount > 0 && (
-            <p className="text-[11px] text-[#737373] mt-1 ml-5">
+            <p className="text-[11px] text-[var(--text-2)] mt-1 ml-5">
               {t.avgIncome} ({recordedMonthCount} {lang === 'nb' ? 'mnd' : 'mo'}): {formatCurrency(averageIncome)}
             </p>
           )}
@@ -164,7 +164,7 @@ export default function SmartRecommendations() {
 
         {/* Savings % badge */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#737373]">{t.savingsTarget}</span>
+          <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{t.savingsTarget}</span>
           {editingPct ? (
             <div className="flex items-center gap-1">
               <input
@@ -176,14 +176,14 @@ export default function SmartRecommendations() {
                 onChange={e => setPctDraft(e.target.value)}
                 onBlur={commitPct}
                 onKeyDown={e => { if (e.key === 'Enter') commitPct(); if (e.key === 'Escape') setEditingPct(false); }}
-                className="w-12 text-center text-[12px] font-bold font-mono bg-transparent border-b border-emerald-400 text-[#0a0a0a] dark:text-[#fafafa] outline-none"
+                className="w-12 text-center text-[12px] font-bold font-mono bg-transparent border-b border-emerald-400 text-[var(--text-1)] outline-none"
               />
-              <span className="text-[12px] font-bold text-[#0a0a0a] dark:text-[#fafafa]">%</span>
+              <span className="text-[12px] font-bold text-[var(--text-1)]">%</span>
             </div>
           ) : (
             <button onClick={() => setEditingPct(true)} className="flex items-center gap-1 group">
-              <span className="text-[13px] font-bold font-mono text-emerald-600 dark:text-emerald-400">{effectiveSavingsPct}%</span>
-              <Edit2 size={11} className="text-[#737373] opacity-0 group-hover:opacity-100 transition-opacity" />
+              <span className="text-[13px] font-bold font-mono text-emerald-600">{effectiveSavingsPct}%</span>
+              <Edit2 size={11} className="text-[var(--text-2)] opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           )}
         </div>
@@ -208,18 +208,18 @@ export default function SmartRecommendations() {
               formatCurrency={formatCurrency}
               onCommit={handleInvestmentEdit}
             />
-            <div className="flex flex-col gap-1.5 rounded-xl border p-3 md:p-4 bg-[#fafafa] dark:bg-[#222222] border-[#e5e5e5] dark:border-[#2a2a2a]">
-              <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#737373]">{t.residual}</span>
-              <span className="text-[13px] md:text-[15px] font-bold font-mono tracking-tight text-[#0a0a0a] dark:text-[#fafafa]">{formatCurrency(currentBalance)}</span>
+            <div className="flex flex-col gap-1.5 rounded-xl border p-3 md:p-4 bg-[var(--bg-raised)] border-[var(--border)]">
+              <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{t.residual}</span>
+              <span className="text-[13px] md:text-[15px] font-bold font-mono tracking-tight text-[var(--text-1)]">{formatCurrency(currentBalance)}</span>
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="flex justify-between text-[11px] text-[#737373]">
+            <div className="flex justify-between text-[11px] text-[var(--text-2)]">
               <span>{lang === 'nb' ? 'Brukt' : 'Spent'}: {formatCurrency(totalSpentThisMonth)}</span>
               <span>{Math.round(spendingPct)}% {t.spentOfRecommended}</span>
             </div>
-            <div className="h-2 bg-[#f0f0f0] dark:bg-[#222222] rounded-full overflow-hidden">
+            <div className="h-2 bg-[var(--bg-elev)] rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   spendingPct >= 100 ? 'bg-[#ef4444]' :
@@ -267,7 +267,7 @@ export default function SmartRecommendations() {
             {pieData.map((entry, i) => (
               <div key={i} className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                <span className="text-[10px] text-[#737373] truncate">{entry.name}</span>
+                <span className="text-[10px] text-[var(--text-2)] truncate">{entry.name}</span>
               </div>
             ))}
           </div>

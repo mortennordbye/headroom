@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Bitcoin,
   Shield,
+  Briefcase,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -19,9 +20,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { useFinance, type Assets } from '../context/FinanceContext';
+import { useFinance, type Assets, type Pension } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
-import { calcNetWorthProjection } from '../lib/calculations';
+import { calcNetWorthProjectionByBucket } from '../lib/calculations';
 
 interface ModalConfig {
   title: string;
@@ -29,8 +30,8 @@ interface ModalConfig {
   onSave: (values: Record<string, string>) => void;
 }
 
-const card = 'bg-white dark:bg-[#1a1a1a] rounded-2xl border border-[#e5e5e5] dark:border-[#2a2a2a] shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[#737373]';
+const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const AssetPage: React.FC = () => {
   const {
@@ -45,10 +46,14 @@ const AssetPage: React.FC = () => {
     cryptoTaxOnGain,
     netCrypto,
     formatCurrency,
-    isDarkMode,
     growthReturnRate,
     setGrowthReturnRate,
+    houseGrowthRate,
+    cashGrowthRate,
+    cryptoGrowthRate,
     totalResidual,
+    pension,
+    updatePension,
   } = useFinance();
 
     const [modal, setModal] = useState<ModalConfig | null>(null);
@@ -67,10 +72,28 @@ const AssetPage: React.FC = () => {
     });
     };
 
+    const openPensionEdit = (label: string, currentVal: number, key: keyof Pension) => {
+    openModal({
+      title: label,
+      fields: [{ key: 'value', label, type: 'number', value: currentVal.toString() }],
+      onSave: (vals) => {
+        const n = parseFloat(vals.value);
+        if (!isNaN(n) && n >= 0) updatePension(key, n);
+        closeModal();
+      },
+    });
+    };
+
     const annualSavings = Math.max(0, totalResidual * 12);
+  const cashStart = assets.savings + assets.bsu + assets.bufferAccount;
   const projectionData = useMemo(
-    () => calcNetWorthProjection(totalEquity, annualSavings, growthReturnRate, 15),
-    [totalEquity, annualSavings, growthReturnRate]
+    () => calcNetWorthProjectionByBucket(
+      { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity },
+      annualSavings,
+      { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate },
+      15,
+    ),
+    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate]
   );
 
   const formatAxisValue = (val: number) => {
@@ -91,15 +114,35 @@ const AssetPage: React.FC = () => {
     });
   };
 
+  const cashTotal = assets.bsu + assets.savings + assets.bufferAccount;
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-6 md:space-y-7">
+      {/* Hero header */}
+      <header className="max-w-4xl">
+        <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
+          {lang === 'nb' ? 'Formue' : 'Net worth'}
+        </div>
+        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+          {lang === 'nb' ? (
+            <>Hva er du verdt — <em className="font-serif italic" style={{ color: 'var(--accent)' }}>egentlig</em>.</>
+          ) : (
+            <>What you're worth — <em className="font-serif italic" style={{ color: 'var(--accent)' }}>truly</em>.</>
+          )}
+        </h1>
+        <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
+          {lang === 'nb'
+            ? `Netto egenkapital ${formatCurrency(totalEquity)}. Investering ${formatCurrency(netInvestment)}, boligegenkapital ${formatCurrency(houseEquity)}, kontanter ${formatCurrency(cashTotal)}.`
+            : `Net equity ${formatCurrency(totalEquity)}. Investment ${formatCurrency(netInvestment)}, property equity ${formatCurrency(houseEquity)}, cash ${formatCurrency(cashTotal)}.`}
+        </p>
+      </header>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Left column */}
         <div className="space-y-4 md:space-y-6">
           {/* Market Positions */}
           <div className={`${card} p-5 md:p-7 space-y-5`}>
-            <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-              <BarChart2 size={14} strokeWidth={2} className="text-[#737373]" />
+            <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+              <BarChart2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h3 className={sectionLabel}>{t.marketPositions}</h3>
             </div>
             <div className="space-y-0">
@@ -121,23 +164,23 @@ const AssetPage: React.FC = () => {
                 suffix="%"
                 onEdit={() => openAssetEdit(t.taxRate, assets.taxRate, 'taxRate')}
                 formatCurrency={(v) => v.toFixed(2)}
-                icon={<Percent size={12} className="text-[#737373]" />}
+                icon={<Percent size={12} className="text-[var(--text-2)]" />}
               />
-              <div className="flex justify-between py-3.5 text-[12px] text-[#ef4444] font-medium border-t border-[#f0f0f0] dark:border-[#222222] mt-1">
+              <div className="flex justify-between py-3.5 text-[12px] text-[#ef4444] font-medium border-t border-[var(--border)] mt-1">
                 <span>{t.liabilityReserve}</span>
                 <span className="font-mono">−{formatCurrency(taxOnGain)}</span>
               </div>
-              <div className="flex justify-between py-3 text-[14px] font-semibold text-[#0a0a0a] dark:text-[#fafafa]">
+              <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
                 <span>{t.netLiquidity}</span>
-                <span className="font-mono text-[#0ea5e9] dark:text-[#38bdf8]">{formatCurrency(netInvestment)}</span>
+                <span className="font-mono text-[#0ea5e9]">{formatCurrency(netInvestment)}</span>
               </div>
             </div>
           </div>
 
           {/* Real Estate */}
           <div className={`${card} p-5 md:p-7 space-y-5`}>
-            <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-              <Home size={14} strokeWidth={2} className="text-[#737373]" />
+            <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+              <Home size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h3 className={sectionLabel}>{t.realEstate}</h3>
             </div>
             <div className="space-y-0">
@@ -154,17 +197,17 @@ const AssetPage: React.FC = () => {
                 formatCurrency={formatCurrency}
                 isNegative
               />
-              <div className="flex justify-between py-3 text-[14px] font-semibold text-[#0a0a0a] dark:text-[#fafafa] border-t border-[#f0f0f0] dark:border-[#222222] mt-1">
+              <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)] border-t border-[var(--border)] mt-1">
                 <span>{t.propertyEquity}</span>
-                <span className="font-mono text-[#0ea5e9] dark:text-[#38bdf8]">{formatCurrency(houseEquity)}</span>
+                <span className="font-mono text-[#0ea5e9]">{formatCurrency(houseEquity)}</span>
               </div>
             </div>
           </div>
 
           {/* Crypto */}
           <div className={`${card} p-5 md:p-7 space-y-5`}>
-            <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-              <Bitcoin size={14} strokeWidth={2} className="text-[#737373]" />
+            <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+              <Bitcoin size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h3 className={sectionLabel}>{t.crypto}</h3>
             </div>
             <div className="space-y-0">
@@ -186,15 +229,15 @@ const AssetPage: React.FC = () => {
                 suffix="%"
                 onEdit={() => openAssetEdit(t.cryptoTaxRate, assets.cryptoTaxRate, 'cryptoTaxRate')}
                 formatCurrency={(v) => v.toFixed(2)}
-                icon={<Percent size={12} className="text-[#737373]" />}
+                icon={<Percent size={12} className="text-[var(--text-2)]" />}
               />
-              <div className="flex justify-between py-3.5 text-[12px] text-[#ef4444] font-medium border-t border-[#f0f0f0] dark:border-[#222222] mt-1">
+              <div className="flex justify-between py-3.5 text-[12px] text-[#ef4444] font-medium border-t border-[var(--border)] mt-1">
                 <span>{t.cryptoTaxLabel}</span>
                 <span className="font-mono">−{formatCurrency(cryptoTaxOnGain)}</span>
               </div>
-              <div className="flex justify-between py-3 text-[14px] font-semibold text-[#0a0a0a] dark:text-[#fafafa]">
+              <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
                 <span>{t.netCrypto}</span>
-                <span className="font-mono text-[#0ea5e9] dark:text-[#38bdf8]">{formatCurrency(netCrypto)}</span>
+                <span className="font-mono text-[#0ea5e9]">{formatCurrency(netCrypto)}</span>
               </div>
             </div>
           </div>
@@ -204,8 +247,8 @@ const AssetPage: React.FC = () => {
         <div className="space-y-4 md:space-y-6">
           {/* Cash Reserves */}
           <div className={`${card} p-5 md:p-7 space-y-5`}>
-            <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-              <PiggyBank size={14} strokeWidth={2} className="text-[#737373]" />
+            <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+              <PiggyBank size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h3 className={sectionLabel}>{t.cashReserves}</h3>
             </div>
             <div className="space-y-0">
@@ -226,122 +269,186 @@ const AssetPage: React.FC = () => {
                 value={assets.bufferAccount}
                 onEdit={() => openAssetEdit(t.bufferAccount, assets.bufferAccount, 'bufferAccount')}
                 formatCurrency={formatCurrency}
-                icon={<Shield size={12} className="text-[#737373]" />}
+                icon={<Shield size={12} className="text-[var(--text-2)]" />}
               />
             </div>
           </div>
 
-          {/* Total Equity Hero */}
-          <div className="relative p-6 md:p-8 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 dark:from-sky-400 dark:to-blue-500 text-white overflow-hidden shadow-lg shadow-sky-500/20">
-            <div className="relative z-10 space-y-6 md:space-y-8">
-              <div className="space-y-1">
-                <div className="text-sky-100/70 text-[11px] font-medium uppercase tracking-[0.1em]">{t.trueNetEquity}</div>
-                <div className="text-3xl md:text-5xl font-bold tracking-tight font-mono">{formatCurrency(totalEquity)}</div>
+          {/* Pension wealth (locked — not in totalEquity) */}
+          <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+              <Briefcase size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+              <h3 className={sectionLabel}>{t.pensionWealth}</h3>
+            </div>
+            <div className="space-y-0">
+              <AssetRow
+                label={t.otpBalance}
+                value={pension.otpBalance}
+                onEdit={() => openPensionEdit(t.otpBalance, pension.otpBalance, 'otpBalance')}
+                formatCurrency={formatCurrency}
+              />
+              <AssetRow
+                label={t.ipsBalance}
+                value={pension.ipsBalance}
+                onEdit={() => openPensionEdit(t.ipsBalance, pension.ipsBalance, 'ipsBalance')}
+                formatCurrency={formatCurrency}
+              />
+              <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)] border-t border-[var(--border)] mt-1">
+                <span>{t.pensionWealth}</span>
+                <span className="font-mono text-[#0ea5e9]">{formatCurrency(pension.otpBalance + pension.ipsBalance)}</span>
               </div>
-              <div className="space-y-3 text-[13px] border-t border-white/20 pt-5 md:pt-6">
-                <div className="flex justify-between text-sky-100/80">
-                  <span>{t.grossAssets}</span>
-                  <span className="font-mono font-semibold text-white">{formatCurrency(assets.portfolio + assets.crypto + assets.houseValue + assets.bsu + assets.savings + assets.bufferAccount)}</span>
+              <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
+                {lang === 'nb'
+                  ? 'Låst til pensjonsalder. Holdes utenfor faktisk egenkapital.'
+                  : 'Locked until retirement age. Excluded from liquid net equity.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Total Equity Hero */}
+          <div
+            className="relative p-6 md:p-8 rounded-[20px] border overflow-hidden"
+            style={{
+              background:
+                'radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 60%), radial-gradient(circle at 10% 100%, color-mix(in srgb, var(--violet) 25%, transparent), transparent 60%), linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--violet) 8%, transparent)), var(--bg-card)',
+              borderColor: 'color-mix(in srgb, var(--accent) 25%, transparent)',
+            }}
+          >
+            <div className="relative z-10 space-y-6 md:space-y-8">
+              <div className="space-y-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--accent)' }}>
+                  {t.trueNetEquity}
                 </div>
-                <div className="flex justify-between text-sky-100/80">
-                  <span>{t.liabilities}</span>
-                  <span className="font-mono font-semibold text-white">−{formatCurrency(assets.houseDebt + taxOnGain + cryptoTaxOnGain)}</span>
+                <div
+                  className="font-semibold tracking-[-0.04em] leading-none tabular-nums"
+                  style={{
+                    fontSize: 'clamp(36px, 5vw, 56px)',
+                    background: 'linear-gradient(180deg, var(--text-1), color-mix(in srgb, var(--text-1) 70%, var(--accent)))',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                  }}
+                >
+                  {formatCurrency(totalEquity)}
+                </div>
+              </div>
+              <div className="space-y-3 text-[13px] border-t pt-5 md:pt-6" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--text-2)' }}>{t.grossAssets}</span>
+                  <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                    {formatCurrency(assets.portfolio + assets.crypto + assets.houseValue + assets.bsu + assets.savings + assets.bufferAccount)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--text-2)' }}>{t.liabilities}</span>
+                  <span className="font-semibold tabular-nums" style={{ color: 'var(--negative)' }}>
+                    −{formatCurrency(assets.houseDebt + taxOnGain + cryptoTaxOnGain)}
+                  </span>
                 </div>
               </div>
             </div>
-            <ArrowUpRight size={100} className="absolute -top-4 -right-4 text-white/10" />
+            <ArrowUpRight size={100} className="absolute -top-4 -right-4" style={{ color: 'rgba(110, 231, 255, 0.08)' }} />
           </div>
         </div>
       </div>
 
       {/* Growth Projection */}
       <div className={`${card} p-5 md:p-7 space-y-5`}>
-        <div className="flex items-center justify-between pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
+        <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
-            <TrendingUp size={14} strokeWidth={2} className="text-[#737373]" />
+            <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
             <h3 className={sectionLabel}>{t.growthProjection}</h3>
           </div>
-          <button
-            onClick={editReturnRate}
-            className="flex items-center gap-1 text-[11px] font-medium text-[#737373] hover:text-[#0a0a0a] dark:hover:text-[#fafafa] transition-colors"
-          >
-            <span className="font-mono">{growthReturnRate}% p.a.</span>
-            <Edit2 size={11} />
-          </button>
+          <div className="flex items-center gap-3 text-[11px] font-mono" style={{ color: 'var(--text-2)' }}>
+            <span title={t.settings.growthReturnRate}>{t.bucketStocks} {growthReturnRate}%</span>
+            <span title={t.settings.houseGrowthRate}>{t.bucketHouse} {houseGrowthRate}%</span>
+            <span title={t.settings.cashGrowthRate}>{t.bucketCash} {cashGrowthRate}%</span>
+            <span title={t.settings.cryptoGrowthRate}>{t.bucketCrypto} {cryptoGrowthRate}%</span>
+            <button
+              onClick={editReturnRate}
+              className="text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
+              aria-label={t.annualReturn}
+            >
+              <Edit2 size={11} />
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-[13px]">
           <div>
             <div className={sectionLabel + ' mb-1'}>{lang === 'nb' ? 'Nå' : 'Now'}</div>
-            <div className="font-mono font-semibold text-[#0a0a0a] dark:text-[#fafafa]">{formatCurrency(totalEquity)}</div>
+            <div className="font-mono font-semibold text-[var(--text-1)]">{formatCurrency(projectionData[0]?.total ?? totalEquity)}</div>
           </div>
           <div>
             <div className={sectionLabel + ' mb-1'}>{lang === 'nb' ? 'Om 5 år' : 'In 5 years'}</div>
-            <div className="font-mono font-semibold text-[#0ea5e9] dark:text-[#38bdf8]">
-              {formatCurrency(projectionData[5]?.netWorth ?? 0)}
+            <div className="font-mono font-semibold text-[#0ea5e9]">
+              {formatCurrency(projectionData[5]?.total ?? 0)}
             </div>
           </div>
           <div>
             <div className={sectionLabel + ' mb-1'}>{lang === 'nb' ? 'Om 15 år' : 'In 15 years'}</div>
-            <div className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(projectionData[15]?.netWorth ?? 0)}
+            <div className="font-mono font-semibold text-emerald-600">
+              {formatCurrency(projectionData[15]?.total ?? 0)}
             </div>
           </div>
         </div>
 
-        <div className="h-[220px] md:h-[280px] w-full">
+        <div className="h-[260px] md:h-[320px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={projectionData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="netWorthGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
+                <linearGradient id="stocksGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.85} />
+                  <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.45} />
+                </linearGradient>
+                <linearGradient id="cryptoGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity={0.85} />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity={0.45} />
+                </linearGradient>
+                <linearGradient id="cashGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#737373" stopOpacity={0.7} />
+                  <stop offset="100%" stopColor="#737373" stopOpacity={0.35} />
+                </linearGradient>
+                <linearGradient id="houseGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.85} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.45} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#222222' : '#f0f0f0'} />
-              <XAxis
-                dataKey="year"
-                tick={{ fontSize: 11, fill: '#737373' }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tickFormatter={formatAxisValue}
-                tick={{ fontSize: 11, fill: '#737373' }}
-                axisLine={false}
-                tickLine={false}
-                width={52}
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke={'#2a2a2a'} />
+              <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={formatAxisValue} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
               <Tooltip
-                formatter={(value) => [formatCurrency(Number(value ?? 0)), t.projectedNetWorth]}
+                formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
                 labelFormatter={(label) => `${label}`}
                 contentStyle={{
                   borderRadius: '10px',
-                  border: `1px solid ${isDarkMode ? '#2a2a2a' : '#e5e5e5'}`,
-                  backgroundColor: isDarkMode ? '#1a1a1a' : '#ffffff',
-                  color: isDarkMode ? '#fafafa' : '#0a0a0a',
+                  border: `1px solid ${'#2a2a2a'}`,
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-1)',
                   boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
                   padding: '10px 14px',
                   fontSize: '13px',
                 }}
               />
-              <Area
-                type="monotone"
-                dataKey="netWorth"
-                stroke="#0ea5e9"
-                strokeWidth={2}
-                fill="url(#netWorthGradient)"
-                dot={false}
-                activeDot={{ r: 4, fill: '#0ea5e9' }}
-              />
+              <Area type="monotone" dataKey="house" stackId="1" name={t.bucketHouse} stroke="#10b981" fill="url(#houseGrad)" />
+              <Area type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke="#737373" fill="url(#cashGrad)" />
+              <Area type="monotone" dataKey="crypto" stackId="1" name={t.bucketCrypto} stroke="#a855f7" fill="url(#cryptoGrad)" />
+              <Area type="monotone" dataKey="stocks" stackId="1" name={t.bucketStocks} stroke="#0ea5e9" fill="url(#stocksGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
-        <p className="text-[11px] text-[#737373]">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#0ea5e9' }} />{t.bucketStocks}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#a855f7' }} />{t.bucketCrypto}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#737373' }} />{t.bucketCash}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#10b981' }} />{t.bucketHouse}</div>
+        </div>
+
+        <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
           {lang === 'nb'
-            ? `Beregnet med ${growthReturnRate}% årlig avkastning og ${formatCurrency(annualSavings)} i årlig sparing fra disponibelt budsjett.`
-            : `Projected at ${growthReturnRate}% annual return with ${formatCurrency(annualSavings)} annual savings from discretionary budget.`}
+            ? `Hver aktivaklasse vokser med egen rate. Sparing (${formatCurrency(annualSavings)}/år fra budsjettet) går til aksjer. Endre ratene i Innstillinger.`
+            : `Each asset class grows at its own rate. Savings (${formatCurrency(annualSavings)}/yr from your budget) flow into stocks. Adjust the rates in Settings.`}
         </p>
       </div>
 
@@ -363,19 +470,19 @@ interface AssetRowProps {
 function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, icon }: AssetRowProps) {
   return (
     <div
-      className={`flex justify-between items-center group py-3.5 border-b border-[#f0f0f0] dark:border-[#222222] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
+      className={`flex justify-between items-center group py-3.5 border-b border-[var(--border)] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
       onClick={onEdit}
     >
-      <span className={`text-[13px] font-medium flex items-center gap-1.5 transition-colors ${onEdit ? 'text-[#0a0a0a] dark:text-[#fafafa] group-hover:text-[#0ea5e9] dark:group-hover:text-[#38bdf8]' : 'text-[#737373]'}`}>
+      <span className={`text-[13px] font-medium flex items-center gap-1.5 transition-colors ${onEdit ? 'text-[var(--text-1)] group-hover:text-[#0ea5e9]' : 'text-[var(--text-2)]'}`}>
         {icon}
         {label}
       </span>
       <div className="flex items-center gap-2">
-        <span className={`text-[13px] font-mono font-medium transition-colors ${isNegative ? 'text-[#ef4444]' : onEdit ? 'text-[#0a0a0a] dark:text-[#fafafa] group-hover:opacity-70' : 'text-[#737373]'}`}>
+        <span className={`text-[13px] font-mono font-medium transition-colors ${isNegative ? 'text-[#ef4444]' : onEdit ? 'text-[var(--text-1)] group-hover:opacity-70' : 'text-[var(--text-2)]'}`}>
           {isNegative ? '−' : ''}{formatCurrency(value)}{suffix}
         </span>
         {onEdit ? (
-          <Edit2 size={13} className="text-[#737373] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0" />
+          <Edit2 size={13} className="text-[var(--text-2)] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0" />
         ) : (
           <span className="w-[13px] shrink-0" />
         )}

@@ -46,8 +46,8 @@ interface ModalConfig {
   onSave: (values: Record<string, string>) => void;
 }
 
-const card = 'bg-white dark:bg-[#1a1a1a] rounded-2xl border border-[#e5e5e5] dark:border-[#2a2a2a] shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[#737373]';
+const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const LoanPage: React.FC = () => {
   const {
@@ -56,7 +56,7 @@ const LoanPage: React.FC = () => {
     homeowner, updateHomeowner,
     transition, updateTransition,
     assets, houseEquity,
-    formatCurrency, isDarkMode,
+    formatCurrency,
   } = useFinance();
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
@@ -195,25 +195,58 @@ const LoanPage: React.FC = () => {
     { mode: 'transitioning', label: t.housingModeTransitioning, icon: <ArrowLeftRight size={13} strokeWidth={2} /> },
   ];
 
-  return (
-    <div className="space-y-4 md:space-y-6 pb-8">
+  const heroSubtitle = housingMode === 'first_buyer'
+    ? (lang === 'nb' ? 'Planlegg ditt første boligkjøp. Beregn låneevne, månedlig kostnad og total tilbakebetaling.' : 'Plan your first home purchase. Calculate borrowing capacity, monthly cost, and total payback.')
+    : housingMode === 'homeowner'
+      ? (lang === 'nb' ? 'Følg med på nåværende boliglån, renter, egenkapital og nedbetaling.' : "Track your current mortgage, rates, equity, and payoff schedule.")
+      : (lang === 'nb' ? 'Modellér overgang fra dagens bolig til en ny — netto salgsprovenu, mellomfinansiering og nytt lån.' : 'Model the move from your current home to a new one — net sale proceeds, bridge loan, and new mortgage.');
 
-      {/* Mode selector */}
-      <div className="flex gap-2 flex-wrap">
-        {modeOptions.map(({ mode, label, icon }) => (
-          <button
-            key={mode}
-            onClick={() => setHousingMode(mode)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-medium transition-all border ${
-              housingMode === mode
-                ? 'bg-[#0ea5e9] border-[#0ea5e9] text-white shadow-sm'
-                : 'bg-white dark:bg-[#1a1a1a] border-[#e5e5e5] dark:border-[#2a2a2a] text-[#737373] hover:border-[#0ea5e9] hover:text-[#0ea5e9]'
-            }`}
-          >
-            {icon}
-            {label}
-          </button>
-        ))}
+  return (
+    <div className="space-y-6 md:space-y-7 pb-8">
+
+      {/* Hero header */}
+      <header className="max-w-4xl">
+        <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
+          {lang === 'nb' ? 'Boliglån' : 'Mortgage'}
+        </div>
+        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+          {lang === 'nb' ? (
+            <>Et hjem, et <em className="font-serif italic" style={{ color: 'var(--accent)' }}>lån</em>.</>
+          ) : (
+            <>A home, a <em className="font-serif italic" style={{ color: 'var(--accent)' }}>loan</em>.</>
+          )}
+        </h1>
+        <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
+          {heroSubtitle}
+        </p>
+      </header>
+
+      {/* Mode selector — pill segmented control */}
+      <div
+        className="inline-flex p-1 rounded-full border flex-wrap gap-1"
+        style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--border)' }}
+        role="radiogroup"
+      >
+        {modeOptions.map(({ mode, label, icon }) => {
+          const active = housingMode === mode;
+          return (
+            <button
+              key={mode}
+              onClick={() => setHousingMode(mode)}
+              role="radio"
+              aria-checked={active}
+              className="flex items-center gap-2 px-4 h-8 rounded-full text-[12px] font-medium transition-colors"
+              style={{
+                background: active ? 'var(--text-1)' : 'transparent',
+                color: active ? 'var(--bg-page)' : 'var(--text-2)',
+                fontWeight: active ? 600 : 500,
+              }}
+            >
+              {icon}
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── FIRST BUYER ── */}
@@ -223,8 +256,8 @@ const LoanPage: React.FC = () => {
 
             {/* Låneevne */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-                <Calculator size={14} strokeWidth={2} className="text-[#737373]" />
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <Calculator size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                 <h2 className={sectionLabel}>Låneevne</h2>
               </div>
               <div className="space-y-1">
@@ -248,8 +281,8 @@ const LoanPage: React.FC = () => {
 
             {/* Kostnad på lån */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-                <TrendingUp size={14} strokeWidth={2} className="text-[#737373]" />
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                 <h2 className={sectionLabel}>Kostnad på lån</h2>
               </div>
               <div className="space-y-1">
@@ -282,8 +315,8 @@ const LoanPage: React.FC = () => {
 
             {/* Skattelettelse */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-                <ShieldCheck size={14} strokeWidth={2} className="text-[#737373]" />
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <ShieldCheck size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                 <h2 className={sectionLabel}>Skattelettelse på boliglån</h2>
               </div>
               <div className="space-y-1">
@@ -299,14 +332,14 @@ const LoanPage: React.FC = () => {
 
             {/* Finansieringsbevis */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center justify-between pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
+              <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
-                  <Building2 size={14} strokeWidth={2} className="text-[#737373]" />
+                  <Building2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                   <h2 className={sectionLabel}>Finansieringsbevis – Handelsbanken</h2>
                 </div>
                 <button
                   onClick={() => editText('Gyldig til', 'gyldigTil', loan.gyldigTil)}
-                  className="flex items-center gap-1 text-[#737373] hover:text-[#0ea5e9] dark:hover:text-[#38bdf8] transition-colors shrink-0 ml-2"
+                  className="flex items-center gap-1 text-[var(--text-2)] hover:text-[#0ea5e9] transition-colors shrink-0 ml-2"
                 >
                   <Clock size={11} />
                   <span className="text-[10px] font-medium whitespace-nowrap">Gyldig til {loan.gyldigTil}</span>
@@ -337,7 +370,6 @@ const LoanPage: React.FC = () => {
             chartData={chartData}
             t={t}
             lang={lang}
-            isDarkMode={isDarkMode}
             formatCurrency={formatCurrency}
           />
         </>
@@ -350,8 +382,8 @@ const LoanPage: React.FC = () => {
 
             {/* Nåværende lån */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-                <Calculator size={14} strokeWidth={2} className="text-[#737373]" />
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <Calculator size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                 <h2 className={sectionLabel}>Nåværende lån</h2>
               </div>
               <div className="space-y-1">
@@ -382,14 +414,14 @@ const LoanPage: React.FC = () => {
 
             {/* Boligegenkapital */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center justify-between pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
+              <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
-                  <Home size={14} strokeWidth={2} className="text-[#737373]" />
+                  <Home size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                   <h2 className={sectionLabel}>Boligegenkapital</h2>
                 </div>
                 <Link
                   to="/assets"
-                  className="text-[10px] text-[#737373] hover:text-[#0ea5e9] transition-colors whitespace-nowrap"
+                  className="text-[10px] text-[var(--text-2)] hover:text-[#0ea5e9] transition-colors whitespace-nowrap"
                 >
                   {t.editInAssets}
                 </Link>
@@ -401,13 +433,13 @@ const LoanPage: React.FC = () => {
               </div>
               {assets.houseValue > 0 && (
                 <div className="pt-2">
-                  <div className="flex justify-between text-[11px] text-[#737373] mb-1.5">
+                  <div className="flex justify-between text-[11px] text-[var(--text-2)] mb-1.5">
                     <span>{t.equityPercent}</span>
-                    <span className="font-mono font-medium text-[#0a0a0a] dark:text-[#fafafa]">
+                    <span className="font-mono font-medium text-[var(--text-1)]">
                       {((houseEquity / assets.houseValue) * 100).toFixed(1)}%
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-[#f0f0f0] dark:bg-[#2a2a2a] overflow-hidden">
+                  <div className="h-2 rounded-full bg-[var(--bg-elev)] overflow-hidden">
                     <div
                       className="h-full rounded-full bg-[#0ea5e9] transition-all"
                       style={{ width: `${Math.min(100, Math.max(0, (houseEquity / assets.houseValue) * 100))}%` }}
@@ -417,13 +449,13 @@ const LoanPage: React.FC = () => {
               )}
               {assets.houseValue > 0 && homeowner.originalLoanAmount > 0 && (
                 <div className="pt-2">
-                  <div className="flex justify-between text-[11px] text-[#737373] mb-1.5">
+                  <div className="flex justify-between text-[11px] text-[var(--text-2)] mb-1.5">
                     <span>Nedbetalt av opprinnelig lån</span>
-                    <span className="font-mono font-medium text-[#0a0a0a] dark:text-[#fafafa]">
+                    <span className="font-mono font-medium text-[var(--text-1)]">
                       {homeownerStatus.equityPercent.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-[#f0f0f0] dark:bg-[#2a2a2a] overflow-hidden">
+                  <div className="h-2 rounded-full bg-[var(--bg-elev)] overflow-hidden">
                     <div
                       className="h-full rounded-full bg-emerald-500 transition-all"
                       style={{ width: `${Math.min(100, homeownerStatus.equityPercent)}%` }}
@@ -435,8 +467,8 @@ const LoanPage: React.FC = () => {
 
             {/* Skattelettelse */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-                <ShieldCheck size={14} strokeWidth={2} className="text-[#737373]" />
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <ShieldCheck size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                 <h2 className={sectionLabel}>Skattelettelse på boliglån</h2>
               </div>
               <div className="space-y-1">
@@ -460,7 +492,6 @@ const LoanPage: React.FC = () => {
             chartData={homeownerChartData}
             t={t}
             lang={lang}
-            isDarkMode={isDarkMode}
             formatCurrency={formatCurrency}
           />
         </>
@@ -473,8 +504,8 @@ const LoanPage: React.FC = () => {
 
             {/* Salg av nåværende bolig */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-                <Building2 size={14} strokeWidth={2} className="text-[#737373]" />
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <Building2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                 <h2 className={sectionLabel}>{t.saleCard}</h2>
               </div>
               <div className="space-y-1">
@@ -505,8 +536,8 @@ const LoanPage: React.FC = () => {
 
             {/* Mellomfinansieringsperiode */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-                <Clock size={14} strokeWidth={2} className="text-[#737373]" />
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <Clock size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                 <h2 className={sectionLabel}>{t.bridgeCard}</h2>
               </div>
               <div className="space-y-1">
@@ -524,8 +555,8 @@ const LoanPage: React.FC = () => {
 
             {/* Ny bolig – lånekalkulator */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center gap-2 pb-4 border-b border-[#f0f0f0] dark:border-[#222222]">
-                <Calculator size={14} strokeWidth={2} className="text-[#737373]" />
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <Calculator size={14} strokeWidth={2} className="text-[var(--text-2)]" />
                 <h2 className={sectionLabel}>{t.newHouseCard}</h2>
               </div>
               <div className="space-y-1">
@@ -559,25 +590,25 @@ const LoanPage: React.FC = () => {
 
           {/* Summary hero card */}
           <div className={`${card} p-5 md:p-7`}>
-            <div className="flex items-center gap-2 pb-4 mb-5 border-b border-[#f0f0f0] dark:border-[#222222]">
-              <TrendingUp size={14} strokeWidth={2} className="text-[#737373]" />
+            <div className="flex items-center gap-2 pb-4 mb-5 border-b border-[var(--border)]">
+              <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h2 className={sectionLabel}>{t.summaryCard}</h2>
             </div>
 
             {/* Flow diagram */}
             <div className="flex items-center gap-2 flex-wrap mb-6">
               <FlowStep label="Selger" value={fmtNum(transition.currentHouseValue)} color="blue" />
-              <ArrowRight size={14} className="text-[#737373] shrink-0" />
+              <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
               <FlowStep label="Betaler lån" value={fmtNum(transition.currentMortgageBalance)} color="red" />
-              <ArrowRight size={14} className="text-[#737373] shrink-0" />
+              <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
               <FlowStep
                 label="Netto proveny"
                 value={fmtNum(saleProceeds.netProceeds)}
                 color={saleProceeds.netProceeds < 0 ? 'red' : 'green'}
               />
-              <ArrowRight size={14} className="text-[#737373] shrink-0" />
+              <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
               <FlowStep label="Kjøper" value={fmtNum(loan.kjoepesum)} color="blue" />
-              <ArrowRight size={14} className="text-[#737373] shrink-0" />
+              <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
               <FlowStep label="Trenger lån" value={fmtNum(transitionNewLoan.newLoanNeeded)} color="red" />
             </div>
 
@@ -605,33 +636,32 @@ interface AmortizationAccordionProps {
   chartData: ReturnType<typeof calcAmortizationSchedule>;
   t: ReturnType<typeof import('../context/FinanceContext').useFinance>['t'];
   lang: string;
-  isDarkMode: boolean;
   formatCurrency: (n: number) => string;
 }
 
-function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, isDarkMode, formatCurrency }: AmortizationAccordionProps) {
+function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, formatCurrency }: AmortizationAccordionProps) {
   return (
     <div className={`${card} overflow-hidden`}>
       <button
         onClick={onToggle}
-        className="w-full px-5 py-4 md:px-7 md:py-5 flex items-center justify-between hover:bg-[#fafafa] dark:hover:bg-[#1f1f1f] transition-colors"
+        className="w-full px-5 py-4 md:px-7 md:py-5 flex items-center justify-between hover:bg-[var(--bg-raised)] transition-colors"
       >
         <div className="flex items-center gap-2">
-          <TrendingUp size={14} strokeWidth={2} className="text-[#737373]" />
+          <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
           <span className={sectionLabel}>{t.amortizationSchedule}</span>
         </div>
         {show
-          ? <ChevronUp size={16} className="text-[#737373]" />
-          : <ChevronDown size={16} className="text-[#737373]" />}
+          ? <ChevronUp size={16} className="text-[var(--text-2)]" />
+          : <ChevronDown size={16} className="text-[var(--text-2)]" />}
       </button>
 
       {show && (
-        <div className="border-t border-[#f0f0f0] dark:border-[#222222]">
+        <div className="border-t border-[var(--border)]">
           <div className="px-5 py-5 md:px-7">
             <div className="h-[200px] md:h-[260px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#222222' : '#f0f0f0'} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={'#2a2a2a'} />
                   <XAxis
                     dataKey="year"
                     tick={{ fontSize: 11, fill: '#737373' }}
@@ -654,9 +684,9 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, i
                     labelFormatter={(v) => `${t.year} ${v}`}
                     contentStyle={{
                       borderRadius: '10px',
-                      border: `1px solid ${isDarkMode ? '#2a2a2a' : '#e5e5e5'}`,
-                      backgroundColor: isDarkMode ? '#1a1a1a' : '#ffffff',
-                      color: isDarkMode ? '#fafafa' : '#0a0a0a',
+                      border: `1px solid ${'#2a2a2a'}`,
+                      backgroundColor: 'var(--bg-card)',
+                      color: 'var(--text-1)',
                       fontSize: '13px',
                     }}
                   />
@@ -679,8 +709,8 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, i
           </div>
           <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 bg-[#fafafa] dark:bg-[#1f1f1f]">
-                <tr className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#737373]">
+              <thead className="sticky top-0 bg-[var(--bg-raised)]">
+                <tr className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">
                   <th className="px-5 md:px-7 py-3">{t.year}</th>
                   <th className="px-5 md:px-7 py-3 text-right">{t.annualPayment}</th>
                   <th className="px-5 md:px-7 py-3 text-right">{t.principalPayment}</th>
@@ -688,14 +718,14 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, i
                   <th className="px-5 md:px-7 py-3 text-right">{t.remainingBalance}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#f0f0f0] dark:divide-[#222222]">
+              <tbody className="divide-y divide-[var(--border)]">
                 {schedule.map((row) => (
-                  <tr key={row.year} className="hover:bg-[#fafafa] dark:hover:bg-[#1f1f1f] transition-colors">
-                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono font-medium text-[#0a0a0a] dark:text-[#fafafa]">{row.year}</td>
-                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#737373]">{formatCurrency(Math.round(row.annualPayment))}</td>
-                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#0ea5e9] dark:text-[#38bdf8]">{formatCurrency(Math.round(row.principalPaid))}</td>
+                  <tr key={row.year} className="hover:bg-[var(--bg-raised)] transition-colors">
+                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono font-medium text-[var(--text-1)]">{row.year}</td>
+                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[var(--text-2)]">{formatCurrency(Math.round(row.annualPayment))}</td>
+                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#0ea5e9]">{formatCurrency(Math.round(row.principalPaid))}</td>
                     <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#ef4444]">{formatCurrency(Math.round(row.interestPaid))}</td>
-                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right font-semibold text-[#0a0a0a] dark:text-[#fafafa]">{formatCurrency(Math.round(row.balance))}</td>
+                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right font-semibold text-[var(--text-1)]">{formatCurrency(Math.round(row.balance))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -722,31 +752,31 @@ function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blu
   const isCalculated = !onEdit;
   const valueColor = highlight
     ? highlightColor === 'green'
-      ? 'text-emerald-600 dark:text-emerald-400'
+      ? 'text-emerald-600'
       : highlightColor === 'red'
         ? 'text-[#ef4444]'
-        : 'text-[#0ea5e9] dark:text-[#38bdf8]'
+        : 'text-[#0ea5e9]'
     : isCalculated
-      ? 'text-[#737373]'
-      : 'text-[#0a0a0a] dark:text-[#fafafa]';
+      ? 'text-[var(--text-2)]'
+      : 'text-[var(--text-1)]';
 
-  const labelColor = highlight ? valueColor : isCalculated ? 'text-[#737373]' : 'text-[#0a0a0a] dark:text-[#fafafa]';
+  const labelColor = highlight ? valueColor : isCalculated ? 'text-[var(--text-2)]' : 'text-[var(--text-1)]';
 
   return (
     <div
-      className={`flex items-center justify-between group py-3.5 border-b border-[#f0f0f0] dark:border-[#222222] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
+      className={`flex items-center justify-between group py-3.5 border-b border-[var(--border)] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
       onClick={onEdit}
     >
       <div className="flex-1 min-w-0 mr-4">
         <div className={`text-[13px] font-medium ${labelColor}`}>{label}</div>
-        {notes && <div className="text-[11px] text-[#737373]/70 hidden lg:block mt-0.5">{notes}</div>}
+        {notes && <div className="text-[11px] text-[var(--text-2)]/70 hidden lg:block mt-0.5">{notes}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${valueColor} ${onEdit ? 'group-hover:opacity-70 transition-opacity' : ''}`}>
           {value}
         </span>
         {onEdit
-          ? <Edit2 size={13} className="text-[#737373] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0" />
+          ? <Edit2 size={13} className="text-[var(--text-2)] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0" />
           : <span className="w-[13px] shrink-0" />}
       </div>
     </div>
@@ -761,9 +791,9 @@ interface FlowStepProps {
 
 function FlowStep({ label, value, color }: FlowStepProps) {
   const colors = {
-    blue: 'bg-[#f0f9ff] dark:bg-[#0ea5e920] border-[#bae6fd] dark:border-[#0ea5e940] text-[#0ea5e9]',
-    green: 'bg-[#f0fdf4] dark:bg-[#10b98120] border-[#bbf7d0] dark:border-[#10b98140] text-emerald-600 dark:text-emerald-400',
-    red: 'bg-[#fff1f2] dark:bg-[#ef444420] border-[#fecdd3] dark:border-[#ef444440] text-[#ef4444]',
+    blue: 'bg-[#f0f9ff] border-[#bae6fd] text-[#0ea5e9]',
+    green: 'bg-[#f0fdf4] border-[#bbf7d0] text-emerald-600',
+    red: 'bg-[#fff1f2] border-[#fecdd3] text-[#ef4444]',
   };
   return (
     <div className={`flex flex-col items-center px-3 py-2 rounded-xl border ${colors[color]} min-w-[100px]`}>
@@ -781,9 +811,9 @@ interface SummaryTileProps {
 
 function SummaryTile({ label, value, accent }: SummaryTileProps) {
   return (
-    <div className={`rounded-xl p-3 border ${accent ? 'bg-[#f0f9ff] dark:bg-[#0ea5e910] border-[#bae6fd] dark:border-[#0ea5e930]' : 'bg-[#fafafa] dark:bg-[#111111] border-[#f0f0f0] dark:border-[#222222]'}`}>
-      <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#737373] mb-1">{label}</div>
-      <div className={`text-[14px] font-mono font-semibold ${accent ? 'text-[#0ea5e9]' : 'text-[#0a0a0a] dark:text-[#fafafa]'}`}>{value}</div>
+    <div className={`rounded-xl p-3 border ${accent ? 'bg-[#f0f9ff] border-[#bae6fd]' : 'bg-[var(--bg-raised)] border-[var(--border)]'}`}>
+      <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)] mb-1">{label}</div>
+      <div className={`text-[14px] font-mono font-semibold ${accent ? 'text-[#0ea5e9]' : 'text-[var(--text-1)]'}`}>{value}</div>
     </div>
   );
 }

@@ -1,10 +1,25 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { FinanceProvider } from './context/FinanceContext';
 import Layout from './components/Layout';
-import BudgetPage from './pages/BudgetPage';
-import AssetPage from './pages/AssetPage';
-import LoanPage from './pages/LoanPage';
-import DashboardPage from './pages/DashboardPage';
+
+// Code-split per route: each page bundle is fetched only when navigated to.
+const BudgetPage = lazy(() => import('./pages/BudgetPage'));
+const AssetPage = lazy(() => import('./pages/AssetPage'));
+const LoanPage = lazy(() => import('./pages/LoanPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const SalaryPage = lazy(() => import('./pages/SalaryPage'));
+const ForecastPage = lazy(() => import('./pages/ForecastPage'));
+const PensionPage = lazy(() => import('./pages/PensionPage'));
+
+function RouteFallback() {
+  return (
+    <div className="grid place-items-center py-24 text-[12px]" style={{ color: 'var(--text-3)' }}>
+      …
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -12,10 +27,14 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<BudgetPage />} />
-            <Route path="overview" element={<DashboardPage />} />
-            <Route path="assets" element={<AssetPage />} />
-            <Route path="loan" element={<LoanPage />} />
+            <Route index element={<Suspense fallback={<RouteFallback />}><BudgetPage /></Suspense>} />
+            <Route path="overview" element={<Suspense fallback={<RouteFallback />}><DashboardPage /></Suspense>} />
+            <Route path="assets" element={<Suspense fallback={<RouteFallback />}><AssetPage /></Suspense>} />
+            <Route path="loan" element={<Suspense fallback={<RouteFallback />}><LoanPage /></Suspense>} />
+            <Route path="salary" element={<Suspense fallback={<RouteFallback />}><SalaryPage /></Suspense>} />
+            <Route path="forecast" element={<Suspense fallback={<RouteFallback />}><ForecastPage /></Suspense>} />
+            <Route path="pension" element={<Suspense fallback={<RouteFallback />}><PensionPage /></Suspense>} />
+            <Route path="settings" element={<Suspense fallback={<RouteFallback />}><SettingsPage /></Suspense>} />
           </Route>
         </Routes>
       </BrowserRouter>

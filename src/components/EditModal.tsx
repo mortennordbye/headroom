@@ -1,14 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type Ref } from 'react';
 import ReactDOM from 'react-dom';
 import { X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 
+export interface ModalFieldOption {
+  value: string;
+  label: string;
+}
+
 export interface ModalField {
   key: string;
   label: string;
-  type: 'text' | 'number';
+  type: 'text' | 'number' | 'select';
   value: string;
   placeholder?: string;
+  options?: ModalFieldOption[]; // required when type === 'select'
+  suggestions?: string[];       // text fields only — populates a <datalist> for autocomplete
 }
 
 interface EditModalProps {
@@ -26,13 +33,15 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
   const [values, setValues] = useState<Record<string, string>>(
     () => Object.fromEntries(fields.map(f => [f.key, f.value]))
   );
-  const firstInputRef = useRef<HTMLInputElement>(null);
+  const firstInputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
   const actualCancelLabel = cancelLabel ?? t.cancel;
   const actualSaveLabel = saveLabel ?? t.save;
 
   useEffect(() => {
     firstInputRef.current?.focus();
-    firstInputRef.current?.select();
+    if (firstInputRef.current && firstInputRef.current instanceof HTMLInputElement) {
+      firstInputRef.current.select();
+    }
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
@@ -52,12 +61,12 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
       className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
-      <div className="w-full sm:w-auto sm:min-w-[360px] sm:max-w-sm bg-white dark:bg-[#1a1a1a] rounded-t-2xl sm:rounded-2xl p-6 space-y-5 shadow-2xl border border-[#e5e5e5] dark:border-[#2a2a2a]">
+      <div className="w-full sm:w-auto sm:min-w-[360px] sm:max-w-sm bg-[var(--bg-card)] rounded-t-2xl sm:rounded-2xl p-6 space-y-5 shadow-2xl border border-[var(--border)]">
         <div className="flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold text-[#0a0a0a] dark:text-[#fafafa]">{title}</h3>
+          <h3 className="text-[14px] font-semibold text-[var(--text-1)]">{title}</h3>
           <button
             onClick={onCancel}
-            className="p-1 rounded-lg text-[#737373] hover:text-[#0a0a0a] dark:hover:text-[#fafafa] hover:bg-[#f0f0f0] dark:hover:bg-[#222222] transition-colors"
+            className="p-1 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"
           >
             <X size={16} />
           </button>
@@ -66,19 +75,58 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
         <div className="space-y-3">
           {fields.map((field, idx) => (
             <div key={field.key} className="space-y-1.5">
-              <label className="text-[11px] font-medium text-[#737373] uppercase tracking-wide">
+              <label className="text-[11px] font-medium text-[var(--text-2)] uppercase tracking-wide">
                 {field.label}
               </label>
-              <input
-                ref={idx === 0 ? firstInputRef : undefined}
-                type={field.type}
-                inputMode={field.type === 'number' ? 'decimal' : undefined}
-                value={values[field.key]}
-                placeholder={field.placeholder}
-                onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                onKeyDown={handleKeyDown}
-                className="w-full bg-[#fafafa] dark:bg-[#222222] border border-[#e5e5e5] dark:border-[#2a2a2a] rounded-xl px-4 py-3 text-[14px] font-mono text-[#0a0a0a] dark:text-[#fafafa] focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] dark:focus:ring-[#38bdf8] placeholder:text-[#737373] placeholder:font-sans"
-              />
+              {field.type === 'select' ? (
+                <select
+                  ref={idx === 0 ? (firstInputRef as Ref<HTMLSelectElement>) : undefined}
+                  value={values[field.key]}
+                  onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                  onKeyDown={handleKeyDown}
+                  className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-xl px-4 py-3 text-[14px] text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                >
+                  {(field.options ?? []).map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  <input
+                    ref={idx === 0 ? (firstInputRef as Ref<HTMLInputElement>) : undefined}
+                    type={field.type}
+                    inputMode={field.type === 'number' ? 'decimal' : undefined}
+                    value={values[field.key]}
+                    placeholder={field.placeholder}
+                    autoComplete={field.suggestions ? 'off' : undefined}
+                    onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                    onKeyDown={handleKeyDown}
+                    className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-xl px-4 py-3 text-[14px] font-mono text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] placeholder:text-[var(--text-2)] placeholder:font-sans"
+                  />
+                  {field.suggestions && field.suggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {field.suggestions.map(s => {
+                        const active = values[field.key].trim() === s;
+                        return (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setValues(prev => ({ ...prev, [field.key]: s }))}
+                            className="px-2 py-1 rounded-full text-[11px] font-medium transition-colors border"
+                            style={{
+                              background: active ? 'var(--accent-bg)' : 'transparent',
+                              color: active ? 'var(--accent)' : 'var(--text-2)',
+                              borderColor: active ? 'color-mix(in srgb, var(--accent) 35%, transparent)' : 'var(--border)',
+                            }}
+                          >
+                            {s}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ))}
           {error && (
@@ -89,13 +137,13 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
         <div className="flex gap-2 pt-1">
           <button
             onClick={onCancel}
-            className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-[#737373] bg-[#f0f0f0] dark:bg-[#222222] hover:bg-[#e5e5e5] dark:hover:bg-[#2a2a2a] transition-colors"
+            className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-[var(--text-2)] bg-[var(--bg-elev)] hover:bg-[#e5e5e5] transition-colors"
           >
             {actualCancelLabel}
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-[#0ea5e9] dark:bg-[#38bdf8] dark:text-[#111111] hover:opacity-90 transition-opacity"
+            className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-[#0ea5e9] hover:opacity-90 transition-opacity"
           >
             {actualSaveLabel}
           </button>

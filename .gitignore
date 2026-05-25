@@ -26,3 +26,9 @@ npm-debug.log*
 
 # Playwright artifacts
 .playwright-mcp/
+
+# Local screenshots from verification / design iterations
+screenshots/
+/*.png
+/*-snapshot.md
+/*-refs.md
