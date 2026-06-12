@@ -16,6 +16,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LabelList,
   PieChart,
   Pie,
   Legend,
@@ -92,6 +93,8 @@ const BudgetPage: React.FC = () => {
   const closeModal = () => setModal(null);
 
   const totalFixedExpenses = fixedExpenses.reduce((sum, item) => sum + item.amount, 0);
+  // Sort biggest-first so the distribution reads as a clean ranking.
+  const sortedExpenses = [...fixedExpenses].sort((a, b) => b.amount - a.amount);
 
   // --- Validation helpers ---
   const parsePositiveNumber = (val: string): number | null => {
@@ -409,39 +412,58 @@ const BudgetPage: React.FC = () => {
           <div className="h-[280px] md:h-[340px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={fixedExpenses}
+                data={sortedExpenses}
                 layout="vertical"
-                margin={{ top: 0, right: 16, left: 16, bottom: 0 }}
+                margin={{ top: 4, right: 60, left: 16, bottom: 4 }}
               >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={'#2a2a2a'} />
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
                 <XAxis type="number" hide />
                 <YAxis
                   dataKey="name"
                   type="category"
                   width={88}
-                  tick={{ fontSize: 11, fill: '#737373', fontWeight: 500 }}
+                  tick={{ fontSize: 11, fill: '#9a9aa3', fontWeight: 500 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <Tooltip
-                  cursor={{ fill: 'rgba(0,0,0,0.03)' }}
-                  formatter={(value) => [formatCurrency(Number(value ?? 0)), '']}
-                  contentStyle={{
-                    borderRadius: '10px',
-                    border: `1px solid ${'#2a2a2a'}`,
-                    backgroundColor: 'var(--bg-card)',
-                    color: 'var(--text-1)',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                    padding: '10px 14px',
-                    fontSize: '13px',
-                    fontWeight: 500
+                  cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  content={({ active, payload }: any) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0].payload;
+                    const pct = totalFixedExpenses > 0 ? (d.amount / totalFixedExpenses) * 100 : 0;
+                    return (
+                      <div
+                        className="rounded-[10px] px-3.5 py-2.5"
+                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}
+                      >
+                        <div className="text-[13px] font-semibold text-[var(--text-1)]">{d.name}</div>
+                        <div className="text-[13px] font-mono text-[var(--text-2)] mt-0.5">{formatCurrency(d.amount)}</div>
+                        <div className="text-[11px] text-[var(--text-3)] mt-1">
+                          {pct.toFixed(1)}% {lang === 'nb' ? 'av faste utgifter' : 'of fixed costs'}
+                        </div>
+                      </div>
+                    );
                   }}
-                  itemStyle={{ padding: 0 }}
                 />
-                <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={10}>
-                  {fixedExpenses.map((_, index) => (
+                <Bar
+                  dataKey="amount"
+                  radius={[0, 6, 6, 0]}
+                  barSize={12}
+                  background={{ fill: 'rgba(255,255,255,0.04)', radius: 6 } as any}
+                >
+                  {sortedExpenses.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                   ))}
+                  <LabelList
+                    dataKey="amount"
+                    position="right"
+                    offset={10}
+                    fill="#9a9aa3"
+                    fontSize={11}
+                    fontWeight={600}
+                    formatter={(v: any) => Math.round(Number(v ?? 0)).toLocaleString(lang === 'nb' ? 'nb-NO' : 'en-US')}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

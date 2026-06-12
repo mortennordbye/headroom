@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { AlertTriangle, TrendingUp, Edit2 } from 'lucide-react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 
 const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
@@ -91,6 +91,7 @@ export default function SmartRecommendations() {
 
   const [editingPct, setEditingPct] = useState(false);
   const [pctDraft, setPctDraft] = useState('');
+  const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
   const pctInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -134,10 +135,14 @@ export default function SmartRecommendations() {
     : savingsTargetPercent;
 
   const pieData = [
-    { name: t.fixedCosts, value: totalFixedExpenses, color: '#404040' },
+    { name: t.fixedCosts, value: totalFixedExpenses, color: '#71717a' },
     { name: t.canSpend, value: recommendedSpending, color: '#0ea5e9' },
     { name: t.shouldInvest, value: recommendedInvestment, color: '#10b981' },
   ];
+  const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
+  const slicePct = (v: number) => (pieTotal > 0 ? (v / pieTotal) * 100 : 0);
+  const fmtKr = (v: number) => Math.round(v).toLocaleString(lang === 'nb' ? 'nb-NO' : 'en-US') + ' kr';
+  const activeSlice = hoveredSlice !== null ? pieData[hoveredSlice] : null;
 
   return (
     <div className={`${card} p-5 md:p-7`}>
@@ -231,43 +236,69 @@ export default function SmartRecommendations() {
           </div>
         </div>
 
-        {/* Right: pie chart */}
+        {/* Right: donut chart */}
         <div className="w-full md:w-[200px] shrink-0">
-          <ResponsiveContainer width="100%" height={160}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                innerRadius={45}
-                outerRadius={72}
-                paddingAngle={2}
-                dataKey="value"
-                strokeWidth={0}
-              >
-                {pieData.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value) => formatCurrency(Number(value))}
-                contentStyle={{
-                  background: 'var(--tooltip-bg, #1a1a1a)',
-                  border: '1px solid #2a2a2a',
-                  borderRadius: '10px',
-                  fontSize: '11px',
-                  color: '#fafafa',
-                }}
-                itemStyle={{ color: '#fafafa' }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          {/* Legend */}
-          <div className="flex flex-col gap-1 mt-1">
+          <div className="relative" style={{ height: 160 }}>
+            <ResponsiveContainer width="100%" height={160}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={48}
+                  outerRadius={72}
+                  paddingAngle={2}
+                  dataKey="value"
+                  strokeWidth={0}
+                  onMouseEnter={(_: unknown, i: number) => setHoveredSlice(i)}
+                  onMouseLeave={() => setHoveredSlice(null)}
+                >
+                  {pieData.map((entry, i) => (
+                    <Cell
+                      key={i}
+                      fill={entry.color}
+                      opacity={hoveredSlice === null || hoveredSlice === i ? 1 : 0.3}
+                      style={{ cursor: 'pointer', transition: 'opacity 0.15s' }}
+                    />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            {/* center label */}
+            <div className="absolute inset-0 grid place-items-center text-center pointer-events-none">
+              <div>
+                <div className="text-[9px] uppercase tracking-[0.1em] text-[var(--text-3)] truncate max-w-[88px] mx-auto">
+                  {activeSlice ? activeSlice.name : (lang === 'nb' ? 'Totalt' : 'Total')}
+                </div>
+                <div className="text-[15px] font-bold font-mono tracking-tight text-[var(--text-1)] mt-0.5">
+                  {fmtKr(activeSlice ? activeSlice.value : pieTotal)}
+                </div>
+                {activeSlice && (
+                  <div className="text-[11px] font-semibold tabular-nums mt-0.5" style={{ color: activeSlice.color }}>
+                    {slicePct(activeSlice.value).toFixed(0)}%
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* Legend with shares */}
+          <div className="flex flex-col gap-1.5 mt-2">
             {pieData.map((entry, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                <span className="text-[10px] text-[var(--text-2)] truncate">{entry.name}</span>
+              <div
+                key={i}
+                className="flex items-center justify-between gap-2 cursor-pointer rounded-md px-1 py-0.5 transition-colors"
+                style={{ background: hoveredSlice === i ? 'rgba(255,255,255,0.05)' : 'transparent' }}
+                onMouseEnter={() => setHoveredSlice(i)}
+                onMouseLeave={() => setHoveredSlice(null)}
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                  <span className="text-[11px] text-[var(--text-2)] truncate">{entry.name}</span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
+                  <span className="text-[11px] font-mono text-[var(--text-1)]">{fmtKr(entry.value)}</span>
+                  <span className="text-[10px] text-[var(--text-3)] w-8 text-right">{slicePct(entry.value).toFixed(0)}%</span>
+                </div>
               </div>
             ))}
           </div>
