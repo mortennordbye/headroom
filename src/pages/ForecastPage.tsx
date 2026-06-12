@@ -338,7 +338,7 @@ interface SummaryTileProps {
 const SummaryTile: React.FC<SummaryTileProps> = ({ label, now, then, thenLabel, subThen, color }) => (
   <div className={`${card} p-4 md:p-5 space-y-1.5`}>
     <div className={sectionLabel}>{label}</div>
-    <div className="text-[20px] md:text-[24px] font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
+    <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
       {then}
     </div>
     <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{thenLabel}</div>

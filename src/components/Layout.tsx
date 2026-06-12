@@ -1,5 +1,5 @@
-import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import React, { useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,14 +12,22 @@ import {
   LineChart as LineChartIcon,
   Activity,
   Briefcase,
+  Menu as MenuIcon,
+  X,
 } from 'lucide-react';
 import { format, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
 
+/** Routes surfaced inside the "Mer" sheet on mobile (everything past the 4 primary tabs). */
+const MORE_ROUTES = ['/forecast', '/pension', '/loan', '/settings'];
+
 const Layout: React.FC = () => {
   const { t, lang, currentMonth, setCurrentMonth } = useFinance();
   const dateLocale = lang === 'nb' ? nb : enUS;
+  const location = useLocation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreActive = MORE_ROUTES.includes(location.pathname);
 
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
@@ -134,30 +142,100 @@ const Layout: React.FC = () => {
       </header>
 
       {/* ─── Main ────────────────────────────── */}
-      <main className="max-w-[1320px] mx-auto px-5 md:px-8 py-6 md:py-8 pb-24 md:pb-12">
+      <main className="max-w-[1320px] mx-auto px-5 md:px-8 py-6 md:py-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12">
         <Outlet />
       </main>
 
+      {/* ─── Mobile "Mer" sheet ──────────────── */}
+      {moreOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 animate-fade-in"
+            style={{ background: 'rgba(0,0,0,0.55)' }}
+            onClick={() => setMoreOpen(false)}
+          />
+          <div
+            className="absolute bottom-0 left-0 right-0 animate-sheet-rise rounded-t-[var(--radius-xl)] border-t px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+            style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
+          >
+            <div className="flex items-center justify-between px-2 pb-1">
+              <span
+                className="mx-auto h-1 w-9 rounded-full"
+                style={{ background: 'var(--border-strong)' }}
+                aria-hidden
+              />
+            </div>
+            <div className="flex items-center justify-between px-2 pt-1 pb-2">
+              <span className="text-[13px] font-semibold" style={{ color: 'var(--text-2)' }}>
+                {t.nav.more}
+              </span>
+              <button
+                onClick={() => setMoreOpen(false)}
+                aria-label="Close"
+                className="grid place-items-center w-8 h-8 rounded-full"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-2)' }}
+              >
+                <X size={16} strokeWidth={2} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <SheetItem to="/forecast" icon={<Activity size={20} strokeWidth={1.75} />} label={t.nav.forecast} onNavigate={() => setMoreOpen(false)} />
+              <SheetItem to="/pension" icon={<Briefcase size={20} strokeWidth={1.75} />} label={t.nav.pension} onNavigate={() => setMoreOpen(false)} />
+              <SheetItem to="/loan" icon={<Building2 size={20} strokeWidth={1.75} />} label={t.nav.loan} onNavigate={() => setMoreOpen(false)} />
+              <SheetItem to="/settings" icon={<SettingsIcon size={20} strokeWidth={1.75} />} label={t.nav.settings} onNavigate={() => setMoreOpen(false)} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Mobile bottom nav ───────────────── */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex overflow-x-auto no-scrollbar border-t backdrop-blur-xl"
+        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex border-t backdrop-blur-xl pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
         style={{
           background: 'color-mix(in srgb, var(--bg-card) 90%, transparent)',
           borderColor: 'var(--border)',
         }}
       >
-        <MobileNavTab to="/overview" icon={<LayoutDashboard size={18} strokeWidth={1.75} />} label={t.nav.dashboard} />
-        <MobileNavTab to="/" icon={<BarChart3 size={18} strokeWidth={1.75} />} label={t.nav.budget} />
-        <MobileNavTab to="/assets" icon={<TrendingUp size={18} strokeWidth={1.75} />} label={t.nav.assets} />
-        <MobileNavTab to="/salary" icon={<LineChartIcon size={18} strokeWidth={1.75} />} label={t.nav.salary} />
-        <MobileNavTab to="/forecast" icon={<Activity size={18} strokeWidth={1.75} />} label={t.nav.forecast} />
-        <MobileNavTab to="/pension" icon={<Briefcase size={18} strokeWidth={1.75} />} label={t.nav.pension} />
-        <MobileNavTab to="/loan" icon={<Building2 size={18} strokeWidth={1.75} />} label={t.nav.loan} />
-        <MobileNavTab to="/settings" icon={<SettingsIcon size={18} strokeWidth={1.75} />} label={t.nav.settings} />
+        <MobileNavTab to="/overview" icon={<LayoutDashboard size={20} strokeWidth={1.75} />} label={t.nav.dashboard} />
+        <MobileNavTab to="/" icon={<BarChart3 size={20} strokeWidth={1.75} />} label={t.nav.budget} />
+        <MobileNavTab to="/assets" icon={<TrendingUp size={20} strokeWidth={1.75} />} label={t.nav.assets} />
+        <MobileNavTab to="/salary" icon={<LineChartIcon size={20} strokeWidth={1.75} />} label={t.nav.salary} />
+        <button
+          onClick={() => setMoreOpen(true)}
+          className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
+          style={{ color: moreActive ? 'var(--accent)' : 'var(--text-3)' }}
+          aria-label={t.nav.more}
+        >
+          <MenuIcon size={20} strokeWidth={1.75} />
+          <span className="truncate max-w-full px-0.5">{t.nav.more}</span>
+        </button>
       </nav>
     </div>
   );
 };
+
+interface SheetItemProps {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+  onNavigate: () => void;
+}
+
+const SheetItem: React.FC<SheetItemProps> = ({ to, icon, label, onNavigate }) => (
+  <NavLink
+    to={to}
+    end={to === '/'}
+    onClick={onNavigate}
+    className="flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors"
+    style={({ isActive }) => ({
+      background: isActive ? 'var(--accent-bg)' : 'rgba(255,255,255,0.04)',
+      color: isActive ? 'var(--accent)' : 'var(--text-1)',
+    })}
+  >
+    {icon}
+    <span>{label}</span>
+  </NavLink>
+);
 
 interface NavButtonProps {
   to: string;
@@ -192,13 +270,13 @@ const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon, label }) => (
   <NavLink
     to={to}
     end={to === '/'}
-    className="shrink-0 min-w-[68px] flex flex-col items-center gap-1 py-2.5 pb-3 text-[10px] font-medium transition-colors"
+    className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
     style={({ isActive }) => ({
       color: isActive ? 'var(--accent)' : 'var(--text-3)',
     })}
   >
     {icon}
-    <span>{label}</span>
+    <span className="truncate max-w-full px-0.5">{label}</span>
   </NavLink>
 );
 

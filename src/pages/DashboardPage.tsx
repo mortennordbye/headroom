@@ -57,43 +57,52 @@ const DashboardPage: React.FC = () => {
   const incomeDelta = prevMonthIncome > 0 ? ((effectiveIncome - prevMonthIncome) / prevMonthIncome) * 100 : null;
   const spendingDelta = prevMonthSpending > 0 ? ((totalSpent - prevMonthSpending) / prevMonthSpending) * 100 : null;
 
-  // ─── Net worth history (12mo + projection) ───
-  // Always produce 12 monthly points so the chart looks meaningful.
-  // If <2 real points are stored, synthesize a gentle backward trajectory
-  // ending at totalEquity (marked as estimated).
+  // ─── Net worth history (last 12 months) ───
+  // Always produce exactly 12 monthly points on a fixed last-12-months grid.
+  // Months with a recorded snapshot are real; gaps are filled (interpolated
+  // between recorded months, gently back-projected before the earliest one) and
+  // tagged estimated so the chart can mark them distinctly. The current month is
+  // always an anchor at the live totalEquity. Estimated points turn real as
+  // monthly snapshots accumulate.
   const { netWorthSeries, isEstimated } = useMemo(() => {
-    const real = Object.entries(netWorthHistory)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-12)
-      .map(([k, v]) => ({ monthKey: k, value: v, estimated: false }));
+    const monthKeys = Array.from({ length: 12 }, (_, i) =>
+      format(subMonths(new Date(), 11 - i), 'yyyy-MM'));
 
-    if (real.length >= 2) return { netWorthSeries: real, isEstimated: false };
-
-    // Synthesize 12 months ending at totalEquity (or the single real point).
-    const end = real[0]?.value ?? totalEquity;
-    const monthlyGrowth = Math.pow(1.005, 1); // ~6% annual
-    const start = end / Math.pow(monthlyGrowth, 11);
-    const synth = Array.from({ length: 12 }, (_, i) => {
-      const d = new Date();
-      d.setMonth(d.getMonth() - (11 - i));
-      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const value = Math.round(start * Math.pow(monthlyGrowth, i));
-      return { monthKey, value, estimated: true };
+    // Known anchor values per grid index (current month = live equity).
+    const values: (number | null)[] = monthKeys.map((k, i) => {
+      if (i === 11) return netWorthHistory[k] ?? Math.round(totalEquity);
+      return netWorthHistory[k] ?? null;
     });
-    // Make sure the last point is the real current value
-    synth[synth.length - 1] = { ...synth[synth.length - 1], value: end };
-    return { netWorthSeries: synth, isEstimated: true };
+    const anchorIdx = values.flatMap((v, i) => (v !== null ? [i] : []));
+
+    const monthlyGrowth = 1.005; // ~6% annual, for back-projecting leading gaps
+    const series = monthKeys.map((monthKey, i) => {
+      if (values[i] !== null) return { monthKey, value: values[i] as number, estimated: false };
+
+      const prev = anchorIdx.filter(a => a < i).pop();
+      const next = anchorIdx.find(a => a > i);
+      let value: number;
+      if (prev !== undefined && next !== undefined) {
+        // Linear interpolation between the surrounding anchors.
+        const t = (i - prev) / (next - prev);
+        value = (values[prev] as number) + ((values[next] as number) - (values[prev] as number)) * t;
+      } else if (next !== undefined) {
+        // Leading gap → gentle back-projection from the first anchor.
+        value = (values[next] as number) / Math.pow(monthlyGrowth, next - i);
+      } else {
+        // Trailing gap (only if no later anchor) → carry the previous value.
+        value = values[prev as number] as number;
+      }
+      return { monthKey, value: Math.round(value), estimated: true };
+    });
+
+    return { netWorthSeries: series, isEstimated: series.some(p => p.estimated) };
   }, [netWorthHistory, totalEquity]);
 
   const annualSavings = Math.max(0, totalResidual * 12);
   const cashStart = assets.savings + assets.bsu + assets.bufferAccount;
   const projectionRates = { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate };
   const projectionStart = { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity };
-  const projectionForHero = useMemo(
-    () => calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 1).slice(1).map(p => ({ year: p.year, netWorth: p.total })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate]
-  );
 
   // ─── Assets ───
   const assetRows = useMemo(() => [
@@ -303,11 +312,11 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Hero chart — proper boxed line chart with today + projection */}
+          {/* Hero chart — clean 12-month actual net-equity trend */}
           <div className="mt-6 rounded-[16px] border p-4" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] mb-2" style={{ color: 'var(--text-3)' }}>
               <div className="flex items-center gap-2">
-                <span>{lang === 'nb' ? 'Netto egenkapital · siste 12 mnd + projeksjon' : 'Net equity · last 12 months + projection'}</span>
+                <span>{lang === 'nb' ? 'Netto egenkapital · siste 12 mnd' : 'Net equity · last 12 months'}</span>
                 {isEstimated && (
                   <span
                     className="px-2 py-0.5 rounded-full normal-case tracking-normal text-[10px]"
@@ -320,9 +329,7 @@ const DashboardPage: React.FC = () => {
               <span style={{ color: 'var(--accent)' }}>{lang === 'nb' ? 'I dag' : 'Today'}</span>
             </div>
             <HeroChart
-              history={netWorthSeries.map(p => ({ label: fmtDate(parse(p.monthKey, 'yyyy-MM', new Date()), 'MMM yy'), value: p.value }))}
-              projectionValue={projectionForHero[0]?.netWorth ?? null}
-              isEstimated={isEstimated}
+              history={netWorthSeries.map(p => ({ label: fmtDate(parse(p.monthKey, 'yyyy-MM', new Date()), 'MMM yy'), value: p.value, estimated: p.estimated }))}
               formatCurrency={formatCurrency}
             />
           </div>
@@ -379,6 +386,8 @@ const DashboardPage: React.FC = () => {
               targetTotal={burnRate.target}
               todayIdx={burnRate.todayIdx}
               overshootValue={overshoot}
+              formatCurrency={formatCurrency}
+              lang={lang}
             />
             <div className="mt-1 flex justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
               <span>{lang === 'nb' ? 'Dag 1' : 'Day 1'}</span>
@@ -530,7 +539,7 @@ const DashboardPage: React.FC = () => {
             <DeltaChip tone="positive" size="sm">+{savingsTargetPercent}%</DeltaChip>
           </div>
 
-          <MonthlyInvestmentBars bars={investmentBars} />
+          <MonthlyInvestmentBars bars={investmentBars} formatCurrency={formatCurrency} />
           <div className="mt-1 flex justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
             <span>{investmentBars[0]?.label ?? ''}</span>
             <span>{investmentBars[Math.floor(investmentBars.length / 2)]?.label ?? ''}</span>
@@ -689,17 +698,32 @@ const DashboardPage: React.FC = () => {
 // ─── Inline chart components ───────────────────────────────────
 // ─────────────────────────────────────────────────────────────────
 
+// Catmull-Rom → cubic-Bézier smoothing for a soft, polished line.
+function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return pts.length ? `M${pts[0].x},${pts[0].y}` : '';
+  let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(2)},${c1y.toFixed(2)} ${c2x.toFixed(2)},${c2y.toFixed(2)} ${p2.x.toFixed(2)},${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
 function HeroChart({
   history,
-  projectionValue,
-  isEstimated = false,
   formatCurrency,
 }: {
-  history: { label: string; value: number }[];
-  projectionValue: number | null;
-  isEstimated?: boolean;
+  history: { label: string; value: number; estimated: boolean }[];
   formatCurrency: (n: number) => string;
 }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   if (history.length < 2) {
     return <div className="h-[160px] grid place-items-center text-[12px]" style={{ color: 'var(--text-3)' }}>—</div>;
   }
@@ -711,84 +735,204 @@ function HeroChart({
   const usableW = W - padX * 2;
   const usableH = H - padY * 2;
 
-  const historyMax = Math.max(...points.map(p => p.value));
-  const max = projectionValue ? Math.max(historyMax, projectionValue) : historyMax;
+  // Vertical breathing room so the line never glues to the top/bottom edge.
+  const yPad = usableH * 0.14;
+  const plotH = usableH - yPad * 2;
+
+  const max = Math.max(...points.map(p => p.value));
   const min = Math.min(...points.map(p => p.value));
   const range = (max - min) || 1;
+  const yOf = (v: number) => padY + yPad + (1 - (v - min) / range) * plotH;
 
-  const xs = points.map((_, i) => padX + (i / (points.length - 1)) * usableW * (projectionValue !== null ? 0.8 : 1));
-  const ys = points.map(p => padY + (1 - (p.value - min) / range) * usableH);
+  const xs = points.map((_, i) => padX + (i / (points.length - 1)) * usableW);
+  const ys = points.map(p => yOf(p.value));
 
-  const historyPath = points.map((_, i) => `${i === 0 ? 'M' : 'L'}${xs[i].toFixed(2)},${ys[i].toFixed(2)}`).join(' ');
+  const historyPath = smoothPath(xs.map((x, i) => ({ x, y: ys[i] })));
   const areaPath = `${historyPath} L${xs[xs.length - 1].toFixed(2)},${H} L${xs[0].toFixed(2)},${H} Z`;
 
-  const projectionX = projectionValue !== null ? W - padX : null;
-  const projectionY = projectionValue !== null
-    ? padY + (1 - (projectionValue - min) / range) * usableH
-    : null;
   const lastHistX = xs[xs.length - 1];
   const lastHistY = ys[ys.length - 1];
   const lastHistValue = points[points.length - 1].value;
+  const lastI = points.length - 1;
+
+  // Clean, rounded value for marker labels (drops a trailing ,00 / .00).
+  const fmtNice = (v: number) => formatCurrency(Math.round(v)).replace(/[.,]00(?=\D*$)/, '');
+  const niceValue = fmtNice(lastHistValue);
+
+  // Percentage positions for the HTML overlay — round dots and crisp text that
+  // the SVG's non-uniform (preserveAspectRatio="none") scaling would distort.
+  const leftPct = (x: number) => `${(x / W) * 100}%`;
+  const topPct = (y: number) => `${(y / H) * 100}%`;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[160px]">
-      <defs>
-        <linearGradient id="heroAreaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6EE7FF" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="#6EE7FF" stopOpacity="0" />
-        </linearGradient>
-      </defs>
+    <div className="relative w-full h-[160px]">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+        <defs>
+          <linearGradient id="heroAreaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6EE7FF" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#6EE7FF" stopOpacity="0" />
+          </linearGradient>
+        </defs>
 
-      {/* gridlines */}
-      <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4">
-        <line x1="0" y1={H * 0.25} x2={W} y2={H * 0.25} />
-        <line x1="0" y1={H * 0.5} x2={W} y2={H * 0.5} />
-        <line x1="0" y1={H * 0.75} x2={W} y2={H * 0.75} />
-      </g>
+        {/* gridlines */}
+        <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4">
+          <line x1="0" y1={H * 0.25} x2={W} y2={H * 0.25} />
+          <line x1="0" y1={H * 0.5} x2={W} y2={H * 0.5} />
+          <line x1="0" y1={H * 0.75} x2={W} y2={H * 0.75} />
+        </g>
 
-      {/* area */}
-      <path d={areaPath} fill="url(#heroAreaGrad)" opacity={isEstimated ? 0.5 : 1} />
-      {/* history line — dashed if estimated */}
-      <path
-        d={historyPath}
-        fill="none"
-        stroke="#6EE7FF"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeDasharray={isEstimated ? '4 4' : undefined}
-        opacity={isEstimated ? 0.75 : 1}
-      />
-      {/* data dots on real points */}
-      {!isEstimated && points.map((_, i) => i % 2 === 0 && (
-        <circle key={i} cx={xs[i]} cy={ys[i]} r="2.5" fill="#08080A" stroke="#6EE7FF" strokeWidth="1.5" />
+        {/* area */}
+        <path d={areaPath} fill="url(#heroAreaGrad)" />
+        {/* line — always solid; estimated context is shown by the dots, not the line */}
+        <path
+          d={historyPath}
+          fill="none"
+          stroke="#6EE7FF"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
+      {/* vertical guide for the hovered month */}
+      {hovered !== null && hovered !== lastI && (
+        <span
+          className="absolute pointer-events-none"
+          style={{
+            left: leftPct(xs[hovered]),
+            top: 0,
+            bottom: 0,
+            width: 1,
+            background: 'rgba(110,231,255,0.25)',
+          }}
+        />
+      )}
+
+      {/* one dot per month — HTML so they stay perfectly round, each hoverable */}
+      {points.map((_, i) => i !== lastI && (
+        <span
+          key={i}
+          className="absolute grid place-items-center cursor-pointer"
+          style={{
+            left: leftPct(xs[i]),
+            top: topPct(ys[i]),
+            transform: 'translate(-50%, -50%)',
+            width: 22,
+            height: 22,
+          }}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(h => (h === i ? null : h))}
+        >
+          <span
+            className="rounded-full transition-all"
+            style={{
+              width: hovered === i ? 11 : 7,
+              height: hovered === i ? 11 : 7,
+              // real months: bright filled · estimated months: hollow + dimmed
+              background: hovered === i || !points[i].estimated ? '#6EE7FF' : '#08080A',
+              border: '1.5px solid #6EE7FF',
+              opacity: hovered === i ? 1 : (points[i].estimated ? 0.4 : 0.95),
+              boxShadow: hovered === i ? '0 0 10px rgba(110,231,255,0.6)' : undefined,
+            }}
+          />
+        </span>
       ))}
 
-      {/* projection line (dashed violet) */}
-      {projectionX !== null && projectionY !== null && (
-        <line x1={lastHistX} y1={lastHistY} x2={projectionX} y2={projectionY}
-          stroke="#A78BFA" strokeWidth="2" strokeDasharray="3 4" strokeLinecap="round" />
+      {/* hovered month tooltip — label + total */}
+      {hovered !== null && hovered !== lastI && (
+        <div
+          className="absolute pointer-events-none z-10"
+          style={{
+            left: leftPct(xs[hovered]),
+            top: topPct(ys[hovered]),
+            transform: `translate(-50%, ${ys[hovered] < 56 ? '18px' : 'calc(-100% - 14px)'})`,
+          }}
+        >
+          <div
+            className="px-2.5 py-1.5 rounded-lg whitespace-nowrap text-center"
+            style={{ background: '#1B1B22', border: '1px solid rgba(110,231,255,0.35)' }}
+          >
+            <div className="text-[9px] uppercase tracking-wider" style={{ color: '#6E6E78' }}>
+              {points[hovered].label}
+            </div>
+            <div className="text-[12px] font-semibold tabular-nums" style={{ color: '#F4F4F6' }}>
+              {fmtNice(points[hovered].value)}
+            </div>
+            {points[hovered].estimated && (
+              <div className="text-[9px] mt-0.5" style={{ color: 'var(--warning)' }}>estimert</div>
+            )}
+          </div>
+        </div>
       )}
 
-      {/* today vertical guide */}
-      <line x1={lastHistX} y1="0" x2={lastHistX} y2={H} stroke="#6EE7FF" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
+      {/* NOW dot */}
+      <span
+        className="absolute rounded-full"
+        style={{
+          left: leftPct(lastHistX),
+          top: topPct(lastHistY),
+          transform: 'translate(-50%, -50%)',
+          width: 13,
+          height: 13,
+          background: '#6EE7FF',
+          boxShadow: '0 0 0 4px #08080A, 0 0 12px rgba(110,231,255,0.55)',
+        }}
+      />
 
-      {/* today dot */}
-      <circle cx={lastHistX} cy={lastHistY} r="6" fill="#08080A" stroke="#6EE7FF" strokeWidth="2" />
-      <circle cx={lastHistX} cy={lastHistY} r="3" fill="#6EE7FF" />
+      {/* NOW value label — crisp HTML, sits just left of the dot */}
+      <div
+        className="absolute"
+        style={{
+          left: `calc(${leftPct(lastHistX)} - 12px)`,
+          top: topPct(lastHistY),
+          transform: 'translate(-100%, -50%)',
+        }}
+      >
+        <div
+          className="px-2.5 py-1 rounded-lg text-[12px] font-semibold tabular-nums whitespace-nowrap"
+          style={{ background: '#1B1B22', border: '1px solid rgba(110,231,255,0.35)', color: '#F4F4F6' }}
+        >
+          {niceValue}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      {/* projection end dot */}
-      {projectionX !== null && projectionY !== null && (
-        <circle cx={projectionX} cy={projectionY} r="4" fill="#08080A" stroke="#A78BFA" strokeWidth="2" />
-      )}
-
-      {/* today callout */}
-      <g transform={`translate(${Math.min(lastHistX - 80, W - 100)}, ${Math.max(8, lastHistY - 42)})`}>
-        <rect width="100" height="34" rx="8" fill="#1B1B22" stroke="#6EE7FF" strokeOpacity="0.4" />
-        <text x="10" y="14" fill="#6E6E78" fontSize="9" fontFamily="Inter" letterSpacing="1">NOW</text>
-        <text x="10" y="28" fill="#F4F4F6" fontSize="11" fontFamily="Inter" fontWeight="600">{formatCurrency(lastHistValue).slice(0, 14)}</text>
-      </g>
-    </svg>
+// Shared hover tooltip for the small overlay charts — crisp HTML so it isn't
+// distorted by the SVGs' preserveAspectRatio="none" scaling.
+function ChartTip({
+  left,
+  top,
+  below,
+  title,
+  value,
+  sub,
+  accent = '#6EE7FF',
+}: {
+  left: string;
+  top: string;
+  below: boolean;
+  title: string;
+  value: string;
+  sub?: string;
+  accent?: string;
+}) {
+  return (
+    <div
+      className="absolute pointer-events-none z-10"
+      style={{ left, top, transform: `translate(-50%, ${below ? '12px' : 'calc(-100% - 12px)'})` }}
+    >
+      <div
+        className="px-2.5 py-1.5 rounded-lg whitespace-nowrap text-center"
+        style={{ background: '#1B1B22', border: `1px solid ${accent}59` }}
+      >
+        <div className="text-[9px] uppercase tracking-wider" style={{ color: '#6E6E78' }}>{title}</div>
+        <div className="text-[12px] font-semibold tabular-nums" style={{ color: '#F4F4F6' }}>{value}</div>
+        {sub && <div className="text-[9px] mt-0.5" style={{ color: 'var(--warning)' }}>{sub}</div>}
+      </div>
+    </div>
   );
 }
 
@@ -798,13 +942,18 @@ function BurnRateChart({
   targetTotal,
   todayIdx,
   overshootValue,
+  formatCurrency,
+  lang,
 }: {
   actual: number[];
   total: number;
   targetTotal: number;
   todayIdx: number;
   overshootValue: number;
+  formatCurrency: (n: number) => string;
+  lang: string;
 }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   const W = 280;
   const H = 80;
   const safeTotal = Math.max(total, 2);
@@ -827,41 +976,100 @@ function BurnRateChart({
   const projectedFinalY = yFor(Math.min(projectedFinal, maxCum));
   const projWillOvershoot = overshootValue > 0 && lastActual > 0;
 
+  const leftPct = (x: number) => `${(x / W) * 100}%`;
+  const topPct = (y: number) => `${(y / H) * 100}%`;
+  const dayWord = lang === 'nb' ? 'Dag' : 'Day';
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[80px]">
-      <defs>
-        <linearGradient id="spendAreaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6EE7FF" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="#6EE7FF" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {/* grid */}
-      <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 3">
-        <line x1="0" y1={H * 0.25} x2={W} y2={H * 0.25} />
-        <line x1="0" y1={H * 0.5} x2={W} y2={H * 0.5} />
-        <line x1="0" y1={H * 0.75} x2={W} y2={H * 0.75} />
-      </g>
-      {/* ideal pace (always drawn) */}
-      <line x1="0" y1={H - 4} x2={W} y2={yFor(targetTotal)} stroke="#6E6E78" strokeWidth="1" strokeDasharray="3 3" />
-      {/* actual area + line — only visible when there's spending */}
-      {lastActual > 0 && <path d={areaStr} fill="url(#spendAreaGrad)" />}
-      {lastActual > 0 && (
-        <path d={ptStr} fill="none" stroke="#6EE7FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <div className="relative w-full h-[80px]">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+        <defs>
+          <linearGradient id="spendAreaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6EE7FF" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#6EE7FF" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* grid */}
+        <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 3">
+          <line x1="0" y1={H * 0.25} x2={W} y2={H * 0.25} />
+          <line x1="0" y1={H * 0.5} x2={W} y2={H * 0.5} />
+          <line x1="0" y1={H * 0.75} x2={W} y2={H * 0.75} />
+        </g>
+        {/* ideal pace (always drawn) */}
+        <line x1="0" y1={H - 4} x2={W} y2={yFor(targetTotal)} stroke="#6E6E78" strokeWidth="1" strokeDasharray="3 3" />
+        {/* actual area + line — only visible when there's spending */}
+        {lastActual > 0 && <path d={areaStr} fill="url(#spendAreaGrad)" />}
+        {lastActual > 0 && (
+          <path d={ptStr} fill="none" stroke="#6EE7FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        )}
+        {/* projection */}
+        {projWillOvershoot && (
+          <line x1={todayX} y1={todayY} x2={W} y2={projectedFinalY} stroke="#FBBF24" strokeWidth="1.5" strokeDasharray="3 3" />
+        )}
+        {/* hovered day guide */}
+        {hovered !== null && (
+          <line x1={xFor(hovered)} y1="0" x2={xFor(hovered)} y2={H} stroke="#6EE7FF" strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
+        )}
+        {/* today vertical guide */}
+        <line x1={todayX} y1="0" x2={todayX} y2={H} stroke="#6EE7FF" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
+      </svg>
+
+      {/* per-day hover zones */}
+      {drawPoints.map((_, i) => (
+        <span
+          key={i}
+          className="absolute top-0 bottom-0 cursor-pointer"
+          style={{ left: leftPct(xFor(i)), width: `${100 / safeTotal}%`, transform: 'translateX(-50%)' }}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(h => (h === i ? null : h))}
+        />
+      ))}
+
+      {/* hovered dot */}
+      {hovered !== null && (
+        <span
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            left: leftPct(xFor(hovered)),
+            top: topPct(yFor(drawPoints[hovered])),
+            transform: 'translate(-50%, -50%)',
+            width: 9,
+            height: 9,
+            background: '#6EE7FF',
+            boxShadow: '0 0 8px rgba(110,231,255,0.6)',
+          }}
+        />
       )}
-      {/* projection */}
-      {projWillOvershoot && (
-        <line x1={todayX} y1={todayY} x2={W} y2={projectedFinalY} stroke="#FBBF24" strokeWidth="1.5" strokeDasharray="3 3" />
+
+      {/* today dot — HTML so it stays round */}
+      <span
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          left: leftPct(todayX),
+          top: topPct(todayY),
+          transform: 'translate(-50%, -50%)',
+          width: 9,
+          height: 9,
+          background: '#08080A',
+          border: '2px solid #6EE7FF',
+        }}
+      />
+
+      {hovered !== null && (
+        <ChartTip
+          left={leftPct(xFor(hovered))}
+          top={topPct(yFor(drawPoints[hovered]))}
+          below={yFor(drawPoints[hovered]) < 24}
+          title={`${dayWord} ${hovered + 1}`}
+          value={formatCurrency(drawPoints[hovered])}
+        />
       )}
-      {/* today vertical guide */}
-      <line x1={todayX} y1="0" x2={todayX} y2={H} stroke="#6EE7FF" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
-      {/* today dot (always visible) */}
-      <circle cx={todayX} cy={todayY} r="5" fill="#08080A" stroke="#6EE7FF" strokeWidth="2" />
-      <circle cx={todayX} cy={todayY} r="2" fill="#6EE7FF" />
-    </svg>
+    </div>
   );
 }
 
-function MonthlyInvestmentBars({ bars }: { bars: { key: string; label: string; value: number; projected?: boolean }[] }) {
+function MonthlyInvestmentBars({ bars, formatCurrency }: { bars: { key: string; label: string; value: number; projected?: boolean }[]; formatCurrency: (n: number) => string }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   if (bars.length === 0) return <div className="h-[80px]" />;
   // If there are fewer than 4 real months, project forward to fill out to ~6 bars
   // so the chart doesn't look anemic.
@@ -887,28 +1095,59 @@ function MonthlyInvestmentBars({ bars }: { bars: { key: string; label: string; v
   const target = max * 0.85;
   const barWidth = (W - padding * (display.length + 1)) / display.length;
   const todayIdx = realBars.length - 1;
+  const barX = (i: number) => padding + i * (barWidth + padding);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[80px] mt-3">
-      {/* target gridline */}
-      <line x1="0" y1={H - (target / max) * (H - 8)} x2={W} y2={H - (target / max) * (H - 8)}
-        stroke="rgba(255,255,255,0.08)" strokeDasharray="2 3" />
-      {display.map((b, i) => {
+    <div className="relative w-full h-[80px] mt-3">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+        {/* target gridline */}
+        <line x1="0" y1={H - (target / max) * (H - 8)} x2={W} y2={H - (target / max) * (H - 8)}
+          stroke="rgba(255,255,255,0.08)" strokeDasharray="2 3" />
+        {display.map((b, i) => {
+          const h = Math.max(2, (b.value / max) * (H - 8));
+          const x = barX(i);
+          const y = H - h;
+          const isActive = i === todayIdx || hovered === i;
+          const opacity = b.projected ? 0.35 : Math.min(1, 0.55 + (i / display.length) * 0.45);
+          return b.projected ? (
+            <rect key={b.key} x={x} y={y} width={barWidth} height={h} rx="2"
+              fill="none" stroke="#3ECF8E" strokeWidth="1" strokeDasharray="2 2" opacity={hovered === i ? 0.8 : opacity} />
+          ) : (
+            <rect key={b.key} x={x} y={y} width={barWidth} height={h} rx="2"
+              fill="#3ECF8E" opacity={isActive ? 1 : opacity}
+              style={isActive ? { filter: 'drop-shadow(0 0 6px color-mix(in srgb, #3ECF8E 50%, transparent))' } : undefined} />
+          );
+        })}
+      </svg>
+
+      {/* per-bar hover zones */}
+      {display.map((b, i) => (
+        <span
+          key={b.key}
+          className="absolute top-0 bottom-0 cursor-pointer"
+          style={{ left: `${(barX(i) / W) * 100}%`, width: `${(barWidth / W) * 100}%` }}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(h => (h === i ? null : h))}
+        />
+      ))}
+
+      {hovered !== null && (() => {
+        const b = display[hovered];
         const h = Math.max(2, (b.value / max) * (H - 8));
-        const x = padding + i * (barWidth + padding);
-        const y = H - h;
-        const isCurrent = i === todayIdx;
-        const opacity = b.projected ? 0.35 : Math.min(1, 0.55 + (i / display.length) * 0.45);
-        return b.projected ? (
-          <rect key={b.key} x={x} y={y} width={barWidth} height={h} rx="2"
-            fill="none" stroke="#3ECF8E" strokeWidth="1" strokeDasharray="2 2" opacity={opacity} />
-        ) : (
-          <rect key={b.key} x={x} y={y} width={barWidth} height={h} rx="2"
-            fill="#3ECF8E" opacity={isCurrent ? 1 : opacity}
-            style={isCurrent ? { filter: 'drop-shadow(0 0 6px color-mix(in srgb, #3ECF8E 50%, transparent))' } : undefined} />
+        const topY = H - h;
+        return (
+          <ChartTip
+            left={`${((barX(hovered) + barWidth / 2) / W) * 100}%`}
+            top={`${(topY / H) * 100}%`}
+            below={topY < 24}
+            title={b.label || 'Estimert'}
+            value={formatCurrency(b.value)}
+            sub={b.projected ? 'estimert' : undefined}
+            accent="#3ECF8E"
+          />
         );
-      })}
-    </svg>
+      })()}
+    </div>
   );
 }
 
@@ -919,6 +1158,7 @@ function ProjectionChart({
   points: { year: number; netWorth: number }[];
   formatCurrency: (n: number) => string;
 }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   if (points.length < 2) return <div className="h-[80px]" />;
   const W = 240;
   const H = 80;
@@ -931,26 +1171,75 @@ function ProjectionChart({
   const ys = points.map(p => padY + (1 - (p.netWorth - min) / range) * (H - padY * 2));
   const line = points.map((_, i) => `${i === 0 ? 'M' : 'L'}${xs[i].toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
   const area = `${line} L${xs[xs.length - 1].toFixed(1)},${H} L${xs[0].toFixed(1)},${H} Z`;
+  const lastI = points.length - 1;
+  const leftPct = (x: number) => `${(x / W) * 100}%`;
+  const topPct = (y: number) => `${(y / H) * 100}%`;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[80px] mt-3">
-      <defs>
-        <linearGradient id="projAreaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#A78BFA" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="#A78BFA" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 3">
-        <line x1="0" y1={H * 0.33} x2={W} y2={H * 0.33} />
-        <line x1="0" y1={H * 0.66} x2={W} y2={H * 0.66} />
-      </g>
-      <path d={area} fill="url(#projAreaGrad)" />
-      <path d={line} fill="none" stroke="#A78BFA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={xs[0]} cy={ys[0]} r="3" fill="#08080A" stroke="#6EE7FF" strokeWidth="1.5" />
-      <circle cx={xs[xs.length - 1]} cy={ys[ys.length - 1]} r="4" fill="#08080A" stroke="#A78BFA" strokeWidth="2" />
-      {/* invisible tspan-ish; rely on title for tooltip */}
-      <title>{formatCurrency(points[points.length - 1].netWorth)}</title>
-    </svg>
+    <div className="relative w-full h-[80px] mt-3">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+        <defs>
+          <linearGradient id="projAreaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#A78BFA" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#A78BFA" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 3">
+          <line x1="0" y1={H * 0.33} x2={W} y2={H * 0.33} />
+          <line x1="0" y1={H * 0.66} x2={W} y2={H * 0.66} />
+        </g>
+        <path d={area} fill="url(#projAreaGrad)" />
+        <path d={line} fill="none" stroke="#A78BFA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {/* hovered year guide */}
+        {hovered !== null && (
+          <line x1={xs[hovered]} y1="0" x2={xs[hovered]} y2={H} stroke="#A78BFA" strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
+        )}
+      </svg>
+
+      {/* dots per year — HTML so they stay round */}
+      {points.map((_, i) => {
+        const endpoint = i === 0 || i === lastI;
+        return (
+          <span
+            key={i}
+            className="absolute rounded-full pointer-events-none transition-all"
+            style={{
+              left: leftPct(xs[i]),
+              top: topPct(ys[i]),
+              transform: 'translate(-50%, -50%)',
+              width: hovered === i ? 9 : endpoint ? 6 : 4,
+              height: hovered === i ? 9 : endpoint ? 6 : 4,
+              background: hovered === i ? '#A78BFA' : '#08080A',
+              border: `1.5px solid ${i === lastI ? '#A78BFA' : '#6EE7FF'}`,
+              opacity: hovered === i ? 1 : endpoint ? 1 : 0.5,
+              boxShadow: hovered === i ? '0 0 8px rgba(167,139,250,0.6)' : undefined,
+            }}
+          />
+        );
+      })}
+
+      {/* per-year hover zones */}
+      {points.map((_, i) => (
+        <span
+          key={i}
+          className="absolute top-0 bottom-0 cursor-pointer"
+          style={{ left: leftPct(xs[i]), width: `${100 / points.length}%`, transform: 'translateX(-50%)' }}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(h => (h === i ? null : h))}
+        />
+      ))}
+
+      {hovered !== null && (
+        <ChartTip
+          left={leftPct(xs[hovered])}
+          top={topPct(ys[hovered])}
+          below={ys[hovered] < 24}
+          title={String(points[hovered].year)}
+          value={formatCurrency(points[hovered].netWorth)}
+          accent="#A78BFA"
+        />
+      )}
+    </div>
   );
 }
 
@@ -980,16 +1269,18 @@ function LegendItem({
   );
 }
 
-function Donut({ rows, total, mom }: { rows: { value: number; color: string }[]; total: number; mom: number | null }) {
+function Donut({ rows, total, mom }: { rows: { value: number; color: string; label?: string }[]; total: number; mom: number | null }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   if (total <= 0) return null;
   let offset = 0;
   const segments = rows.map(row => {
     const pct = (row.value / total) * 100;
     const filled = Math.max(0, pct - 1.5);
-    const seg = { color: row.color, filled, offset: -offset };
+    const seg = { color: row.color, filled, offset: -offset, pct, label: row.label, value: row.value };
     offset += pct;
     return seg;
   });
+  const active = hovered !== null ? segments[hovered] : null;
 
   return (
     <div className="relative shrink-0" style={{ width: 160, height: 160 }}>
@@ -1003,26 +1294,38 @@ function Donut({ rows, total, mom }: { rows: { value: number; color: string }[];
             r="15.915"
             fill="none"
             stroke={s.color}
-            strokeWidth="4"
+            strokeWidth={hovered === i ? 5 : 4}
             strokeLinecap="round"
             strokeDasharray={`${s.filled} ${100 - s.filled}`}
             strokeDashoffset={s.offset}
-            style={i === 0 ? { filter: `drop-shadow(0 0 4px color-mix(in srgb, ${s.color} 35%, transparent))` } : undefined}
+            opacity={hovered === null || hovered === i ? 1 : 0.3}
+            className="cursor-pointer transition-all"
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(h => (h === i ? null : h))}
+            style={hovered === i || (hovered === null && i === 0) ? { filter: `drop-shadow(0 0 4px color-mix(in srgb, ${s.color} 45%, transparent))` } : undefined}
           />
         ))}
       </svg>
-      <div className="absolute inset-0 grid place-items-center text-center">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>Total</div>
-          <div className="text-[15px] font-bold leading-tight mt-1">{formatTotalCompact(total)}</div>
-          {mom !== null && (
-            <div className="mt-1">
-              <DeltaChip tone={mom >= 0 ? 'positive' : 'negative'} size="sm">
-                {mom >= 0 ? '+' : ''}{mom.toFixed(1)}%
-              </DeltaChip>
-            </div>
-          )}
-        </div>
+      <div className="absolute inset-0 grid place-items-center text-center pointer-events-none">
+        {active ? (
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.12em] truncate max-w-[130px]" style={{ color: 'var(--text-3)' }}>{active.label ?? ''}</div>
+            <div className="text-[15px] font-bold leading-tight mt-1">{formatTotalCompact(active.value)}</div>
+            <div className="text-[11px] mt-1 font-semibold tabular-nums" style={{ color: active.color }}>{active.pct.toFixed(0)}%</div>
+          </div>
+        ) : (
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>Total</div>
+            <div className="text-[15px] font-bold leading-tight mt-1">{formatTotalCompact(total)}</div>
+            {mom !== null && (
+              <div className="mt-1">
+                <DeltaChip tone={mom >= 0 ? 'positive' : 'negative'} size="sm">
+                  {mom >= 0 ? '+' : ''}{mom.toFixed(1)}%
+                </DeltaChip>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
