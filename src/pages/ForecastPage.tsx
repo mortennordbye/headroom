@@ -4,21 +4,11 @@ import {
 } from 'recharts';
 import { TrendingUp, Wallet, Activity } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import ChartTooltip from '../components/ChartTooltip';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 
 const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
-
-const tooltipStyle = {
-  borderRadius: '12px',
-  border: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
-  backgroundColor: 'color-mix(in srgb, var(--bg-card) 96%, transparent)',
-  boxShadow: '0 10px 32px rgba(0,0,0,0.45)',
-  color: 'var(--text-1)',
-  fontSize: '12px',
-  padding: '10px 12px',
-  backdropFilter: 'blur(8px)',
-};
 
 function formatAxisInt(val: number): string {
   if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
@@ -242,8 +232,7 @@ const ForecastPage: React.FC = () => {
               <XAxis dataKey="yearLabel" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
               <Tooltip
-                formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
-                contentStyle={tooltipStyle}
+                content={<ChartTooltip />}
                 cursor={{ stroke: 'var(--text-3)', strokeWidth: 1, strokeDasharray: '3 3' }}
               />
               <ReferenceLine y={first.netWorth} stroke="var(--text-3)" strokeDasharray="2 4" />
@@ -271,10 +260,7 @@ const ForecastPage: React.FC = () => {
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
               <XAxis dataKey="yearLabel" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
-              <Tooltip
-                formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
-                contentStyle={tooltipStyle}
-              />
+              <Tooltip content={<ChartTooltip />} />
               <Line type="monotone" dataKey="gross" name={t.forecast.grossSalary} stroke="var(--accent)" strokeWidth={2.5} dot={false} />
               <Line type="monotone" dataKey="net" name={t.forecast.netTakeHome} stroke="var(--positive)" strokeWidth={2.5} dot={false} />
               {startingMortgage > 0 && (

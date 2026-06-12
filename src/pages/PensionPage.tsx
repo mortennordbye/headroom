@@ -6,17 +6,7 @@ import { Briefcase, TrendingUp, Lock, Calculator } from 'lucide-react';
 import { useFinance, type Pension } from '../context/FinanceContext';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
-
-const tooltipStyle = {
-  borderRadius: '12px',
-  border: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
-  backgroundColor: 'color-mix(in srgb, var(--bg-card) 96%, transparent)',
-  boxShadow: '0 10px 32px rgba(0,0,0,0.45)',
-  color: 'var(--text-1)',
-  fontSize: '12px',
-  padding: '10px 12px',
-  backdropFilter: 'blur(8px)',
-};
+import ChartTooltip from '../components/ChartTooltip';
 
 function formatAxisInt(val: number): string {
   if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
@@ -156,10 +146,7 @@ const PensionPage: React.FC = () => {
                   <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
                   <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
-                  <Tooltip
-                    formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
-                    contentStyle={tooltipStyle}
-                  />
+                  <Tooltip content={<ChartTooltip />} />
                   <Area type="monotone" dataKey="ips" stackId="1" name="IPS" stroke="#a855f7" fill="url(#ipsGrad)" />
                   <Area type="monotone" dataKey="otp" stackId="1" name="OTP" stroke="#0ea5e9" fill="url(#otpGrad)" />
                 </AreaChart>

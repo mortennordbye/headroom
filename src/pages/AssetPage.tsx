@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { useFinance, type Assets, type Pension } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
+import ChartTooltip from '../components/ChartTooltip';
 import { calcNetWorthProjectionByBucket } from '../lib/calculations';
 
 interface ModalConfig {
@@ -413,19 +414,7 @@ const AssetPage: React.FC = () => {
               <CartesianGrid strokeDasharray="3 3" stroke={'#2a2a2a'} />
               <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={formatAxisValue} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
-              <Tooltip
-                formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
-                labelFormatter={(label) => `${label}`}
-                contentStyle={{
-                  borderRadius: '10px',
-                  border: `1px solid ${'#2a2a2a'}`,
-                  backgroundColor: 'var(--bg-card)',
-                  color: 'var(--text-1)',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                  padding: '10px 14px',
-                  fontSize: '13px',
-                }}
-              />
+              <Tooltip content={<ChartTooltip />} />
               <Area type="monotone" dataKey="house" stackId="1" name={t.bucketHouse} stroke="#10b981" fill="url(#houseGrad)" />
               <Area type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke="#737373" fill="url(#cashGrad)" />
               <Area type="monotone" dataKey="crypto" stackId="1" name={t.bucketCrypto} stroke="#a855f7" fill="url(#cryptoGrad)" />

@@ -84,6 +84,7 @@ const BudgetPage: React.FC = () => {
     dailyTransactions,
     setDailyTransactions,
     formatCurrency,
+    formatCurrencyShort,
   } = useFinance();
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
@@ -462,7 +463,7 @@ const BudgetPage: React.FC = () => {
                     fill="#9a9aa3"
                     fontSize={11}
                     fontWeight={600}
-                    formatter={(v: any) => Math.round(Number(v ?? 0)).toLocaleString(lang === 'nb' ? 'nb-NO' : 'en-US')}
+                    formatter={(v: any) => formatCurrencyShort(Number(v ?? 0))}
                   />
                 </Bar>
               </BarChart>

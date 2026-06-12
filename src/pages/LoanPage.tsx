@@ -32,6 +32,7 @@ import {
   type HousingMode,
 } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
+import ChartTooltip from '../components/ChartTooltip';
 import {
   calcAmortizationSchedule,
   calcHomeownerMortgageStatus,
@@ -677,18 +678,7 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
                     width={48}
                   />
                   <Tooltip
-                    formatter={(value, name) => [
-                      formatCurrency(Math.round(Number(value ?? 0))),
-                      name === 'principalPaid' ? t.principalPayment : name === 'interestPaid' ? t.interestPayment : t.remainingBalance
-                    ]}
-                    labelFormatter={(v) => `${t.year} ${v}`}
-                    contentStyle={{
-                      borderRadius: '10px',
-                      border: `1px solid ${'#2a2a2a'}`,
-                      backgroundColor: 'var(--bg-card)',
-                      color: 'var(--text-1)',
-                      fontSize: '13px',
-                    }}
+                    content={<ChartTooltip labelFormatter={(v) => `${t.year} ${v}`} />}
                   />
                   <Legend
                     iconType="square"
@@ -701,8 +691,8 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
                       return <span style={{ fontSize: '11px', color: '#737373' }}>{labels[value] ?? value}</span>;
                     }}
                   />
-                  <Bar dataKey="principalPaid" stackId="a" fill="#0ea5e9" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="interestPaid" stackId="a" fill="#ef444480" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="principalPaid" name={t.principalPayment} stackId="a" fill="#0ea5e9" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="interestPaid" name={t.interestPayment} stackId="a" fill="#ef444480" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -41,6 +41,7 @@ const DashboardPage: React.FC = () => {
     cashGrowthRate,
     cryptoGrowthRate,
     formatCurrency,
+    formatCurrencyShort,
   } = useFinance();
 
   // ─── Derived numbers ───
@@ -579,7 +580,7 @@ const DashboardPage: React.FC = () => {
                     <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-elev)' }}>
                       <div style={{ width: `${row.pctOfMax}%`, height: '100%', background: colors[i % colors.length], borderRadius: 999 }} />
                     </div>
-                    <span className="font-semibold tabular-nums">{Math.round(row.value).toLocaleString('no-NO')}</span>
+                    <span className="font-semibold tabular-nums">{formatCurrencyShort(row.value)}</span>
                     {row.deltaPct === null ? (
                       <DeltaChip tone="muted" size="sm">·</DeltaChip>
                     ) : (

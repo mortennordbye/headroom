@@ -1097,6 +1097,7 @@ interface FinanceContextType {
   cryptoTaxOnGain: number;
   netCrypto: number;
   formatCurrency: (val: number) => string;
+  formatCurrencyShort: (val: number) => string;
   importAll: (data: Partial<ExportPayload>) => void;
   resetAll: () => void;
 }
@@ -1597,6 +1598,30 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }).format(val);
   };
 
+  // Like formatCurrency but without decimals — for chart labels/legends where
+  // 2-decimal precision is noise. Respects the user's display currency so
+  // converted values (USD/custom) stay correct.
+  const formatCurrencyShort = (val: number) => {
+    if (displayCurrency === 'USD') {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+      }).format(val * nokToUsd);
+    }
+    if (displayCurrency === 'custom' && customCurrencyCode) {
+      const converted = val * customCurrencyRate;
+      try {
+        return new Intl.NumberFormat('en', {
+          style: 'currency', currency: customCurrencyCode.toUpperCase(), maximumFractionDigits: 0,
+        }).format(converted);
+      } catch {
+        return `${customCurrencyCode.toUpperCase()} ${Math.round(converted).toLocaleString('en-US')}`;
+      }
+    }
+    return new Intl.NumberFormat(lang === 'nb' ? 'nb-NO' : 'en-US', {
+      style: 'currency', currency: 'NOK', maximumFractionDigits: 0,
+    }).format(val);
+  };
+
   return (
     <FinanceContext.Provider value={{
       lang, setLang, t, displayCurrency, setDisplayCurrency, nokToUsd, setNokToUsd,
@@ -1627,7 +1652,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       totalResidual,
       totalFixedExpenses, monthlyBudget, dailyBudget,
       dailyData, totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
-      formatCurrency, importAll, resetAll
+      formatCurrency, formatCurrencyShort, importAll, resetAll
     }}>
       {children}
     </FinanceContext.Provider>

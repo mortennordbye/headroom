@@ -37,6 +37,7 @@ import {
 } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
+import ChartTooltip from '../components/ChartTooltip';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isPositiveNumber, isNonEmpty } from '../lib/validators';
 
@@ -44,17 +45,6 @@ const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const WEEKS_PER_MONTH = 4.345;
-
-const tooltipStyle = {
-  borderRadius: '12px',
-  border: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
-  backgroundColor: 'color-mix(in srgb, var(--bg-card) 96%, transparent)',
-  boxShadow: '0 10px 32px rgba(0,0,0,0.45)',
-  color: 'var(--text-1)',
-  fontSize: '12px',
-  padding: '10px 12px',
-  backdropFilter: 'blur(8px)',
-};
 
 const CHANGE_TYPE_COLOR: Record<SalaryChangeType, string> = {
   initial: '#9ca3af',
@@ -886,10 +876,7 @@ const SalaryPage: React.FC = () => {
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
-              <Tooltip
-                formatter={(value) => [formatCurrency(Number(value ?? 0)), t.salary.grossAnnual]}
-                contentStyle={tooltipStyle}
-              />
+              <Tooltip content={<ChartTooltip />} />
               {jobChangeMonths.map(jc => (
                 <ReferenceLine
                   key={jc.month}
@@ -918,6 +905,7 @@ const SalaryPage: React.FC = () => {
               <Area
                 type="stepAfter"
                 dataKey="gross"
+                name={t.salary.grossAnnual}
                 stroke="var(--accent)"
                 strokeWidth={2.5}
                 fill="url(#salaryGradient)"
@@ -977,8 +965,7 @@ const SalaryPage: React.FC = () => {
               <XAxis dataKey="year" tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 600 }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={44} />
               <Tooltip
-                formatter={(value, name) => [`${Number(value ?? 0).toFixed(1)}%`, name]}
-                contentStyle={tooltipStyle}
+                content={<ChartTooltip valueFormatter={(v) => `${v.toFixed(1)}%`} />}
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
               />
               <ReferenceLine y={0} stroke="var(--text-3)" strokeWidth={1} />
@@ -1074,8 +1061,7 @@ const SalaryPage: React.FC = () => {
               <XAxis dataKey="year" tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 600 }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
               <Tooltip
-                formatter={(value) => formatCurrency(Number(value ?? 0))}
-                contentStyle={tooltipStyle}
+                content={<ChartTooltip />}
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
               />
               <Bar dataKey="base" stackId="a" name={lang === 'nb' ? 'Grunnlønn' : 'Base'} fill="url(#compBaseGradient)" />
@@ -1117,13 +1103,8 @@ const SalaryPage: React.FC = () => {
               <YAxis yAxisId="left" tickFormatter={(v) => `${v}t`} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={40} />
               <YAxis yAxisId="right" orientation="right" tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={56} />
               <Tooltip
-                contentStyle={tooltipStyle}
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                formatter={(value, name, item) => {
-                  const key = item.dataKey;
-                  if (key === 'hoursPerWeek') return [`${Number(value ?? 0).toFixed(1)} t/uke`, name];
-                  return [formatCurrency(Number(value ?? 0)), name];
-                }}
+                content={<ChartTooltip valueFormatter={(v, e) => e?.dataKey === 'hoursPerWeek' ? `${v.toFixed(1)} t/uke` : formatCurrency(v)} />}
               />
               <Bar yAxisId="left" dataKey="hoursPerWeek" name={lang === 'nb' ? 'Timer/uke' : 'Hours/wk'} fill="url(#hoursGradient)" radius={[6, 6, 0, 0]}>
                 <LabelList dataKey="hoursPerWeek" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}t`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--warning)' }} />
@@ -1498,8 +1479,7 @@ const RealHourlyChart: React.FC<RealHourlyChartProps> = ({ series, formatCurrenc
               width={44}
             />
             <Tooltip
-              formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
-              contentStyle={tooltipStyle}
+              content={<ChartTooltip />}
               cursor={{ stroke: 'var(--text-3)', strokeWidth: 1, strokeDasharray: '3 3' }}
             />
             <ReferenceLine y={first.real} stroke="var(--text-3)" strokeDasharray="2 4" label={{ value: 'baseline', position: 'insideTopLeft', fill: 'var(--text-3)', fontSize: 10 }} />

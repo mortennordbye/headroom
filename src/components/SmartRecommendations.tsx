@@ -86,6 +86,7 @@ export default function SmartRecommendations() {
     setSavingsTargetPercent,
     dailyData,
     formatCurrency,
+    formatCurrencyShort,
     totalResidual,
   } = useFinance();
 
@@ -141,7 +142,6 @@ export default function SmartRecommendations() {
   ];
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
   const slicePct = (v: number) => (pieTotal > 0 ? (v / pieTotal) * 100 : 0);
-  const fmtKr = (v: number) => Math.round(v).toLocaleString(lang === 'nb' ? 'nb-NO' : 'en-US') + ' kr';
   const activeSlice = hoveredSlice !== null ? pieData[hoveredSlice] : null;
 
   return (
@@ -271,7 +271,7 @@ export default function SmartRecommendations() {
                   {activeSlice ? activeSlice.name : (lang === 'nb' ? 'Totalt' : 'Total')}
                 </div>
                 <div className="text-[15px] font-bold font-mono tracking-tight text-[var(--text-1)] mt-0.5">
-                  {fmtKr(activeSlice ? activeSlice.value : pieTotal)}
+                  {formatCurrencyShort(activeSlice ? activeSlice.value : pieTotal)}
                 </div>
                 {activeSlice && (
                   <div className="text-[11px] font-semibold tabular-nums mt-0.5" style={{ color: activeSlice.color }}>
@@ -296,7 +296,7 @@ export default function SmartRecommendations() {
                   <span className="text-[11px] text-[var(--text-2)] truncate">{entry.name}</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
-                  <span className="text-[11px] font-mono text-[var(--text-1)]">{fmtKr(entry.value)}</span>
+                  <span className="text-[11px] font-mono text-[var(--text-1)]">{formatCurrencyShort(entry.value)}</span>
                   <span className="text-[10px] text-[var(--text-3)] w-8 text-right">{slicePct(entry.value).toFixed(0)}%</span>
                 </div>
               </div>
