@@ -1,0 +1,17 @@
+{
+  "name": "Headroom",
+  "short_name": "Headroom",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08080A",
+  "theme_color": "#08080A",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

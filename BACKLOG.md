@@ -2,6 +2,16 @@
 
 Items deferred from prior work. When an item is finished, remove it.
 
+## PWA — raster home-screen icons
+
+The standalone-app setup (manifest + `apple-mobile-web-app-*` meta tags) is shipped, so the app now launches without Safari chrome. The home-screen / install icon is still the SVG favicon, which iOS does not render as an `apple-touch-icon` — it falls back to a screenshot of the page. Android/Chrome also prefer raster icons for the install prompt.
+
+**What's needed**: generate `180×180` (apple-touch-icon), `192×192`, and `512×512` PNGs from `public/favicon.svg`, drop them in `public/`, then reference them — add `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />` in `index.html` and the 192/512 entries (incl. a `"purpose": "maskable"` variant) in `public/manifest.webmanifest`.
+
+**Unblock**: needs an image-rasterizing step (e.g. `sharp`, `resvg`, or an online converter) to turn the SVG into PNGs — not doable from the SVG alone in-app.
+
+**Where**: `public/`, `index.html`, `public/manifest.webmanifest`.
+
 ## Live SSB wage statistics
 
 `/api/wage-stats` currently returns a curated static series (server/index.js, `WAGE_STATS_STATIC`). Should query SSB table 11418 (or 13606) for live national median annual wage instead.
