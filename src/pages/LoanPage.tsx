@@ -13,6 +13,8 @@ import {
   Home,
   ArrowLeftRight,
   ArrowRight,
+  TrendingDown,
+  ExternalLink,
 } from 'lucide-react';
 import {
   BarChart,
@@ -482,6 +484,36 @@ const LoanPage: React.FC = () => {
                   value={fmtNum(homeownerStatus.annualTaxDeduction)}
                   highlight highlightColor="green" />
               </div>
+            </div>
+
+            {/* Sammenlign renten din */}
+            <div className={`${card} p-5 md:p-7 space-y-5`}>
+              <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+                <TrendingDown size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+                <h2 className={sectionLabel}>Sammenlign renten din</h2>
+              </div>
+              <p className="text-[13px] text-[var(--text-2)]">
+                En lavere rente i markedet er forhandlingskort mot banken din – be om bedre
+                rente, eller vurder å refinansiere. Bruk tallene under på Finansportalen.
+              </p>
+              <div className="space-y-1">
+                <LoanRow label="Din rente (nominell p.a.)" value={fmtPct(homeowner.rente)} />
+                <LoanRow label="Restgjeld" value={fmtNum(homeowner.currentMortgageBalance)} />
+                <LoanRow label="Belåningsgrad"
+                  value={assets.houseValue > 0
+                    ? fmtPct((homeowner.currentMortgageBalance / assets.houseValue) * 100)
+                    : '–'}
+                  highlight />
+              </div>
+              <a
+                href="https://www.forbrukerradet.no/finansportalen/bank/lan/boliglan"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-[#0ea5e9] text-white text-[13px] font-medium hover:bg-[#0284c7] transition-colors"
+              >
+                Sammenlign på Finansportalen
+                <ExternalLink size={14} strokeWidth={2} />
+              </a>
             </div>
 
           </div>
