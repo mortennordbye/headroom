@@ -120,7 +120,9 @@ app.get('/api/wage-stats', (_req, res) => {
 const DIST = path.join(__dirname, 'dist');
 if (fs.existsSync(DIST)) {
   app.use(express.static(DIST));
-  app.get('*', (req, res) => res.sendFile(path.join(DIST, 'index.html')));
+  // SPA fallback. Regex route (not the bare '*' string) for Express 5 /
+  // path-to-regexp v8 compatibility; matches any unhandled GET.
+  app.get(/.*/, (req, res) => res.sendFile(path.join(DIST, 'index.html')));
 }
 
 const PORT = process.env.PORT || 3001;

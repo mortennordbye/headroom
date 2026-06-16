@@ -20,6 +20,7 @@ import {
   PieChart,
   Pie,
   Legend,
+  type TooltipContentProps,
 } from 'recharts';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
@@ -429,9 +430,9 @@ const BudgetPage: React.FC = () => {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-                  content={({ active, payload }: any) => {
+                  content={({ active, payload }: TooltipContentProps) => {
                     if (!active || !payload?.length) return null;
-                    const d = payload[0].payload;
+                    const d = payload[0].payload as { name: string; amount: number };
                     const pct = totalFixedExpenses > 0 ? (d.amount / totalFixedExpenses) * 100 : 0;
                     return (
                       <div
@@ -451,7 +452,7 @@ const BudgetPage: React.FC = () => {
                   dataKey="amount"
                   radius={[0, 6, 6, 0]}
                   barSize={12}
-                  background={{ fill: 'rgba(255,255,255,0.04)', radius: 6 } as any}
+                  background={{ fill: 'rgba(255,255,255,0.04)', radius: 6 } as unknown as React.ComponentProps<typeof Bar>['background']}
                 >
                   {sortedExpenses.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
@@ -463,7 +464,7 @@ const BudgetPage: React.FC = () => {
                     fill="#9a9aa3"
                     fontSize={11}
                     fontWeight={600}
-                    formatter={(v: any) => formatCurrencyShort(Number(v ?? 0))}
+                    formatter={(v: unknown) => formatCurrencyShort(Number(v ?? 0))}
                   />
                 </Bar>
               </BarChart>

@@ -1076,7 +1076,7 @@ function MonthlyInvestmentBars({ bars, formatCurrency }: { bars: { key: string; 
   // so the chart doesn't look anemic.
   const realBars = bars.filter(b => !b.projected);
   const baseVal = realBars[realBars.length - 1]?.value ?? bars[0]?.value ?? 0;
-  let display = [...bars];
+  const display = [...bars];
   if (realBars.length < 4 && baseVal > 0) {
     const projCount = Math.max(0, 6 - bars.length);
     for (let i = 1; i <= projCount; i++) {
@@ -1273,13 +1273,12 @@ function LegendItem({
 function Donut({ rows, total, mom }: { rows: { value: number; color: string; label?: string }[]; total: number; mom: number | null }) {
   const [hovered, setHovered] = useState<number | null>(null);
   if (total <= 0) return null;
-  let offset = 0;
-  const segments = rows.map(row => {
+  const segments = rows.map((row, i) => {
     const pct = (row.value / total) * 100;
     const filled = Math.max(0, pct - 1.5);
-    const seg = { color: row.color, filled, offset: -offset, pct, label: row.label, value: row.value };
-    offset += pct;
-    return seg;
+    // Offset = cumulative pct of preceding segments (prefix sum, no outer mutation).
+    const offset = rows.slice(0, i).reduce((s, r) => s + (r.value / total) * 100, 0);
+    return { color: row.color, filled, offset: -offset, pct, label: row.label, value: row.value };
   });
   const active = hovered !== null ? segments[hovered] : null;
 

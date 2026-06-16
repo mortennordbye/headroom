@@ -97,6 +97,8 @@ export default function SmartRecommendations() {
 
   useEffect(() => {
     if (editingPct) {
+      // Seed the draft from the live value when entering edit mode, then select it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPctDraft(savingsTargetPercent.toString());
       setTimeout(() => pctInputRef.current?.select(), 0);
     }

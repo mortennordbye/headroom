@@ -276,6 +276,8 @@ function NumberRow({
   suffix?: string;
 }) {
   const [draft, setDraft] = useState(value.toString());
+  // Re-sync the editable draft when the committed value changes from outside.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setDraft(value.toString()); }, [value]);
   return (
     <div>

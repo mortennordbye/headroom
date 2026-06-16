@@ -187,7 +187,7 @@ const LoanPage: React.FC = () => {
     const newMonthlyPayment = calcMonthlyPayment(newLoanNeeded, loan.rente, loan.nedbetalingstid) + loan.termingebyr;
     const totalTransactionCosts = saleProceeds.agentCost + transition.documentFee + transition.otherSaleCosts + bridgeCost;
     return { equityFromSale, totalEquityNew, newLoanNeeded, newMonthlyPayment, totalTransactionCosts };
-  }, [saleProceeds, bridgeCost, loan]);
+  }, [saleProceeds, bridgeCost, loan, transition.documentFee, transition.otherSaleCosts]);
 
   const fmtNum = (n: number) => formatCurrency(Math.round(n));
   const fmtPct = (n: number) => `${n.toFixed(2)}%`;

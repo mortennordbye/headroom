@@ -27,6 +27,7 @@ import {
 } from 'recharts';
 import {
   useFinance,
+  translations,
   type SalaryEntry,
   type JobEntry,
   type BonusEntry,
@@ -1505,7 +1506,7 @@ interface NextReviewCtx {
 
 interface NextReviewCardProps {
   ctx: NextReviewCtx;
-  t: any;
+  t: typeof translations.nb;
   lang: string;
   formatCurrency: (v: number) => string;
 }

@@ -177,6 +177,10 @@ export interface WageStatPoint {
 
 // --- Translations ---
 
+// This module deliberately co-locates the provider, the useFinance hook, types
+// and the translations table; splitting them out is not worth the churn, so
+// Fast Refresh's component-only export rule is disabled for these exports.
+// eslint-disable-next-line react-refresh/only-export-components
 export const translations = {
   nb: {
     title: 'Headroom',
@@ -1241,6 +1245,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Fetch SSB wage statistics when region is Norway. Hidden in generic mode.
   useEffect(() => {
     if (region !== 'no') {
+      // Intentional reset of fetched data when leaving Norway region.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setWageStats([]);
       return;
     }
@@ -1257,6 +1263,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // and the UI hides inflation-dependent features.
   useEffect(() => {
     if (region !== 'no') {
+      // Intentional reset of fetched data when leaving Norway region.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setInflation([]);
       setInflationStale(false);
       return;
@@ -1376,20 +1384,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [dailyTransactions, currentMonth]);
 
   const dailyData: DailyDataEntry[] = useMemo(() => {
+    const result: DailyDataEntry[] = [];
     let runningBalance = 0;
-    return monthInterval.map((day) => {
+    for (const day of monthInterval) {
       const dateStr = format(day, 'yyyy-MM-dd');
       const dayTransactions = transactionsForMonth.filter(t => t.date === dateStr);
       const totalSpentToday = dayTransactions.reduce((sum, t) => sum + t.amount, 0);
       runningBalance += dailyBudget - totalSpentToday;
-      return {
+      result.push({
         date: day,
         dateStr,
         spent: totalSpentToday,
         balance: runningBalance,
         transactions: dayTransactions
-      };
-    });
+      });
+    }
+    return result;
   }, [monthInterval, transactionsForMonth, dailyBudget]);
 
   const taxOnGain = (assets.unrealizedGain * assets.taxRate) / 100;
@@ -1403,6 +1413,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded.current) return;
     if (monthKey !== format(new Date(), 'yyyy-MM')) return;
+    // Deliberate: snapshot the current month's net worth into persisted state when equity changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNetWorthHistory(prev => ({ ...prev, [monthKey]: Math.round(totalEquity) }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalEquity]);
@@ -1659,6 +1671,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useFinance() {
   const context = useContext(FinanceContext);
   if (context === undefined) {

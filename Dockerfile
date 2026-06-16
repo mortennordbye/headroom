@@ -2,7 +2,7 @@
 FROM node:20-slim AS frontend-build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
 RUN npm run build
 
@@ -10,8 +10,8 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 RUN apk add --no-cache python3 make g++
-COPY server/package.json ./
-RUN npm install --omit=dev
+COPY server/package*.json ./
+RUN npm ci --omit=dev
 COPY server/index.js ./
 COPY server/seed.js ./
 COPY server/ssb.js ./

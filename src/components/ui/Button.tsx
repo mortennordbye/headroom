@@ -23,8 +23,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const base =
     'inline-flex items-center justify-center gap-2 rounded-full font-medium select-none cursor-pointer transition-[transform,background,border-color,opacity] duration-150 disabled:cursor-not-allowed disabled:opacity-50';
 
-  let variantClass = '';
-  let variantStyle: React.CSSProperties = {};
+  let variantClass: string;
+  let variantStyle: React.CSSProperties;
 
   if (variant === 'primary') {
     variantClass = 'text-[#08080A] font-semibold border-0 hover:-translate-y-px';
