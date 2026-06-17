@@ -13,8 +13,12 @@ import {
   FileJson,
   Trash2,
   Globe,
+  LayoutGrid,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useFinance, type ExportPayload } from '../context/FinanceContext';
+import { NAV_ITEMS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { Button } from '../components/ui/Button';
@@ -70,6 +74,8 @@ export default function SettingsPage() {
     setRegion,
     customTaxRatePct,
     setCustomTaxRatePct,
+    hiddenNavItems,
+    toggleNavItem,
     importAll,
     resetAll,
   } = useFinance();
@@ -431,6 +437,35 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
+          </div>
+        </Card>
+
+        {/* ──── Navigation (span 12) ──── */}
+        <Card padding="lg" className="md:col-span-12">
+          <SectionLabel icon={<LayoutGrid />}>{t.settings.navVisibility}</SectionLabel>
+          <p className="mt-2 text-[13px]" style={{ color: 'var(--text-2)' }}>
+            {t.settings.navVisibilityDesc}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {NAV_ITEMS.filter(item => item.path !== ALWAYS_VISIBLE_NAV).map(item => {
+              const visible = !hiddenNavItems.includes(item.path);
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => toggleNavItem(item.path)}
+                  aria-pressed={visible}
+                  className="inline-flex items-center gap-2 px-4 h-9 rounded-full border text-[13px] font-medium transition-colors"
+                  style={{
+                    borderColor: visible ? 'var(--accent)' : 'var(--border)',
+                    background: visible ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
+                    color: visible ? 'var(--accent)' : 'var(--text-3)',
+                  }}
+                >
+                  {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                  {t.nav[item.key]}
+                </button>
+              );
+            })}
           </div>
         </Card>
 

@@ -609,6 +609,8 @@ export const translations = {
       norwegian: 'Norsk',
       region: 'Region',
       regionDesc: 'Norge bruker SSB-data og norsk skattemodell. "Generisk" skjuler norsk-spesifikke funksjoner.',
+      navVisibility: 'Navigasjon',
+      navVisibilityDesc: 'Velg hvilke sider som vises i menyen. Innstillinger vises alltid.',
       regionNorway: 'Norge',
       regionGeneric: 'Generisk',
       customTaxRate: 'Effektiv skatteprosent',
@@ -1023,6 +1025,8 @@ export const translations = {
       norwegian: 'Norwegian',
       region: 'Region',
       regionDesc: 'Norway uses SSB data and Norwegian tax model. "Generic" hides Norway-specific features.',
+      navVisibility: 'Navigation',
+      navVisibilityDesc: 'Choose which pages appear in the menu. Settings is always shown.',
       regionNorway: 'Norway',
       regionGeneric: 'Generic',
       customTaxRate: 'Effective tax rate',
@@ -1213,6 +1217,8 @@ interface FinanceContextType {
   updateEmployerCostConfig: (key: keyof EmployerCostConfig, value: number) => void;
   billingConfig: BillingRateConfig;
   updateBillingConfig: (key: keyof BillingRateConfig, value: number | null) => void;
+  hiddenNavItems: string[];
+  toggleNavItem: (path: string) => void;
   totalResidual: number;
   totalFixedExpenses: number;
   monthlyBudget: number;
@@ -1265,6 +1271,7 @@ export interface ExportPayload {
   customTaxRatePct?: number;
   employerCostConfig?: EmployerCostConfig;
   billingConfig?: BillingRateConfig;
+  hiddenNavItems?: string[];
 }
 
 export interface DailyDataEntry {
@@ -1323,6 +1330,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [customTaxRatePct, setCustomTaxRatePct] = useState<number>(30);
   const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
+  const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
 
   const loaded = useRef(false);
   const [dataLoadFailed, setDataLoadFailed] = useState(false);
@@ -1369,6 +1377,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           if (typeof data.customTaxRatePct === 'number') setCustomTaxRatePct(data.customTaxRatePct);
           setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...(data.employerCostConfig ?? {}) });
           setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...(data.billingConfig ?? {}) });
+          if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
         }
     };
 
@@ -1451,14 +1460,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
       customCurrencyCode, customCurrencyRate,
       jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
-      region, customTaxRatePct, employerCostConfig, billingConfig,
+      region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems,
     };
     fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig]);
+  }, [income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems]);
 
   // --- Calculations ---
 
@@ -1602,6 +1611,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setBillingConfig(prev => ({ ...prev, [key]: value }));
   };
 
+  const toggleNavItem = (path: string) => {
+    setHiddenNavItems(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
+  };
+
   const updateHomeowner = (key: keyof HomeownerData, value: number) => {
     setHomeowner(prev => ({ ...prev, [key]: value }));
   };
@@ -1716,6 +1729,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (typeof data.customTaxRatePct === 'number') setCustomTaxRatePct(data.customTaxRatePct);
     if (data.employerCostConfig) setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...data.employerCostConfig });
     if (data.billingConfig) setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...data.billingConfig });
+    if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
   };
 
   const resetAll = () => {
@@ -1838,6 +1852,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       inflation, inflationStale, wageStats,
       region, setRegion, customTaxRatePct, setCustomTaxRatePct,
       employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
+      hiddenNavItems, toggleNavItem,
       totalResidual,
       totalFixedExpenses, monthlyBudget, dailyBudget,
       dailyData, totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,

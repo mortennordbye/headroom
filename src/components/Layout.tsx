@@ -5,14 +5,9 @@ import {
   ChevronRight,
   BarChart3,
   TrendingUp,
-  Building2,
   LayoutDashboard,
-  Settings as SettingsIcon,
   Check,
   LineChart as LineChartIcon,
-  Activity,
-  Briefcase,
-  Receipt,
   Menu as MenuIcon,
   X,
 } from 'lucide-react';
@@ -20,15 +15,16 @@ import { format, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fn
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
 
-/** Routes surfaced inside the "Mer" sheet on mobile (everything past the 4 primary tabs). */
-const MORE_ROUTES = ['/forecast', '/pension', '/employer-cost', '/loan', '/settings'];
+import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed } = useFinance();
+  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, hiddenNavItems } = useFinance();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = MORE_ROUTES.includes(location.pathname);
+
+  const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
 
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
@@ -76,15 +72,9 @@ const Layout: React.FC = () => {
           className="hidden md:flex items-center gap-1.5 p-1 rounded-full border"
           style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--border)' }}
         >
-          <NavButton to="/overview" label={t.nav.dashboard} />
-          <NavButton to="/" label={t.nav.budget} />
-          <NavButton to="/assets" label={t.nav.assets} />
-          <NavButton to="/salary" label={t.nav.salary} />
-          <NavButton to="/forecast" label={t.nav.forecast} />
-          <NavButton to="/pension" label={t.nav.pension} />
-          <NavButton to="/employer-cost" label={t.nav.employerCost} />
-          <NavButton to="/loan" label={t.nav.loan} />
-          <NavButton to="/settings" label={t.nav.settings} />
+          {NAV_ITEMS.filter(item => isVisible(item.path)).map(item => (
+            <NavButton key={item.path} to={item.path} label={t.nav[item.key]} />
+          ))}
         </nav>
 
         {/* Right cluster: month picker */}
@@ -197,11 +187,11 @@ const Layout: React.FC = () => {
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 pt-1">
-              <SheetItem to="/forecast" icon={<Activity size={20} strokeWidth={1.75} />} label={t.nav.forecast} onNavigate={() => setMoreOpen(false)} />
-              <SheetItem to="/pension" icon={<Briefcase size={20} strokeWidth={1.75} />} label={t.nav.pension} onNavigate={() => setMoreOpen(false)} />
-              <SheetItem to="/employer-cost" icon={<Receipt size={20} strokeWidth={1.75} />} label={t.nav.employerCost} onNavigate={() => setMoreOpen(false)} />
-              <SheetItem to="/loan" icon={<Building2 size={20} strokeWidth={1.75} />} label={t.nav.loan} onNavigate={() => setMoreOpen(false)} />
-              <SheetItem to="/settings" icon={<SettingsIcon size={20} strokeWidth={1.75} />} label={t.nav.settings} onNavigate={() => setMoreOpen(false)} />
+              {NAV_ITEMS
+                .filter(item => MORE_ROUTES.includes(item.path) && isVisible(item.path))
+                .map(item => (
+                  <SheetItem key={item.path} to={item.path} icon={item.icon} label={t.nav[item.key]} onNavigate={() => setMoreOpen(false)} />
+                ))}
             </div>
           </div>
         </div>
