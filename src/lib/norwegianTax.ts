@@ -17,7 +17,7 @@ const TRYGDEAVGIFT_LOWER_LIMIT = 99_650;
 const MINSTEFRADRAG_RATE = 0.46;
 const MINSTEFRADRAG_MAX = 92_000;
 const PERSONFRADRAG = 88_250;
-const IPS_MAX_DEDUCTION = 15_000;
+export const IPS_MAX_DEDUCTION = 15_000;
 
 /** Trinnskatt brackets 2025 (NOK lower bound, rate). */
 const TRINNSKATT: Array<{ from: number; rate: number }> = [

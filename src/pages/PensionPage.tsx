@@ -3,7 +3,8 @@ import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Briefcase, TrendingUp, Lock, Calculator } from 'lucide-react';
-import { useFinance, type Pension } from '../context/FinanceContext';
+import { useFinance, calcActiveGrossAnnual, type Pension } from '../context/FinanceContext';
+import { IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import ChartTooltip from '../components/ChartTooltip';
@@ -26,15 +27,11 @@ const PensionPage: React.FC = () => {
   // Pensionable income: latest salary + on-call.
   const pensionableIncome = useMemo(() => {
     const today = new Date().toISOString().slice(0, 7);
-    const eligible = salaries.filter(s => s.effectiveDate <= today);
-    if (eligible.length === 0) return 0;
-    const latest = eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b));
-    const job = jobs.find(j => j.id === latest.jobId);
-    return latest.grossAnnual + (job?.onCallAnnual ?? 0);
+    return calcActiveGrossAnnual(salaries, jobs, today);
   }, [salaries, jobs]);
 
   const otpAnnualContribution = pensionableIncome * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
-  const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, 15_000);
+  const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
   const ipsTaxSaving = ipsAnnualContribution * 0.22;
 
   // Year-by-year projection.
@@ -191,7 +188,7 @@ const PensionPage: React.FC = () => {
             <NumberRow
               label={t.ipsAnnualContribution}
               value={pension.ipsAnnualContribution}
-              onCommit={(v) => updatePension('ipsAnnualContribution', Math.min(Math.max(0, v), 15_000))}
+              onCommit={(v) => updatePension('ipsAnnualContribution', Math.min(Math.max(0, v), IPS_MAX_DEDUCTION))}
               suffix="kr/år"
             />
             <SliderRow label={t.ipsGrowthRate} value={pension.ipsGrowthRate} onChange={(v) => updatePension('ipsGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" />

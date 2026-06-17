@@ -5,7 +5,7 @@ import {
 import { TrendingUp, Wallet, Activity } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
-import { calcTaxByRegion } from '../lib/norwegianTax';
+import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 
 const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -45,7 +45,7 @@ const ForecastPage: React.FC = () => {
       ? Math.max(0, pension.retirementAge - (currentYear - pension.birthYear))
       : 0;
     const otpAnnual = (currentGross + currentOnCall) * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
-    const ipsAnnual = Math.min(pension.ipsAnnualContribution, 15000);
+    const ipsAnnual = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
     const futureValue = (start: number, contrib: number, rate: number, n: number) => {
       const r = rate / 100;
       if (n <= 0) return start;
@@ -107,7 +107,7 @@ const ForecastPage: React.FC = () => {
         const interestAccrued = mortgage * mortgageRate;
         mortgage = Math.max(0, mortgage + interestAccrued - annualMortgagePayment);
       }
-      const tax = calcTaxByRegion(gross, region, customTaxRatePct);
+      const tax = calcTaxByRegion(gross, region, customTaxRatePct, pension.ipsAnnualContribution);
       const net = tax.netAnnual;
       const contribution = Math.max(0, net * (savingsPct / 100));
       if (y > 0) {
@@ -127,7 +127,7 @@ const ForecastPage: React.FC = () => {
       });
     }
     return out;
-  }, [currentGross, totalEquity, startingMortgage, mortgageRate, annualMortgagePayment, raisePct, savingsPct, returnPct, inflationPct, years, region, customTaxRatePct]);
+  }, [currentGross, totalEquity, startingMortgage, mortgageRate, annualMortgagePayment, raisePct, savingsPct, returnPct, inflationPct, years, region, customTaxRatePct, pension.ipsAnnualContribution]);
 
   const last = projection[projection.length - 1];
   const first = projection[0];

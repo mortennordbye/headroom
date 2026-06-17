@@ -2,10 +2,11 @@
 
 A self-hosted personal finance tracker. Track monthly budgets, manage assets and investments, model housing loans, and get smart spending recommendations. All data is stored server-side in a SQLite database via Docker — zero browser storage. Norwegian is natively supported.
 
-| Dark mode | Light mode |
-|-----------|------------|
-| ![Dashboard dark](screenshots/dashboard.png) | ![Dashboard light](screenshots/dashboard-light.png) |
-| ![Budget dark](screenshots/budget.png) | ![Budget light](screenshots/budget-light.png) |
+| Dashboard | Budget |
+|-----------|--------|
+| ![Dashboard](screenshots/dashboard.png) | ![Budget](screenshots/budget.png) |
+
+![Net worth](screenshots/assets.png)
 
 ## Features
 

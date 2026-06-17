@@ -138,7 +138,7 @@ const SalaryPage: React.FC = () => {
     hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
     inflation, inflationStale,
     wageStats,
-    region, customTaxRatePct,
+    region, customTaxRatePct, pension,
   } = useFinance();
   const isGeneric = region === 'generic';
 
@@ -775,8 +775,8 @@ const SalaryPage: React.FC = () => {
           value={current ? formatCurrency(current.totalAnnual) : '—'}
           sub={current ? (
             currentOnCallAnnual > 0
-              ? `${formatCurrency(current.grossAnnual)} ${lang === 'nb' ? 'grunn' : 'base'} + ${formatCurrency(currentOnCallAnnual)} ${t.salary.onCallShort} · ${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct).netMonthly)} ${lang === 'nb' ? 'netto/mnd' : 'net/mo'}`
-              : `${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct).netMonthly)} ${lang === 'nb' ? 'netto/mnd' : 'net/mo'}`
+              ? `${formatCurrency(current.grossAnnual)} ${lang === 'nb' ? 'grunn' : 'base'} + ${formatCurrency(currentOnCallAnnual)} ${t.salary.onCallShort} · ${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly)} ${lang === 'nb' ? 'netto/mnd' : 'net/mo'}`
+              : `${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly)} ${lang === 'nb' ? 'netto/mnd' : 'net/mo'}`
           ) : ''}
           chip={(() => {
             if (!current) return undefined;

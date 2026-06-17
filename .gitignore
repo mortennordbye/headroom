@@ -27,8 +27,12 @@ npm-debug.log*
 # Playwright artifacts
 .playwright-mcp/
 
-# Local screenshots from verification / design iterations
-screenshots/
+# Local screenshots from verification / design iterations are scratch and
+# ignored — except the README images, which are tracked.
+screenshots/*
+!screenshots/dashboard.png
+!screenshots/budget.png
+!screenshots/assets.png
 /*.png
 /*-snapshot.md
 /*-refs.md

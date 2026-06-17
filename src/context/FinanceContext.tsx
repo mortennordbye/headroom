@@ -124,6 +124,34 @@ export interface SalaryEntry {
   notes?: string;
 }
 
+/**
+ * Total gross annual employment income (base + on-call) active in a given month.
+ * Picks the latest applicable salary PER job (so salary history works) and SUMS
+ * across all jobs that are still active that month (so concurrent jobs count).
+ * Must aggregate before tax — progressive brackets apply to combined income.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function calcActiveGrossAnnual(
+  salaries: SalaryEntry[],
+  jobs: JobEntry[],
+  monthKey: string,
+): number {
+  const eligible = salaries.filter(s => s.effectiveDate <= monthKey);
+  if (eligible.length === 0) return 0;
+  const latestPerJob = new Map<string, SalaryEntry>();
+  for (const s of eligible) {
+    const cur = latestPerJob.get(s.jobId);
+    if (!cur || s.effectiveDate > cur.effectiveDate) latestPerJob.set(s.jobId, s);
+  }
+  let total = 0;
+  for (const [jobId, sal] of latestPerJob) {
+    const job = jobs.find(j => j.id === jobId);
+    if (job?.endDate && job.endDate < monthKey) continue; // skip jobs that ended before this month
+    total += sal.grossAnnual + (job?.onCallAnnual ?? 0);
+  }
+  return total;
+}
+
 export type BonusType = 'annual' | 'performance' | 'signing' | 'holiday_pay' | 'profit_share' | 'other';
 
 export interface BonusEntry {
@@ -1050,6 +1078,8 @@ interface FinanceContextType {
   updateHomeowner: (key: keyof HomeownerData, value: number) => void;
   transition: TransitionData;
   updateTransition: (key: keyof TransitionData, value: number) => void;
+  mortgageRate: number;
+  mortgageTermYears: number;
   growthReturnRate: number;
   setGrowthReturnRate: (val: number) => void;
   houseGrowthRate: number;
@@ -1319,12 +1349,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Falls back to the legacy static `income` when no salaries have been entered.
   const derivedMonthlyIncome = useMemo(() => {
     if (salaries.length === 0) return income;
-    const eligible = salaries.filter(s => s.effectiveDate <= monthKey);
-    if (eligible.length === 0) return income;
-    const latest = eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b));
-    const job = jobs.find(j => j.id === latest.jobId);
-    const onCallAnnual = job?.onCallAnnual ?? 0;
-    const totalAnnual = latest.grossAnnual + onCallAnnual;
+    const totalAnnual = calcActiveGrossAnnual(salaries, jobs, monthKey);
+    if (totalAnnual === 0) return income;
     return Math.round(calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly);
   }, [salaries, jobs, monthKey, region, customTaxRatePct, income, pension.ipsAnnualContribution]);
 
@@ -1402,11 +1428,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return result;
   }, [monthInterval, transactionsForMonth, dailyBudget]);
 
-  const taxOnGain = (assets.unrealizedGain * assets.taxRate) / 100;
+  // Latent tax floored at 0: a loss (negative gain) is not a liquid asset, so it
+  // must not inflate net worth. The UI clamps inputs ≥0 but JSON import does not.
+  const taxOnGain = (Math.max(0, assets.unrealizedGain) * assets.taxRate) / 100;
   const netInvestment = assets.portfolio - taxOnGain;
   const houseEquity = assets.houseValue - assets.houseDebt;
-  const cryptoTaxOnGain = (assets.cryptoUnrealizedGain * assets.cryptoTaxRate) / 100;
+  const cryptoTaxOnGain = (Math.max(0, assets.cryptoUnrealizedGain) * assets.cryptoTaxRate) / 100;
   const netCrypto = assets.crypto - cryptoTaxOnGain;
+  // Single source of truth for the mortgage rate/term used by net-worth projections,
+  // selected by the active housing mode (first-buyer & transitioning use the `loan`
+  // inputs; homeowner uses the `homeowner` inputs).
+  const mortgageRate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
+  const mortgageTermYears = housingMode === 'homeowner' ? homeowner.nedbetalingstid : loan.nedbetalingstid;
   const totalEquity = netInvestment + netCrypto + assets.bsu + assets.savings + assets.bufferAccount + houseEquity;
 
   // Snapshot current month's net worth whenever equity changes (only for the current real month)
@@ -1649,6 +1682,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       recurringTemplates, setRecurringTemplates,
       assets, updateAsset, loan, updateLoan, pension, updatePension,
       housingMode, setHousingMode, homeowner, updateHomeowner, transition, updateTransition,
+      mortgageRate, mortgageTermYears,
       growthReturnRate, setGrowthReturnRate,
       houseGrowthRate, setHouseGrowthRate,
       cashGrowthRate, setCashGrowthRate,

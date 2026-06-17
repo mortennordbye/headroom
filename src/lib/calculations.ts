@@ -1,6 +1,7 @@
 export function calcMonthlyPayment(principal: number, annualRate: number, years: number): number {
   const monthlyRate = annualRate / 100 / 12;
   const n = years * 12;
+  if (n <= 0) return 0; // guard: a 0/negative term has no payment schedule (avoids Infinity/NaN)
   if (monthlyRate === 0) return principal / n;
   return principal * monthlyRate / (1 - Math.pow(1 + monthlyRate, -n));
 }
@@ -116,14 +117,15 @@ export function calcHomeownerMortgageStatus(
   skattefradragssats: number
 ): HomeownerStatus {
   const monthlyRate = annualRate / 100 / 12;
-  const n = yearsRemaining * 12;
-  const monthlyPaymentCalc =
-    monthlyRate === 0
-      ? currentBalance / n
-      : (currentBalance * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -n));
+  const monthlyPaymentCalc = calcMonthlyPayment(currentBalance, annualRate, yearsRemaining);
   const monthlyInterest = currentBalance * monthlyRate;
   const monthlyPrincipal = monthlyPaymentCalc - monthlyInterest;
-  const annualTaxDeduction = monthlyInterest * 12 * (skattefradragssats / 100);
+  // Tax deduction is based on the FIRST year's real interest (summed over the
+  // amortizing 12 months), not month-1 interest extrapolated flat — the balance
+  // (and thus interest) falls every month, so flat×12 overstates it.
+  const yearOneInterest = calcAmortizationSchedule(currentBalance, annualRate, yearsRemaining)[0]?.interestPaid
+    ?? monthlyInterest * 12;
+  const annualTaxDeduction = yearOneInterest * (skattefradragssats / 100);
   const equityPercent =
     originalLoan > 0
       ? Math.max(0, ((originalLoan - currentBalance) / originalLoan) * 100)
@@ -155,33 +157,74 @@ export interface BucketProjectionPoint {
 }
 
 /**
+ * Project housing equity forward year by year.
+ *
+ * Equity = market value − remaining mortgage. The appreciation rate applies to
+ * the full property value (not to the equity), and the mortgage balance declines
+ * each year per its amortization schedule. Because the debt shrinks while the
+ * whole asset appreciates, equity grows considerably faster than the bare
+ * appreciation rate would suggest (the leverage effect).
+ *
+ * Returns equity for years 0..years (index 0 = today).
+ */
+export function calcHouseEquityByYear(
+  houseValue: number,
+  houseDebt: number,
+  appreciationRate: number,
+  loanRate: number,
+  loanTermYears: number,
+  years: number
+): number[] {
+  const schedule =
+    houseDebt > 0 && loanTermYears > 0
+      ? calcAmortizationSchedule(houseDebt, loanRate, loanTermYears)
+      : [];
+  const equity: number[] = [];
+  let value = houseValue;
+  for (let y = 0; y <= years; y++) {
+    // schedule[y - 1] is the balance at the end of year y; once the loan is
+    // paid off the schedule runs out and the remaining balance is 0.
+    const debt = y === 0 ? houseDebt : schedule[y - 1]?.balance ?? 0;
+    equity.push(value - debt);
+    value = value * (1 + appreciationRate / 100);
+  }
+  return equity;
+}
+
+/**
  * Project each asset bucket forward at its own annual growth rate.
  * `annualSavings` accrues to the stocks bucket each year (assumption:
  * discretionary savings flow into investments).
+ *
+ * Pass `houseByYear` (see `calcHouseEquityByYear`) to model housing with
+ * appreciation + mortgage paydown; without it, the house bucket simply
+ * compounds `start.house` at `rates.house`.
  */
 export function calcNetWorthProjectionByBucket(
   start: BucketAmounts,
   annualSavings: number,
   rates: BucketRates,
-  years: number
+  years: number,
+  houseByYear?: number[]
 ): BucketProjectionPoint[] {
   const result: BucketProjectionPoint[] = [];
   let { stocks, crypto, cash, house } = start;
   const currentYear = new Date().getFullYear();
 
   for (let y = 0; y <= years; y++) {
+    const houseVal = houseByYear ? houseByYear[y] ?? house : house;
     result.push({
       year: currentYear + y,
       stocks: Math.round(stocks),
       crypto: Math.round(crypto),
       cash: Math.round(cash),
-      house: Math.round(house),
-      total: Math.round(stocks + crypto + cash + house),
+      house: Math.round(houseVal),
+      total: Math.round(stocks + crypto + cash + houseVal),
     });
     stocks = stocks * (1 + rates.stocks / 100) + annualSavings;
     crypto = crypto * (1 + rates.crypto / 100);
     cash = cash * (1 + rates.cash / 100);
-    house = house * (1 + rates.house / 100);
+    if (!houseByYear) house = house * (1 + rates.house / 100);
   }
   return result;
 }

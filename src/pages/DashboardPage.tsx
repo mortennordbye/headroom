@@ -8,7 +8,7 @@ import { useFinance } from '../context/FinanceContext';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
-import { calcNetWorthProjectionByBucket } from '../lib/calculations';
+import { calcNetWorthProjectionByBucket, calcHouseEquityByYear } from '../lib/calculations';
 import GoalsSection from '../components/GoalsSection';
 
 const DashboardPage: React.FC = () => {
@@ -42,6 +42,9 @@ const DashboardPage: React.FC = () => {
     cryptoGrowthRate,
     formatCurrency,
     formatCurrencyShort,
+    dailyBudget,
+    mortgageRate,
+    mortgageTermYears,
   } = useFinance();
 
   // ─── Derived numbers ───
@@ -100,10 +103,11 @@ const DashboardPage: React.FC = () => {
     return { netWorthSeries: series, isEstimated: series.some(p => p.estimated) };
   }, [netWorthHistory, totalEquity]);
 
-  const annualSavings = Math.max(0, totalResidual * 12);
+  const annualSavings = Math.max(0, recommendedInvestment * 12);
   const cashStart = assets.savings + assets.bsu + assets.bufferAccount;
   const projectionRates = { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate };
   const projectionStart = { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity };
+  const houseByYear = calcHouseEquityByYear(assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15);
 
   // ─── Assets ───
   const assetRows = useMemo(() => [
@@ -181,23 +185,30 @@ const DashboardPage: React.FC = () => {
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
-    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15);
+    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate]);
+  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, assets.houseValue, assets.houseDebt, mortgageRate, mortgageTermYears]);
 
   const projectionEndYear = projection15y[projection15y.length - 1]?.year;
   const projectionEndValue = projection15y[projection15y.length - 1]?.total ?? 0;
-  const projectionGrowthPct = totalEquity > 0 ? Math.round((projectionEndValue / totalEquity - 1) * 100) : 0;
+  // Denominator is the projection's own year-0 total (not totalEquity computed
+  // elsewhere) so the % can't silently drift if either definition changes.
+  const projectionStartValue = projection15y[0]?.total ?? 0;
+  const projectionGrowthPct = projectionStartValue > 0 ? Math.round((projectionEndValue / projectionStartValue - 1) * 100) : 0;
 
   // ─── Burn rate (Can Spend chart) ───
   const burnRate = useMemo(() => {
-    const todayIdx = Math.max(0, dailyData.findIndex(d => d.dateStr === todayStr));
-    const upToToday = todayIdx >= 0 ? dailyData.slice(0, todayIdx + 1) : dailyData;
+    const rawIdx = dailyData.findIndex(d => d.dateStr === todayStr);
+    // When viewing a non-current month, "today" isn't in it — treat the whole
+    // month as elapsed rather than collapsing to day 1 (which findIndex=-1 → 0 did).
+    const isCurrentMonth = rawIdx >= 0;
+    const todayIdx = isCurrentMonth ? rawIdx : dailyData.length - 1;
+    const upToToday = dailyData.slice(0, todayIdx + 1);
     const cumulative: number[] = [];
     let running = 0;
     upToToday.forEach(d => { running += d.spent; cumulative.push(running); });
     return {
-      todayIdx: todayIdx >= 0 ? todayIdx : dailyData.length - 1,
+      todayIdx,
       total: dailyData.length,
       actual: cumulative,
       target: recommendedSpending,
@@ -358,7 +369,7 @@ const DashboardPage: React.FC = () => {
         <Card padding="md" className="md:col-span-5" glow="accent">
           <div className="flex items-start justify-between gap-3">
             <SectionLabel icon={<Wallet />}>{t.canSpend}</SectionLabel>
-            <DeltaChip tone="accent" size="sm">{formatCurrency(Math.round(recommendedSpending / 30))}/d</DeltaChip>
+            <DeltaChip tone="accent" size="sm">{formatCurrency(Math.round(dailyBudget))}/d</DeltaChip>
           </div>
           <div className="font-semibold tracking-[-0.02em] leading-none mt-3 text-[32px]">
             {formatCurrency(recommendedSpending)}

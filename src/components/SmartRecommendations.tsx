@@ -133,10 +133,6 @@ export default function SmartRecommendations() {
   const todayEntry = dailyData.find(d => d.dateStr === todayStr) ?? dailyData[dailyData.length - 1];
   const currentBalance = todayEntry?.balance ?? 0;
 
-  const effectiveSavingsPct = conservativeMode
-    ? Math.min(95, savingsTargetPercent + 10)
-    : savingsTargetPercent;
-
   const pieData = [
     { name: t.fixedCosts, value: totalFixedExpenses, color: '#71717a' },
     { name: t.canSpend, value: recommendedSpending, color: '#0ea5e9' },
@@ -189,7 +185,7 @@ export default function SmartRecommendations() {
             </div>
           ) : (
             <button onClick={() => setEditingPct(true)} className="flex items-center gap-1 group">
-              <span className="text-[13px] font-bold font-mono text-emerald-600">{effectiveSavingsPct}%</span>
+              <span className="text-[13px] font-bold font-mono text-emerald-600">{savingsTargetPercent}%</span>
               <Edit2 size={11} className="text-[var(--text-2)] opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           )}

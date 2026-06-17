@@ -48,8 +48,25 @@ The job-filter tab strip and per-job `jobId` on `BonusEntry` / `OvertimeEntry` /
 - **Commission / provisjon tracking** — variable monthly amount tied to billed hours, project margin, or sales. Needs a new `CommissionEntry { id, jobId, periodMonth, amount, basis?: 'hours' | 'margin' | 'sales', rate?: number, notes? }` plus an aggregation in `compByYear`. **Where**: `src/context/FinanceContext.tsx`, `src/pages/SalaryPage.tsx`.
 - **Per-job billing rate (consultant mode)** — track `kr/hour billed to client` distinct from base salary. Add `billingRateKrPerHour?: number` to `JobEntry`, plus a "billed hours" snapshot type. Enables an "Effective billing margin" chart contrasting what you cost vs what's billed.
 - **Per-job stack in the Total comp chart** — when more than one job has activity in a given year, split the `base` / `onCall` / `bonus` / `overtime` segments per job (or add a job-color legend). Currently aggregated globally across jobs. **Where**: `compByYear` in `src/pages/SalaryPage.tsx`.
-- **Concurrent jobs** — UI currently assumes one active job at a time (the "Total årslønn" tile uses the latest `SalaryEntry`'s job). Investigate moonlighting / overlapping contracts: should `derivedMonthlyIncome` sum across all currently-active jobs?
+- **Concurrent jobs** — `derivedMonthlyIncome` (budget income) and `PensionPage` pensionable income now sum across all active jobs via `calcActiveGrossAnnual` (latest salary per job, skipping ended jobs, aggregated before tax). Still single-job: `ForecastPage` `currentGross`/`currentOnCall` (base-only decomposition, single latest salary) and the SalaryPage "Total comp" chart (`compByYear` aggregates globally — see the per-job-stack bullet above). **Where**: `src/pages/ForecastPage.tsx:23-37`, `src/pages/SalaryPage.tsx` `compByYear`.
 - **Reassign unassigned entries** — `BonusEntry` / `OvertimeEntry` / `HoursSnapshot` rows from before the `jobId` field render under "Uten jobb" in the All tab. Add a quick bulk-attribute UI (or surface it inline in the entry row) so users can clean these up without opening the edit modal one by one.
+
+## Math-correctness audit — deferred findings
+
+A cross-domain math audit (2026-06) fixed the high-value issues (savings-rate in the
+projection, multi-job income aggregation, IPS net-income consistency across pages,
+homeowner year-1 tax deduction, mortgage rate/term source, loan term=0 guard, `/30`
+daily-budget divisor, latent-tax floor, projection-growth denominator, burn-rate month
+guard). These lower-priority findings were **intentionally left** and are not bugs that
+break current usage:
+
+- **Loan capacity oversimplified** — `LoanPage` first-buyer `totalLaaneevne = 5*arslonn + egenkapital - eksisterendeGjeld` omits the two binding Norwegian rules: the 85% LTV / 15%-equity cap and the +3pp affordability stress test. Should surface `maxPrice = min(maxDebt + equity, equity/0.15)` and a stress-tested payment. **Where**: `src/pages/LoanPage.tsx` (`totalLaaneevne`).
+- **Trygdeavgift low-income band** — `norwegianTax.ts:101` charges `gross * 7.8%` once above the 99 650 threshold. Correct for normal salaries (the flat rate IS on full personinntekt), but it overcharges in the ~99 650–144 000 *opptrapping* band where the real avgift is capped at 25% of income above the threshold, and it has a hard cliff at the threshold. Also the 2025 rate is arguably 7.7%, not 7.8%. Low impact (only part-time/low earners). **Where**: `src/lib/norwegianTax.ts` (`trygde`).
+- **Dashboard investment bars denominator** — `DashboardPage` monthly-investment bars use `income * savingsTargetPercent` (% of *gross income*), inconsistent with the projection/recommendation which use `residual * ratio`. Pick one definition. **Where**: `src/pages/DashboardPage.tsx` (`investmentBars`, ~line 139).
+- **`ipsTaxSaving` hardcodes 22%** — `PensionPage` shows IPS tax saving as `contribution * 0.22`. Correct for the Norwegian regime, but in `region === 'generic'` the real saving is `customTaxRatePct`, so the displayed figure is wrong there. **Where**: `src/pages/PensionPage.tsx:38`.
+- **Bonus / overtime never reach the budget** — entered on SalaryPage and shown in the comp chart, but `derivedMonthlyIncome` ignores them (lumpy income). Likely by-design; if they should count, add them to annual gross *before* tax (progressive). **Where**: `src/context/FinanceContext.tsx` (`derivedMonthlyIncome`).
+
+**Unblock**: each is self-contained; none needs new server data. Confirm the intended product behavior (esp. loan-capacity rule and bonus/overtime) before implementing.
 
 ## Pension — phase 2
 

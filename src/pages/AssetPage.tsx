@@ -23,7 +23,7 @@ import {
 import { useFinance, type Assets, type Pension } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
-import { calcNetWorthProjectionByBucket } from '../lib/calculations';
+import { calcNetWorthProjectionByBucket, calcHouseEquityByYear } from '../lib/calculations';
 
 interface ModalConfig {
   title: string;
@@ -55,9 +55,11 @@ const AssetPage: React.FC = () => {
     setCashGrowthRate,
     cryptoGrowthRate,
     setCryptoGrowthRate,
-    totalResidual,
+    recommendedInvestment,
     pension,
     updatePension,
+    mortgageRate,
+    mortgageTermYears,
   } = useFinance();
 
     const [modal, setModal] = useState<ModalConfig | null>(null);
@@ -88,16 +90,21 @@ const AssetPage: React.FC = () => {
     });
     };
 
-    const annualSavings = Math.max(0, totalResidual * 12);
+    const annualSavings = Math.max(0, recommendedInvestment * 12);
   const cashStart = assets.savings + assets.bsu + assets.bufferAccount;
+  const houseByYear = useMemo(
+    () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15),
+    [assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears]
+  );
   const projectionData = useMemo(
     () => calcNetWorthProjectionByBucket(
       { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity },
       annualSavings,
       { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate },
       15,
+      houseByYear,
     ),
-    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate]
+    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, houseByYear]
   );
 
   const formatAxisValue = (val: number) => {
