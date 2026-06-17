@@ -1143,6 +1143,7 @@ interface FinanceContextType {
   setMonthlyIncomeForMonth: (monthKey: string, amount: number) => void;
   clearMonthlyIncomeForMonth: (monthKey: string) => void;
   derivedMonthlyIncome: number;
+  grossAnnualIncome: number;
   isMonthlyIncomeOverridden: boolean;
   netWorthHistory: Record<string, number>;
   prevMonthIncome: number;
@@ -1493,6 +1494,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return Math.round(calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly);
   }, [salaries, jobs, monthKey, region, customTaxRatePct, income, pension.ipsAnnualContribution]);
 
+  // Gross annual employment income active this month (before tax) — falls back to
+  // the legacy static `income` annualised when no salaries have been entered.
+  const grossAnnualIncome = useMemo(() => {
+    const fromSalaries = calcActiveGrossAnnual(salaries, jobs, monthKey);
+    if (fromSalaries > 0) return fromSalaries;
+    return income * 12;
+  }, [salaries, jobs, monthKey, income]);
+
   const isMonthlyIncomeOverridden = monthlyIncomes[monthKey] !== undefined;
 
   const effectiveIncome = useMemo(() =>
@@ -1829,7 +1838,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
       currentMonth, setCurrentMonth, income, setIncome,
       monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
-      derivedMonthlyIncome, isMonthlyIncomeOverridden,
+      derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
       netWorthHistory, prevMonthIncome, prevMonthSpending,
       effectiveIncome, averageIncome,
       savingsTargetPercent, setSavingsTargetPercent,

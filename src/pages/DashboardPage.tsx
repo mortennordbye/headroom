@@ -1,14 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import {
   TrendingUp, Wallet, Home, Zap, PiggyBank, BarChart2, Bitcoin, Shield, Receipt,
-  ArrowUpRight, BarChart3,
+  ArrowUpRight, BarChart3, LifeBuoy, Scale,
 } from 'lucide-react';
 import { format, parse, format as fmtDate, subMonths } from 'date-fns';
 import { useFinance } from '../context/FinanceContext';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
-import { calcNetWorthProjectionByBucket, calcHouseEquityByYear } from '../lib/calculations';
+import {
+  calcNetWorthProjectionByBucket, calcHouseEquityByYear,
+  calcEmergencyFundStatus, calcDebtToIncome,
+} from '../lib/calculations';
 import GoalsSection from '../components/GoalsSection';
 
 const DashboardPage: React.FC = () => {
@@ -45,6 +48,7 @@ const DashboardPage: React.FC = () => {
     dailyBudget,
     mortgageRate,
     mortgageTermYears,
+    grossAnnualIncome,
   } = useFinance();
 
   // ─── Derived numbers ───
@@ -60,6 +64,10 @@ const DashboardPage: React.FC = () => {
   const incomeDiffPct = averageIncome > 0 ? ((effectiveIncome - averageIncome) / averageIncome) * 100 : 0;
   const incomeDelta = prevMonthIncome > 0 ? ((effectiveIncome - prevMonthIncome) / prevMonthIncome) * 100 : null;
   const spendingDelta = prevMonthSpending > 0 ? ((totalSpent - prevMonthSpending) / prevMonthSpending) * 100 : null;
+
+  // ─── Financial-resilience metrics ───
+  const emergencyFund = calcEmergencyFundStatus(assets.bufferAccount, totalFixedExpenses);
+  const debtToIncome = calcDebtToIncome(assets.houseDebt, grossAnnualIncome);
 
   // ─── Net worth history (last 12 months) ───
   // Always produce exactly 12 monthly points on a fixed last-12-months grid.
@@ -633,6 +641,149 @@ const DashboardPage: React.FC = () => {
             <span>{projection15y[Math.floor(projection15y.length / 2)]?.year ?? ''}</span>
             <span style={{ color: 'var(--violet)' }}>{projectionEndYear}</span>
           </div>
+        </Card>
+
+        {/* ─── Resilience row: emergency fund + debt-to-income (6 + 6) ─── */}
+
+        {/* Emergency fund adequacy */}
+        <Card padding="md" className="md:col-span-6" glow={emergencyFund.status === 'low' ? 'warning' : 'positive'}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div
+                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                style={{ background: 'var(--positive-bg, var(--bg-elev))', color: 'var(--positive)' }}
+              >
+                <LifeBuoy size={18} />
+              </div>
+              <SectionLabel>{lang === 'nb' ? 'Bufferkonto' : 'Emergency fund'}</SectionLabel>
+              {totalFixedExpenses <= 0 ? (
+                <div className="text-[13px] mt-2" style={{ color: 'var(--text-3)' }}>
+                  {lang === 'nb'
+                    ? 'Legg inn faste utgifter for å se dekning.'
+                    : 'Add fixed expenses to see coverage.'}
+                </div>
+              ) : (
+                <>
+                  <div className="text-[24px] font-bold tracking-[-0.02em] leading-none mt-2">
+                    {emergencyFund.monthsCovered.toFixed(1)} {lang === 'nb' ? 'mnd' : 'mo'}
+                  </div>
+                  <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                    {formatCurrency(assets.bufferAccount)} · {lang === 'nb' ? 'mål' : 'target'} {emergencyFund.minMonths}–{emergencyFund.targetMonths} {lang === 'nb' ? 'mnd' : 'mo'}
+                  </div>
+                </>
+              )}
+            </div>
+            {totalFixedExpenses > 0 && (
+              <DeltaChip
+                tone={emergencyFund.status === 'low' ? 'warning' : 'positive'}
+                size="sm"
+              >
+                {emergencyFund.status === 'low'
+                  ? (lang === 'nb' ? 'Lav' : 'Low')
+                  : emergencyFund.status === 'adequate'
+                    ? (lang === 'nb' ? 'OK' : 'OK')
+                    : (lang === 'nb' ? 'Solid' : 'Strong')}
+              </DeltaChip>
+            )}
+          </div>
+
+          {totalFixedExpenses > 0 && (
+            <>
+              <div className="mt-4 relative h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-elev)' }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, (emergencyFund.monthsCovered / emergencyFund.targetMonths) * 100)}%`,
+                    background: emergencyFund.status === 'low' ? 'var(--warning)' : 'var(--positive)',
+                  }}
+                />
+                {/* recommended-minimum marker */}
+                <div
+                  className="absolute top-0 h-full w-px"
+                  style={{ left: `${(emergencyFund.minMonths / emergencyFund.targetMonths) * 100}%`, background: 'var(--text-3)' }}
+                />
+              </div>
+              <div className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {emergencyFund.shortfallToMin > 0
+                  ? (lang === 'nb'
+                      ? `${formatCurrency(emergencyFund.shortfallToMin)} unna ${emergencyFund.minMonths} mnd`
+                      : `${formatCurrency(emergencyFund.shortfallToMin)} short of ${emergencyFund.minMonths} mo`)
+                  : (lang === 'nb' ? 'Innenfor anbefalt nivå' : 'Within recommended range')}
+              </div>
+            </>
+          )}
+        </Card>
+
+        {/* Debt-to-income ratio */}
+        <Card
+          padding="md"
+          className="md:col-span-6"
+          glow={debtToIncome.status === 'high' ? 'warning' : 'positive'}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div
+                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
+              >
+                <Scale size={18} />
+              </div>
+              <SectionLabel>{lang === 'nb' ? 'Gjeldsgrad' : 'Debt-to-income'}</SectionLabel>
+              {grossAnnualIncome <= 0 ? (
+                <div className="text-[13px] mt-2" style={{ color: 'var(--text-3)' }}>
+                  {lang === 'nb'
+                    ? 'Legg inn lønn for å se gjeldsgrad.'
+                    : 'Add salary to see your ratio.'}
+                </div>
+              ) : (
+                <>
+                  <div className="text-[24px] font-bold tracking-[-0.02em] leading-none mt-2">
+                    {debtToIncome.ratio.toFixed(1)}× / {debtToIncome.cap}×
+                  </div>
+                  <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                    {formatCurrency(assets.houseDebt)} {lang === 'nb' ? 'gjeld' : 'debt'} · {lang === 'nb' ? 'brutto' : 'gross'} {formatCurrency(grossAnnualIncome)}
+                  </div>
+                </>
+              )}
+            </div>
+            {grossAnnualIncome > 0 && (
+              <DeltaChip
+                tone={debtToIncome.status === 'high' ? 'negative' : debtToIncome.status === 'moderate' ? 'warning' : 'positive'}
+                size="sm"
+              >
+                {debtToIncome.status === 'high'
+                  ? (lang === 'nb' ? 'Over grense' : 'Over cap')
+                  : debtToIncome.status === 'moderate'
+                    ? (lang === 'nb' ? 'Moderat' : 'Moderate')
+                    : (lang === 'nb' ? 'Sunn' : 'Healthy')}
+              </DeltaChip>
+            )}
+          </div>
+
+          {grossAnnualIncome > 0 && (
+            <>
+              <div className="mt-4 h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-elev)' }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, (debtToIncome.ratio / debtToIncome.cap) * 100)}%`,
+                    background: debtToIncome.status === 'high'
+                      ? 'var(--negative)'
+                      : debtToIncome.status === 'moderate' ? 'var(--warning)' : 'var(--positive)',
+                  }}
+                />
+              </div>
+              <div className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {debtToIncome.status === 'high'
+                  ? (lang === 'nb'
+                      ? 'Over utlånsforskriftens grense på 5×'
+                      : 'Above the 5× lending-rule cap')
+                  : (lang === 'nb'
+                      ? `${formatCurrency(debtToIncome.borrowingHeadroom)} igjen til ${debtToIncome.cap}×-grensen`
+                      : `${formatCurrency(debtToIncome.borrowingHeadroom)} headroom to the ${debtToIncome.cap}× cap`)}
+              </div>
+            </>
+          )}
         </Card>
 
         {/* ─── Goals (span 12) ─── */}

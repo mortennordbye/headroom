@@ -76,6 +76,70 @@ export function calcRecommendations(
   };
 }
 
+export type EmergencyFundStatus = 'low' | 'adequate' | 'strong';
+
+export interface EmergencyFundResult {
+  monthsCovered: number;       // buffer ÷ monthly essential expenses (Infinity if no expenses)
+  minMonths: number;           // lower bound of the recommended band
+  targetMonths: number;        // upper bound of the recommended band
+  status: EmergencyFundStatus;
+  shortfallToMin: number;      // kr still needed to reach minMonths (0 if already there)
+}
+
+/**
+ * Emergency-fund adequacy: how many months of essential (fixed) expenses the
+ * buffer account covers, against the conventional 3–6 month band.
+ *
+ * monthlyEssentialExpenses == 0 ⇒ no expenses to cover, so coverage is Infinity
+ * and the fund counts as 'strong' (callers should special-case the display).
+ */
+export function calcEmergencyFundStatus(
+  bufferAccount: number,
+  monthlyEssentialExpenses: number,
+  minMonths: number = 3,
+  targetMonths: number = 6
+): EmergencyFundResult {
+  if (monthlyEssentialExpenses <= 0) {
+    return { monthsCovered: Infinity, minMonths, targetMonths, status: 'strong', shortfallToMin: 0 };
+  }
+  const monthsCovered = bufferAccount / monthlyEssentialExpenses;
+  const status: EmergencyFundStatus =
+    monthsCovered >= targetMonths ? 'strong' : monthsCovered >= minMonths ? 'adequate' : 'low';
+  const shortfallToMin = Math.max(0, minMonths * monthlyEssentialExpenses - bufferAccount);
+  return { monthsCovered, minMonths, targetMonths, status, shortfallToMin };
+}
+
+export type DebtToIncomeStatus = 'healthy' | 'moderate' | 'high';
+
+export interface DebtToIncomeResult {
+  ratio: number;               // total debt ÷ gross annual income (0 if no income)
+  cap: number;                 // regulatory ceiling (Norway: 5×)
+  status: DebtToIncomeStatus;
+  borrowingHeadroom: number;   // additional debt allowed before hitting the cap (≥0)
+}
+
+/**
+ * Debt-to-income ratio against Norway's lending rule, which caps total debt at
+ * 5× gross annual income. Below 3× is comfortable, 3×–cap is moderate, above
+ * the cap means no further borrowing is permitted under the rule.
+ *
+ * grossAnnualIncome == 0 ⇒ ratio is undefined; we report 0 and no headroom so
+ * callers can show an "add salary" placeholder instead of a misleading number.
+ */
+export function calcDebtToIncome(
+  totalDebt: number,
+  grossAnnualIncome: number,
+  cap: number = 5
+): DebtToIncomeResult {
+  if (grossAnnualIncome <= 0) {
+    return { ratio: 0, cap, status: 'healthy', borrowingHeadroom: 0 };
+  }
+  const ratio = totalDebt / grossAnnualIncome;
+  const status: DebtToIncomeStatus = ratio > cap ? 'high' : ratio >= 3 ? 'moderate' : 'healthy';
+  const borrowingHeadroom = Math.max(0, cap * grossAnnualIncome - totalDebt);
+  return { ratio, cap, status, borrowingHeadroom };
+}
+
 export interface SaleProceeds {
   agentCost: number;
   netProceeds: number;

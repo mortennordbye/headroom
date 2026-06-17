@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { FinanceProvider } from './context/FinanceContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import UpdatePrompt from './components/UpdatePrompt';
 import Layout from './components/Layout';
 
 // Code-split per route: each page bundle is fetched only when navigated to.
@@ -25,21 +27,24 @@ function RouteFallback() {
 function App() {
   return (
     <FinanceProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Suspense fallback={<RouteFallback />}><BudgetPage /></Suspense>} />
-            <Route path="overview" element={<Suspense fallback={<RouteFallback />}><DashboardPage /></Suspense>} />
-            <Route path="assets" element={<Suspense fallback={<RouteFallback />}><AssetPage /></Suspense>} />
-            <Route path="loan" element={<Suspense fallback={<RouteFallback />}><LoanPage /></Suspense>} />
-            <Route path="salary" element={<Suspense fallback={<RouteFallback />}><SalaryPage /></Suspense>} />
-            <Route path="forecast" element={<Suspense fallback={<RouteFallback />}><ForecastPage /></Suspense>} />
-            <Route path="pension" element={<Suspense fallback={<RouteFallback />}><PensionPage /></Suspense>} />
-            <Route path="employer-cost" element={<Suspense fallback={<RouteFallback />}><EmployerCostPage /></Suspense>} />
-            <Route path="settings" element={<Suspense fallback={<RouteFallback />}><SettingsPage /></Suspense>} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Suspense fallback={<RouteFallback />}><BudgetPage /></Suspense>} />
+              <Route path="overview" element={<Suspense fallback={<RouteFallback />}><DashboardPage /></Suspense>} />
+              <Route path="assets" element={<Suspense fallback={<RouteFallback />}><AssetPage /></Suspense>} />
+              <Route path="loan" element={<Suspense fallback={<RouteFallback />}><LoanPage /></Suspense>} />
+              <Route path="salary" element={<Suspense fallback={<RouteFallback />}><SalaryPage /></Suspense>} />
+              <Route path="forecast" element={<Suspense fallback={<RouteFallback />}><ForecastPage /></Suspense>} />
+              <Route path="pension" element={<Suspense fallback={<RouteFallback />}><PensionPage /></Suspense>} />
+              <Route path="employer-cost" element={<Suspense fallback={<RouteFallback />}><EmployerCostPage /></Suspense>} />
+              <Route path="settings" element={<Suspense fallback={<RouteFallback />}><SettingsPage /></Suspense>} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </ErrorBoundary>
+      <UpdatePrompt />
     </FinanceProvider>
   );
 }
