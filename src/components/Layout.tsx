@@ -12,6 +12,7 @@ import {
   LineChart as LineChartIcon,
   Activity,
   Briefcase,
+  Receipt,
   Menu as MenuIcon,
   X,
 } from 'lucide-react';
@@ -20,7 +21,7 @@ import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
 
 /** Routes surfaced inside the "Mer" sheet on mobile (everything past the 4 primary tabs). */
-const MORE_ROUTES = ['/forecast', '/pension', '/loan', '/settings'];
+const MORE_ROUTES = ['/forecast', '/pension', '/employer-cost', '/loan', '/settings'];
 
 const Layout: React.FC = () => {
   const { t, lang, currentMonth, setCurrentMonth } = useFinance();
@@ -81,6 +82,7 @@ const Layout: React.FC = () => {
           <NavButton to="/salary" label={t.nav.salary} />
           <NavButton to="/forecast" label={t.nav.forecast} />
           <NavButton to="/pension" label={t.nav.pension} />
+          <NavButton to="/employer-cost" label={t.nav.employerCost} />
           <NavButton to="/loan" label={t.nav.loan} />
           <NavButton to="/settings" label={t.nav.settings} />
         </nav>
@@ -181,6 +183,7 @@ const Layout: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 pt-1">
               <SheetItem to="/forecast" icon={<Activity size={20} strokeWidth={1.75} />} label={t.nav.forecast} onNavigate={() => setMoreOpen(false)} />
               <SheetItem to="/pension" icon={<Briefcase size={20} strokeWidth={1.75} />} label={t.nav.pension} onNavigate={() => setMoreOpen(false)} />
+              <SheetItem to="/employer-cost" icon={<Receipt size={20} strokeWidth={1.75} />} label={t.nav.employerCost} onNavigate={() => setMoreOpen(false)} />
               <SheetItem to="/loan" icon={<Building2 size={20} strokeWidth={1.75} />} label={t.nav.loan} onNavigate={() => setMoreOpen(false)} />
               <SheetItem to="/settings" icon={<SettingsIcon size={20} strokeWidth={1.75} />} label={t.nav.settings} onNavigate={() => setMoreOpen(false)} />
             </div>

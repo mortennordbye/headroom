@@ -10,6 +10,12 @@ import {
 } from 'date-fns';
 import { calcRecommendations } from '../lib/calculations';
 import { calcTaxByRegion } from '../lib/norwegianTax';
+import {
+  type EmployerCostConfig,
+  type BillingRateConfig,
+  DEFAULT_EMPLOYER_COST_CONFIG,
+  DEFAULT_BILLING_CONFIG,
+} from '../lib/employerCost';
 
 // --- Types ---
 
@@ -376,7 +382,46 @@ export const translations = {
       salary: 'Lønn',
       forecast: 'Prognose',
       pension: 'Pensjon',
+      employerCost: 'Lønnskostnad',
       more: 'Mer',
+    },
+    employerCost: {
+      heroLabel: 'Lønnskostnad',
+      subtitle: 'Se hva du faktisk koster arbeidsgiveren — og hvilken timepris en bedrift må ta for å dekke deg.',
+      grossSalary: 'Brutto årslønn',
+      totalCost: 'Total arbeidsgiverkostnad',
+      loading: 'Påslag over lønn',
+      targetRate: 'Måltimepris',
+      salaryInput: 'Årslønn',
+      salaryHint: 'Hentes fra Lønn-siden. Overstyr for å regne på en hypotetisk lønn.',
+      costBreakdown: 'Kostnadsoppbygging',
+      gross: 'Brutto lønn',
+      feriepenger: 'Feriepenger',
+      benefitsLeave: 'Goder / fri',
+      employerPension: 'OTP (arbeidsgiver)',
+      employerPensionGeneric: 'Arbeidsgiverpensjon',
+      employerPensionHint: 'Settes på Pensjon-siden (OTP arbeidsgiver %).',
+      payrollTax: 'Arbeidsgiveravgift',
+      payrollTaxGeneric: 'Lønnsskatt',
+      payrollTaxBase: 'Grunnlag for avgift',
+      overheadFlat: 'Faste kostnader (kr/år)',
+      overheadPct: 'Faste kostnader (% av lønn)',
+      total: 'Total kostnad',
+      billingTitle: 'Timepris for konsulent',
+      billingSubtitle: 'For konsulenter / frilansere',
+      workHoursPerYear: 'Arbeidstimer per år',
+      utilization: 'Fakturerbar andel',
+      billableHours: 'Fakturerbare timer/år',
+      billableOverride: 'Overstyr fakturerbare timer',
+      breakEven: 'Dekningspris (timepris)',
+      targetMargin: 'Målmargin (av omsetning)',
+      markupOnCost: 'påslag på kostnad',
+      targetHourly: 'Måltimepris',
+      dailyRate: 'Dagsrate',
+      hoursPerDay: 'Timer per dag',
+      annualRevenue: 'Årlig omsetning',
+      annualProfit: 'Årlig fortjeneste',
+      caveat: 'Estimat: feriepenger opptjenes i år og utbetales neste år, og arbeidsgiveravgiften varierer med sone. Tallene er en god pekepinn, ikke en lønnskjøring.',
     },
     today: 'I dag',
     viewingPast: 'Historisk måned',
@@ -748,7 +793,46 @@ export const translations = {
       salary: 'Salary',
       forecast: 'Forecast',
       pension: 'Pension',
+      employerCost: 'Cost & rate',
       more: 'More',
+    },
+    employerCost: {
+      heroLabel: 'Cost & rate',
+      subtitle: 'See what you actually cost your employer — and the hourly rate a company must charge to cover you.',
+      grossSalary: 'Gross annual salary',
+      totalCost: 'Total employer cost',
+      loading: 'Loading over salary',
+      targetRate: 'Target hourly rate',
+      salaryInput: 'Annual salary',
+      salaryHint: 'Pulled from the Salary page. Override to model a hypothetical salary.',
+      costBreakdown: 'Cost breakdown',
+      gross: 'Gross salary',
+      feriepenger: 'Holiday pay',
+      benefitsLeave: 'Benefits / leave',
+      employerPension: 'Employer pension (OTP)',
+      employerPensionGeneric: 'Employer pension',
+      employerPensionHint: 'Set on the Pension page (employer OTP %).',
+      payrollTax: 'Employer national insurance',
+      payrollTaxGeneric: 'Payroll tax',
+      payrollTaxBase: 'Payroll tax base',
+      overheadFlat: 'Overhead (kr/yr)',
+      overheadPct: 'Overhead (% of salary)',
+      total: 'Total cost',
+      billingTitle: 'Consultant billing rate',
+      billingSubtitle: 'For consultants / freelancers',
+      workHoursPerYear: 'Work hours per year',
+      utilization: 'Billable share',
+      billableHours: 'Billable hours/yr',
+      billableOverride: 'Override billable hours',
+      breakEven: 'Break-even (hourly)',
+      targetMargin: 'Target margin (of revenue)',
+      markupOnCost: 'markup on cost',
+      targetHourly: 'Target hourly',
+      dailyRate: 'Day rate',
+      hoursPerDay: 'Hours per day',
+      annualRevenue: 'Annual revenue',
+      annualProfit: 'Annual profit',
+      caveat: 'Estimate: holiday pay is accrued this year and paid next, and employer national insurance varies by zone. A solid guide, not a payroll run.',
     },
     today: 'Today',
     viewingPast: 'Past month',
@@ -1119,6 +1203,10 @@ interface FinanceContextType {
   setRegion: (r: Region) => void;
   customTaxRatePct: number;
   setCustomTaxRatePct: (v: number) => void;
+  employerCostConfig: EmployerCostConfig;
+  updateEmployerCostConfig: (key: keyof EmployerCostConfig, value: number) => void;
+  billingConfig: BillingRateConfig;
+  updateBillingConfig: (key: keyof BillingRateConfig, value: number | null) => void;
   totalResidual: number;
   totalFixedExpenses: number;
   monthlyBudget: number;
@@ -1168,6 +1256,8 @@ export interface ExportPayload {
   goals?: Goal[];
   region?: Region;
   customTaxRatePct?: number;
+  employerCostConfig?: EmployerCostConfig;
+  billingConfig?: BillingRateConfig;
 }
 
 export interface DailyDataEntry {
@@ -1224,6 +1314,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [wageStats, setWageStats] = useState<WageStatPoint[]>([]);
   const [region, setRegion] = useState<Region>('no');
   const [customTaxRatePct, setCustomTaxRatePct] = useState<number>(30);
+  const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
+  const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
 
   const loaded = useRef(false);
 
@@ -1266,6 +1358,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           if (Array.isArray(data.goals)) setGoals(data.goals);
           if (data.region === 'no' || data.region === 'generic') setRegion(data.region);
           if (typeof data.customTaxRatePct === 'number') setCustomTaxRatePct(data.customTaxRatePct);
+          setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...(data.employerCostConfig ?? {}) });
+          setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...(data.billingConfig ?? {}) });
         }
       })
       .catch(() => {})
@@ -1321,14 +1415,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
       customCurrencyCode, customCurrencyRate,
       jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
-      region, customTaxRatePct,
+      region, customTaxRatePct, employerCostConfig, billingConfig,
     };
     fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct]);
+  }, [income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig]);
 
   // --- Calculations ---
 
@@ -1464,6 +1558,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setPension(prev => ({ ...prev, [key]: value }));
   };
 
+  const updateEmployerCostConfig = (key: keyof EmployerCostConfig, value: number) => {
+    setEmployerCostConfig(prev => ({ ...prev, [key]: value }));
+  };
+
+  const updateBillingConfig = (key: keyof BillingRateConfig, value: number | null) => {
+    setBillingConfig(prev => ({ ...prev, [key]: value }));
+  };
+
   const updateHomeowner = (key: keyof HomeownerData, value: number) => {
     setHomeowner(prev => ({ ...prev, [key]: value }));
   };
@@ -1576,6 +1678,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (Array.isArray(data.goals)) setGoals(data.goals);
     if (data.region === 'no' || data.region === 'generic') setRegion(data.region);
     if (typeof data.customTaxRatePct === 'number') setCustomTaxRatePct(data.customTaxRatePct);
+    if (data.employerCostConfig) setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...data.employerCostConfig });
+    if (data.billingConfig) setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...data.billingConfig });
   };
 
   const resetAll = () => {
@@ -1617,6 +1721,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setOvertime([]);
     setHoursSnapshots([]);
     setGoals([]);
+    setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
+    setBillingConfig(DEFAULT_BILLING_CONFIG);
   };
 
   const formatCurrency = (val: number) => {
@@ -1695,6 +1801,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       goals, addGoal, updateGoal, removeGoal,
       inflation, inflationStale, wageStats,
       region, setRegion, customTaxRatePct, setCustomTaxRatePct,
+      employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
       totalResidual,
       totalFixedExpenses, monthlyBudget, dailyBudget,
       dailyData, totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
