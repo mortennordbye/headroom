@@ -24,7 +24,7 @@ import { useFinance } from '../context/FinanceContext';
 const MORE_ROUTES = ['/forecast', '/pension', '/employer-cost', '/loan', '/settings'];
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth } = useFinance();
+  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed } = useFinance();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -145,6 +145,22 @@ const Layout: React.FC = () => {
 
       {/* ─── Main ────────────────────────────── */}
       <main className="max-w-[1320px] mx-auto px-5 md:px-8 py-6 md:py-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12">
+        {dataLoadFailed && (
+          <div
+            className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"
+            style={{ background: 'var(--negative-bg)', borderColor: 'color-mix(in srgb, var(--negative) 35%, transparent)', color: 'var(--negative)' }}
+            role="alert"
+          >
+            <span>{t.dataLoadError}</span>
+            <button
+              onClick={() => window.location.reload()}
+              className="shrink-0 px-3 h-8 rounded-full text-[12px] font-semibold"
+              style={{ background: 'var(--negative)', color: 'var(--bg-page)' }}
+            >
+              {t.retry}
+            </button>
+          </div>
+        )}
         <Outlet />
       </main>
 

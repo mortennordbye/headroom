@@ -23,6 +23,17 @@
 export const FERIEPENGER_DEFAULT_PCT = 12; // 5-week (avtalefestet); 10.2% is the 4-week minimum
 export const AGA_DEFAULT_PCT = 14.1; // arbeidsgiveravgift, zone I
 
+// Typical Norwegian per-employee fixed overhead (knowledge worker / consultant),
+// annual. There is no single official statistic for this, so it's a transparent
+// rule-of-thumb buildup — adjust on the page for your situation:
+//   office / workspace    ~45 000  (rent, power, cleaning, shared areas)
+//   IT equipment          ~15 000  (laptop / phone / peripherals, ~3-yr amortised)
+//   software & licences   ~15 000  (M365, professional tools)
+//   insurance & misc      ~15 000  (yrkesskade, mobile / broadband, HSE)
+//                         ─────────
+//                          90 000
+export const OVERHEAD_DEFAULT_NOK = 90_000;
+
 export interface EmployerCostConfig {
   feriepengesatsPct: number; // holiday pay % of gross (generic: benefits/leave %)
   payrollTaxPct: number;     // arbeidsgiveravgift % (generic: payroll tax %)
@@ -130,7 +141,7 @@ export function calcBillingRate(
 export const DEFAULT_EMPLOYER_COST_CONFIG: EmployerCostConfig = {
   feriepengesatsPct: FERIEPENGER_DEFAULT_PCT,
   payrollTaxPct: AGA_DEFAULT_PCT,
-  overheadAnnual: 0,
+  overheadAnnual: OVERHEAD_DEFAULT_NOK,
   overheadPct: 0,
 };
 

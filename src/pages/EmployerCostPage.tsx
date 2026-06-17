@@ -124,6 +124,7 @@ const EmployerCostPage: React.FC = () => {
               <NumberRow label={ec.overheadFlat} value={employerCostConfig.overheadAnnual} onCommit={(v) => updateEmployerCostConfig('overheadAnnual', Math.max(0, v))} suffix="kr/år" />
               <SliderRow label={ec.overheadPct} value={employerCostConfig.overheadPct} onChange={(v) => updateEmployerCostConfig('overheadPct', v)} min={0} max={50} step={1} suffix="%" />
             </div>
+            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.overheadHint}</p>
 
             <div className="flex items-baseline justify-between rounded-[12px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)' }}>
               <div>

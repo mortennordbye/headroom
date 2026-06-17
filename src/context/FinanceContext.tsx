@@ -406,6 +406,7 @@ export const translations = {
       payrollTaxBase: 'Grunnlag for avgift',
       overheadFlat: 'Faste kostnader (kr/år)',
       overheadPct: 'Faste kostnader (% av lønn)',
+      overheadHint: 'Standardestimat: kontorplass, utstyr, programvare og forsikring. Juster etter din situasjon.',
       total: 'Total kostnad',
       billingTitle: 'Timepris for konsulent',
       billingSubtitle: 'For konsulenter / frilansere',
@@ -423,6 +424,8 @@ export const translations = {
       annualProfit: 'Årlig fortjeneste',
       caveat: 'Estimat: feriepenger opptjenes i år og utbetales neste år, og arbeidsgiveravgiften varierer med sone. Tallene er en god pekepinn, ikke en lønnskjøring.',
     },
+    dataLoadError: 'Kunne ikke laste dataene dine. Sjekk tilkoblingen.',
+    retry: 'Last på nytt',
     today: 'I dag',
     viewingPast: 'Historisk måned',
     viewingFuture: 'Fremtidig måned',
@@ -817,6 +820,7 @@ export const translations = {
       payrollTaxBase: 'Payroll tax base',
       overheadFlat: 'Overhead (kr/yr)',
       overheadPct: 'Overhead (% of salary)',
+      overheadHint: 'Default estimate: office, equipment, software and insurance. Adjust to your situation.',
       total: 'Total cost',
       billingTitle: 'Consultant billing rate',
       billingSubtitle: 'For consultants / freelancers',
@@ -834,6 +838,8 @@ export const translations = {
       annualProfit: 'Annual profit',
       caveat: 'Estimate: holiday pay is accrued this year and paid next, and employer national insurance varies by zone. A solid guide, not a payroll run.',
     },
+    dataLoadError: 'Could not load your data. Check your connection.',
+    retry: 'Reload',
     today: 'Today',
     viewingPast: 'Past month',
     viewingFuture: 'Future month',
@@ -1222,6 +1228,7 @@ interface FinanceContextType {
   formatCurrencyShort: (val: number) => string;
   importAll: (data: Partial<ExportPayload>) => void;
   resetAll: () => void;
+  dataLoadFailed: boolean;
 }
 
 export interface ExportPayload {
@@ -1318,11 +1325,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
 
   const loaded = useRef(false);
+  const [dataLoadFailed, setDataLoadFailed] = useState(false);
 
   useEffect(() => {
-    fetch('/api/data')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
+    let cancelled = false;
+    const ATTEMPTS = 3;
+
+    const applyData = (data: Partial<ExportPayload> | null) => {
         if (data) {
           setIncome(data.income ?? 55000);
           setMonthlyIncomes(data.monthlyIncomes ?? {});
@@ -1361,9 +1370,36 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...(data.employerCostConfig ?? {}) });
           setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...(data.billingConfig ?? {}) });
         }
-      })
-      .catch(() => {})
-      .finally(() => { loaded.current = true; });
+    };
+
+    // Retry the initial load a few times: a transient miss (e.g. a network
+    // hiccup around service-worker activation) otherwise leaves the app showing
+    // empty defaults until a manual refresh. Crucially, `loaded.current` is set
+    // ONLY on a successful response — including a genuinely empty DB (data ===
+    // null on first run, which should be allowed to seed). If every attempt
+    // fails we leave it false so the auto-save effect can never overwrite the
+    // stored data with empty defaults.
+    const load = async () => {
+      for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+        try {
+          const r = await fetch('/api/data');
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const data = await r.json();
+          if (cancelled) return;
+          applyData(data);
+          loaded.current = true;
+          return;
+        } catch {
+          if (attempt < ATTEMPTS) {
+            await new Promise(res => setTimeout(res, attempt * 400));
+          }
+        }
+      }
+      if (!cancelled) setDataLoadFailed(true);
+    };
+
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   // Fetch SSB wage statistics when region is Norway. Hidden in generic mode.
@@ -1805,7 +1841,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       totalResidual,
       totalFixedExpenses, monthlyBudget, dailyBudget,
       dailyData, totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
-      formatCurrency, formatCurrencyShort, importAll, resetAll
+      formatCurrency, formatCurrencyShort, importAll, resetAll,
+      dataLoadFailed,
     }}>
       {children}
     </FinanceContext.Provider>
