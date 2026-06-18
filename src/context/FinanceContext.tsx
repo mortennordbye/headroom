@@ -10,6 +10,7 @@ import {
 } from 'date-fns';
 import { calcRecommendations } from '../lib/calculations';
 import { calcTaxByRegion } from '../lib/norwegianTax';
+import { getDemoData } from '../lib/demoData';
 import {
   type EmployerCostConfig,
   type BillingRateConfig,
@@ -595,6 +596,13 @@ export const translations = {
       cryptoGrowthRate: 'Krypto-avkastning',
       growthRatesDesc: 'Egne vekstrater per aktivaklasse. Aksjer brukes kun på aksjeporteføljen — bolig, kontant og krypto vokser med egne rater.',
       restoreDefaults: 'Tilbakestill til standard',
+      demoTitle: 'Demomodus',
+      demoDesc: 'Bytt ut tallene dine med eksempeldata, slik at du kan vise appen uten å avsløre din egen økonomi. Dine ekte data lagres trygt og hentes tilbake når du slår av.',
+      demoActivate: 'Aktiver demomodus',
+      demoDeactivate: 'Avslutt demomodus — gjenopprett mine data',
+      demoActive: 'Demomodus er på',
+      demoBanner: 'Demomodus — viser eksempeldata, ikke din egen økonomi.',
+      demoExit: 'Avslutt',
       dataManagement: 'Datahåndtering',
       dataDesc: 'Eksporter eller importer alle dataene dine som JSON.',
       about: 'Om Headroom',
@@ -1012,6 +1020,13 @@ export const translations = {
       cryptoGrowthRate: 'Crypto return',
       growthRatesDesc: 'Each asset class grows at its own rate. The stocks rate applies only to your investment portfolio — house, cash, and crypto grow at their own rates.',
       restoreDefaults: 'Restore defaults',
+      demoTitle: 'Demo mode',
+      demoDesc: 'Replace your numbers with sample data so you can show the app without revealing your own finances. Your real data is kept safe and restored when you turn it off.',
+      demoActivate: 'Enable demo mode',
+      demoDeactivate: 'Exit demo mode — restore my data',
+      demoActive: 'Demo mode is on',
+      demoBanner: 'Demo mode — showing sample data, not your real finances.',
+      demoExit: 'Exit',
       dataManagement: 'Data management',
       dataDesc: 'Export or import all your data as JSON.',
       about: 'About Headroom',
@@ -1065,14 +1080,14 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
 
 // Data-based default assumptions. These are the researched starting points users
 // can tune — and restore to via the per-section "restore defaults" controls.
-export const DEFAULT_GROWTH_RATES = {
+const DEFAULT_GROWTH_RATES = {
   growthReturnRate: 7,
   houseGrowthRate: 3,
   cashGrowthRate: 1,
   cryptoGrowthRate: 0,
 };
 
-export const DEFAULT_TAX_RATES = {
+const DEFAULT_TAX_RATES = {
   stockTaxRate: 37.84,
   cryptoTaxRate: 22,
   customTaxRatePct: 30,
@@ -1126,7 +1141,7 @@ const DEFAULT_LOAN: LoanData = {
   gyldigTil: '1. jan 2027',
 };
 
-export const DEFAULT_PENSION: Pension = {
+const DEFAULT_PENSION: Pension = {
   otpBalance: 0,
   otpEmployerPct: 5,
   otpEmployeePct: 0,
@@ -1257,6 +1272,8 @@ interface FinanceContextType {
   restoreCustomTaxRateDefault: () => void;
   restorePensionAssumptionDefaults: () => void;
   restoreEmployerCostDefaults: () => void;
+  demoMode: boolean;
+  toggleDemoMode: () => void;
   dataLoadFailed: boolean;
 }
 
@@ -1354,8 +1371,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
+  const [demoMode, setDemoMode] = useState(false);
 
   const loaded = useRef(false);
+  // Holds the user's real data while demo mode is active, so it can be restored
+  // on exit. In-memory only — a page reload exits demo mode and reloads the real
+  // data from the backend (which demo mode never overwrites).
+  const demoSnapshot = useRef<Partial<ExportPayload> | null>(null);
   const [dataLoadFailed, setDataLoadFailed] = useState(false);
 
   useEffect(() => {
@@ -1476,6 +1498,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loaded.current) return;
+    // Never persist while showing demo data — that would clobber the user's real
+    // data on the backend. The real data stays safe in `demoSnapshot` until exit.
+    if (demoMode) return;
     const payload = {
       income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions,
       assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
@@ -1490,7 +1515,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems]);
+  }, [income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode]);
 
   // --- Calculations ---
 
@@ -1763,6 +1788,37 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
   };
 
+  // --- Demo mode: swap real data for a fictional dataset, then restore it ---
+  // The real data is held in `demoSnapshot` (memory) and the auto-save effect is
+  // suspended while demoMode is true, so the backend keeps the real data intact.
+  const enableDemoMode = () => {
+    if (demoMode) return;
+    demoSnapshot.current = {
+      income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions,
+      assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
+      lang, currentMonth: format(currentMonth, 'yyyy-MM'),
+      savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
+      displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
+      jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
+      region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems,
+    };
+    setDemoMode(true);
+    importAll(getDemoData());
+  };
+
+  const disableDemoMode = () => {
+    if (!demoMode) return;
+    const snapshot = demoSnapshot.current;
+    setDemoMode(false);
+    if (snapshot) importAll(snapshot);
+    demoSnapshot.current = null;
+  };
+
+  const toggleDemoMode = () => {
+    if (demoMode) disableDemoMode();
+    else enableDemoMode();
+  };
+
   const resetAll = () => {
     setIncome(0);
     setMonthlyIncomes({});
@@ -1920,6 +1976,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       formatCurrency, formatCurrencyShort, importAll, resetAll,
       restoreGrowthRateDefaults, restoreAssetTaxDefaults, restoreCustomTaxRateDefault,
       restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
+      demoMode, toggleDemoMode,
       dataLoadFailed,
     }}>
       {children}

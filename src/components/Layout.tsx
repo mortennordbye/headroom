@@ -18,7 +18,7 @@ import { useFinance } from '../context/FinanceContext';
 import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, hiddenNavItems } = useFinance();
+  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, hiddenNavItems, demoMode, toggleDemoMode } = useFinance();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -135,6 +135,22 @@ const Layout: React.FC = () => {
 
       {/* ─── Main ────────────────────────────── */}
       <main className="max-w-[1320px] mx-auto px-5 md:px-8 py-6 md:py-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12">
+        {demoMode && (
+          <div
+            className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"
+            style={{ background: 'var(--violet-bg)', borderColor: 'color-mix(in srgb, var(--violet) 35%, transparent)', color: 'var(--violet)' }}
+            role="status"
+          >
+            <span className="font-medium">{t.settings.demoBanner}</span>
+            <button
+              onClick={toggleDemoMode}
+              className="shrink-0 px-3 h-8 rounded-full text-[12px] font-semibold"
+              style={{ background: 'var(--violet)', color: 'var(--bg-page)' }}
+            >
+              {t.settings.demoExit}
+            </button>
+          </div>
+        )}
         {dataLoadFailed && (
           <div
             className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"

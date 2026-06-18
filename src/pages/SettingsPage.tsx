@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   Eye,
   EyeOff,
+  MonitorPlay,
 } from 'lucide-react';
 import { useFinance, type ExportPayload } from '../context/FinanceContext';
 import { NAV_ITEMS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
@@ -77,6 +78,8 @@ export default function SettingsPage() {
     setCustomTaxRatePct,
     restoreGrowthRateDefaults,
     restoreCustomTaxRateDefault,
+    demoMode,
+    toggleDemoMode,
     hiddenNavItems,
     toggleNavItem,
     importAll,
@@ -535,6 +538,35 @@ export default function SettingsPage() {
           <p className="mt-4 text-[12px]" style={{ color: 'var(--text-3)' }}>
             {t.settings.growthRatesDesc}
           </p>
+        </Card>
+
+        {/* ──── Demo mode (span 12) ──── */}
+        <Card padding="lg" className="md:col-span-12">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <SectionLabel icon={<MonitorPlay />}>{t.settings.demoTitle}</SectionLabel>
+              <p className="mt-2 text-[13px] max-w-2xl" style={{ color: 'var(--text-2)' }}>
+                {t.settings.demoDesc}
+              </p>
+            </div>
+            {demoMode && (
+              <span
+                className="text-[12px] font-semibold px-3 py-1 rounded-full"
+                style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
+              >
+                {t.settings.demoActive}
+              </span>
+            )}
+          </div>
+          <Button
+            variant={demoMode ? 'secondary' : 'primary'}
+            size="md"
+            className="mt-5"
+            leadingIcon={<MonitorPlay />}
+            onClick={toggleDemoMode}
+          >
+            {demoMode ? t.settings.demoDeactivate : t.settings.demoActivate}
+          </Button>
         </Card>
 
         {/* ──── Data management (span 12) ──── */}
