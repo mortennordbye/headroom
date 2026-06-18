@@ -22,6 +22,7 @@ import { NAV_ITEMS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { Button } from '../components/ui/Button';
+import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { DeltaChip } from '../components/ui/DeltaChip';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
@@ -74,6 +75,8 @@ export default function SettingsPage() {
     setRegion,
     customTaxRatePct,
     setCustomTaxRatePct,
+    restoreGrowthRateDefaults,
+    restoreCustomTaxRateDefault,
     hiddenNavItems,
     toggleNavItem,
     importAll,
@@ -435,6 +438,7 @@ export default function SettingsPage() {
                     {customTaxRatePct}%
                   </span>
                 </div>
+                <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreCustomTaxRateDefault} className="-ml-3" />
               </div>
             )}
           </div>
@@ -478,6 +482,7 @@ export default function SettingsPage() {
                 {t.settings.displayDesc}
               </p>
             </div>
+            <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreGrowthRateDefaults} />
           </div>
 
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">

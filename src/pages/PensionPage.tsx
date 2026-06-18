@@ -7,6 +7,7 @@ import { useFinance, calcActiveGrossAnnual, type Pension } from '../context/Fina
 import { IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
+import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import ChartTooltip from '../components/ChartTooltip';
 
 function formatAxisInt(val: number): string {
@@ -16,7 +17,7 @@ function formatAxisInt(val: number): string {
 }
 
 const PensionPage: React.FC = () => {
-  const { t, lang, pension, updatePension, salaries, jobs, formatCurrency } = useFinance();
+  const { t, lang, pension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults } = useFinance();
 
   const currentYear = new Date().getFullYear();
   const hasBirthYear = pension.birthYear > 1900;
@@ -160,9 +161,12 @@ const PensionPage: React.FC = () => {
       {/* Settings — OTP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card padding="lg">
-          <div className="flex items-center gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
-            <Briefcase size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
-            <SectionLabel>OTP — {lang === 'nb' ? 'arbeidsgiverpensjon' : 'employer pension'}</SectionLabel>
+          <div className="flex items-center justify-between gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-2">
+              <Briefcase size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
+              <SectionLabel>OTP — {lang === 'nb' ? 'arbeidsgiverpensjon' : 'employer pension'}</SectionLabel>
+            </div>
+            <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restorePensionAssumptionDefaults} />
           </div>
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
             <NumberRow label={t.otpBalance} value={pension.otpBalance} onCommit={(v) => updatePension('otpBalance', v)} suffix="kr" />

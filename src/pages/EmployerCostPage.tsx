@@ -4,6 +4,7 @@ import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import { calcEmployerCost, calcBillingRate } from '../lib/employerCost';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
+import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 
 const EmployerCostPage: React.FC = () => {
   const {
@@ -11,6 +12,7 @@ const EmployerCostPage: React.FC = () => {
     salaries, jobs, pension,
     employerCostConfig, updateEmployerCostConfig,
     billingConfig, updateBillingConfig,
+    restoreEmployerCostDefaults,
   } = useFinance();
   const ec = t.employerCost;
   const isNo = region === 'no';
@@ -77,9 +79,12 @@ const EmployerCostPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {/* Inputs */}
         <Card padding="lg">
-          <div className="flex items-center gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
-            <Receipt size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
-            <SectionLabel>{ec.salaryInput}</SectionLabel>
+          <div className="flex items-center justify-between gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-2">
+              <Receipt size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
+              <SectionLabel>{ec.salaryInput}</SectionLabel>
+            </div>
+            <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreEmployerCostDefaults} />
           </div>
           <div className="mt-5 space-y-5">
             <div>

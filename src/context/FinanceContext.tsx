@@ -594,6 +594,7 @@ export const translations = {
       cashGrowthRate: 'Kontant/BSU-rente',
       cryptoGrowthRate: 'Krypto-avkastning',
       growthRatesDesc: 'Egne vekstrater per aktivaklasse. Aksjer brukes kun på aksjeporteføljen — bolig, kontant og krypto vokser med egne rater.',
+      restoreDefaults: 'Tilbakestill til standard',
       dataManagement: 'Datahåndtering',
       dataDesc: 'Eksporter eller importer alle dataene dine som JSON.',
       about: 'Om Headroom',
@@ -1010,6 +1011,7 @@ export const translations = {
       cashGrowthRate: 'Cash/BSU rate',
       cryptoGrowthRate: 'Crypto return',
       growthRatesDesc: 'Each asset class grows at its own rate. The stocks rate applies only to your investment portfolio — house, cash, and crypto grow at their own rates.',
+      restoreDefaults: 'Restore defaults',
       dataManagement: 'Data management',
       dataDesc: 'Export or import all your data as JSON.',
       about: 'About Headroom',
@@ -1061,17 +1063,32 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   { id: '8', name: 'Sparing',         amount: 5000  },
 ];
 
+// Data-based default assumptions. These are the researched starting points users
+// can tune — and restore to via the per-section "restore defaults" controls.
+export const DEFAULT_GROWTH_RATES = {
+  growthReturnRate: 7,
+  houseGrowthRate: 3,
+  cashGrowthRate: 1,
+  cryptoGrowthRate: 0,
+};
+
+export const DEFAULT_TAX_RATES = {
+  stockTaxRate: 37.84,
+  cryptoTaxRate: 22,
+  customTaxRatePct: 30,
+};
+
 const DEFAULT_ASSETS: Assets = {
   portfolio: 0,
   unrealizedGain: 0,
-  taxRate: 37.84,
+  taxRate: DEFAULT_TAX_RATES.stockTaxRate,
   bsu: 0,
   savings: 0,
   houseValue: 0,
   houseDebt: 0,
   crypto: 0,
   cryptoUnrealizedGain: 0,
-  cryptoTaxRate: 22,
+  cryptoTaxRate: DEFAULT_TAX_RATES.cryptoTaxRate,
   bufferAccount: 0,
 };
 
@@ -1109,7 +1126,7 @@ const DEFAULT_LOAN: LoanData = {
   gyldigTil: '1. jan 2027',
 };
 
-const DEFAULT_PENSION: Pension = {
+export const DEFAULT_PENSION: Pension = {
   otpBalance: 0,
   otpEmployerPct: 5,
   otpEmployeePct: 0,
@@ -1235,6 +1252,11 @@ interface FinanceContextType {
   formatCurrencyShort: (val: number) => string;
   importAll: (data: Partial<ExportPayload>) => void;
   resetAll: () => void;
+  restoreGrowthRateDefaults: () => void;
+  restoreAssetTaxDefaults: () => void;
+  restoreCustomTaxRateDefault: () => void;
+  restorePensionAssumptionDefaults: () => void;
+  restoreEmployerCostDefaults: () => void;
   dataLoadFailed: boolean;
 }
 
@@ -1314,10 +1336,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [housingMode, setHousingMode] = useState<HousingMode>('first_buyer');
   const [homeowner, setHomeowner] = useState<HomeownerData>(DEFAULT_HOMEOWNER);
   const [transition, setTransition] = useState<TransitionData>(DEFAULT_TRANSITION);
-  const [growthReturnRate, setGrowthReturnRate] = useState<number>(7);
-  const [houseGrowthRate, setHouseGrowthRate] = useState<number>(3);
-  const [cashGrowthRate, setCashGrowthRate] = useState<number>(1);
-  const [cryptoGrowthRate, setCryptoGrowthRate] = useState<number>(0);
+  const [growthReturnRate, setGrowthReturnRate] = useState<number>(DEFAULT_GROWTH_RATES.growthReturnRate);
+  const [houseGrowthRate, setHouseGrowthRate] = useState<number>(DEFAULT_GROWTH_RATES.houseGrowthRate);
+  const [cashGrowthRate, setCashGrowthRate] = useState<number>(DEFAULT_GROWTH_RATES.cashGrowthRate);
+  const [cryptoGrowthRate, setCryptoGrowthRate] = useState<number>(DEFAULT_GROWTH_RATES.cryptoGrowthRate);
   const [jobs, setJobs] = useState<JobEntry[]>([]);
   const [salaries, setSalaries] = useState<SalaryEntry[]>([]);
   const [bonuses, setBonuses] = useState<BonusEntry[]>([]);
@@ -1328,7 +1350,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [inflationStale, setInflationStale] = useState<boolean>(false);
   const [wageStats, setWageStats] = useState<WageStatPoint[]>([]);
   const [region, setRegion] = useState<Region>('no');
-  const [customTaxRatePct, setCustomTaxRatePct] = useState<number>(30);
+  const [customTaxRatePct, setCustomTaxRatePct] = useState<number>(DEFAULT_TAX_RATES.customTaxRatePct);
   const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
@@ -1784,6 +1806,36 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setBillingConfig(DEFAULT_BILLING_CONFIG);
   };
 
+  // --- Restore data-based defaults (assumptions only — never touches balances/data) ---
+  const restoreGrowthRateDefaults = () => {
+    setGrowthReturnRate(DEFAULT_GROWTH_RATES.growthReturnRate);
+    setHouseGrowthRate(DEFAULT_GROWTH_RATES.houseGrowthRate);
+    setCashGrowthRate(DEFAULT_GROWTH_RATES.cashGrowthRate);
+    setCryptoGrowthRate(DEFAULT_GROWTH_RATES.cryptoGrowthRate);
+  };
+
+  const restoreAssetTaxDefaults = () => {
+    updateAsset('taxRate', DEFAULT_TAX_RATES.stockTaxRate);
+    updateAsset('cryptoTaxRate', DEFAULT_TAX_RATES.cryptoTaxRate);
+  };
+
+  const restoreCustomTaxRateDefault = () => {
+    setCustomTaxRatePct(DEFAULT_TAX_RATES.customTaxRatePct);
+  };
+
+  const restorePensionAssumptionDefaults = () => {
+    updatePension('otpEmployerPct', DEFAULT_PENSION.otpEmployerPct);
+    updatePension('otpEmployeePct', DEFAULT_PENSION.otpEmployeePct);
+    updatePension('otpGrowthRate', DEFAULT_PENSION.otpGrowthRate);
+    updatePension('ipsGrowthRate', DEFAULT_PENSION.ipsGrowthRate);
+    updatePension('retirementAge', DEFAULT_PENSION.retirementAge);
+  };
+
+  const restoreEmployerCostDefaults = () => {
+    setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
+    setBillingConfig(DEFAULT_BILLING_CONFIG);
+  };
+
   const formatCurrency = (val: number) => {
     if (displayCurrency === 'USD') {
       return new Intl.NumberFormat('en-US', {
@@ -1866,6 +1918,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       totalFixedExpenses, monthlyBudget, dailyBudget,
       dailyData, totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
       formatCurrency, formatCurrencyShort, importAll, resetAll,
+      restoreGrowthRateDefaults, restoreAssetTaxDefaults, restoreCustomTaxRateDefault,
+      restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
       dataLoadFailed,
     }}>
       {children}

@@ -21,6 +21,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useFinance, type Assets, type Pension } from '../context/FinanceContext';
+import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear } from '../lib/calculations';
@@ -60,6 +61,8 @@ const AssetPage: React.FC = () => {
     updatePension,
     mortgageRate,
     mortgageTermYears,
+    restoreAssetTaxDefaults,
+    restoreGrowthRateDefaults,
   } = useFinance();
 
     const [modal, setModal] = useState<ModalConfig | null>(null);
@@ -152,9 +155,12 @@ const AssetPage: React.FC = () => {
         <div className="space-y-4 md:space-y-6">
           {/* Market Positions */}
           <div className={`${card} p-5 md:p-7 space-y-5`}>
-            <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
-              <BarChart2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-              <h3 className={sectionLabel}>{t.marketPositions}</h3>
+            <div className="flex items-center justify-between gap-2 pb-4 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <BarChart2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+                <h3 className={sectionLabel}>{t.marketPositions}</h3>
+              </div>
+              <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreAssetTaxDefaults} />
             </div>
             <div className="space-y-0">
               <AssetRow
@@ -375,6 +381,7 @@ const AssetPage: React.FC = () => {
             <RateChip label={t.bucketHouse} value={houseGrowthRate} onClick={() => editRate(t.settings.houseGrowthRate, houseGrowthRate, setHouseGrowthRate)} />
             <RateChip label={t.bucketCash} value={cashGrowthRate} onClick={() => editRate(t.settings.cashGrowthRate, cashGrowthRate, setCashGrowthRate)} />
             <RateChip label={t.bucketCrypto} value={cryptoGrowthRate} onClick={() => editRate(t.settings.cryptoGrowthRate, cryptoGrowthRate, setCryptoGrowthRate)} />
+            <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreGrowthRateDefaults} />
           </div>
         </div>
 
