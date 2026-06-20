@@ -12,9 +12,10 @@ interface EditablePillProps {
   color: 'sky' | 'emerald';
   formatCurrency: (v: number) => string;
   onCommit: (newValue: number) => void;
+  hint?: string;
 }
 
-function EditablePill({ label, value, color, formatCurrency, onCommit }: EditablePillProps) {
+function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: EditablePillProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +69,9 @@ function EditablePill({ label, value, color, formatCurrency, onCommit }: Editabl
           {formatCurrency(value)}
         </span>
       )}
+      {hint && (
+        <span className="text-[10px] text-[var(--warning)] leading-tight">{hint}</span>
+      )}
     </div>
   );
 }
@@ -80,7 +84,9 @@ export default function SmartRecommendations() {
     totalFixedExpenses,
     recommendedSpending,
     recommendedInvestment,
+    suggestedInvestment,
     conservativeMode,
+    conservativeReason,
     monthlyIncomes,
     savingsTargetPercent,
     setSavingsTargetPercent,
@@ -147,7 +153,7 @@ export default function SmartRecommendations() {
       {conservativeMode && (
         <div className="mb-4 flex items-center gap-2 border bg-[var(--warning-bg)] border-[color-mix(in_srgb,var(--warning)_30%,transparent)] rounded-xl px-4 py-2.5 text-[12px] text-[var(--warning)] font-medium">
           <AlertTriangle size={13} className="shrink-0" />
-          <span>{t.conservativeWarning}</span>
+          <span>{conservativeReason === 'volatility' ? t.volatileIncomeWarning : t.conservativeWarning}</span>
         </div>
       )}
 
@@ -210,6 +216,9 @@ export default function SmartRecommendations() {
               color="emerald"
               formatCurrency={formatCurrency}
               onCommit={handleInvestmentEdit}
+              hint={conservativeMode && suggestedInvestment > recommendedInvestment
+                ? `${lang === 'nb' ? 'Anbefalt' : 'Recommended'}: ${formatCurrency(suggestedInvestment)}`
+                : undefined}
             />
             <div className="flex flex-col gap-1.5 rounded-xl border p-3 md:p-4 bg-[var(--bg-raised)] border-[var(--border)]">
               <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{t.residual}</span>

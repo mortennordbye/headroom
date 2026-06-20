@@ -9,6 +9,7 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations } from '../lib/calculations';
+import type { ConservativeReason } from '../lib/calculations';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { getDemoData } from '../lib/demoData';
 import {
@@ -333,7 +334,8 @@ export const translations = {
     canSpend: 'Kan bruke',
     shouldInvest: 'Investering',
     avgIncome: 'Snittinntekt',
-    conservativeWarning: 'Inntekt under snitt — sparemål økt med 10%',
+    conservativeWarning: 'Inntekt under snitt — vurder å spare 10% mer',
+    volatileIncomeWarning: 'Uregelmessig inntekt — vurder å spare 10% mer',
     spentOfRecommended: 'av anbefalt',
     savingsTarget: 'Sparemål',
     funBudget: 'Morsomme penger',
@@ -757,7 +759,8 @@ export const translations = {
     canSpend: 'Can Spend',
     shouldInvest: 'Investment',
     avgIncome: 'Avg Income',
-    conservativeWarning: 'Income below average — savings target increased by 10%',
+    conservativeWarning: 'Income below average — consider saving 10% more',
+    volatileIncomeWarning: 'Irregular income — consider saving 10% more',
     spentOfRecommended: 'of recommended',
     savingsTarget: 'Savings Target',
     funBudget: 'Fun Budget',
@@ -1186,7 +1189,9 @@ interface FinanceContextType {
   setSavingsTargetPercent: (val: number) => void;
   recommendedSpending: number;
   recommendedInvestment: number;
+  suggestedInvestment: number;
   conservativeMode: boolean;
+  conservativeReason: ConservativeReason;
   fixedExpenses: FixedExpense[];
   setFixedExpenses: (val: FixedExpense[]) => void;
   dailyTransactions: DailyTransaction[];
@@ -1569,7 +1574,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return Math.sqrt(variance) / mean;
   }, [monthlyIncomes, averageIncome]);
 
-  const { recommendedSpending, recommendedInvestment, conservativeMode } = useMemo(() =>
+  const { recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason } = useMemo(() =>
     calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent),
   [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent]);
 
@@ -1950,7 +1955,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       netWorthHistory, prevMonthIncome, prevMonthSpending,
       effectiveIncome, averageIncome,
       savingsTargetPercent, setSavingsTargetPercent,
-      recommendedSpending, recommendedInvestment, conservativeMode,
+      recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
       fixedExpenses, setFixedExpenses, dailyTransactions, setDailyTransactions,
       recurringTemplates, setRecurringTemplates,
       assets, updateAsset, loan, updateLoan, pension, updatePension,

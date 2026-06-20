@@ -48,10 +48,20 @@ export function calcAmortizationSchedule(
   return schedule;
 }
 
+export type ConservativeReason = 'shortfall' | 'volatility' | null;
+
 export interface BudgetRecommendation {
   recommendedSpending: number;
   recommendedInvestment: number;
   conservativeMode: boolean;
+  /** Which trigger put us in conservative mode (null when not active). */
+  conservativeReason: ConservativeReason;
+  /**
+   * Conservative advisory target for investment. In conservative mode this is
+   * higher than recommendedInvestment (savings bumped +10pp); otherwise it
+   * equals recommendedInvestment. Purely advisory — it never overrides the plan.
+   */
+  suggestedInvestment: number;
 }
 
 export function calcRecommendations(
@@ -63,16 +73,23 @@ export function calcRecommendations(
 ): BudgetRecommendation {
   const residual = effectiveIncome - totalFixedExpenses;
   const shortfall = averageIncome > 0 ? (averageIncome - effectiveIncome) / averageIncome : 0;
-  const conservativeMode = shortfall > 0.10 || volatility > 0.15;
-  if (residual <= 0) return { recommendedSpending: 0, recommendedInvestment: 0, conservativeMode: true };
-  // In conservative mode, bump savings by 10 percentage points (capped at 95%)
-  const investRatio = conservativeMode
+  // Shortfall takes priority when both triggers fire, since it's the more concrete signal.
+  const conservativeReason: ConservativeReason =
+    shortfall > 0.10 ? 'shortfall' : volatility > 0.15 ? 'volatility' : null;
+  const conservativeMode = conservativeReason !== null;
+  if (residual <= 0) return { recommendedSpending: 0, recommendedInvestment: 0, conservativeMode: true, conservativeReason, suggestedInvestment: 0 };
+  // The plan follows the user's chosen savings target exactly — manual edits stick.
+  const investRatio = savingsTargetPercent / 100;
+  // Conservative mode only *suggests* saving 10pp more (capped at 95%); it does not override the plan.
+  const suggestedRatio = conservativeMode
     ? Math.min(0.95, (savingsTargetPercent + 10) / 100)
-    : savingsTargetPercent / 100;
+    : investRatio;
   return {
     recommendedSpending: Math.round(residual * (1 - investRatio)),
     recommendedInvestment: Math.round(residual * investRatio),
     conservativeMode,
+    conservativeReason,
+    suggestedInvestment: Math.round(residual * suggestedRatio),
   };
 }
 
