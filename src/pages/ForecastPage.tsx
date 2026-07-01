@@ -7,7 +7,7 @@ import { useFinance } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 
-const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 function formatAxisInt(val: number): string {
@@ -141,9 +141,9 @@ const ForecastPage: React.FC = () => {
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
           {t.forecast.heroLabel}
         </div>
-        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+        <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {t.forecast.heroTitlePre}{' '}
-          <em className="font-serif italic" style={{ color: 'var(--accent)' }}>{t.forecast.heroTitleEm}</em>
+          <em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.forecast.heroTitleEm}</em>
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
           {t.forecast.subtitle}
@@ -220,17 +220,17 @@ const ForecastPage: React.FC = () => {
             <AreaChart data={projection} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.12} />
+                  <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.12} />
                 </linearGradient>
                 <linearGradient id="forecastRealGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--violet)" stopOpacity={0.25} />
-                  <stop offset="100%" stopColor="var(--violet)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--violet)" stopOpacity={0.1} />
+                  <stop offset="100%" stopColor="var(--violet)" stopOpacity={0.1} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-              <XAxis dataKey="yearLabel" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
+              <XAxis dataKey="yearLabel" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
               <Tooltip
                 content={<ChartTooltip />}
                 cursor={{ stroke: 'var(--text-3)', strokeWidth: 1, strokeDasharray: '3 3' }}
@@ -257,9 +257,9 @@ const ForecastPage: React.FC = () => {
         <div className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={projection} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-              <XAxis dataKey="yearLabel" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
+              <XAxis dataKey="yearLabel" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
               <Tooltip content={<ChartTooltip />} />
               <Line type="monotone" dataKey="gross" name={t.forecast.grossSalary} stroke="var(--accent)" strokeWidth={2.5} dot={false} />
               <Line type="monotone" dataKey="net" name={t.forecast.netTakeHome} stroke="var(--positive)" strokeWidth={2.5} dot={false} />

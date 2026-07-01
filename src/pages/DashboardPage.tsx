@@ -275,11 +275,11 @@ const DashboardPage: React.FC = () => {
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
           {lang === 'nb' ? 'God dag' : 'Good afternoon'}
         </div>
-        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+        <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {lang === 'nb' ? (
-            <>Pengene dine har <em className="font-serif italic" style={{ color: 'var(--accent)' }}>headroom</em>.<br className="hidden md:inline" /> Her er status.</>
+            <>Pengene dine har <em className="italic" style={{ color: 'var(--brass)' }}>headroom</em>.<br className="hidden md:inline" /> Her er status.</>
           ) : (
-            <>Your money has <em className="font-serif italic" style={{ color: 'var(--accent)' }}>headroom</em>.<br className="hidden md:inline" /> Here's the state of things.</>
+            <>Your money has <em className="italic" style={{ color: 'var(--brass)' }}>headroom</em>.<br className="hidden md:inline" /> Here's the state of things.</>
           )}
         </h1>
         <p className="mt-4 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
@@ -324,13 +324,10 @@ const DashboardPage: React.FC = () => {
           </div>
 
           <div
-            className="font-semibold tracking-[-0.04em] leading-none mt-4"
+            className="font-mono font-medium tracking-[-0.03em] leading-none mt-4"
             style={{
               fontSize: 'clamp(40px, 5.5vw, 60px)',
-              background: 'linear-gradient(180deg, var(--text-1), color-mix(in srgb, var(--text-1) 70%, var(--accent)))',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
+              color: 'var(--text-1)',
             }}
           >
             {formatCurrency(totalEquity)}
@@ -370,13 +367,13 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Hero chart — clean 12-month actual net-equity trend */}
-          <div className="mt-6 rounded-[16px] border p-4" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
+          <div className="mt-6 rounded-[8px] border p-4" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] mb-2" style={{ color: 'var(--text-3)' }}>
               <div className="flex items-center gap-2">
                 <span>{lang === 'nb' ? 'Netto egenkapital · siste 12 mnd' : 'Net equity · last 12 months'}</span>
                 {isEstimated && (
                   <span
-                    className="px-2 py-0.5 rounded-full normal-case tracking-normal text-[10px]"
+                    className="px-2 py-0.5 rounded-[4px] normal-case tracking-normal text-[10px]"
                     style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
                   >
                     {lang === 'nb' ? 'estimert' : 'estimated'}
@@ -439,7 +436,7 @@ const DashboardPage: React.FC = () => {
               </span>
             )}
           </div>
-          <div className="mt-4 rounded-[14px] border p-3" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
+          <div className="mt-4 rounded-[8px] border p-3" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex gap-3 text-[10px] uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>
                 <span><span className="inline-block w-2 h-0.5 mr-1.5 align-middle" style={{ background: 'var(--accent)' }} /> {lang === 'nb' ? 'Faktisk' : 'Actual'}</span>
@@ -463,20 +460,6 @@ const DashboardPage: React.FC = () => {
               <span style={{ color: 'var(--accent)' }}>{lang === 'nb' ? `I dag · ${burnRate.todayIdx + 1}` : `Today · ${burnRate.todayIdx + 1}`}</span>
               <span style={{ color: overshoot > 0 ? 'var(--warning)' : 'var(--text-3)' }}>{lang === 'nb' ? `Dag ${burnRate.total}` : `Day ${burnRate.total}`}</span>
             </div>
-          </div>
-        </Card>
-
-        {/* ─── Should Invest ─── */}
-        <Card padding="md" className="md:col-span-5" glow="violet">
-          <div className="flex items-start justify-between gap-3">
-            <SectionLabel icon={<TrendingUp />}>{t.shouldInvest}</SectionLabel>
-            <DeltaChip tone="positive" size="sm">{savingsTargetPercent}% {t.savingsTarget}</DeltaChip>
-          </div>
-          <div className="font-semibold tracking-[-0.02em] leading-none mt-3 text-[32px]">
-            {formatCurrency(recommendedInvestment)}
-          </div>
-          <div className="text-[12px] mt-2" style={{ color: 'var(--text-3)' }}>
-            {lang === 'nb' ? 'Denne måneden' : 'This month'}
           </div>
         </Card>
 
@@ -507,17 +490,17 @@ const DashboardPage: React.FC = () => {
           </div>
 
           <div
-            className="mt-5 flex h-3 rounded-full overflow-hidden"
+            className="mt-5 flex h-3 rounded-[4px] overflow-hidden"
             style={{ background: 'var(--bg-elev)' }}
             aria-label="Budget composition"
           >
-            {budgetUsedPct > 0 && <div style={{ width: `${budgetUsedPct}%`, background: 'linear-gradient(90deg, var(--negative), color-mix(in srgb, var(--negative) 70%, var(--pink)))' }} />}
+            {budgetUsedPct > 0 && <div style={{ width: `${budgetUsedPct}%`, background: 'var(--teal)' }} />}
             {spentPct > 0 && <div style={{ width: `${spentPct}%`, background: 'var(--warning)' }} />}
-            {availablePct > 0 && <div style={{ width: `${availablePct}%`, background: 'linear-gradient(90deg, var(--positive), var(--emerald, #34D399))' }} />}
+            {availablePct > 0 && <div style={{ width: `${availablePct}%`, background: 'var(--positive)' }} />}
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-4">
-            <LegendItem dot="var(--negative)" name={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} pct={`${budgetUsedPct.toFixed(1)}%`} />
+            <LegendItem dot="var(--teal)" name={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} pct={`${budgetUsedPct.toFixed(1)}%`} />
             <LegendItem dot="var(--warning)" name={t.monthSpent} value={formatCurrency(totalSpent)} pct={`${spentPct.toFixed(1)}%`} />
             <LegendItem
               dot="var(--positive)"
@@ -551,25 +534,48 @@ const DashboardPage: React.FC = () => {
               {lang === 'nb' ? 'Ingen formuesverdier registrert enda.' : 'No assets recorded yet.'}
             </p>
           ) : (
-            <div className="flex items-center gap-5 mb-4">
-              <Donut rows={assetRows} total={totalEquity} mom={incomeDelta} />
-              <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="mb-4">
+              {/* Horizontal allocation strip — top 4 holdings + "Annet" (replaces the donut) */}
+              {(() => {
+                const nonZero = assetRows.filter(r => r.value > 0);
+                const head = nonZero.slice(0, 4);
+                const rest = nonZero.slice(4);
+                const strip = rest.length
+                  ? [...head, { label: lang === 'nb' ? 'Annet' : 'Other', value: rest.reduce((s, r) => s + r.value, 0), color: 'var(--text-dim)' }]
+                  : head;
+                const stripTotal = strip.reduce((s, r) => s + r.value, 0);
+                return (
+                  <div className="flex h-[30px] rounded-[4px] overflow-hidden border border-[var(--rule)]">
+                    {strip.map((r, i) => {
+                      const pct = stripTotal > 0 ? (r.value / stripTotal) * 100 : 0;
+                      if (pct <= 0) return null;
+                      return (
+                        <div
+                          key={i}
+                          className="flex items-center justify-center font-mono text-[10px]"
+                          style={{ width: `${pct}%`, background: r.color, color: '#0E1310' }}
+                          title={r.label}
+                        >
+                          {pct >= 10 ? `${pct.toFixed(0)}%` : ''}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              <div className="mt-4 space-y-1">
                 {assetRows.map((row, i) => {
                   const pct = totalEquity > 0 ? (row.value / totalEquity) * 100 : 0;
-                  const isLargest = i === 0;
                   return (
                     <div
                       key={i}
-                      className="grid items-center gap-2 text-[12px] px-2 py-1 rounded-lg"
-                      style={{
-                        gridTemplateColumns: '14px 1fr auto auto',
-                        background: isLargest ? `color-mix(in srgb, ${row.color} 8%, transparent)` : 'transparent',
-                      }}
+                      className="grid items-center gap-2 text-[12px] px-2 py-1"
+                      style={{ gridTemplateColumns: '14px 1fr auto auto' }}
                     >
-                      <span className="inline-block w-2 h-2 rounded-[3px]" style={{ background: row.color }} />
+                      <span className="inline-block w-2 h-2 rounded-[2px]" style={{ background: row.color }} />
                       <span className="truncate" style={{ color: 'var(--text-1)' }}>{row.label}</span>
                       <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-3)' }}>{pct.toFixed(0)}%</span>
-                      <span className="font-semibold tabular-nums">{formatCurrency(Math.round(row.value))}</span>
+                      <span className="font-mono font-medium tabular-nums">{formatCurrency(Math.round(row.value))}</span>
                     </div>
                   );
                 })}
@@ -592,7 +598,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div>
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}
               >
                 <ArrowUpRight size={18} />
@@ -621,7 +627,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div>
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
               >
                 <BarChart3 size={18} />
@@ -668,7 +674,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div>
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
               >
                 <TrendingUp size={18} />
@@ -699,7 +705,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--positive-bg, var(--bg-elev))', color: 'var(--positive)' }}
               >
                 <LifeBuoy size={18} />
@@ -772,7 +778,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
               >
                 <Scale size={18} />
@@ -876,7 +882,7 @@ const DashboardPage: React.FC = () => {
                     }}
                   >
                     <div
-                      className="w-9 h-9 rounded-[12px] border grid place-items-center text-[13px] font-semibold tabular-nums"
+                      className="w-9 h-9 rounded-[8px] border grid place-items-center text-[13px] font-semibold tabular-nums"
                       style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
                     >
                       {format(date, 'dd')}
@@ -989,8 +995,8 @@ function HeroChart({
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
         <defs>
           <linearGradient id="heroAreaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#6EE7FF" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#6EE7FF" stopOpacity="0" />
+            <stop offset="0%" stopColor="#7FCBA0" stopOpacity="0.1" />
+            <stop offset="100%" stopColor="#7FCBA0" stopOpacity="0.1" />
           </linearGradient>
         </defs>
 
@@ -1007,7 +1013,7 @@ function HeroChart({
         <path
           d={historyPath}
           fill="none"
-          stroke="#6EE7FF"
+          stroke="#7FCBA0"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -1024,7 +1030,7 @@ function HeroChart({
             top: 0,
             bottom: 0,
             width: 1,
-            background: 'rgba(110,231,255,0.25)',
+            background: 'rgba(127,203,160,0.25)',
           }}
         />
       )}
@@ -1050,10 +1056,10 @@ function HeroChart({
               width: hovered === i ? 11 : 7,
               height: hovered === i ? 11 : 7,
               // real months: bright filled · estimated months: hollow + dimmed
-              background: hovered === i || !points[i].estimated ? '#6EE7FF' : '#08080A',
-              border: '1.5px solid #6EE7FF',
+              background: hovered === i || !points[i].estimated ? '#7FCBA0' : '#0E100D',
+              border: '1.5px solid #7FCBA0',
               opacity: hovered === i ? 1 : (points[i].estimated ? 0.4 : 0.95),
-              boxShadow: hovered === i ? '0 0 10px rgba(110,231,255,0.6)' : undefined,
+              boxShadow: undefined,
             }}
           />
         </span>
@@ -1071,12 +1077,12 @@ function HeroChart({
         >
           <div
             className="px-2.5 py-1.5 rounded-lg whitespace-nowrap text-center"
-            style={{ background: '#1B1B22', border: '1px solid rgba(110,231,255,0.35)' }}
+            style={{ background: '#191D16', border: '1px solid rgba(127,203,160,0.35)' }}
           >
-            <div className="text-[9px] uppercase tracking-wider" style={{ color: '#6E6E78' }}>
+            <div className="text-[9px] uppercase tracking-wider" style={{ color: '#5F6555' }}>
               {points[hovered].label}
             </div>
-            <div className="text-[12px] font-semibold tabular-nums" style={{ color: '#F4F4F6' }}>
+            <div className="text-[12px] font-semibold tabular-nums" style={{ color: '#ECE7D8' }}>
               {fmtNice(points[hovered].value)}
             </div>
             {points[hovered].estimated && (
@@ -1095,8 +1101,8 @@ function HeroChart({
           transform: 'translate(-50%, -50%)',
           width: 13,
           height: 13,
-          background: '#6EE7FF',
-          boxShadow: '0 0 0 4px #08080A, 0 0 12px rgba(110,231,255,0.55)',
+          background: '#7FCBA0',
+          boxShadow: '0 0 0 4px #0E100D',
         }}
       />
 
@@ -1111,7 +1117,7 @@ function HeroChart({
       >
         <div
           className="px-2.5 py-1 rounded-lg text-[12px] font-semibold tabular-nums whitespace-nowrap"
-          style={{ background: '#1B1B22', border: '1px solid rgba(110,231,255,0.35)', color: '#F4F4F6' }}
+          style={{ background: '#191D16', border: '1px solid rgba(127,203,160,0.35)', color: '#ECE7D8' }}
         >
           {niceValue}
         </div>
@@ -1129,7 +1135,7 @@ function ChartTip({
   title,
   value,
   sub,
-  accent = '#6EE7FF',
+  accent = '#7FCBA0',
 }: {
   left: string;
   top: string;
@@ -1146,10 +1152,10 @@ function ChartTip({
     >
       <div
         className="px-2.5 py-1.5 rounded-lg whitespace-nowrap text-center"
-        style={{ background: '#1B1B22', border: `1px solid ${accent}59` }}
+        style={{ background: '#191D16', border: `1px solid ${accent}59` }}
       >
-        <div className="text-[9px] uppercase tracking-wider" style={{ color: '#6E6E78' }}>{title}</div>
-        <div className="text-[12px] font-semibold tabular-nums" style={{ color: '#F4F4F6' }}>{value}</div>
+        <div className="text-[9px] uppercase tracking-wider" style={{ color: '#5F6555' }}>{title}</div>
+        <div className="text-[12px] font-semibold tabular-nums" style={{ color: '#ECE7D8' }}>{value}</div>
         {sub && <div className="text-[9px] mt-0.5" style={{ color: 'var(--warning)' }}>{sub}</div>}
       </div>
     </div>
@@ -1205,8 +1211,8 @@ function BurnRateChart({
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
         <defs>
           <linearGradient id="spendAreaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#6EE7FF" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#6EE7FF" stopOpacity="0" />
+            <stop offset="0%" stopColor="#7FCBA0" stopOpacity="0.1" />
+            <stop offset="100%" stopColor="#7FCBA0" stopOpacity="0.1" />
           </linearGradient>
         </defs>
         {/* grid */}
@@ -1216,22 +1222,22 @@ function BurnRateChart({
           <line x1="0" y1={H * 0.75} x2={W} y2={H * 0.75} />
         </g>
         {/* ideal pace (always drawn) */}
-        <line x1="0" y1={H - 4} x2={W} y2={yFor(targetTotal)} stroke="#6E6E78" strokeWidth="1" strokeDasharray="3 3" />
+        <line x1="0" y1={H - 4} x2={W} y2={yFor(targetTotal)} stroke="#5F6555" strokeWidth="1" strokeDasharray="3 3" />
         {/* actual area + line — only visible when there's spending */}
         {lastActual > 0 && <path d={areaStr} fill="url(#spendAreaGrad)" />}
         {lastActual > 0 && (
-          <path d={ptStr} fill="none" stroke="#6EE7FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          <path d={ptStr} fill="none" stroke="#7FCBA0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         )}
         {/* projection */}
         {projWillOvershoot && (
-          <line x1={todayX} y1={todayY} x2={W} y2={projectedFinalY} stroke="#FBBF24" strokeWidth="1.5" strokeDasharray="3 3" />
+          <line x1={todayX} y1={todayY} x2={W} y2={projectedFinalY} stroke="#C9A24A" strokeWidth="1.5" strokeDasharray="3 3" />
         )}
         {/* hovered day guide */}
         {hovered !== null && (
-          <line x1={xFor(hovered)} y1="0" x2={xFor(hovered)} y2={H} stroke="#6EE7FF" strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
+          <line x1={xFor(hovered)} y1="0" x2={xFor(hovered)} y2={H} stroke="#7FCBA0" strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
         )}
         {/* today vertical guide */}
-        <line x1={todayX} y1="0" x2={todayX} y2={H} stroke="#6EE7FF" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
+        <line x1={todayX} y1="0" x2={todayX} y2={H} stroke="#7FCBA0" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
       </svg>
 
       {/* per-day hover zones */}
@@ -1255,8 +1261,8 @@ function BurnRateChart({
             transform: 'translate(-50%, -50%)',
             width: 9,
             height: 9,
-            background: '#6EE7FF',
-            boxShadow: '0 0 8px rgba(110,231,255,0.6)',
+            background: '#7FCBA0',
+            boxShadow: undefined,
           }}
         />
       )}
@@ -1270,8 +1276,8 @@ function BurnRateChart({
           transform: 'translate(-50%, -50%)',
           width: 9,
           height: 9,
-          background: '#08080A',
-          border: '2px solid #6EE7FF',
+          background: '#0E100D',
+          border: '2px solid #7FCBA0',
         }}
       />
 
@@ -1331,11 +1337,11 @@ function MonthlyInvestmentBars({ bars, formatCurrency }: { bars: { key: string; 
           const opacity = b.projected ? 0.35 : Math.min(1, 0.55 + (i / display.length) * 0.45);
           return b.projected ? (
             <rect key={b.key} x={x} y={y} width={barWidth} height={h} rx="2"
-              fill="none" stroke="#3ECF8E" strokeWidth="1" strokeDasharray="2 2" opacity={hovered === i ? 0.8 : opacity} />
+              fill="none" stroke="#7FCBA0" strokeWidth="1" strokeDasharray="2 2" opacity={hovered === i ? 0.8 : opacity} />
           ) : (
             <rect key={b.key} x={x} y={y} width={barWidth} height={h} rx="2"
-              fill="#3ECF8E" opacity={isActive ? 1 : opacity}
-              style={isActive ? { filter: 'drop-shadow(0 0 6px color-mix(in srgb, #3ECF8E 50%, transparent))' } : undefined} />
+              fill="#7FCBA0" opacity={isActive ? 1 : opacity}
+              />
           );
         })}
       </svg>
@@ -1363,7 +1369,7 @@ function MonthlyInvestmentBars({ bars, formatCurrency }: { bars: { key: string; 
             title={b.label || 'Estimert'}
             value={formatCurrency(b.value)}
             sub={b.projected ? 'estimert' : undefined}
-            accent="#3ECF8E"
+            accent="#7FCBA0"
           />
         );
       })()}
@@ -1400,8 +1406,8 @@ function ProjectionChart({
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
         <defs>
           <linearGradient id="projAreaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#A78BFA" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#A78BFA" stopOpacity="0" />
+            <stop offset="0%" stopColor="#3F7373" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="#3F7373" stopOpacity="0.12" />
           </linearGradient>
         </defs>
         <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 3">
@@ -1409,10 +1415,10 @@ function ProjectionChart({
           <line x1="0" y1={H * 0.66} x2={W} y2={H * 0.66} />
         </g>
         <path d={area} fill="url(#projAreaGrad)" />
-        <path d={line} fill="none" stroke="#A78BFA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <path d={line} fill="none" stroke="#3F7373" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         {/* hovered year guide */}
         {hovered !== null && (
-          <line x1={xs[hovered]} y1="0" x2={xs[hovered]} y2={H} stroke="#A78BFA" strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
+          <line x1={xs[hovered]} y1="0" x2={xs[hovered]} y2={H} stroke="#3F7373" strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
         )}
       </svg>
 
@@ -1429,10 +1435,10 @@ function ProjectionChart({
               transform: 'translate(-50%, -50%)',
               width: hovered === i ? 9 : endpoint ? 6 : 4,
               height: hovered === i ? 9 : endpoint ? 6 : 4,
-              background: hovered === i ? '#A78BFA' : '#08080A',
-              border: `1.5px solid ${i === lastI ? '#A78BFA' : '#6EE7FF'}`,
+              background: hovered === i ? '#3F7373' : '#0E100D',
+              border: `1.5px solid ${i === lastI ? '#3F7373' : '#7FCBA0'}`,
               opacity: hovered === i ? 1 : endpoint ? 1 : 0.5,
-              boxShadow: hovered === i ? '0 0 8px rgba(167,139,250,0.6)' : undefined,
+              boxShadow: undefined,
             }}
           />
         );
@@ -1456,7 +1462,7 @@ function ProjectionChart({
           below={ys[hovered] < 24}
           title={String(points[hovered].year)}
           value={formatCurrency(points[hovered].netWorth)}
-          accent="#A78BFA"
+          accent="#3F7373"
         />
       )}
     </div>
@@ -1489,88 +1495,21 @@ function LegendItem({
   );
 }
 
-function Donut({ rows, total, mom }: { rows: { value: number; color: string; label?: string }[]; total: number; mom: number | null }) {
-  const [hovered, setHovered] = useState<number | null>(null);
-  if (total <= 0) return null;
-  const segments = rows.map((row, i) => {
-    const pct = (row.value / total) * 100;
-    const filled = Math.max(0, pct - 1.5);
-    // Offset = cumulative pct of preceding segments (prefix sum, no outer mutation).
-    const offset = rows.slice(0, i).reduce((s, r) => s + (r.value / total) * 100, 0);
-    return { color: row.color, filled, offset: -offset, pct, label: row.label, value: row.value };
-  });
-  const active = hovered !== null ? segments[hovered] : null;
-
-  return (
-    <div className="relative shrink-0" style={{ width: 160, height: 160 }}>
-      <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-        <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="4" />
-        {segments.map((s, i) => (
-          <circle
-            key={i}
-            cx="18"
-            cy="18"
-            r="15.915"
-            fill="none"
-            stroke={s.color}
-            strokeWidth={hovered === i ? 5 : 4}
-            strokeLinecap="round"
-            strokeDasharray={`${s.filled} ${100 - s.filled}`}
-            strokeDashoffset={s.offset}
-            opacity={hovered === null || hovered === i ? 1 : 0.3}
-            className="cursor-pointer transition-all"
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(h => (h === i ? null : h))}
-            style={hovered === i || (hovered === null && i === 0) ? { filter: `drop-shadow(0 0 4px color-mix(in srgb, ${s.color} 45%, transparent))` } : undefined}
-          />
-        ))}
-      </svg>
-      <div className="absolute inset-0 grid place-items-center text-center pointer-events-none">
-        {active ? (
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.12em] truncate max-w-[130px]" style={{ color: 'var(--text-3)' }}>{active.label ?? ''}</div>
-            <div className="text-[15px] font-bold leading-tight mt-1">{formatTotalCompact(active.value)}</div>
-            <div className="text-[11px] mt-1 font-semibold tabular-nums" style={{ color: active.color }}>{active.pct.toFixed(0)}%</div>
-          </div>
-        ) : (
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>Total</div>
-            <div className="text-[15px] font-bold leading-tight mt-1">{formatTotalCompact(total)}</div>
-            {mom !== null && (
-              <div className="mt-1">
-                <DeltaChip tone={mom >= 0 ? 'positive' : 'negative'} size="sm">
-                  {mom >= 0 ? '+' : ''}{mom.toFixed(1)}%
-                </DeltaChip>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function FilterPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="h-7 px-3 rounded-full text-[11px] font-medium border transition-colors cursor-pointer"
+      className="h-7 px-3 rounded-[6px] text-[11px] font-medium border transition-colors cursor-pointer"
       style={{
-        background: active ? 'var(--text-1)' : 'rgba(255,255,255,0.04)',
-        borderColor: active ? 'transparent' : 'var(--border)',
-        color: active ? 'var(--bg-page)' : 'var(--text-2)',
+        background: active ? 'var(--bg-3)' : 'var(--bg-2)',
+        borderColor: active ? 'var(--brass-dim)' : 'var(--border)',
+        color: active ? 'var(--brass)' : 'var(--text-2)',
       }}
     >
       {children}
     </button>
   );
-}
-
-function formatTotalCompact(v: number): string {
-  if (v >= 1_000_000) return (v / 1_000_000).toFixed(2) + 'M';
-  if (v >= 1_000) return (v / 1_000).toFixed(0) + 'k';
-  return String(Math.round(v));
 }
 
 export default DashboardPage;

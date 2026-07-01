@@ -40,8 +40,8 @@ export default function ChartTooltip({
 
   return (
     <div
-      className="rounded-[10px] px-3 py-2.5"
-      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}
+      className="rounded-[8px] px-3 py-2.5"
+      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
     >
       {!hideLabel && label != null && label !== '' && (
         <div className="text-[10px] uppercase tracking-[0.08em] mb-1.5" style={{ color: 'var(--text-3)' }}>

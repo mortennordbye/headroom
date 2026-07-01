@@ -6,7 +6,6 @@ import {
   BarChart3,
   TrendingUp,
   LayoutDashboard,
-  Check,
   LineChart as LineChartIcon,
   Menu as MenuIcon,
   X,
@@ -59,29 +58,26 @@ const Layout: React.FC = () => {
     <div className="min-h-screen text-[var(--text-1)] font-sans">
       {/* ─── Top nav ─────────────────────────── */}
       <header
-        className="sticky top-0 z-20 flex items-center justify-between gap-4 px-5 md:px-8 py-4 backdrop-blur-xl"
-        style={{ background: 'color-mix(in srgb, var(--bg-page) 75%, transparent)' }}
+        className="sticky top-0 z-20 flex items-center justify-between gap-4 px-5 md:px-8 py-4 border-b"
+        style={{ background: 'var(--bg)', borderColor: 'var(--rule)' }}
       >
-        {/* Brand */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Brand — ceiling/clearance mark (a ring bisected by a hairline) + serif wordmark */}
+        <div className="flex items-center gap-2.5 shrink-0">
           <span
-            className="grid place-items-center w-7 h-7 rounded-[8px]"
-            style={{
-              background: 'linear-gradient(135deg, var(--accent), var(--violet))',
-              boxShadow: '0 4px 14px color-mix(in srgb, var(--violet) 40%, transparent)',
-            }}
+            className="relative grid place-items-center w-[18px] h-[18px] rounded-full shrink-0"
+            style={{ border: '1px solid var(--brass)' }}
             aria-hidden
           >
-            <Check size={14} strokeWidth={3} style={{ color: 'var(--bg-page)' }} />
+            <span
+              className="absolute left-[4px] right-[4px] top-1/2 h-px -translate-y-1/2"
+              style={{ background: 'var(--brass)' }}
+            />
           </span>
-          <span className="text-[20px] font-bold tracking-[-0.02em]">{t.title}</span>
+          <span className="font-serif text-[22px] font-semibold leading-none">{t.title}</span>
         </div>
 
-        {/* Pill tabs — desktop only */}
-        <nav
-          className="hidden md:flex items-center gap-1.5 p-1 rounded-full border"
-          style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--border)' }}
-        >
+        {/* Underline tabs — desktop only */}
+        <nav className="hidden md:flex items-center gap-7">
           {NAV_ITEMS.filter(item => isVisible(item.path)).map(item => (
             <NavButton key={item.path} to={item.path} label={t.nav[item.key]} />
           ))}
@@ -92,7 +88,7 @@ const Layout: React.FC = () => {
           {isMonthScoped ? (
             <>
               <div
-                className="flex items-center gap-1 rounded-full border p-1 transition-colors"
+                className="flex items-center gap-1 rounded-[6px] border p-1 transition-colors"
                 style={{
                   background: statusBg,
                   borderColor: isCurrentMonth ? 'color-mix(in srgb, var(--positive) 35%, transparent)' : 'var(--border)',
@@ -102,7 +98,7 @@ const Layout: React.FC = () => {
                 <button
                   onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
                   aria-label="Previous month"
-                  className="grid place-items-center w-7 h-7 rounded-full transition-colors"
+                  className="grid place-items-center w-7 h-7 rounded-[4px] transition-colors"
                   style={{ color: 'var(--text-2)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}
@@ -122,7 +118,7 @@ const Layout: React.FC = () => {
                 <button
                   onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
                   aria-label="Next month"
-                  className="grid place-items-center w-7 h-7 rounded-full transition-colors"
+                  className="grid place-items-center w-7 h-7 rounded-[4px] transition-colors"
                   style={{ color: 'var(--text-2)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}
@@ -133,7 +129,7 @@ const Layout: React.FC = () => {
               {!isCurrentMonth && (
                 <button
                   onClick={() => setCurrentMonth(startOfMonth(today))}
-                  className="hidden sm:inline-flex items-center px-3 h-8 rounded-full text-[12px] font-semibold transition-colors"
+                  className="hidden sm:inline-flex items-center px-3 h-8 rounded-[6px] text-[12px] font-semibold transition-colors"
                   style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 22%, transparent)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-bg)'; }}
@@ -145,7 +141,7 @@ const Layout: React.FC = () => {
             </>
           ) : hideTimeMarker ? null : (
             <div
-              className="flex items-center gap-1.5 rounded-full border px-3 h-9"
+              className="flex items-center gap-1.5 rounded-[6px] border px-3 h-9"
               style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--border)' }}
               title={t.asOfTodayHint}
             >
@@ -173,7 +169,7 @@ const Layout: React.FC = () => {
             <span className="font-medium">{t.settings.demoBanner}</span>
             <button
               onClick={toggleDemoMode}
-              className="shrink-0 px-3 h-8 rounded-full text-[12px] font-semibold"
+              className="shrink-0 px-3 h-8 rounded-[6px] text-[12px] font-semibold"
               style={{ background: 'var(--violet)', color: 'var(--bg-page)' }}
             >
               {t.settings.demoExit}
@@ -189,7 +185,7 @@ const Layout: React.FC = () => {
             <span>{t.dataLoadError}</span>
             <button
               onClick={() => window.location.reload()}
-              className="shrink-0 px-3 h-8 rounded-full text-[12px] font-semibold"
+              className="shrink-0 px-3 h-8 rounded-[6px] text-[12px] font-semibold"
               style={{ background: 'var(--negative)', color: 'var(--bg-page)' }}
             >
               {t.retry}
@@ -225,8 +221,8 @@ const Layout: React.FC = () => {
               <button
                 onClick={() => setMoreOpen(false)}
                 aria-label="Close"
-                className="grid place-items-center w-8 h-8 rounded-full"
-                style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-2)' }}
+                className="grid place-items-center w-8 h-8 rounded-[6px]"
+                style={{ background: 'var(--bg-2)', color: 'var(--text-2)' }}
               >
                 <X size={16} strokeWidth={2} />
               </button>
@@ -244,10 +240,10 @@ const Layout: React.FC = () => {
 
       {/* ─── Mobile bottom nav ───────────────── */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex border-t backdrop-blur-xl pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
+        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex border-t pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
         style={{
-          background: 'color-mix(in srgb, var(--bg-card) 90%, transparent)',
-          borderColor: 'var(--border)',
+          background: 'var(--bg)',
+          borderColor: 'var(--rule)',
         }}
       >
         <MobileNavTab to="/overview" icon={<LayoutDashboard size={20} strokeWidth={1.75} />} label={t.nav.dashboard} />
@@ -257,7 +253,7 @@ const Layout: React.FC = () => {
         <button
           onClick={() => setMoreOpen(true)}
           className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
-          style={{ color: moreActive ? 'var(--accent)' : 'var(--text-3)' }}
+          style={{ color: moreActive ? 'var(--brass)' : 'var(--text-3)' }}
           aria-label={t.nav.more}
         >
           <MenuIcon size={20} strokeWidth={1.75} />
@@ -280,10 +276,11 @@ const SheetItem: React.FC<SheetItemProps> = ({ to, icon, label, onNavigate }) =>
     to={to}
     end={to === '/'}
     onClick={onNavigate}
-    className="flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors"
+    className="flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
     style={({ isActive }) => ({
-      background: isActive ? 'var(--accent-bg)' : 'rgba(255,255,255,0.04)',
-      color: isActive ? 'var(--accent)' : 'var(--text-1)',
+      background: isActive ? 'var(--warning-bg)' : 'var(--bg-2)',
+      borderColor: isActive ? 'var(--brass-dim)' : 'var(--rule)',
+      color: isActive ? 'var(--brass)' : 'var(--text-1)',
     })}
   >
     {icon}
@@ -300,14 +297,10 @@ const NavButton: React.FC<NavButtonProps> = ({ to, label }) => (
   <NavLink
     to={to}
     end={to === '/'}
-    className={({ isActive }) =>
-      `text-[13px] font-medium px-4 py-2 rounded-full transition-colors ${
-        isActive ? 'font-semibold' : ''
-      }`
-    }
+    className="text-[13px] font-medium pb-1 border-b transition-colors"
     style={({ isActive }) => ({
-      background: isActive ? 'var(--text-1)' : 'transparent',
-      color: isActive ? 'var(--bg-page)' : 'var(--text-2)',
+      borderColor: isActive ? 'var(--brass)' : 'transparent',
+      color: isActive ? 'var(--text-1)' : 'var(--text-2)',
     })}
   >
     {label}
@@ -326,7 +319,7 @@ const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon, label }) => (
     end={to === '/'}
     className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
     style={({ isActive }) => ({
-      color: isActive ? 'var(--accent)' : 'var(--text-3)',
+      color: isActive ? 'var(--brass)' : 'var(--text-3)',
     })}
   >
     {icon}

@@ -5,7 +5,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import { isValidYearMonth, isOptionalYearMonth, isPositiveNumber, isNonEmpty } from '../lib/validators';
 
-const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 function currentValueFor(goal: Goal, ctx: {
@@ -164,17 +164,17 @@ const GoalsSection: React.FC = () => {
                     <button onClick={() => openModal(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[var(--text-1)] opacity-0 group-hover:opacity-100 transition-opacity">
                       <Edit2 size={12} />
                     </button>
-                    <button onClick={() => confirmDelete(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[#ef4444] opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => confirmDelete(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[#B5533A] opacity-0 group-hover:opacity-100 transition-opacity">
                       <Trash2 size={12} />
                     </button>
                   </div>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden" style={{ background: 'color-mix(in srgb, var(--text-3) 18%, transparent)' }}>
+                <div className="h-2 rounded-[3px] overflow-hidden" style={{ background: 'var(--bg-elev)' }}>
                   <div
-                    className="h-full rounded-full transition-all duration-700"
+                    className="h-full rounded-[3px] transition-all duration-700"
                     style={{
                       width: `${progress}%`,
-                      background: `linear-gradient(90deg, ${barColor}, color-mix(in srgb, ${barColor} 65%, transparent))`,
+                      background: barColor,
                     }}
                   />
                 </div>

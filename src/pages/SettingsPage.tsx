@@ -231,7 +231,7 @@ export default function SettingsPage() {
         >
           {t.settings.title}
         </div>
-        <h1 className="text-4xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+        <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {t.settings.subtitle}
         </h1>
       </header>
@@ -247,7 +247,7 @@ export default function SettingsPage() {
 
           {/* Segmented control */}
           <div
-            className="mt-5 inline-flex p-1 rounded-full border"
+            className="mt-5 inline-flex p-1 rounded-[8px] border"
             style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)' }}
             role="radiogroup"
             aria-label={t.settings.currency}
@@ -283,7 +283,7 @@ export default function SettingsPage() {
                   min="0.001"
                   value={usdRateInput}
                   onChange={e => setUsdRateInput(e.target.value)}
-                  className="flex-1 h-10 px-3 rounded-[12px] text-[13px] font-mono outline-none border"
+                  className="flex-1 h-10 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
                   style={{
                     background: 'rgba(255,255,255,0.04)',
                     borderColor: 'var(--border)',
@@ -321,7 +321,7 @@ export default function SettingsPage() {
                   placeholder={t.settings.currencyCode}
                   value={customCodeInput}
                   onChange={e => setCustomCodeInput(e.target.value.toUpperCase())}
-                  className="w-20 h-10 px-3 rounded-[12px] text-[13px] font-mono uppercase outline-none border"
+                  className="w-20 h-10 px-3 rounded-[8px] text-[13px] font-mono uppercase outline-none border"
                   style={{
                     background: 'rgba(255,255,255,0.04)',
                     borderColor: 'var(--border)',
@@ -335,7 +335,7 @@ export default function SettingsPage() {
                   placeholder={t.settings.currencyRate}
                   value={customRateInput}
                   onChange={e => setCustomRateInput(e.target.value)}
-                  className="flex-1 h-10 px-3 rounded-[12px] text-[13px] font-mono outline-none border"
+                  className="flex-1 h-10 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
                   style={{
                     background: 'rgba(255,255,255,0.04)',
                     borderColor: 'var(--border)',
@@ -410,7 +410,7 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setRegion('no')}
-                className="rounded-[14px] border p-4 text-left transition-colors"
+                className="rounded-[8px] border p-4 text-left transition-colors"
                 style={{
                   borderColor: region === 'no' ? 'var(--accent)' : 'var(--border)',
                   background: region === 'no' ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
@@ -422,7 +422,7 @@ export default function SettingsPage() {
               </button>
               <button
                 onClick={() => setRegion('generic')}
-                className="rounded-[14px] border p-4 text-left transition-colors"
+                className="rounded-[8px] border p-4 text-left transition-colors"
                 style={{
                   borderColor: region === 'generic' ? 'var(--accent)' : 'var(--border)',
                   background: region === 'generic' ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
@@ -478,7 +478,7 @@ export default function SettingsPage() {
                   key={item.path}
                   onClick={() => toggleNavItem(item.path)}
                   aria-pressed={visible}
-                  className="inline-flex items-center gap-2 px-4 h-9 rounded-full border text-[13px] font-medium transition-colors"
+                  className="inline-flex items-center gap-2 px-4 h-9 rounded-[6px] border text-[13px] font-medium transition-colors"
                   style={{
                     borderColor: visible ? 'var(--accent)' : 'var(--border)',
                     background: visible ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
@@ -572,7 +572,7 @@ export default function SettingsPage() {
             </div>
             {demoMode && (
               <span
-                className="text-[12px] font-semibold px-3 py-1 rounded-full"
+                className="text-[12px] font-semibold px-3 py-1 rounded-[4px]"
                 style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
               >
                 {t.settings.demoActive}
@@ -605,12 +605,12 @@ export default function SettingsPage() {
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Export */}
             <div
-              className="rounded-[16px] border p-5 flex flex-col"
+              className="rounded-[8px] border p-5 flex flex-col"
               style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}
             >
               <div className="flex items-start gap-3">
                 <div
-                  className="w-10 h-10 rounded-[12px] grid place-items-center shrink-0"
+                  className="w-10 h-10 rounded-[8px] grid place-items-center shrink-0"
                   style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
                 >
                   <Download size={18} />
@@ -642,12 +642,12 @@ export default function SettingsPage() {
 
             {/* Import */}
             <div
-              className="rounded-[16px] border p-5 flex flex-col"
+              className="rounded-[8px] border p-5 flex flex-col"
               style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}
             >
               <div className="flex items-start gap-3">
                 <div
-                  className="w-10 h-10 rounded-[12px] grid place-items-center shrink-0"
+                  className="w-10 h-10 rounded-[8px] grid place-items-center shrink-0"
                   style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
                 >
                   <Upload size={18} />
@@ -674,7 +674,7 @@ export default function SettingsPage() {
                       const file = e.dataTransfer.files[0];
                       if (file) processFile(file);
                     }}
-                    className="mt-4 rounded-[14px] border-2 border-dashed cursor-pointer transition-colors p-6 grid place-items-center text-center"
+                    className="mt-4 rounded-[8px] border-2 border-dashed cursor-pointer transition-colors p-6 grid place-items-center text-center"
                     style={{
                       borderColor: isDragOver ? 'var(--violet)' : 'var(--border-strong)',
                       background: isDragOver ? 'var(--violet-bg)' : 'transparent',
@@ -705,7 +705,7 @@ export default function SettingsPage() {
                   {importState === 'error' && (
                     <div
                       role="alert"
-                      className="mt-3 flex items-start gap-2 text-[12px] rounded-[12px] p-3"
+                      className="mt-3 flex items-start gap-2 text-[12px] rounded-[8px] p-3"
                       style={{ background: 'var(--negative-bg)', color: 'var(--negative)' }}
                     >
                       <AlertTriangle size={14} className="mt-0.5" />
@@ -720,7 +720,7 @@ export default function SettingsPage() {
                     {t.settings.importReady}
                   </div>
                   <div
-                    className="rounded-[12px] p-3 grid grid-cols-3 gap-2 text-center"
+                    className="rounded-[8px] p-3 grid grid-cols-3 gap-2 text-center"
                     style={{ background: 'rgba(255,255,255,0.04)' }}
                   >
                     <DataStat label="expenses" value={importPreview.fixedExpenses.length} />
@@ -734,7 +734,7 @@ export default function SettingsPage() {
                     <DataStat label="goals" value={importPreview.goals?.length ?? 0} />
                   </div>
                   <div
-                    className="flex items-start gap-2 text-[12px] rounded-[12px] p-3"
+                    className="flex items-start gap-2 text-[12px] rounded-[8px] p-3"
                     style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
                   >
                     <AlertTriangle size={14} className="mt-0.5 shrink-0" />
@@ -751,7 +751,7 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <div
-                  className="mt-4 flex items-center gap-2 text-[13px] font-medium rounded-[12px] p-4"
+                  className="mt-4 flex items-center gap-2 text-[13px] font-medium rounded-[8px] p-4"
                   style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}
                 >
                   <CheckCircle2 size={16} />
@@ -789,7 +789,7 @@ export default function SettingsPage() {
           {resetState === 'confirm' && (
             <div className="mt-5 flex flex-col gap-3 max-w-2xl">
               <div
-                className="flex items-start gap-2 text-[12px] rounded-[12px] p-3"
+                className="flex items-start gap-2 text-[12px] rounded-[8px] p-3"
                 style={{ background: 'var(--negative-bg)', color: 'var(--negative)' }}
               >
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
@@ -808,7 +808,7 @@ export default function SettingsPage() {
 
           {resetState === 'done' && (
             <div
-              className="mt-5 flex items-center gap-2 text-[13px] font-medium rounded-[12px] p-4 max-w-2xl"
+              className="mt-5 flex items-center gap-2 text-[13px] font-medium rounded-[8px] p-4 max-w-2xl"
               style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}
             >
               <CheckCircle2 size={16} />
@@ -857,7 +857,7 @@ function SegBtn({
       aria-checked={active}
       disabled={disabled}
       onClick={onClick}
-      className="px-4 h-8 text-[12px] font-semibold rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      className="px-4 h-8 text-[12px] font-semibold rounded-[6px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       style={{
         background: active ? 'var(--text-1)' : 'transparent',
         color: active ? 'var(--bg-page)' : 'var(--text-2)',
@@ -885,14 +885,14 @@ function LangCard({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className="flex items-center gap-3 px-4 py-3 rounded-[16px] border transition-colors text-left"
+      className="flex items-center gap-3 px-4 py-3 rounded-[8px] border transition-colors text-left"
       style={{
         background: active ? 'var(--accent-bg)' : 'rgba(255,255,255,0.04)',
         borderColor: active ? 'color-mix(in srgb, var(--accent) 50%, transparent)' : 'var(--border)',
       }}
     >
       <span
-        className="grid place-items-center w-9 h-9 rounded-[10px] font-bold text-[11px] tracking-wider"
+        className="grid place-items-center w-9 h-9 rounded-[8px] font-bold text-[11px] tracking-wider"
         style={{
           background: active ? 'var(--accent)' : 'var(--bg-elev)',
           color: active ? 'var(--bg-page)' : 'var(--text-2)',

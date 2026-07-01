@@ -53,10 +53,10 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
 
   const content = (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full sm:w-auto sm:min-w-[420px] sm:max-w-md bg-[var(--bg-card)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 shadow-2xl border border-[var(--border)] max-h-[85vh] flex flex-col">
+      <div className="w-full sm:w-auto sm:min-w-[420px] sm:max-w-md bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 space-y-4 border border-[var(--border)] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between shrink-0">
           <h3 className="text-[14px] font-semibold text-[var(--text-1)]">{nw.title}</h3>
           <button
@@ -91,7 +91,7 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
                       {formatCurrency(p.value)}
                     </span>
                     <span
-                      className="inline-flex items-center rounded-full font-semibold h-[18px] px-[7px] text-[10px]"
+                      className="inline-flex items-center rounded-[4px] font-semibold h-[18px] px-[7px] text-[10px]"
                       style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
                       title={nw.liveHint}
                     >
@@ -108,7 +108,7 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
                       onChange={(e) => setDrafts(prev => ({ ...prev, [p.monthKey]: e.target.value }))}
                       onBlur={(e) => commit(p.monthKey, e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
-                      className="flex-1 min-w-0 h-9 px-3 rounded-[10px] text-[13px] font-mono outline-none border focus:ring-2 focus:ring-[#0ea5e9]"
+                      className="flex-1 min-w-0 h-9 px-3 rounded-[8px] text-[13px] font-mono outline-none border focus:ring-2 focus:ring-[#7FCBA0]"
                       style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
                     />
                     <ProvenanceBadge kind={p.estimated ? 'estimate' : 'custom'} />
@@ -133,7 +133,7 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
 
         <button
           onClick={onClose}
-          className="shrink-0 w-full py-2.5 rounded-xl text-[13px] font-semibold text-white bg-[#0ea5e9] hover:opacity-90 transition-opacity"
+          className="shrink-0 w-full py-2.5 rounded-[8px] text-[13px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-opacity"
         >
           {nw.done}
         </button>

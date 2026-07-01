@@ -48,11 +48,11 @@ const EmployerCostPage: React.FC = () => {
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
           {ec.heroLabel}
         </div>
-        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+        <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {lang === 'nb' ? (
-            <>Hva koster du <em className="font-serif italic" style={{ color: 'var(--accent)' }}>egentlig</em>?</>
+            <>Hva koster du <em className="font-serif italic" style={{ color: 'var(--brass)' }}>egentlig</em>?</>
           ) : (
-            <>What do you <em className="font-serif italic" style={{ color: 'var(--accent)' }}>really</em> cost?</>
+            <>What do you <em className="font-serif italic" style={{ color: 'var(--brass)' }}>really</em> cost?</>
           )}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
@@ -111,7 +111,7 @@ const EmployerCostPage: React.FC = () => {
                   const n = parseFloat(e.target.value);
                   setSalaryOverride(Number.isFinite(n) ? n : 0);
                 }}
-                className="w-full h-10 px-3 rounded-[12px] text-[14px] font-mono outline-none border"
+                className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
                 style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
               />
               {!isAuto && (
@@ -133,7 +133,7 @@ const EmployerCostPage: React.FC = () => {
             </div>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.overheadHint}</p>
 
-            <div className="flex items-baseline justify-between rounded-[12px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+            <div className="flex items-baseline justify-between rounded-[8px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)' }}>
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{pensionLabel}</div>
                 <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{ec.employerPensionHint}</div>
@@ -189,7 +189,7 @@ const EmployerCostPage: React.FC = () => {
                 const n = parseFloat(raw);
                 updateBillingConfig('billableHoursOverride', Number.isFinite(n) && n > 0 ? n : null);
               }}
-              className="w-full h-10 px-3 rounded-[12px] text-[14px] font-mono outline-none border"
+              className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
               style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
             />
           </div>
@@ -235,7 +235,7 @@ function SummaryTile({ label, value, sub, color }: { label: string; value: strin
 
 function StatBlock({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="rounded-[12px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+    <div className="rounded-[8px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)' }}>
       <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>{label}</div>
       <div className="text-[16px] md:text-[18px] leading-tight font-semibold font-mono tabular-nums mt-1 [overflow-wrap:anywhere]" style={{ color: color ?? 'var(--text-1)' }}>
         {value}
@@ -281,7 +281,7 @@ function NumberRow({ label, value, onCommit, suffix, badge }: { label: string; v
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => { const n = parseFloat(draft); onCommit(Number.isFinite(n) ? n : 0); }}
-        className="w-full h-10 px-3 rounded-[12px] text-[14px] font-mono outline-none border"
+        className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
         style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
       />
     </div>

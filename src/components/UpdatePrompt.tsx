@@ -18,7 +18,7 @@ export default function UpdatePrompt() {
   return (
     <div
       role="alert"
-      className="fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-[12px] shadow-lg"
+      className="fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-[8px]"
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
     >
       <span className="text-[13px]">Ny versjon tilgjengelig / New version available</span>

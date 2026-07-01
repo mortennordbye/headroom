@@ -16,26 +16,26 @@ export default function ConfirmModal({
 }: ConfirmModalProps) {
   const content = (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
-      <div className="w-full sm:w-auto sm:min-w-[340px] sm:max-w-sm bg-[var(--bg-card)] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 shadow-2xl border border-[var(--border)]">
+      <div className="w-full sm:w-auto sm:min-w-[340px] sm:max-w-sm bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 space-y-4 border border-[var(--border)]">
         <div className="flex items-center gap-3">
-          {danger && <AlertTriangle size={18} className="text-[#ef4444] shrink-0" />}
+          {danger && <AlertTriangle size={18} className="text-[#B5533A] shrink-0" />}
           <h3 className="text-[14px] font-semibold text-[var(--text-1)]">{title}</h3>
         </div>
         <p className="text-[13px] text-[var(--text-2)] leading-relaxed">{message}</p>
         <div className="flex gap-2 pt-1">
           <button
             onClick={onCancel}
-            className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-[var(--text-2)] bg-[var(--bg-elev)] hover:bg-[#e5e5e5] transition-colors"
+            className="flex-1 py-2.5 rounded-[6px] text-[13px] font-medium text-[var(--text-2)] bg-[var(--bg-elev)] hover:bg-[var(--bg-raised)] transition-colors"
           >
             {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
-            className={`flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-opacity hover:opacity-90 ${
-              danger ? 'bg-[#ef4444]' : 'bg-[#0ea5e9]'
+            className={`flex-1 py-2.5 rounded-[6px] text-[13px] font-semibold text-[var(--text)] transition-colors ${
+              danger ? 'bg-[var(--rust)] hover:bg-[#9c4632]' : 'bg-[var(--forest)] hover:bg-[var(--forest-dim)]'
             }`}
           >
             {confirmLabel}

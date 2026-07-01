@@ -83,11 +83,11 @@ const PensionPage: React.FC = () => {
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
           {t.pension}
         </div>
-        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+        <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {lang === 'nb' ? (
-            <>Når kan du <em className="font-serif italic" style={{ color: 'var(--accent)' }}>slutte</em>?</>
+            <>Når kan du <em className="font-serif italic" style={{ color: 'var(--brass)' }}>slutte</em>?</>
           ) : (
-            <>When can you <em className="font-serif italic" style={{ color: 'var(--accent)' }}>retire</em>?</>
+            <>When can you <em className="font-serif italic" style={{ color: 'var(--brass)' }}>retire</em>?</>
           )}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
@@ -146,26 +146,26 @@ const PensionPage: React.FC = () => {
                 <AreaChart data={projection} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="otpGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.85} />
-                      <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.4} />
+                      <stop offset="0%" stopColor="#1F5A42" stopOpacity={0.92} />
+                      <stop offset="100%" stopColor="#1F5A42" stopOpacity={0.92} />
                     </linearGradient>
                     <linearGradient id="ipsGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#a855f7" stopOpacity={0.85} />
-                      <stop offset="100%" stopColor="#a855f7" stopOpacity={0.4} />
+                      <stop offset="0%" stopColor="#3F7373" stopOpacity={0.85} />
+                      <stop offset="100%" stopColor="#3F7373" stopOpacity={0.85} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-                  <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} width={52} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
+                  <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Area type="monotone" dataKey="ips" stackId="1" name="IPS" stroke="#a855f7" fill="url(#ipsGrad)" />
-                  <Area type="monotone" dataKey="otp" stackId="1" name="OTP" stroke="#0ea5e9" fill="url(#otpGrad)" />
+                  <Area type="monotone" dataKey="ips" stackId="1" name="IPS" stroke="#3F7373" fill="url(#ipsGrad)" />
+                  <Area type="monotone" dataKey="otp" stackId="1" name="OTP" stroke="#7FCBA0" fill="url(#otpGrad)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] mt-3" style={{ color: 'var(--text-2)' }}>
-              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#0ea5e9' }} />OTP</div>
-              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#a855f7' }} />IPS</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#7FCBA0' }} />OTP</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#3F7373' }} />IPS</div>
             </div>
           </>
         )}
@@ -210,7 +210,7 @@ const PensionPage: React.FC = () => {
             />
             <SliderRow label={t.ipsGrowthRate} value={pension.ipsGrowthRate} onChange={(v) => updatePension('ipsGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.ipsGrowthRate, DEFAULT_PENSION.ipsGrowthRate)} />} />
           </div>
-          <div className="mt-4 flex items-start gap-2 rounded-[12px] p-3" style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}>
+          <div className="mt-4 flex items-start gap-2 rounded-[8px] p-3" style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}>
             <Calculator size={14} className="mt-0.5 shrink-0" />
             <span className="text-[12px]">
               {lang === 'nb'
@@ -311,7 +311,7 @@ function NumberRow({
           const n = parseFloat(draft);
           onCommit(Number.isFinite(n) ? n : 0);
         }}
-        className="w-full h-10 px-3 rounded-[12px] text-[14px] font-mono outline-none border"
+        className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
         style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
       />
     </div>
