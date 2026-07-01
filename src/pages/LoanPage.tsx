@@ -244,7 +244,7 @@ const LoanPage: React.FC = () => {
 
       {/* Mode selector — pill segmented control */}
       <div
-        className="inline-flex p-1 rounded-full border flex-wrap gap-1"
+        className="inline-flex p-1 rounded-[8px] border flex-wrap gap-1"
         style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--border)' }}
         role="radiogroup"
       >
@@ -256,7 +256,7 @@ const LoanPage: React.FC = () => {
               onClick={() => setHousingMode(mode)}
               role="radio"
               aria-checked={active}
-              className="flex items-center gap-2 px-4 h-8 rounded-full text-[12px] font-medium transition-colors"
+              className="flex items-center gap-2 px-4 h-8 rounded-[6px] text-[12px] font-medium transition-colors"
               style={{
                 background: active ? 'var(--text-1)' : 'transparent',
                 color: active ? 'var(--bg-page)' : 'var(--text-2)',

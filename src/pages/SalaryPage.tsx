@@ -1171,7 +1171,7 @@ const SalaryPage: React.FC = () => {
                   role="tab"
                   aria-selected={active}
                   onClick={() => setActiveJobFilter(tab.id)}
-                  className="px-3 h-8 rounded-full text-[12px] font-semibold transition-colors border"
+                  className="px-3 h-8 rounded-[6px] text-[12px] font-semibold transition-colors border"
                   style={{
                     background: active ? 'var(--accent-bg)' : 'transparent',
                     color: active ? 'var(--accent)' : 'var(--text-2)',

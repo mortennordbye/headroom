@@ -91,7 +91,7 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
                       {formatCurrency(p.value)}
                     </span>
                     <span
-                      className="inline-flex items-center rounded-full font-semibold h-[18px] px-[7px] text-[10px]"
+                      className="inline-flex items-center rounded-[4px] font-semibold h-[18px] px-[7px] text-[10px]"
                       style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
                       title={nw.liveHint}
                     >

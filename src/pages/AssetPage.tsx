@@ -510,7 +510,7 @@ function RateChip({ label, value, onClick }: { label: string; value: number; onC
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 px-2 py-1 rounded-full border transition-colors"
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border transition-colors"
       style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}
       onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent) 35%, transparent)'; }}
       onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}

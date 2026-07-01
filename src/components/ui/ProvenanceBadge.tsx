@@ -22,7 +22,7 @@ export function ProvenanceBadge({ kind, className = '' }: ProvenanceBadgeProps) 
 
   return (
     <span
-      className={`inline-flex items-center rounded-full font-semibold h-[18px] px-[7px] text-[10px] ${className}`}
+      className={`inline-flex items-center rounded-[4px] font-semibold h-[18px] px-[7px] text-[10px] ${className}`}
       style={{ background: tone.bg, color: tone.color }}
       title={hint}
     >

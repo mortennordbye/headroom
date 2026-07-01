@@ -22,7 +22,7 @@ export default function BalanceHistoryBar({ hist }: { hist: BalanceHistory }) {
 
   return (
     <div
-      className="flex flex-wrap items-center justify-between gap-3 mb-5 px-3 py-2 rounded-full border"
+      className="flex flex-wrap items-center justify-between gap-3 mb-5 px-3 py-2 rounded-[8px] border"
       style={{ background: accentBg, borderColor: `color-mix(in srgb, ${accent} 35%, transparent)` }}
       role="status"
     >
@@ -32,7 +32,7 @@ export default function BalanceHistoryBar({ hist }: { hist: BalanceHistory }) {
             onClick={hist.goPrev}
             disabled={!hist.canPrev}
             aria-label="Previous snapshot"
-            className="grid place-items-center w-7 h-7 rounded-full transition-colors disabled:opacity-30 disabled:cursor-default"
+            className="grid place-items-center w-7 h-7 rounded-[6px] transition-colors disabled:opacity-30 disabled:cursor-default"
             style={{ color: 'var(--text-2)' }}
           >
             <ChevronLeft size={15} strokeWidth={2} />
@@ -41,7 +41,7 @@ export default function BalanceHistoryBar({ hist }: { hist: BalanceHistory }) {
             onClick={hist.goNext}
             disabled={!hist.canNext}
             aria-label="Next snapshot"
-            className="grid place-items-center w-7 h-7 rounded-full transition-colors disabled:opacity-30 disabled:cursor-default"
+            className="grid place-items-center w-7 h-7 rounded-[6px] transition-colors disabled:opacity-30 disabled:cursor-default"
             style={{ color: 'var(--text-2)' }}
           >
             <ChevronRight size={15} strokeWidth={2} />
@@ -60,7 +60,7 @@ export default function BalanceHistoryBar({ hist }: { hist: BalanceHistory }) {
           </span>
           <button
             onClick={hist.goLive}
-            className="shrink-0 inline-flex items-center px-3 h-7 rounded-full text-[12px] font-semibold transition-opacity hover:opacity-90"
+            className="shrink-0 inline-flex items-center px-3 h-7 rounded-[6px] text-[12px] font-semibold transition-opacity hover:opacity-90"
             style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
           >
             {tm.backToToday}

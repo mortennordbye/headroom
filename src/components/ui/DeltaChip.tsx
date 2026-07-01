@@ -38,7 +38,7 @@ export function DeltaChip({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full font-semibold tabular-nums ${dims} ${className}`}
+      className={`inline-flex items-center gap-1 rounded-[4px] font-semibold tabular-nums ${dims} ${className}`}
       style={{ background: s.bg, color: s.color }}
     >
       {showArrow && tone === 'positive' && <ChevronsUp className="w-[11px] h-[11px]" strokeWidth={3} />}

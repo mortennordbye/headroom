@@ -373,7 +373,7 @@ const DashboardPage: React.FC = () => {
                 <span>{lang === 'nb' ? 'Netto egenkapital · siste 12 mnd' : 'Net equity · last 12 months'}</span>
                 {isEstimated && (
                   <span
-                    className="px-2 py-0.5 rounded-full normal-case tracking-normal text-[10px]"
+                    className="px-2 py-0.5 rounded-[4px] normal-case tracking-normal text-[10px]"
                     style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
                   >
                     {lang === 'nb' ? 'estimert' : 'estimated'}

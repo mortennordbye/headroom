@@ -247,7 +247,7 @@ export default function SettingsPage() {
 
           {/* Segmented control */}
           <div
-            className="mt-5 inline-flex p-1 rounded-full border"
+            className="mt-5 inline-flex p-1 rounded-[8px] border"
             style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)' }}
             role="radiogroup"
             aria-label={t.settings.currency}
@@ -478,7 +478,7 @@ export default function SettingsPage() {
                   key={item.path}
                   onClick={() => toggleNavItem(item.path)}
                   aria-pressed={visible}
-                  className="inline-flex items-center gap-2 px-4 h-9 rounded-full border text-[13px] font-medium transition-colors"
+                  className="inline-flex items-center gap-2 px-4 h-9 rounded-[6px] border text-[13px] font-medium transition-colors"
                   style={{
                     borderColor: visible ? 'var(--accent)' : 'var(--border)',
                     background: visible ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
@@ -572,7 +572,7 @@ export default function SettingsPage() {
             </div>
             {demoMode && (
               <span
-                className="text-[12px] font-semibold px-3 py-1 rounded-full"
+                className="text-[12px] font-semibold px-3 py-1 rounded-[4px]"
                 style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
               >
                 {t.settings.demoActive}
@@ -857,7 +857,7 @@ function SegBtn({
       aria-checked={active}
       disabled={disabled}
       onClick={onClick}
-      className="px-4 h-8 text-[12px] font-semibold rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      className="px-4 h-8 text-[12px] font-semibold rounded-[6px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       style={{
         background: active ? 'var(--text-1)' : 'transparent',
         color: active ? 'var(--bg-page)' : 'var(--text-2)',

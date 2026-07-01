@@ -112,7 +112,7 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
                             key={s}
                             type="button"
                             onClick={() => setValues(prev => ({ ...prev, [field.key]: s }))}
-                            className="px-2 py-1 rounded-full text-[11px] font-medium transition-colors border"
+                            className="px-2 py-1 rounded-[4px] text-[11px] font-medium transition-colors border"
                             style={{
                               background: active ? 'var(--accent-bg)' : 'transparent',
                               color: active ? 'var(--accent)' : 'var(--text-2)',
