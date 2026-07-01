@@ -220,7 +220,7 @@ export default function SmartRecommendations() {
                 ? `${lang === 'nb' ? 'Anbefalt' : 'Recommended'}: ${formatCurrency(suggestedInvestment)}`
                 : undefined}
             />
-            <div className="flex flex-col gap-1.5 rounded-xl border p-3 md:p-4 bg-[var(--bg-raised)] border-[var(--border)]">
+            <div className="flex flex-col gap-1.5 rounded-[8px] border p-3 md:p-4 bg-[var(--bg-raised)] border-[var(--border)]">
               <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{t.residual}</span>
               <span className="text-[13px] md:text-[15px] font-bold font-mono tracking-tight text-[var(--text-1)]">{formatCurrency(currentBalance)}</span>
             </div>

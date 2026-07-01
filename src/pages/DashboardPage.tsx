@@ -367,7 +367,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Hero chart — clean 12-month actual net-equity trend */}
-          <div className="mt-6 rounded-[16px] border p-4" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
+          <div className="mt-6 rounded-[8px] border p-4" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] mb-2" style={{ color: 'var(--text-3)' }}>
               <div className="flex items-center gap-2">
                 <span>{lang === 'nb' ? 'Netto egenkapital · siste 12 mnd' : 'Net equity · last 12 months'}</span>
@@ -436,7 +436,7 @@ const DashboardPage: React.FC = () => {
               </span>
             )}
           </div>
-          <div className="mt-4 rounded-[14px] border p-3" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
+          <div className="mt-4 rounded-[8px] border p-3" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex gap-3 text-[10px] uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>
                 <span><span className="inline-block w-2 h-0.5 mr-1.5 align-middle" style={{ background: 'var(--accent)' }} /> {lang === 'nb' ? 'Faktisk' : 'Actual'}</span>
@@ -612,7 +612,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div>
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}
               >
                 <ArrowUpRight size={18} />
@@ -641,7 +641,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div>
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
               >
                 <BarChart3 size={18} />
@@ -688,7 +688,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div>
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
               >
                 <TrendingUp size={18} />
@@ -719,7 +719,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--positive-bg, var(--bg-elev))', color: 'var(--positive)' }}
               >
                 <LifeBuoy size={18} />
@@ -792,7 +792,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div
-                className="w-9 h-9 rounded-[12px] grid place-items-center mb-3"
+                className="w-9 h-9 rounded-[8px] grid place-items-center mb-3"
                 style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
               >
                 <Scale size={18} />
@@ -896,7 +896,7 @@ const DashboardPage: React.FC = () => {
                     }}
                   >
                     <div
-                      className="w-9 h-9 rounded-[12px] border grid place-items-center text-[13px] font-semibold tabular-nums"
+                      className="w-9 h-9 rounded-[8px] border grid place-items-center text-[13px] font-semibold tabular-nums"
                       style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
                     >
                       {format(date, 'dd')}

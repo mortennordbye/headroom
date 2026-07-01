@@ -1,7 +1,7 @@
 import { Smile } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 
-const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 interface FunStatProps {
@@ -13,11 +13,11 @@ interface FunStatProps {
 
 function FunStat({ label, value, negative, highlight }: FunStatProps) {
   return (
-    <div className="flex flex-col gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] rounded-xl p-3 md:p-4">
+    <div className="flex flex-col gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] rounded-[8px] p-3 md:p-4">
       <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{label}</span>
       <span className={`text-[13px] md:text-[15px] font-bold font-mono tracking-tight ${
-        negative ? 'text-[#ef4444]' :
-        highlight ? 'text-[#ef4444]' :
+        negative ? 'text-[#B5533A]' :
+        highlight ? 'text-[#B5533A]' :
         'text-[var(--text-1)]'
       }`}>
         {negative ? '−' : ''}{value}
@@ -73,9 +73,9 @@ export default function FunBudget() {
         <div className="h-3 bg-[var(--bg-elev)] rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-700 ${
-              pct >= 100 ? 'bg-[#ef4444]' :
-              pct >= 75 ? 'bg-amber-400' :
-              'bg-[#10b981]'
+              pct >= 100 ? 'bg-[#B5533A]' :
+              pct >= 75 ? 'bg-[var(--brass)]' :
+              'bg-[#7FCBA0]'
             }`}
             style={{ width: `${pct}%` }}
           />
@@ -88,7 +88,7 @@ export default function FunBudget() {
       </div>
 
       {funRemaining < 0 && (
-        <div className="mt-3 text-[12px] text-[#ef4444] font-medium">
+        <div className="mt-3 text-[12px] text-[#B5533A] font-medium">
           {t.funBudgetOverspent} {formatCurrency(Math.abs(funRemaining))}
         </div>
       )}

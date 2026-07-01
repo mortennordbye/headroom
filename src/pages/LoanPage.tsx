@@ -52,7 +52,7 @@ interface ModalConfig {
   onSave: (values: Record<string, string>) => void;
 }
 
-const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const LoanPage: React.FC = () => {
@@ -230,11 +230,11 @@ const LoanPage: React.FC = () => {
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
           {lang === 'nb' ? 'Boliglån' : 'Mortgage'}
         </div>
-        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+        <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {lang === 'nb' ? (
-            <>Et hjem, et <em className="font-serif italic" style={{ color: 'var(--accent)' }}>lån</em>.</>
+            <>Et hjem, et <em className="font-serif italic" style={{ color: 'var(--brass)' }}>lån</em>.</>
           ) : (
-            <>A home, a <em className="font-serif italic" style={{ color: 'var(--accent)' }}>loan</em>.</>
+            <>A home, a <em className="font-serif italic" style={{ color: 'var(--brass)' }}>loan</em>.</>
           )}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
@@ -360,7 +360,7 @@ const LoanPage: React.FC = () => {
                 </div>
                 <button
                   onClick={() => editText('Gyldig til', 'gyldigTil', loan.gyldigTil)}
-                  className="flex items-center gap-1 text-[var(--text-2)] hover:text-[#0ea5e9] transition-colors shrink-0 ml-2"
+                  className="flex items-center gap-1 text-[var(--text-2)] hover:text-[#7FCBA0] transition-colors shrink-0 ml-2"
                 >
                   <Clock size={11} />
                   <span className="text-[10px] font-medium whitespace-nowrap">Gyldig til {loan.gyldigTil}</span>
@@ -442,7 +442,7 @@ const LoanPage: React.FC = () => {
                 </div>
                 <Link
                   to="/assets"
-                  className="text-[10px] text-[var(--text-2)] hover:text-[#0ea5e9] transition-colors whitespace-nowrap"
+                  className="text-[10px] text-[var(--text-2)] hover:text-[#7FCBA0] transition-colors whitespace-nowrap"
                 >
                   {t.editInAssets}
                 </Link>
@@ -462,7 +462,7 @@ const LoanPage: React.FC = () => {
                   </div>
                   <div className="h-2 rounded-full bg-[var(--bg-elev)] overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-[#0ea5e9] transition-all"
+                      className="h-full rounded-full bg-[#7FCBA0] transition-all"
                       style={{ width: `${Math.min(100, Math.max(0, (houseEquity / assets.houseValue) * 100))}%` }}
                     />
                   </div>
@@ -478,7 +478,7 @@ const LoanPage: React.FC = () => {
                   </div>
                   <div className="h-2 rounded-full bg-[var(--bg-elev)] overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      className="h-full rounded-full bg-[var(--positive)] transition-all"
                       style={{ width: `${Math.min(100, homeownerStatus.equityPercent)}%` }}
                     />
                   </div>
@@ -527,7 +527,7 @@ const LoanPage: React.FC = () => {
                 href="https://www.forbrukerradet.no/finansportalen/bank/lan/boliglan"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-[#0ea5e9] text-white text-[13px] font-medium hover:bg-[#0284c7] transition-colors"
+                className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-[6px] bg-[var(--forest)] text-[var(--text)] text-[13px] font-medium hover:bg-[var(--forest-dim)] transition-colors"
               >
                 Sammenlign på Finansportalen
                 <ExternalLink size={14} strokeWidth={2} />
@@ -713,17 +713,17 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
             <div className="h-[200px] md:h-[260px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={'#2a2a2a'} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={'#262A20'} />
                   <XAxis
                     dataKey="year"
-                    tick={{ fontSize: 11, fill: '#737373' }}
+                    tick={{ fontSize: 11, fill: '#5F6555' }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) => `${lang === 'nb' ? 'År' : 'Yr'} ${v}`}
                   />
                   <YAxis
                     tickFormatter={(v) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : `${Math.round(v / 1_000)}k`}
-                    tick={{ fontSize: 11, fill: '#737373' }}
+                    tick={{ fontSize: 11, fill: '#5F6555' }}
                     axisLine={false}
                     tickLine={false}
                     width={48}
@@ -739,11 +739,11 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
                         principalPaid: t.principalPayment,
                         interestPaid: t.interestPayment,
                       };
-                      return <span style={{ fontSize: '11px', color: '#737373' }}>{labels[value] ?? value}</span>;
+                      return <span style={{ fontSize: '11px', color: '#5F6555' }}>{labels[value] ?? value}</span>;
                     }}
                   />
-                  <Bar dataKey="principalPaid" name={t.principalPayment} stackId="a" fill="#0ea5e9" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="interestPaid" name={t.interestPayment} stackId="a" fill="#ef444480" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="principalPaid" name={t.principalPayment} stackId="a" fill="#7FCBA0" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="interestPaid" name={t.interestPayment} stackId="a" fill="#B5533A80" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -764,8 +764,8 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
                   <tr key={row.year} className="hover:bg-[var(--bg-raised)] transition-colors">
                     <td className="px-5 md:px-7 py-3 text-[12px] font-mono font-medium text-[var(--text-1)]">{row.year}</td>
                     <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[var(--text-2)]">{formatCurrency(Math.round(row.annualPayment))}</td>
-                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#0ea5e9]">{formatCurrency(Math.round(row.principalPaid))}</td>
-                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#ef4444]">{formatCurrency(Math.round(row.interestPaid))}</td>
+                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#7FCBA0]">{formatCurrency(Math.round(row.principalPaid))}</td>
+                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#B5533A]">{formatCurrency(Math.round(row.interestPaid))}</td>
                     <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right font-semibold text-[var(--text-1)]">{formatCurrency(Math.round(row.balance))}</td>
                   </tr>
                 ))}
@@ -793,10 +793,10 @@ function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blu
   const isCalculated = !onEdit;
   const valueColor = highlight
     ? highlightColor === 'green'
-      ? 'text-emerald-600'
+      ? 'text-[var(--positive)]'
       : highlightColor === 'red'
-        ? 'text-[#ef4444]'
-        : 'text-[#0ea5e9]'
+        ? 'text-[#B5533A]'
+        : 'text-[#7FCBA0]'
     : isCalculated
       ? 'text-[var(--text-2)]'
       : 'text-[var(--text-1)]';
@@ -832,12 +832,12 @@ interface FlowStepProps {
 
 function FlowStep({ label, value, color }: FlowStepProps) {
   const colors = {
-    blue: 'bg-[#f0f9ff] border-[#bae6fd] text-[#0ea5e9]',
-    green: 'bg-[#f0fdf4] border-[#bbf7d0] text-emerald-600',
-    red: 'bg-[#fff1f2] border-[#fecdd3] text-[#ef4444]',
+    blue: 'bg-[var(--bg-3)] border-[var(--rule)] text-[var(--forest-light)]',
+    green: 'bg-[var(--positive-bg)] border-[color-mix(in_srgb,var(--positive)_35%,transparent)] text-[var(--positive)]',
+    red: 'bg-[var(--negative-bg)] border-[color-mix(in_srgb,var(--negative)_35%,transparent)] text-[var(--negative)]',
   };
   return (
-    <div className={`flex flex-col items-center px-3 py-2 rounded-xl border ${colors[color]} min-w-[100px]`}>
+    <div className={`flex flex-col items-center px-3 py-2 rounded-[8px] border ${colors[color]} min-w-[100px]`}>
       <span className="text-[10px] font-medium uppercase tracking-[0.08em] opacity-70 mb-0.5">{label}</span>
       <span className="text-[13px] font-mono font-semibold">{value}</span>
     </div>
@@ -852,9 +852,9 @@ interface SummaryTileProps {
 
 function SummaryTile({ label, value, accent }: SummaryTileProps) {
   return (
-    <div className={`rounded-xl p-3 border ${accent ? 'bg-[#f0f9ff] border-[#bae6fd]' : 'bg-[var(--bg-raised)] border-[var(--border)]'}`}>
+    <div className={`rounded-[8px] p-3 border ${accent ? 'bg-[var(--bg-3)] border-[var(--brass-dim)]' : 'bg-[var(--bg-raised)] border-[var(--border)]'}`}>
       <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)] mb-1">{label}</div>
-      <div className={`text-[14px] font-mono font-semibold ${accent ? 'text-[#0ea5e9]' : 'text-[var(--text-1)]'}`}>{value}</div>
+      <div className={`text-[14px] font-mono font-semibold ${accent ? 'text-[#7FCBA0]' : 'text-[var(--text-1)]'}`}>{value}</div>
     </div>
   );
 }
