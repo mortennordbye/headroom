@@ -2,29 +2,57 @@
 
 @theme {
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Fira Mono", ui-monospace, monospace;
-  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", "Fira Code", "Fira Mono", ui-monospace, monospace;
+  --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
 }
 
+/*
+ * "Dark old-money" theme tokens.
+ *
+ * Canonical palette lives in the --bg / --forest / --brass / … names below.
+ * The legacy names (--bg-page, --accent, --positive, …) are kept as aliases so
+ * every existing component re-themes through the cascade without edits. Color
+ * always carries meaning — see role notes inline; never assign a hue decoratively.
+ */
 :root {
-  --bg-page: #08080A;
-  --bg-card: #131318;
-  --bg-raised: #1B1B22;
-  --bg-elev: #25252E;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.12);
+  /* ── Canonical palette ─────────────────────────── */
+  --bg: #0E100D;
+  --bg-2: #141712;
+  --bg-3: #191D16;
+  --rule: #262A20;
 
-  --text-1: #F4F4F6;
-  --text-2: #A8A8B0;
-  --text-3: #6E6E78;
+  --text: #ECE7D8;
+  --text-soft: #9A9C8C;
+  --text-dim: #5F6555;
 
-  --positive: #3ECF8E;
-  --negative: #F87171;
-  --warning: #FBBF24;
-  --accent: #6EE7FF;
-  --violet: #A78BFA;
-  --pink: #F472B6;
-  --emerald: #34D399;
+  --forest: #1F5A42;        /* large fills, chart areas */
+  --forest-light: #7FCBA0;  /* strokes, small accents, positive values */
+  --forest-dim: #123626;
+  --teal: #3F7373;          /* fixed / structural category */
+  --slate: #5B7280;         /* cash / subscription category */
+  --brass: #C9A24A;         /* headline totals, active nav, warnings — never decorative */
+  --brass-dim: #8C7A45;
+  --rust: #B5533A;          /* debt, negative values, risk */
+
+  /* ── Legacy aliases (map old names → old-money palette) ── */
+  --bg-page: var(--bg);
+  --bg-card: var(--bg-2);
+  --bg-raised: var(--bg-3);
+  --bg-elev: #1F241B;
+  --border: var(--rule);
+  --border-strong: var(--brass-dim);
+
+  --text-1: var(--text);
+  --text-2: var(--text-soft);
+  --text-3: var(--text-dim);
+
+  --positive: var(--forest-light);
+  --negative: var(--rust);
+  --warning: var(--brass);
+  --accent: var(--forest-light);  /* general interactive accent; active nav uses --brass explicitly */
+  --violet: var(--teal);          /* structural / future marker */
+  --pink: var(--slate);
+  --emerald: var(--forest-light);
 
   --positive-bg: color-mix(in srgb, var(--positive) 14%, transparent);
   --negative-bg: color-mix(in srgb, var(--negative) 14%, transparent);
@@ -33,17 +61,19 @@
   --violet-bg: color-mix(in srgb, var(--violet) 14%, transparent);
   --pink-bg: color-mix(in srgb, var(--pink) 14%, transparent);
 
-  --chart-1: #6EE7FF;
-  --chart-2: #3ECF8E;
-  --chart-3: #A78BFA;
-  --chart-4: #FBBF24;
-  --chart-5: #F472B6;
-  --chart-6: #F87171;
+  /* Chart roles — max ~4 hues + neutral "Annet"; group the rest, never add a 5th color. */
+  --chart-1: var(--forest);
+  --chart-2: var(--teal);
+  --chart-3: var(--slate);
+  --chart-4: var(--rust);
+  --chart-5: var(--forest-light);
+  --chart-6: var(--text-dim);
 
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  /* No radius > 8px in the old-money theme. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
 }
 
 html, body {
@@ -52,11 +82,8 @@ html, body {
 }
 
 body {
-  background:
-    radial-gradient(ellipse 50% 40% at 15% 0%, color-mix(in srgb, var(--violet) 18%, transparent), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 85% 30%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
-    var(--bg-page);
-  background-attachment: fixed;
+  /* Flat fill only — no gradients, no glow (old-money theme). */
+  background: var(--bg);
   min-height: 100vh;
   color: var(--text-1);
   font-family: var(--font-sans);
@@ -75,11 +102,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--rule);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--brass-dim);
 }
 
 /* Hide scrollbar but keep scrolling. */
@@ -115,14 +142,14 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--forest-light) 26%, transparent);
   color: var(--text-1);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--forest-light);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
