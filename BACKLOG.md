@@ -19,13 +19,19 @@ Known limitations:
 
 ## PWA — raster home-screen icons
 
-The standalone-app setup (manifest + `apple-mobile-web-app-*` meta tags) is shipped, so the app now launches without Safari chrome. The home-screen / install icon is still the SVG favicon, which iOS does not render as an `apple-touch-icon` — it falls back to a screenshot of the page. Android/Chrome also prefer raster icons for the install prompt.
+Mostly shipped with the dark old-money theme (2026-07): raster favicons and the apple-touch-icon now exist (`public/favicon.ico` 16/32/48, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` 180×180 with a dark rounded background), wired up in `index.html` + `public/manifest.webmanifest`. They were rasterized via headless Chrome canvas (no `sharp`/`resvg` available locally).
 
-**What's needed**: generate `180×180` (apple-touch-icon), `192×192`, and `512×512` PNGs from `public/favicon.svg`, drop them in `public/`, then reference them — add `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />` in `index.html` and the 192/512 entries (incl. a `"purpose": "maskable"` variant) in `public/manifest.webmanifest`.
+**Remaining**: Android/Chrome install prompt still wants `192×192` and `512×512` PNGs, including a `"purpose": "maskable"` variant with safe-zone padding. Generate from `public/favicon.svg` (brass mark on `#0E100D`) and add the entries to `public/manifest.webmanifest`.
 
-**Unblock**: needs an image-rasterizing step (e.g. `sharp`, `resvg`, or an online converter) to turn the SVG into PNGs — not doable from the SVG alone in-app.
+**Where**: `public/`, `public/manifest.webmanifest`.
 
-**Where**: `public/`, `index.html`, `public/manifest.webmanifest`.
+## Dark old-money theme — follow-ups
+
+The `theme/dark-old-money` branch reskins the whole app (tokens in `src/index.css`, restyled `Card`/`Button`/`Layout`, donut/pie → allocation-strip/bar-list, serif headings, mono figures, ≤8px radii, no gradients/shadows, new favicon). Deferred / noticed items:
+
+- **Fonts load from Google Fonts CDN** (`index.html`) — Cormorant Garamond, IBM Plex Mono, Inter. The PWA is offline-capable but these aren't precached (the service worker globs js/css/html/svg/webmanifest only), so an offline install falls back to system fonts. To guarantee the brand type offline, self-host the woff2 files under `public/` and `@font-face` them in `src/index.css` (or add the font files to the PWA precache glob).
+- **Expense-category colours are hash-based, not semantic.** `FixedExpense` has no `type` field (`src/context/FinanceContext.tsx`), so `getCategoryColor` in `src/pages/BudgetPage.tsx` hashes the name into the restricted role palette. The reference mockup colours categories by *type* (Fast=teal, Variabel=forest, Abonnement=slate, Forsikring=rust). To match it, add an expense `type` field (data-model change — was intentionally not done without sign-off) and map type→role colour.
+- **Pre-existing (not theme): `savingsTargetPercent` renders as a long unrounded float** in a few spots (e.g. Dashboard "Sparemål" chip, Settings slider readout). It's set to a raw ratio in `handleSpendingEdit`/`handleInvestmentEdit` (`src/components/SmartRecommendations.tsx`). Round on write or on display.
 
 ## Live SSB wage statistics
 
