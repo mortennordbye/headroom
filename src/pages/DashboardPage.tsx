@@ -463,20 +463,6 @@ const DashboardPage: React.FC = () => {
           </div>
         </Card>
 
-        {/* ─── Should Invest ─── */}
-        <Card padding="md" className="md:col-span-5" glow="violet">
-          <div className="flex items-start justify-between gap-3">
-            <SectionLabel icon={<TrendingUp />}>{t.shouldInvest}</SectionLabel>
-            <DeltaChip tone="positive" size="sm">{savingsTargetPercent}% {t.savingsTarget}</DeltaChip>
-          </div>
-          <div className="font-semibold tracking-[-0.02em] leading-none mt-3 text-[32px]">
-            {formatCurrency(recommendedInvestment)}
-          </div>
-          <div className="text-[12px] mt-2" style={{ color: 'var(--text-3)' }}>
-            {lang === 'nb' ? 'Denne måneden' : 'This month'}
-          </div>
-        </Card>
-
         {/* ─── Budget Health (span 7, row 3) ─── */}
         <Card padding="lg" className="md:col-span-7">
           <div className="flex items-center justify-between gap-3 mb-5">
