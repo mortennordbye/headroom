@@ -1,10 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { AlertTriangle, TrendingUp, Edit2 } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 
-const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+
+// Category roles (shared by the pills, allocation strip and legend).
+const ROLE_FIXED = 'var(--teal)';
+const ROLE_SPEND = 'var(--forest-light)';
+const ROLE_INVEST = 'var(--slate)';
 
 interface EditablePillProps {
   label: string;
@@ -20,13 +24,9 @@ function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: E
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const bg = color === 'sky'
-    ? 'bg-[var(--accent-bg)] border-[color-mix(in_srgb,var(--accent)_25%,transparent)]'
-    : 'bg-[var(--positive-bg)] border-[color-mix(in_srgb,var(--positive)_25%,transparent)]';
-  const valueColor = color === 'sky'
-    ? 'text-sky-600'
-    : 'text-emerald-600';
-  const borderFocus = color === 'sky' ? 'border-sky-400' : 'border-emerald-400';
+  // 'sky' = "kan bruke" (forest-light), 'emerald' = "investering" (slate).
+  const roleColor = color === 'sky' ? ROLE_SPEND : ROLE_INVEST;
+  const bg = 'bg-[var(--bg-raised)] border-[var(--border)]';
 
   useEffect(() => {
     if (editing) inputRef.current?.select();
@@ -45,7 +45,7 @@ function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: E
 
   return (
     <div
-      className={`flex flex-col gap-1.5 rounded-xl border p-3 md:p-4 cursor-pointer ${bg}`}
+      className={`flex flex-col gap-1.5 rounded-[6px] border p-3 md:p-4 cursor-pointer ${bg}`}
       onClick={() => { if (!editing) startEditing(); }}
     >
       <div className="flex items-center justify-between">
@@ -62,10 +62,11 @@ function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: E
           onBlur={commit}
           onClick={e => e.stopPropagation()}
           onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
-          className={`text-[13px] md:text-[15px] font-bold font-mono bg-transparent border-b ${borderFocus} ${valueColor} outline-none w-full`}
+          className="text-[13px] md:text-[15px] font-bold font-mono bg-transparent border-b outline-none w-full"
+          style={{ color: roleColor, borderColor: roleColor }}
         />
       ) : (
-        <span className={`text-[13px] md:text-[15px] font-bold font-mono tracking-tight ${valueColor}`}>
+        <span className="text-[13px] md:text-[15px] font-bold font-mono tracking-tight" style={{ color: roleColor }}>
           {formatCurrency(value)}
         </span>
       )}
@@ -140,18 +141,17 @@ export default function SmartRecommendations() {
   const currentBalance = todayEntry?.balance ?? 0;
 
   const pieData = [
-    { name: t.fixedCosts, value: totalFixedExpenses, color: '#71717a' },
-    { name: t.canSpend, value: recommendedSpending, color: '#0ea5e9' },
-    { name: t.shouldInvest, value: recommendedInvestment, color: '#10b981' },
+    { name: t.fixedCosts, value: totalFixedExpenses, color: ROLE_FIXED },
+    { name: t.canSpend, value: recommendedSpending, color: ROLE_SPEND },
+    { name: t.shouldInvest, value: recommendedInvestment, color: ROLE_INVEST },
   ];
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
   const slicePct = (v: number) => (pieTotal > 0 ? (v / pieTotal) * 100 : 0);
-  const activeSlice = hoveredSlice !== null ? pieData[hoveredSlice] : null;
 
   return (
     <div className={`${card} p-5 md:p-7`}>
       {conservativeMode && (
-        <div className="mb-4 flex items-center gap-2 border bg-[var(--warning-bg)] border-[color-mix(in_srgb,var(--warning)_30%,transparent)] rounded-xl px-4 py-2.5 text-[12px] text-[var(--warning)] font-medium">
+        <div className="mb-4 flex items-center gap-2 border bg-[var(--warning-bg)] border-[color-mix(in_srgb,var(--warning)_30%,transparent)] rounded-[6px] px-4 py-2.5 text-[12px] text-[var(--warning)] font-medium">
           <AlertTriangle size={13} className="shrink-0" />
           <span>{conservativeReason === 'volatility' ? t.volatileIncomeWarning : t.conservativeWarning}</span>
         </div>
@@ -185,13 +185,13 @@ export default function SmartRecommendations() {
                 onChange={e => setPctDraft(e.target.value)}
                 onBlur={commitPct}
                 onKeyDown={e => { if (e.key === 'Enter') commitPct(); if (e.key === 'Escape') setEditingPct(false); }}
-                className="w-12 text-center text-[12px] font-bold font-mono bg-transparent border-b border-emerald-400 text-[var(--text-1)] outline-none"
+                className="w-12 text-center text-[12px] font-bold font-mono bg-transparent border-b border-[var(--forest-light)] text-[var(--text-1)] outline-none"
               />
               <span className="text-[12px] font-bold text-[var(--text-1)]">%</span>
             </div>
           ) : (
             <button onClick={() => setEditingPct(true)} className="flex items-center gap-1 group">
-              <span className="text-[13px] font-bold font-mono text-emerald-600">{savingsTargetPercent}%</span>
+              <span className="text-[13px] font-bold font-mono text-[var(--forest-light)]">{savingsTargetPercent}%</span>
               <Edit2 size={11} className="text-[var(--text-2)] opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           )}
@@ -231,11 +231,11 @@ export default function SmartRecommendations() {
               <span>{lang === 'nb' ? 'Brukt' : 'Spent'}: {formatCurrency(totalSpentThisMonth)}</span>
               <span>{Math.round(spendingPct)}% {t.spentOfRecommended}</span>
             </div>
-            <div className="h-2 bg-[var(--bg-elev)] rounded-full overflow-hidden">
+            <div className="h-2 bg-[var(--bg-elev)] rounded-[3px] overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  spendingPct >= 100 ? 'bg-[#ef4444]' :
-                  spendingPct >= 80 ? 'bg-amber-400' : 'bg-[#0ea5e9]'
+                className={`h-full rounded-[3px] transition-all duration-500 ${
+                  spendingPct >= 100 ? 'bg-[var(--rust)]' :
+                  spendingPct >= 80 ? 'bg-[var(--brass)]' : 'bg-[var(--forest-light)]'
                 }`}
                 style={{ width: `${Math.min(spendingPct, 100)}%` }}
               />
@@ -243,67 +243,50 @@ export default function SmartRecommendations() {
           </div>
         </div>
 
-        {/* Right: donut chart */}
-        <div className="w-full md:w-[200px] shrink-0">
-          <div className="relative" style={{ height: 160 }}>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={48}
-                  outerRadius={72}
-                  paddingAngle={2}
-                  dataKey="value"
-                  strokeWidth={0}
-                  onMouseEnter={(_: unknown, i: number) => setHoveredSlice(i)}
+        {/* Right: allocation strip + legend (replaces the donut) */}
+        <div className="w-full md:w-[240px] shrink-0">
+          <div className="flex items-baseline justify-between text-[10px] uppercase tracking-[0.1em] text-[var(--text-3)] mb-2">
+            <span>{lang === 'nb' ? 'Fordeling' : 'Allocation'}</span>
+            <span className="font-mono">{formatCurrencyShort(pieTotal)}</span>
+          </div>
+          <div className="flex h-[30px] rounded-[4px] overflow-hidden border border-[var(--rule)]">
+            {pieData.map((entry, i) => {
+              const pct = slicePct(entry.value);
+              if (pct <= 0) return null;
+              return (
+                <div
+                  key={i}
+                  className="flex items-center justify-center font-mono text-[10px] transition-opacity"
+                  style={{
+                    width: `${pct}%`,
+                    background: entry.color,
+                    color: '#0E1310',
+                    opacity: hoveredSlice === null || hoveredSlice === i ? 1 : 0.4,
+                  }}
+                  onMouseEnter={() => setHoveredSlice(i)}
                   onMouseLeave={() => setHoveredSlice(null)}
                 >
-                  {pieData.map((entry, i) => (
-                    <Cell
-                      key={i}
-                      fill={entry.color}
-                      opacity={hoveredSlice === null || hoveredSlice === i ? 1 : 0.3}
-                      style={{ cursor: 'pointer', transition: 'opacity 0.15s' }}
-                    />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            {/* center label */}
-            <div className="absolute inset-0 grid place-items-center text-center pointer-events-none">
-              <div>
-                <div className="text-[9px] uppercase tracking-[0.1em] text-[var(--text-3)] truncate max-w-[88px] mx-auto">
-                  {activeSlice ? activeSlice.name : (lang === 'nb' ? 'Totalt' : 'Total')}
+                  {pct >= 10 ? `${pct.toFixed(0)}%` : ''}
                 </div>
-                <div className="text-[15px] font-bold font-mono tracking-tight text-[var(--text-1)] mt-0.5">
-                  {formatCurrencyShort(activeSlice ? activeSlice.value : pieTotal)}
-                </div>
-                {activeSlice && (
-                  <div className="text-[11px] font-semibold tabular-nums mt-0.5" style={{ color: activeSlice.color }}>
-                    {slicePct(activeSlice.value).toFixed(0)}%
-                  </div>
-                )}
-              </div>
-            </div>
+              );
+            })}
           </div>
           {/* Legend with shares */}
-          <div className="flex flex-col gap-1.5 mt-2">
+          <div className="flex flex-col gap-2 mt-4">
             {pieData.map((entry, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between gap-2 cursor-pointer rounded-md px-1 py-0.5 transition-colors"
-                style={{ background: hoveredSlice === i ? 'rgba(255,255,255,0.05)' : 'transparent' }}
+                className="flex items-center justify-between gap-2 cursor-pointer transition-opacity"
+                style={{ opacity: hoveredSlice === null || hoveredSlice === i ? 1 : 0.4 }}
                 onMouseEnter={() => setHoveredSlice(i)}
                 onMouseLeave={() => setHoveredSlice(null)}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                  <span className="text-[11px] text-[var(--text-2)] truncate">{entry.name}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-[9px] h-[9px] rounded-[2px] shrink-0" style={{ backgroundColor: entry.color }} />
+                  <span className="text-[12px] text-[var(--text-2)] truncate">{entry.name}</span>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
-                  <span className="text-[11px] font-mono text-[var(--text-1)]">{formatCurrencyShort(entry.value)}</span>
+                <div className="flex items-center gap-2 shrink-0 tabular-nums">
+                  <span className="text-[12px] font-mono text-[var(--text-1)]">{formatCurrencyShort(entry.value)}</span>
                   <span className="text-[10px] text-[var(--text-3)] w-8 text-right">{slicePct(entry.value).toFixed(0)}%</span>
                 </div>
               </div>

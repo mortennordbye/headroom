@@ -15,11 +15,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
   LabelList,
-  PieChart,
-  Pie,
-  Legend,
   type TooltipContentProps,
 } from 'recharts';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
@@ -28,18 +24,23 @@ import { useFinance, type TransactionTemplate } from '../context/FinanceContext'
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 
+// Old-money category roles (concrete hex — recharts sets these as SVG attributes,
+// which do not resolve CSS var()). Restricted to the 4 category hues + neutrals;
+// no brass (reserved) and no decorative rainbow.
 const CHART_COLORS = [
-  '#6EE7FF', // accent
-  '#3ECF8E', // positive
-  '#FBBF24', // warning
-  '#F472B6', // pink
-  '#A78BFA', // violet
-  '#34D399', // emerald
-  '#F87171', // negative
-  '#6E6E78', // text-3
+  '#3F7373', // teal
+  '#5B7280', // slate
+  '#1F5A42', // forest
+  '#B5533A', // rust
+  '#7FCBA0', // forest-light
+  '#5F6555', // text-dim (→ "Annet")
 ];
+const CHART_INK = '#9A9C8C';   // text-soft — axis labels
+const CHART_GRID = 'rgba(236,231,216,0.06)';
+const CHART_TRACK = 'rgba(236,231,216,0.05)';
+const TEAL = '#3F7373';
 
-const card = 'bg-[var(--bg-card)] rounded-[20px] border border-[var(--border)]';
+const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)] font-semibold';
 
 function getCategoryColor(category: string): string {
@@ -268,7 +269,7 @@ const BudgetPage: React.FC = () => {
             {monthLabel}
           </span>
           <span
-            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em]"
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-semibold uppercase tracking-[0.1em]"
             style={{
               background: isCurrentMonth ? 'var(--positive-bg)' : isPast ? 'rgba(255,255,255,0.05)' : 'var(--violet-bg)',
               color: isCurrentMonth ? 'var(--positive)' : isPast ? 'var(--text-3)' : 'var(--violet)',
@@ -283,18 +284,18 @@ const BudgetPage: React.FC = () => {
           {!isCurrentMonth && (
             <button
               onClick={() => setCurrentMonth(startOfMonth(today))}
-              className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full transition-colors"
+              className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-[4px] transition-colors"
               style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
             >
               → {t.today}
             </button>
           )}
         </div>
-        <h1 className="text-3xl md:text-5xl font-normal leading-[1.05] tracking-[-0.03em]">
+        <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {lang === 'nb' ? (
-            <>Månedsbudsjettet <em className="font-serif italic" style={{ color: 'var(--accent)' }}>ditt</em>.</>
+            <>Månedsbudsjettet <em className="font-serif italic" style={{ color: 'var(--brass)' }}>ditt</em>.</>
           ) : (
-            <>Your monthly <em className="font-serif italic" style={{ color: 'var(--accent)' }}>budget</em>.</>
+            <>Your monthly <em className="font-serif italic" style={{ color: 'var(--brass)' }}>budget</em>.</>
           )}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
@@ -369,7 +370,7 @@ const BudgetPage: React.FC = () => {
             <h2 className={sectionLabel}>{t.fixedCosts}</h2>
             <button
               onClick={addFixedExpense}
-              className="text-[#0ea5e9] hover:opacity-70 transition-opacity"
+              className="text-[var(--accent)] hover:opacity-70 transition-opacity"
             >
               <PlusCircle size={18} strokeWidth={2} />
             </button>
@@ -378,21 +379,21 @@ const BudgetPage: React.FC = () => {
             {fixedExpenses.map((expense) => (
               <div key={expense.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0">
                 <span
-                  className="text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[#0ea5e9] transition-colors"
+                  className="text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
                   onClick={() => editFixedExpense(expense.id, expense.name, expense.amount)}
                 >
                   {expense.name}
                 </span>
                 <div className="flex items-center gap-3">
                   <span
-                    className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[#0ea5e9] transition-colors"
+                    className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
                     onClick={() => editFixedExpense(expense.id, expense.name, expense.amount)}
                   >
                     {formatCurrency(expense.amount)}
                   </span>
                   <button
                     onClick={() => removeFixedExpense(expense.id, expense.name)}
-                    className="text-[var(--text-2)] hover:text-[#ef4444] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                    className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -418,26 +419,26 @@ const BudgetPage: React.FC = () => {
                 layout="vertical"
                 margin={{ top: 4, right: 60, left: 16, bottom: 4 }}
               >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART_GRID} />
                 <XAxis type="number" hide />
                 <YAxis
                   dataKey="name"
                   type="category"
                   width={88}
-                  tick={{ fontSize: 11, fill: '#9a9aa3', fontWeight: 500 }}
+                  tick={{ fontSize: 11, fill: CHART_INK, fontWeight: 500 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <Tooltip
-                  cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  cursor={{ fill: CHART_TRACK }}
                   content={({ active, payload }: TooltipContentProps) => {
                     if (!active || !payload?.length) return null;
                     const d = payload[0].payload as { name: string; amount: number };
                     const pct = totalFixedExpenses > 0 ? (d.amount / totalFixedExpenses) * 100 : 0;
                     return (
                       <div
-                        className="rounded-[10px] px-3.5 py-2.5"
-                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}
+                        className="rounded-[6px] px-3.5 py-2.5"
+                        style={{ background: 'var(--bg-card)', border: '1px solid var(--rule)' }}
                       >
                         <div className="text-[13px] font-semibold text-[var(--text-1)]">{d.name}</div>
                         <div className="text-[13px] font-mono text-[var(--text-2)] mt-0.5">{formatCurrency(d.amount)}</div>
@@ -450,18 +451,16 @@ const BudgetPage: React.FC = () => {
                 />
                 <Bar
                   dataKey="amount"
-                  radius={[0, 6, 6, 0]}
+                  radius={[0, 3, 3, 0]}
                   barSize={12}
-                  background={{ fill: 'rgba(255,255,255,0.04)', radius: 6 } as unknown as React.ComponentProps<typeof Bar>['background']}
+                  fill={TEAL}
+                  background={{ fill: CHART_TRACK, radius: 3 } as unknown as React.ComponentProps<typeof Bar>['background']}
                 >
-                  {sortedExpenses.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
                   <LabelList
                     dataKey="amount"
                     position="right"
                     offset={10}
-                    fill="#9a9aa3"
+                    fill={CHART_INK}
                     fontSize={11}
                     fontWeight={600}
                     formatter={(v: unknown) => formatCurrencyShort(Number(v ?? 0))}
@@ -471,48 +470,44 @@ const BudgetPage: React.FC = () => {
             </ResponsiveContainer>
           </div>
 
-          {/* Category pie chart — only shown when there's categorized data */}
-          {categoryData.length > 0 && (
-            <>
-              <div className={`${sectionLabel} pt-2 pb-3 border-t border-[var(--border)]`}>
-                {t.category} — {t.operationalLog}
-              </div>
-              <div className="h-[200px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={70}
-                      innerRadius={40}
-                    >
-                      {categoryData.map((entry, i) => (
-                        <Cell key={i} fill={getCategoryColor(entry.name)} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value) => [formatCurrency(Number(value ?? 0)), '']}
-                      contentStyle={{
-                        borderRadius: '10px',
-                        border: `1px solid ${'#2a2a2a'}`,
-                        backgroundColor: 'var(--bg-card)',
-                        color: 'var(--text-1)',
-                        fontSize: '13px',
-                      }}
-                    />
-                    <Legend
-                      iconType="circle"
-                      iconSize={8}
-                      formatter={(value) => <span style={{ fontSize: '11px', color: '#737373' }}>{value}</span>}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </>
-          )}
+          {/* Category breakdown — direct-labeled bar list (top 4 + "Annet"), no pie */}
+          {categoryData.length > 0 && (() => {
+            const sorted = [...categoryData].sort((a, b) => b.value - a.value);
+            const head = sorted.slice(0, 4);
+            const rest = sorted.slice(4);
+            const rows = rest.length
+              ? [...head, { name: lang === 'nb' ? 'Annet' : 'Other', value: rest.reduce((s, r) => s + r.value, 0) }]
+              : head;
+            const catTotal = rows.reduce((s, r) => s + r.value, 0);
+            const isAnnet = (name: string) => name === 'Annet' || name === 'Other';
+            return (
+              <>
+                <div className={`${sectionLabel} pt-2 pb-3 border-t border-[var(--border)]`}>
+                  {t.category} — {t.operationalLog}
+                </div>
+                <div className="flex flex-col gap-3">
+                  {rows.map((r, i) => {
+                    const pct = catTotal > 0 ? (r.value / catTotal) * 100 : 0;
+                    const color = isAnnet(r.name) ? '#5F6555' : getCategoryColor(r.name);
+                    return (
+                      <div key={i} className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between text-[12.5px]">
+                          <span className="flex items-center gap-2 text-[var(--text-1)] min-w-0">
+                            <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ backgroundColor: color }} />
+                            <span className="truncate">{r.name}</span>
+                          </span>
+                          <span className="font-mono text-[var(--text-2)] tabular-nums shrink-0">{formatCurrency(r.value)}</span>
+                        </div>
+                        <div className="h-1.5 rounded-[3px] bg-[var(--bg-raised)] overflow-hidden">
+                          <div className="h-full rounded-[3px]" style={{ width: `${pct}%`, background: color }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
@@ -548,12 +543,12 @@ const BudgetPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   {day.spent > 0 && (
-                    <span className="text-[12px] font-mono font-semibold text-[#ef4444]">−{formatCurrency(day.spent)}</span>
+                    <span className="text-[12px] font-mono font-semibold text-[var(--negative)]">−{formatCurrency(day.spent)}</span>
                   )}
                   <span className={`text-[12px] font-mono font-bold px-2 py-0.5 rounded-md ${
                     day.balance >= 0
                       ? 'bg-[var(--positive-bg)] text-[var(--positive)]'
-                      : 'bg-red-50 text-[#ef4444]'
+                      : 'bg-[var(--negative-bg)] text-[var(--negative)]'
                   }`}>
                     {formatCurrency(day.balance)}
                   </span>
@@ -569,10 +564,10 @@ const BudgetPage: React.FC = () => {
                       )}
                       <span>{tx.description}</span>
                       <span className="font-mono text-[var(--text-2)]">{formatCurrency(tx.amount)}</span>
-                      <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[var(--text-2)] hover:text-[#0ea5e9]">
+                      <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
                         <Edit2 size={11} />
                       </button>
-                      <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[#ef4444]">
+                      <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
                         <Trash2 size={11} />
                       </button>
                     </span>
@@ -582,7 +577,7 @@ const BudgetPage: React.FC = () => {
 
               <button
                 onClick={() => addDailyTransaction(day.dateStr)}
-                className="flex items-center gap-1 text-[#0ea5e9] text-[12px] font-medium"
+                className="flex items-center gap-1 text-[var(--accent)] text-[12px] font-medium"
               >
                 <PlusCircle size={13} strokeWidth={2} />
                 <span>{lang === 'nb' ? 'Legg til' : 'Add'}</span>
@@ -592,7 +587,7 @@ const BudgetPage: React.FC = () => {
 
           <div className="p-4 flex justify-between items-center bg-[var(--bg-raised)]">
             <span className={sectionLabel}>{t.endPeriodSurplus}</span>
-            <span className={`text-[15px] font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[#0ea5e9]' : 'text-[#ef4444]'}`}>
+            <span className={`text-[15px] font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[var(--accent)]' : 'text-[var(--negative)]'}`}>
               {formatCurrency(dailyData[dailyData.length - 1]?.balance || 0)}
             </span>
           </div>
@@ -628,17 +623,17 @@ const BudgetPage: React.FC = () => {
                           {tx.category && (
                             <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{tx.category}</span>
                           )}
-                          <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[var(--text-2)] hover:text-[#0ea5e9] transition-colors">
+                          <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
                             <Edit2 size={12} />
                           </button>
-                          <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[#ef4444] transition-colors">
+                          <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
                             <Trash2 size={12} />
                           </button>
                         </span>
                       ))}
                       <button
                         onClick={() => addDailyTransaction(day.dateStr)}
-                        className="text-[#0ea5e9] hover:opacity-70 p-1 transition-opacity"
+                        className="text-[var(--accent)] hover:opacity-70 p-1 transition-opacity"
                       >
                         <PlusCircle size={18} strokeWidth={2} />
                       </button>
@@ -646,16 +641,16 @@ const BudgetPage: React.FC = () => {
                   </td>
                   <td className="px-7 py-4 text-[13px] font-mono font-medium text-right">
                     {day.spent > 0 ? (
-                      <span className="text-[#ef4444]">−{formatCurrency(day.spent)}</span>
+                      <span className="text-[var(--negative)]">−{formatCurrency(day.spent)}</span>
                     ) : (
-                      <span className="text-[#e5e5e5]">—</span>
+                      <span className="text-[var(--text-2)]">—</span>
                     )}
                   </td>
                   <td className="px-7 py-4 text-right">
                     <span className={`text-[13px] font-mono font-bold px-2.5 py-1 rounded-md ${
                       day.balance >= 0
                         ? 'bg-[var(--positive-bg)] text-[var(--positive)]'
-                        : 'bg-red-50 text-[#ef4444]'
+                        : 'bg-[var(--negative-bg)] text-[var(--negative)]'
                     }`}>
                       {formatCurrency(day.balance)}
                     </span>
@@ -670,7 +665,7 @@ const BudgetPage: React.FC = () => {
                   {formatCurrency(totalSpentThisMonth)}
                 </td>
                 <td className="px-7 py-5 text-right">
-                  <span className={`text-xl font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[#0ea5e9]' : 'text-[#ef4444]'}`}>
+                  <span className={`text-xl font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[var(--accent)]' : 'text-[var(--negative)]'}`}>
                     {formatCurrency(dailyData[dailyData.length - 1]?.balance || 0)}
                   </span>
                 </td>
@@ -705,28 +700,25 @@ interface CardProps {
 }
 
 function Card({ title, value, sublabel, accent, editable, onEdit }: CardProps) {
+  // The highlighted stat is set apart by a brass hairline only — no glow, no gradient.
   const accentStyle: React.CSSProperties = accent
-    ? {
-        background:
-          'radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 60%), linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--violet) 8%, transparent)), var(--bg-card)',
-        borderColor: 'color-mix(in srgb, var(--accent) 25%, transparent)',
-      }
+    ? { background: 'var(--bg-3)', borderColor: 'var(--brass-dim)' }
     : { background: 'var(--bg-card)', borderColor: 'var(--border)' };
 
   return (
     <div
-      className="p-5 md:p-6 rounded-[20px] border flex flex-col gap-3 transition-all hover:-translate-y-px"
+      className="p-5 md:p-6 rounded-[8px] border flex flex-col gap-3"
       style={accentStyle}
     >
       <span
         className="text-[11px] font-semibold uppercase tracking-[0.14em]"
-        style={{ color: accent ? 'var(--accent)' : 'var(--text-3)' }}
+        style={{ color: accent ? 'var(--brass)' : 'var(--text-3)' }}
       >
         {title}
       </span>
       <div className="flex items-baseline gap-2">
         <span
-          className="text-[24px] md:text-[28px] font-semibold tracking-[-0.02em] leading-none tabular-nums"
+          className="text-[24px] md:text-[28px] font-mono font-medium tracking-[-0.02em] leading-none tabular-nums"
           style={{ color: 'var(--text-1)' }}
         >
           {value}
