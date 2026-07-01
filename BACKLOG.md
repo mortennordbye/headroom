@@ -17,14 +17,6 @@ Known limitations:
 - **`recommendedInvestment` on Assets is silently month-coupled** — it derives from `effectiveIncome` (month-scoped), so with the picker hidden on `/assets` the value still reflects whatever month was last selected on Budget/Dashboard. **Where**: `calcRecommendations(effectiveIncome, …)` at `src/context/FinanceContext.tsx:1654`, consumed in `src/pages/AssetPage.tsx`.
 - **Net-worth history editor covers a rolling 12-month window** matching the Dashboard chart. Editing months older than 12 back isn't exposed.
 
-## PWA — raster home-screen icons
-
-Mostly shipped with the dark old-money theme (2026-07): raster favicons and the apple-touch-icon now exist (`public/favicon.ico` 16/32/48, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` 180×180 with a dark rounded background), wired up in `index.html` + `public/manifest.webmanifest`. They were rasterized via headless Chrome canvas (no `sharp`/`resvg` available locally).
-
-**Remaining**: Android/Chrome install prompt still wants `192×192` and `512×512` PNGs, including a `"purpose": "maskable"` variant with safe-zone padding. Generate from `public/favicon.svg` (brass mark on `#0E100D`) and add the entries to `public/manifest.webmanifest`.
-
-**Where**: `public/`, `public/manifest.webmanifest`.
-
 ## Dark old-money theme — follow-ups
 
 The `theme/dark-old-money` branch reskins the whole app (tokens in `src/index.css`, restyled `Card`/`Button`/`Layout`, donut/pie → allocation-strip/bar-list, serif headings, mono figures, ≤8px radii, no gradients/shadows, new favicon). Deferred / noticed items:
