@@ -2,6 +2,13 @@
 
 Items deferred from prior work. When an item is finished, remove it.
 
+## Debt modeling — follow-ups
+
+Non-mortgage debts (studielån / forbrukslån / kredittkort) now exist (`Debt` in `src/context/FinanceContext.tsx`, math in `src/lib/debt.ts`, UI in `src/components/DebtSection.tsx` on the Formue page). They reduce the headline net worth (`netWorth = totalEquity − totalDebt`) and feed the gjeldsgrad metric. Remaining:
+
+- **Debts aren't historized or projected.** The Dashboard 12-month net-worth chart and the Formue growth projection are asset-equity based, so when debts > 0 the hero/highlight net-worth number sits slightly below the chart's latest point, and the growth projection's "Nå" starts from asset equity (excludes other debt). To fix: snapshot `debts` in `BalanceSnapshot` and factor debt paydown into `calcNetWorthProjectionByBucket` (mirrors the existing "contributions/rates not snapshotted" caveats).
+- **Debt payments don't flow into the budget.** A debt's `minPayment` isn't reflected as a fixed expense on the Budget page — consider surfacing total monthly debt service there.
+
 ## Time/data-model rethink — follow-ups
 
 Shipped (2026-07): the contextual month picker, provenance badges, editable net-worth history, monthly balance snapshots, and the balance-page time machine are all done. Details: contextual picker (interactive only on `/` and `/overview`; static "as of today" marker elsewhere; hidden on `/settings` — `MONTH_SCOPED_ROUTES` / `HIDE_TIME_MARKER_ROUTES` in `src/components/Layout.tsx`); `ProvenanceBadge` Default/Yours/Estimate (`src/lib/provenance.ts`, `src/components/ui/ProvenanceBadge.tsx`) on high-impact assumptions across Assets/Settings/Pension/Employer Cost + a Dashboard "defaults nudge"; `setNetWorthForMonth`/`clearNetWorthForMonth` + `NetWorthHistoryModal` (`src/components/NetWorthHistoryModal.tsx`); `BalanceSnapshot` + `balanceSnapshots` auto-captured for the current calendar month and persisted/exported/imported; `useBalanceHistory` (`src/hooks/useBalanceHistory.ts`) + `BalanceHistoryBar` (`src/components/BalanceHistoryBar.tsx`) making Assets/Loan/Pension render read-only history, with shared equity math in `src/lib/equity.ts`. Demo data (`src/lib/demoData.ts`) seeds 6 months of snapshots so demo mode showcases it.

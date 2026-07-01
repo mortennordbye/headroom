@@ -25,6 +25,7 @@ import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
 import EditModal, { type ModalField } from '../components/EditModal';
+import DebtSection from '../components/DebtSection';
 import ChartTooltip from '../components/ChartTooltip';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
@@ -47,6 +48,7 @@ const AssetPage: React.FC = () => {
     assets: liveAssets,
     updateAsset,
     formatCurrency,
+    totalDebt,
     growthReturnRate,
     setGrowthReturnRate,
     houseGrowthRate,
@@ -72,6 +74,8 @@ const AssetPage: React.FC = () => {
     () => computeEquityBreakdown(assets),
     [assets],
   );
+  // True net worth also nets out non-mortgage debts (studielån, forbrukslån, …).
+  const netWorth = totalEquity - totalDebt;
 
     const [modal, setModal] = useState<ModalConfig | null>(null);
     const openModal = (config: ModalConfig) => setModal(config);
@@ -158,8 +162,8 @@ const AssetPage: React.FC = () => {
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
           {lang === 'nb'
-            ? `Netto egenkapital ${formatCurrency(totalEquity)}. Investering ${formatCurrency(netInvestment)}, boligegenkapital ${formatCurrency(houseEquity)}, kontanter ${formatCurrency(cashTotal)}.`
-            : `Net equity ${formatCurrency(totalEquity)}. Investment ${formatCurrency(netInvestment)}, property equity ${formatCurrency(houseEquity)}, cash ${formatCurrency(cashTotal)}.`}
+            ? `Netto egenkapital ${formatCurrency(netWorth)}. Investering ${formatCurrency(netInvestment)}, boligegenkapital ${formatCurrency(houseEquity)}, kontanter ${formatCurrency(cashTotal)}.`
+            : `Net equity ${formatCurrency(netWorth)}. Investment ${formatCurrency(netInvestment)}, property equity ${formatCurrency(houseEquity)}, cash ${formatCurrency(cashTotal)}.`}
         </p>
       </header>
 
@@ -356,7 +360,7 @@ const AssetPage: React.FC = () => {
                     color: 'var(--text-1)',
                   }}
                 >
-                  {formatCurrency(totalEquity)}
+                  {formatCurrency(netWorth)}
                 </div>
               </div>
               <div className="space-y-3 text-[13px] border-t pt-5 md:pt-6" style={{ borderColor: 'var(--rule)' }}>
@@ -369,7 +373,7 @@ const AssetPage: React.FC = () => {
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-2)' }}>{t.liabilities}</span>
                   <span className="font-semibold tabular-nums" style={{ color: 'var(--negative)' }}>
-                    −{formatCurrency(assets.houseDebt + taxOnGain + cryptoTaxOnGain)}
+                    −{formatCurrency(assets.houseDebt + taxOnGain + cryptoTaxOnGain + totalDebt)}
                   </span>
                 </div>
               </div>
@@ -378,6 +382,9 @@ const AssetPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Debt (non-mortgage) */}
+      <DebtSection />
 
       {/* Growth Projection */}
       <div className={`${card} p-5 md:p-7 space-y-5`}>

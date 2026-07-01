@@ -32,6 +32,19 @@ export interface FixedExpense {
   type?: ExpenseType; // optional for back-compat with older stored/imported data
 }
 
+// Non-mortgage debts (studielån, forbrukslån, kredittkort, …). Modeled separately
+// from the mortgage (which lives in Assets.houseDebt) and reduce net worth.
+export type DebtType = 'student' | 'consumer' | 'credit_card' | 'other';
+
+export interface Debt {
+  id: string;
+  name: string;
+  type: DebtType;
+  balance: number;      // current outstanding principal
+  rate: number;         // annual nominal interest rate, %
+  minPayment: number;   // normal monthly payment
+}
+
 export interface DailyTransaction {
   id: string;
   date: string; // ISO string
@@ -263,6 +276,15 @@ export const translations = {
     newAmount: 'Beløp:',
     expenseTypeLabel: 'Type:',
     expenseType: { fixed: 'Fast', variable: 'Variabel', subscription: 'Abonnement', insurance: 'Forsikring' },
+    debt: {
+      title: 'Gjeld', add: 'Legg til gjeld', none: 'Ingen gjeld registrert.',
+      name: 'Navn:', balance: 'Saldo:', rate: 'Rente (% p.a.):', minPayment: 'Månedlig betaling:', typeLabel: 'Type:',
+      sum: 'Sum gjeld', payoffIn: 'Nedbetalt om', interestLabel: 'renter', never: 'Dekker ikke renten',
+      planner: 'Nedbetalingsplan', strategy: 'Strategi', avalanche: 'Høyest rente først', snowball: 'Minst saldo først',
+      extra: 'Ekstra per måned', debtFree: 'Gjeldfri om', totalInterest: 'Totale renter',
+      interestSaved: 'Spart i renter', vsMinimum: 'vs. kun minstebetaling',
+      types: { student: 'Studielån', consumer: 'Forbrukslån', credit_card: 'Kredittkort', other: 'Annet' },
+    },
     editName: 'Nytt navn:',
     editAmount: 'Nytt beløp:',
     editDescription: 'Ny beskrivelse:',
@@ -717,6 +739,15 @@ export const translations = {
     newAmount: 'Amount:',
     expenseTypeLabel: 'Type:',
     expenseType: { fixed: 'Fixed', variable: 'Variable', subscription: 'Subscription', insurance: 'Insurance' },
+    debt: {
+      title: 'Debt', add: 'Add debt', none: 'No debt recorded.',
+      name: 'Name:', balance: 'Balance:', rate: 'Rate (% p.a.):', minPayment: 'Monthly payment:', typeLabel: 'Type:',
+      sum: 'Total debt', payoffIn: 'Paid off in', interestLabel: 'interest', never: "Doesn't cover interest",
+      planner: 'Payoff plan', strategy: 'Strategy', avalanche: 'Highest rate first', snowball: 'Smallest balance first',
+      extra: 'Extra per month', debtFree: 'Debt-free in', totalInterest: 'Total interest',
+      interestSaved: 'Interest saved', vsMinimum: 'vs. minimums only',
+      types: { student: 'Student loan', consumer: 'Consumer loan', credit_card: 'Credit card', other: 'Other' },
+    },
     editName: 'New name:',
     editAmount: 'New amount:',
     editDescription: 'New description:',
@@ -1263,6 +1294,10 @@ interface FinanceContextType {
   conservativeReason: ConservativeReason;
   fixedExpenses: FixedExpense[];
   setFixedExpenses: (val: FixedExpense[]) => void;
+  debts: Debt[];
+  setDebts: (val: Debt[]) => void;
+  totalDebt: number;
+  netWorth: number;
   dailyTransactions: DailyTransaction[];
   setDailyTransactions: (val: DailyTransaction[]) => void;
   recurringTemplates: TransactionTemplate[];
@@ -1367,6 +1402,7 @@ export interface ExportPayload {
   income: number;
   fixedExpenses: FixedExpense[];
   dailyTransactions: DailyTransaction[];
+  debts?: Debt[];
   assets: Assets;
   loan: LoanData;
   pension?: Pension;
@@ -1433,6 +1469,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [balanceSnapshots, setBalanceSnapshots] = useState<Record<string, BalanceSnapshot>>({});
   const [savingsTargetPercent, setSavingsTargetPercent] = useState<number>(20);
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(DEFAULT_FIXED_EXPENSES);
+  const [debts, setDebts] = useState<Debt[]>([]);
   const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
   const [recurringTemplates, setRecurringTemplates] = useState<TransactionTemplate[]>([]);
   const [assets, setAssets] = useState<Assets>(DEFAULT_ASSETS);
@@ -1479,6 +1516,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           setNetWorthHistory(data.netWorthHistory ?? {});
           setBalanceSnapshots(data.balanceSnapshots ?? {});
           setFixedExpenses(data.fixedExpenses ?? DEFAULT_FIXED_EXPENSES);
+          setDebts(data.debts ?? []);
           setDailyTransactions(data.dailyTransactions ?? []);
           setAssets({ ...DEFAULT_ASSETS, ...(data.assets ?? {}) });
           setLoan(data.loan ?? DEFAULT_LOAN);
@@ -1591,7 +1629,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // data on the backend. The real data stays safe in `demoSnapshot` until exit.
     if (demoMode) return;
     const payload = {
-      income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions,
+      income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
       assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
       lang, currentMonth: format(currentMonth, 'yyyy-MM'),
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
@@ -1604,7 +1642,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode]);
+  }, [income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode]);
 
   // --- Calculations ---
 
@@ -1731,6 +1769,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Latent tax floored at 0: a loss (negative gain) is not a liquid asset, so it
   // must not inflate net worth. The UI clamps inputs ≥0 but JSON import does not.
   const { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity } = computeEquityBreakdown(assets);
+  // `totalEquity` is the asset-side figure (mortgage already netted in houseEquity).
+  // Non-mortgage debts reduce it further to give true net worth.
+  const totalDebt = debts.reduce((s, d) => s + Math.max(0, d.balance), 0);
+  const netWorth = totalEquity - totalDebt;
   // Single source of truth for the mortgage rate/term used by net-worth projections,
   // selected by the active housing mode (first-buyer & transitioning use the `loan`
   // inputs; homeowner uses the `homeowner` inputs).
@@ -1867,6 +1909,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.netWorthHistory !== undefined) setNetWorthHistory(data.netWorthHistory);
     if (data.balanceSnapshots !== undefined) setBalanceSnapshots(data.balanceSnapshots);
     if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses);
+    if (data.debts) setDebts(data.debts);
     if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions);
     if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets });
     if (data.pension) setPension({ ...DEFAULT_PENSION, ...data.pension });
@@ -1908,7 +1951,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const enableDemoMode = () => {
     if (demoMode) return;
     demoSnapshot.current = {
-      income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions,
+      income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
       assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
       lang, currentMonth: format(currentMonth, 'yyyy-MM'),
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
@@ -1939,6 +1982,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setNetWorthHistory({});
     setBalanceSnapshots({});
     setFixedExpenses([]);
+    setDebts([]);
     setDailyTransactions([]);
     setRecurringTemplates([]);
     setAssets({
@@ -2067,6 +2111,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       savingsTargetPercent, setSavingsTargetPercent,
       recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
       fixedExpenses, setFixedExpenses, dailyTransactions, setDailyTransactions,
+      debts, setDebts, totalDebt, netWorth,
       recurringTemplates, setRecurringTemplates,
       assets, updateAsset, loan, updateLoan, pension, updatePension,
       housingMode, setHousingMode, homeowner, updateHomeowner, transition, updateTransition,

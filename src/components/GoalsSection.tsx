@@ -48,7 +48,7 @@ interface ConfirmConfig {
 }
 
 const GoalsSection: React.FC = () => {
-  const { t, lang, goals, addGoal, updateGoal, removeGoal, assets, totalEquity, formatCurrency } = useFinance();
+  const { t, lang, goals, addGoal, updateGoal, removeGoal, assets, netWorth, formatCurrency } = useFinance();
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [confirm, setConfirm] = useState<ConfirmConfig | null>(null);
 
@@ -137,7 +137,7 @@ const GoalsSection: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {goals.map(g => {
-            const current = currentValueFor(g, { assets, totalEquity });
+            const current = currentValueFor(g, { assets, totalEquity: netWorth });
             const progress = g.target > 0 ? Math.min(100, (current / g.target) * 100) : 0;
             const remaining = Math.max(0, g.target - current);
             const isComplete = current >= g.target;

@@ -127,6 +127,12 @@ export function getDemoData(): Partial<ExportPayload> {
       { id: 'demo-fx-7', name: 'Mat', amount: 6500, type: 'variable' },
     ],
 
+    debts: [
+      { id: 'demo-debt-1', name: 'Studielån (Lånekassen)', type: 'student', balance: 284000, rate: 4.9, minPayment: 3200 },
+      { id: 'demo-debt-2', name: 'Kredittkort', type: 'credit_card', balance: 24500, rate: 22.9, minPayment: 1500 },
+      { id: 'demo-debt-3', name: 'Forbrukslån', type: 'consumer', balance: 55000, rate: 12.5, minPayment: 2500 },
+    ],
+
     dailyTransactions: [
       { id: 'demo-tx-1', date: dayThisMonth(3), description: 'Rema 1000', amount: 742, category: 'Mat' },
       { id: 'demo-tx-2', date: dayThisMonth(6), description: 'Vinmonopolet', amount: 389, category: 'Annet' },
