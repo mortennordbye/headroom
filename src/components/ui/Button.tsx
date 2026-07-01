@@ -21,32 +21,34 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-full font-medium select-none cursor-pointer transition-[transform,background,border-color,opacity] duration-150 disabled:cursor-not-allowed disabled:opacity-50';
+    'inline-flex items-center justify-center gap-2 rounded-[6px] font-medium select-none cursor-pointer transition-[background,border-color,opacity] duration-150 disabled:cursor-not-allowed disabled:opacity-50';
 
   let variantClass: string;
   let variantStyle: React.CSSProperties;
 
   if (variant === 'primary') {
-    variantClass = 'text-[#08080A] font-semibold border-0 hover:-translate-y-px';
+    // Forest fill — not brass (brass is reserved for totals/active-nav/warnings).
+    variantClass = 'font-semibold border';
     variantStyle = {
-      background: 'linear-gradient(135deg, var(--accent), var(--violet))',
-      boxShadow: '0 6px 20px color-mix(in srgb, var(--violet) 35%, transparent)',
+      background: 'var(--forest)',
+      borderColor: 'var(--forest)',
+      color: 'var(--text)',
     };
   } else if (variant === 'secondary') {
     variantClass = 'border';
     variantStyle = {
-      background: 'rgba(255,255,255,0.05)',
-      borderColor: 'var(--border)',
+      background: 'var(--bg-2)',
+      borderColor: 'var(--rule)',
       color: 'var(--text-1)',
     };
   } else if (variant === 'ghost') {
-    variantClass = 'border-0 hover:bg-[rgba(255,255,255,0.04)]';
+    variantClass = 'border-0 hover:bg-[var(--bg-2)]';
     variantStyle = { background: 'transparent', color: 'var(--text-2)' };
   } else {
     variantClass = 'border';
     variantStyle = {
       background: 'var(--negative-bg)',
-      borderColor: 'color-mix(in srgb, var(--negative) 40%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--negative) 45%, transparent)',
       color: 'var(--negative)',
     };
   }
