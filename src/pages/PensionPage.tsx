@@ -3,11 +3,15 @@ import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Briefcase, TrendingUp, Lock, Calculator } from 'lucide-react';
-import { useFinance, calcActiveGrossAnnual, type Pension } from '../context/FinanceContext';
+import { useFinance, calcActiveGrossAnnual, DEFAULT_PENSION, type Pension } from '../context/FinanceContext';
 import { IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
+import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
+import { provenanceOf } from '../lib/provenance';
+import BalanceHistoryBar from '../components/BalanceHistoryBar';
+import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import ChartTooltip from '../components/ChartTooltip';
 
 function formatAxisInt(val: number): string {
@@ -17,7 +21,11 @@ function formatAxisInt(val: number): string {
 }
 
 const PensionPage: React.FC = () => {
-  const { t, lang, pension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults } = useFinance();
+  const { t, lang, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults } = useFinance();
+
+  // Time machine: when viewing a past month, render that month's pension snapshot (read-only).
+  const hist = useBalanceHistory();
+  const pension = hist.snapshot?.pension ?? livePension;
 
   const currentYear = new Date().getFullYear();
   const hasBirthYear = pension.birthYear > 1900;
@@ -64,7 +72,12 @@ const PensionPage: React.FC = () => {
   const monthlyPensionGross = totalAtRetire / (drawdownYears * 12);
 
   return (
-    <div className="space-y-6 md:space-y-7">
+    <>
+    <BalanceHistoryBar hist={hist} />
+    <div
+      className={`space-y-6 md:space-y-7 ${hist.isLive ? '' : 'pointer-events-none select-none'}`}
+      style={{ opacity: hist.isLive ? 1 : 0.92 }}
+    >
       {/* Hero header */}
       <header className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
@@ -170,9 +183,9 @@ const PensionPage: React.FC = () => {
           </div>
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
             <NumberRow label={t.otpBalance} value={pension.otpBalance} onCommit={(v) => updatePension('otpBalance', v)} suffix="kr" />
-            <SliderRow label={t.otpEmployerPct} value={pension.otpEmployerPct} onChange={(v) => updatePension('otpEmployerPct', v)} min={0} max={10} step={0.5} suffix="%" />
+            <SliderRow label={t.otpEmployerPct} value={pension.otpEmployerPct} onChange={(v) => updatePension('otpEmployerPct', v)} min={0} max={10} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.otpEmployerPct, DEFAULT_PENSION.otpEmployerPct)} />} />
             <SliderRow label={t.otpEmployeePct} value={pension.otpEmployeePct} onChange={(v) => updatePension('otpEmployeePct', v)} min={0} max={5} step={0.5} suffix="%" />
-            <SliderRow label={t.otpGrowthRate} value={pension.otpGrowthRate} onChange={(v) => updatePension('otpGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" />
+            <SliderRow label={t.otpGrowthRate} value={pension.otpGrowthRate} onChange={(v) => updatePension('otpGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.otpGrowthRate, DEFAULT_PENSION.otpGrowthRate)} />} />
           </div>
           <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
             {lang === 'nb'
@@ -195,7 +208,7 @@ const PensionPage: React.FC = () => {
               onCommit={(v) => updatePension('ipsAnnualContribution', Math.min(Math.max(0, v), IPS_MAX_DEDUCTION))}
               suffix="kr/år"
             />
-            <SliderRow label={t.ipsGrowthRate} value={pension.ipsGrowthRate} onChange={(v) => updatePension('ipsGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" />
+            <SliderRow label={t.ipsGrowthRate} value={pension.ipsGrowthRate} onChange={(v) => updatePension('ipsGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.ipsGrowthRate, DEFAULT_PENSION.ipsGrowthRate)} />} />
           </div>
           <div className="mt-4 flex items-start gap-2 rounded-[12px] p-3" style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}>
             <Calculator size={14} className="mt-0.5 shrink-0" />
@@ -229,6 +242,7 @@ const PensionPage: React.FC = () => {
             max={75}
             step={1}
             suffix=""
+            badge={<ProvenanceBadge kind={provenanceOf(pension.retirementAge, DEFAULT_PENSION.retirementAge)} />}
           />
         </div>
         <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
@@ -238,6 +252,7 @@ const PensionPage: React.FC = () => {
         </p>
       </Card>
     </div>
+    </>
   );
 };
 
@@ -311,6 +326,7 @@ function SliderRow({
   max,
   step,
   suffix,
+  badge,
 }: {
   label: string;
   value: number;
@@ -319,13 +335,17 @@ function SliderRow({
   max: number;
   step: number;
   suffix: string;
+  badge?: React.ReactNode;
 }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between mb-2">
-        <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
-          {label}
-        </label>
+      <div className="flex items-baseline justify-between mb-2 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
+            {label}
+          </label>
+          {badge}
+        </div>
         <span className="text-[18px] font-semibold tabular-nums">
           {value}
           {suffix && <span className="text-[12px] ml-1" style={{ color: 'var(--text-3)' }}>{suffix}</span>}

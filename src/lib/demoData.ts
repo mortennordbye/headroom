@@ -1,4 +1,5 @@
-import type { ExportPayload } from '../context/FinanceContext';
+import type { ExportPayload, BalanceSnapshot, Assets, Pension } from '../context/FinanceContext';
+import { computeEquityBreakdown } from './equity';
 
 /**
  * A believable but entirely fictional dataset used by demo mode, so the app can
@@ -20,10 +21,100 @@ export function getDemoData(): Partial<ExportPayload> {
     return ym(d);
   };
 
+  const demoAssets: Assets = {
+    portfolio: 285000,
+    unrealizedGain: 62000,
+    taxRate: 37.84,
+    bsu: 33000,
+    savings: 95000,
+    houseValue: 4200000,
+    houseDebt: 2950000,
+    crypto: 48000,
+    cryptoUnrealizedGain: 15000,
+    cryptoTaxRate: 22,
+    bufferAccount: 60000,
+  };
+  const demoHomeowner = {
+    currentMortgageBalance: 2950000,
+    originalLoanAmount: 3400000,
+    rente: 5.5,
+    nedbetalingstid: 25,
+    termingebyr: 50,
+    skattefradragssats: 22,
+  };
+  const demoTransition = {
+    currentHouseValue: 4200000,
+    currentMortgageBalance: 2950000,
+    agentFeePercent: 3,
+    documentFee: 7500,
+    otherSaleCosts: 0,
+    bridgeMonths: 2,
+    bridgeLoanRate: 6.5,
+  };
+  const demoLoan = {
+    arslonn: 744000,
+    eksisterendeGjeld: 0,
+    egenkapital: 500000,
+    laanebelop: 3000000,
+    rente: 5.5,
+    nedbetalingstid: 25,
+    termingebyr: 50,
+    etableringsgebyr: 0,
+    skattefradragssats: 22,
+    betingetLaan: 2500000,
+    kjoepesum: 3500000,
+    gyldigTil: '',
+  };
+  const demoPension: Pension = {
+    otpBalance: 210000,
+    otpEmployerPct: 5,
+    otpEmployeePct: 0,
+    otpGrowthRate: 5,
+    ipsBalance: 48000,
+    ipsAnnualContribution: 15000,
+    ipsGrowthRate: 7,
+    birthYear: 1990,
+    retirementAge: 67,
+  };
+
+  // Build a believable 6-month back-history so demo mode can showcase the balance
+  // time machine and the net-worth chart. k=0 is the current month; older months
+  // taper growable balances down and leave the mortgage slightly higher.
+  const snapshotFor = (k: number): BalanceSnapshot => ({
+    housingMode: 'homeowner',
+    loan: demoLoan,
+    transition: demoTransition,
+    homeowner: { ...demoHomeowner, currentMortgageBalance: demoHomeowner.currentMortgageBalance + 8000 * k },
+    assets: {
+      ...demoAssets,
+      portfolio: Math.round(demoAssets.portfolio * (1 - 0.012 * k)),
+      unrealizedGain: Math.round(demoAssets.unrealizedGain * (1 - 0.03 * k)),
+      houseValue: Math.round(demoAssets.houseValue * (1 - 0.004 * k)),
+      houseDebt: demoAssets.houseDebt + 8000 * k,
+      crypto: Math.round(demoAssets.crypto * (1 - 0.02 * k)),
+      savings: Math.round(demoAssets.savings * (1 - 0.015 * k)),
+      bufferAccount: Math.round(demoAssets.bufferAccount * (1 - 0.01 * k)),
+    },
+    pension: {
+      ...demoPension,
+      otpBalance: Math.round(demoPension.otpBalance * (1 - 0.02 * k)),
+      ipsBalance: Math.round(demoPension.ipsBalance * (1 - 0.02 * k)),
+    },
+  });
+
+  const balanceSnapshots: Record<string, BalanceSnapshot> = {};
+  const netWorthHistory: Record<string, number> = {};
+  for (let k = 0; k <= 5; k++) {
+    const snap = snapshotFor(k);
+    balanceSnapshots[monthsAgo(k)] = snap;
+    netWorthHistory[monthsAgo(k)] = Math.round(computeEquityBreakdown(snap.assets).totalEquity);
+  }
+
   return {
     income: 62000,
     monthlyIncomes: {},
-    netWorthHistory: {},
+    netWorthHistory,
+    balanceSnapshots,
     savingsTargetPercent: 20,
 
     fixedExpenses: [
@@ -50,64 +141,14 @@ export function getDemoData(): Partial<ExportPayload> {
       { id: 'demo-rt-2', description: 'Lunsj', amount: 129, category: 'Mat' },
     ],
 
-    assets: {
-      portfolio: 285000,
-      unrealizedGain: 62000,
-      taxRate: 37.84,
-      bsu: 33000,
-      savings: 95000,
-      houseValue: 4200000,
-      houseDebt: 2950000,
-      crypto: 48000,
-      cryptoUnrealizedGain: 15000,
-      cryptoTaxRate: 22,
-      bufferAccount: 60000,
-    },
+    assets: demoAssets,
 
     housingMode: 'homeowner',
-    homeowner: {
-      currentMortgageBalance: 2950000,
-      originalLoanAmount: 3400000,
-      rente: 5.5,
-      nedbetalingstid: 25,
-      termingebyr: 50,
-      skattefradragssats: 22,
-    },
-    transition: {
-      currentHouseValue: 4200000,
-      currentMortgageBalance: 2950000,
-      agentFeePercent: 3,
-      documentFee: 7500,
-      otherSaleCosts: 0,
-      bridgeMonths: 2,
-      bridgeLoanRate: 6.5,
-    },
-    loan: {
-      arslonn: 744000,
-      eksisterendeGjeld: 0,
-      egenkapital: 500000,
-      laanebelop: 3000000,
-      rente: 5.5,
-      nedbetalingstid: 25,
-      termingebyr: 50,
-      etableringsgebyr: 0,
-      skattefradragssats: 22,
-      betingetLaan: 2500000,
-      kjoepesum: 3500000,
-      gyldigTil: '',
-    },
+    homeowner: demoHomeowner,
+    transition: demoTransition,
+    loan: demoLoan,
 
-    pension: {
-      otpBalance: 210000,
-      otpEmployerPct: 5,
-      otpEmployeePct: 0,
-      otpGrowthRate: 5,
-      ipsBalance: 48000,
-      ipsAnnualContribution: 15000,
-      ipsGrowthRate: 7,
-      birthYear: 1990,
-      retirementAge: 67,
-    },
+    pension: demoPension,
 
     jobs: [
       {

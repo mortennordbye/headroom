@@ -35,6 +35,9 @@ import {
 } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
+import BalanceHistoryBar from '../components/BalanceHistoryBar';
+import { useBalanceHistory } from '../hooks/useBalanceHistory';
+import { computeEquityBreakdown } from '../lib/equity';
 import {
   calcAmortizationSchedule,
   calcHomeownerMortgageStatus,
@@ -54,13 +57,23 @@ const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[v
 
 const LoanPage: React.FC = () => {
   const {
-    t, lang, loan, updateLoan,
-    housingMode, setHousingMode,
-    homeowner, updateHomeowner,
-    transition, updateTransition,
-    assets, houseEquity,
+    t, lang, loan: liveLoan, updateLoan,
+    housingMode: liveHousingMode, setHousingMode,
+    homeowner: liveHomeowner, updateHomeowner,
+    transition: liveTransition, updateTransition,
+    assets: liveAssets,
     formatCurrency,
   } = useFinance();
+
+  // Time machine: when viewing a past month, render that month's snapshot (read-only).
+  const hist = useBalanceHistory();
+  const snap = hist.snapshot;
+  const loan = snap?.loan ?? liveLoan;
+  const homeowner = snap?.homeowner ?? liveHomeowner;
+  const transition = snap?.transition ?? liveTransition;
+  const assets = snap?.assets ?? liveAssets;
+  const housingMode = snap?.housingMode ?? liveHousingMode;
+  const houseEquity = computeEquityBreakdown(assets).houseEquity;
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [showAmortization, setShowAmortization] = useState(false);
@@ -205,7 +218,12 @@ const LoanPage: React.FC = () => {
       : (lang === 'nb' ? 'Modellér overgang fra dagens bolig til en ny — netto salgsprovenu, mellomfinansiering og nytt lån.' : 'Model the move from your current home to a new one — net sale proceeds, bridge loan, and new mortgage.');
 
   return (
-    <div className="space-y-6 md:space-y-7 pb-8">
+    <>
+    <BalanceHistoryBar hist={hist} />
+    <div
+      className={`space-y-6 md:space-y-7 pb-8 ${hist.isLive ? '' : 'pointer-events-none select-none'}`}
+      style={{ opacity: hist.isLive ? 1 : 0.92 }}
+    >
 
       {/* Hero header */}
       <header className="max-w-4xl">
@@ -657,6 +675,7 @@ const LoanPage: React.FC = () => {
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
     </div>
+    </>
   );
 };
 

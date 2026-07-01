@@ -10,6 +10,7 @@ import {
 } from 'date-fns';
 import { calcRecommendations } from '../lib/calculations';
 import type { ConservativeReason } from '../lib/calculations';
+import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { getDemoData } from '../lib/demoData';
 import {
@@ -433,6 +434,33 @@ export const translations = {
     viewingPast: 'Historisk måned',
     viewingFuture: 'Fremtidig måned',
     viewingCurrent: 'Denne måneden',
+    asOfToday: 'Per i dag',
+    asOfTodayHint: 'Denne siden viser tall per i dag – ikke påvirket av månedsvelgeren.',
+    provenance: {
+      default: 'Standard',
+      custom: 'Ditt',
+      estimate: 'Estimert',
+      defaultHint: 'Standardverdi – du har ikke endret denne ennå.',
+      customHint: 'Du har satt denne verdien selv.',
+      estimateHint: 'Beregnet fra dine data.',
+    },
+    netWorthEditor: {
+      edit: 'Rediger historikk',
+      title: 'Formueshistorikk',
+      desc: 'Legg inn din faktiske nettoformue for tidligere måneder. Måneder du fyller inn blir ekte datapunkter; resten estimeres til du fyller dem inn.',
+      live: 'Live',
+      liveHint: 'Denne måneden oppdateres automatisk fra din nåværende egenkapital.',
+      placeholderEstimate: 'estimat',
+      reset: 'Nullstill',
+      done: 'Ferdig',
+      snapshotSaved: 'Full tilstand lagret – tilgjengelig for tidsmaskin senere',
+    },
+    timeMachine: {
+      viewing: 'Viser',
+      liveLabel: 'I dag (live)',
+      readOnly: 'Skrivebeskyttet historikk – gå til i dag for å redigere',
+      backToToday: 'Tilbake til i dag',
+    },
     salary: {
       title: 'Lønn',
       heroLabel: 'Lønn',
@@ -858,6 +886,33 @@ export const translations = {
     viewingPast: 'Past month',
     viewingFuture: 'Future month',
     viewingCurrent: 'Current month',
+    asOfToday: 'As of today',
+    asOfTodayHint: 'This page shows values as of today — not affected by the month picker.',
+    provenance: {
+      default: 'Default',
+      custom: 'Yours',
+      estimate: 'Estimate',
+      defaultHint: "Default value — you haven't changed this yet.",
+      customHint: 'You set this value.',
+      estimateHint: 'Calculated from your data.',
+    },
+    netWorthEditor: {
+      edit: 'Edit history',
+      title: 'Net worth history',
+      desc: 'Enter your actual net worth for past months. Months you fill in become real data points; the rest stay estimated until you do.',
+      live: 'Live',
+      liveHint: 'This month updates automatically from your current equity.',
+      placeholderEstimate: 'estimate',
+      reset: 'Reset',
+      done: 'Done',
+      snapshotSaved: 'Full state saved — available for the time machine later',
+    },
+    timeMachine: {
+      viewing: 'Viewing',
+      liveLabel: 'Today (live)',
+      readOnly: 'Read-only history — go to today to edit',
+      backToToday: 'Back to today',
+    },
     salary: {
       title: 'Salary',
       heroLabel: 'Salary',
@@ -1083,14 +1138,16 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
 
 // Data-based default assumptions. These are the researched starting points users
 // can tune — and restore to via the per-section "restore defaults" controls.
-const DEFAULT_GROWTH_RATES = {
+// eslint-disable-next-line react-refresh/only-export-components -- shared default, single source of truth
+export const DEFAULT_GROWTH_RATES = {
   growthReturnRate: 7,
   houseGrowthRate: 3,
   cashGrowthRate: 1,
   cryptoGrowthRate: 0,
 };
 
-const DEFAULT_TAX_RATES = {
+// eslint-disable-next-line react-refresh/only-export-components -- shared default, single source of truth
+export const DEFAULT_TAX_RATES = {
   stockTaxRate: 37.84,
   cryptoTaxRate: 22,
   customTaxRatePct: 30,
@@ -1144,7 +1201,8 @@ const DEFAULT_LOAN: LoanData = {
   gyldigTil: '1. jan 2027',
 };
 
-const DEFAULT_PENSION: Pension = {
+// eslint-disable-next-line react-refresh/only-export-components -- shared default, single source of truth
+export const DEFAULT_PENSION: Pension = {
   otpBalance: 0,
   otpEmployerPct: 5,
   otpEmployeePct: 0,
@@ -1181,6 +1239,9 @@ interface FinanceContextType {
   grossAnnualIncome: number;
   isMonthlyIncomeOverridden: boolean;
   netWorthHistory: Record<string, number>;
+  setNetWorthForMonth: (monthKey: string, value: number) => void;
+  clearNetWorthForMonth: (monthKey: string) => void;
+  balanceSnapshots: Record<string, BalanceSnapshot>;
   prevMonthIncome: number;
   prevMonthSpending: number;
   effectiveIncome: number;
@@ -1282,6 +1343,18 @@ interface FinanceContextType {
   dataLoadFailed: boolean;
 }
 
+// A full capture of the balance-relevant state as of a given month, so the
+// balance pages can be viewed historically once snapshots accumulate. Keyed by
+// 'yyyy-MM'. Recorded automatically for the current calendar month.
+export interface BalanceSnapshot {
+  assets: Assets;
+  loan: LoanData;
+  pension: Pension;
+  homeowner: HomeownerData;
+  transition: TransitionData;
+  housingMode: HousingMode;
+}
+
 export interface ExportPayload {
   income: number;
   fixedExpenses: FixedExpense[];
@@ -1292,6 +1365,7 @@ export interface ExportPayload {
   recurringTemplates: TransactionTemplate[];
   monthlyIncomes?: Record<string, number>;
   netWorthHistory?: Record<string, number>;
+  balanceSnapshots?: Record<string, BalanceSnapshot>;
   housingMode?: HousingMode;
   homeowner?: HomeownerData;
   transition?: TransitionData;
@@ -1348,6 +1422,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [income, setIncome] = useState<number>(55000);
   const [monthlyIncomes, setMonthlyIncomes] = useState<Record<string, number>>({});
   const [netWorthHistory, setNetWorthHistory] = useState<Record<string, number>>({});
+  const [balanceSnapshots, setBalanceSnapshots] = useState<Record<string, BalanceSnapshot>>({});
   const [savingsTargetPercent, setSavingsTargetPercent] = useState<number>(20);
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(DEFAULT_FIXED_EXPENSES);
   const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
@@ -1394,6 +1469,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           setIncome(data.income ?? 55000);
           setMonthlyIncomes(data.monthlyIncomes ?? {});
           setNetWorthHistory(data.netWorthHistory ?? {});
+          setBalanceSnapshots(data.balanceSnapshots ?? {});
           setFixedExpenses(data.fixedExpenses ?? DEFAULT_FIXED_EXPENSES);
           setDailyTransactions(data.dailyTransactions ?? []);
           setAssets({ ...DEFAULT_ASSETS, ...(data.assets ?? {}) });
@@ -1507,7 +1583,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // data on the backend. The real data stays safe in `demoSnapshot` until exit.
     if (demoMode) return;
     const payload = {
-      income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions,
+      income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions,
       assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
       lang, currentMonth: format(currentMonth, 'yyyy-MM'),
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
@@ -1520,7 +1596,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode]);
+  }, [income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode]);
 
   // --- Calculations ---
 
@@ -1591,6 +1667,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // Manually record (or correct) the net worth for a past month, so the history
+  // chart reflects the user's real numbers instead of interpolated estimates.
+  // The current real month is not edited here — it auto-snapshots from live equity.
+  const setNetWorthForMonth = (key: string, value: number) => {
+    setNetWorthHistory(prev => ({ ...prev, [key]: Math.round(value) }));
+  };
+
+  const clearNetWorthForMonth = (key: string) => {
+    setNetWorthHistory(prev => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   const totalResidual = effectiveIncome - totalFixedExpenses;
   const monthlyBudget = recommendedSpending;
   const daysInMonth = getDaysInMonth(currentMonth);
@@ -1630,17 +1722,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Latent tax floored at 0: a loss (negative gain) is not a liquid asset, so it
   // must not inflate net worth. The UI clamps inputs ≥0 but JSON import does not.
-  const taxOnGain = (Math.max(0, assets.unrealizedGain) * assets.taxRate) / 100;
-  const netInvestment = assets.portfolio - taxOnGain;
-  const houseEquity = assets.houseValue - assets.houseDebt;
-  const cryptoTaxOnGain = (Math.max(0, assets.cryptoUnrealizedGain) * assets.cryptoTaxRate) / 100;
-  const netCrypto = assets.crypto - cryptoTaxOnGain;
+  const { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity } = computeEquityBreakdown(assets);
   // Single source of truth for the mortgage rate/term used by net-worth projections,
   // selected by the active housing mode (first-buyer & transitioning use the `loan`
   // inputs; homeowner uses the `homeowner` inputs).
   const mortgageRate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
   const mortgageTermYears = housingMode === 'homeowner' ? homeowner.nedbetalingstid : loan.nedbetalingstid;
-  const totalEquity = netInvestment + netCrypto + assets.bsu + assets.savings + assets.bufferAccount + houseEquity;
 
   // Snapshot current month's net worth whenever equity changes (only for the current real month)
   useEffect(() => {
@@ -1651,6 +1738,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setNetWorthHistory(prev => ({ ...prev, [monthKey]: Math.round(totalEquity) }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalEquity]);
+
+  // Capture the full balance state for the current calendar month whenever it
+  // changes, so the balance pages can be viewed historically later. This state is
+  // not month-scoped, so we always target the real current month regardless of the
+  // selected month.
+  useEffect(() => {
+    if (!loaded.current) return;
+    const nowKey = format(new Date(), 'yyyy-MM');
+    setBalanceSnapshots(prev => ({
+      ...prev,
+      [nowKey]: { assets, loan, pension, homeowner, transition, housingMode },
+    }));
+  }, [assets, loan, pension, homeowner, transition, housingMode]);
 
   const updateAsset = (key: keyof Assets, value: number) => {
     setAssets(prev => ({ ...prev, [key]: value }));
@@ -1757,6 +1857,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.income !== undefined) setIncome(data.income);
     if (data.monthlyIncomes !== undefined) setMonthlyIncomes(data.monthlyIncomes);
     if (data.netWorthHistory !== undefined) setNetWorthHistory(data.netWorthHistory);
+    if (data.balanceSnapshots !== undefined) setBalanceSnapshots(data.balanceSnapshots);
     if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses);
     if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions);
     if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets });
@@ -1799,7 +1900,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const enableDemoMode = () => {
     if (demoMode) return;
     demoSnapshot.current = {
-      income, monthlyIncomes, netWorthHistory, fixedExpenses, dailyTransactions,
+      income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions,
       assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
       lang, currentMonth: format(currentMonth, 'yyyy-MM'),
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
@@ -1828,6 +1929,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setIncome(0);
     setMonthlyIncomes({});
     setNetWorthHistory({});
+    setBalanceSnapshots({});
     setFixedExpenses([]);
     setDailyTransactions([]);
     setRecurringTemplates([]);
@@ -1952,7 +2054,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       currentMonth, setCurrentMonth, income, setIncome,
       monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
       derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
-      netWorthHistory, prevMonthIncome, prevMonthSpending,
+      netWorthHistory, setNetWorthForMonth, clearNetWorthForMonth, balanceSnapshots, prevMonthIncome, prevMonthSpending,
       effectiveIncome, averageIncome,
       savingsTargetPercent, setSavingsTargetPercent,
       recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,

@@ -2,6 +2,21 @@
 
 Items deferred from prior work. When an item is finished, remove it.
 
+## Time/data-model rethink — follow-ups
+
+Shipped (2026-07): the contextual month picker, provenance badges, editable net-worth history, monthly balance snapshots, and the balance-page time machine are all done. Details: contextual picker (interactive only on `/` and `/overview`; static "as of today" marker elsewhere; hidden on `/settings` — `MONTH_SCOPED_ROUTES` / `HIDE_TIME_MARKER_ROUTES` in `src/components/Layout.tsx`); `ProvenanceBadge` Default/Yours/Estimate (`src/lib/provenance.ts`, `src/components/ui/ProvenanceBadge.tsx`) on high-impact assumptions across Assets/Settings/Pension/Employer Cost + a Dashboard "defaults nudge"; `setNetWorthForMonth`/`clearNetWorthForMonth` + `NetWorthHistoryModal` (`src/components/NetWorthHistoryModal.tsx`); `BalanceSnapshot` + `balanceSnapshots` auto-captured for the current calendar month and persisted/exported/imported; `useBalanceHistory` (`src/hooks/useBalanceHistory.ts`) + `BalanceHistoryBar` (`src/components/BalanceHistoryBar.tsx`) making Assets/Loan/Pension render read-only history, with shared equity math in `src/lib/equity.ts`. Demo data (`src/lib/demoData.ts`) seeds 6 months of snapshots so demo mode showcases it.
+
+Remaining:
+
+- **Deepen the time machine.** (a) Stepper state is per-page (each balance page defaults to live) — consider lifting it so the selected month carries across Assets/Loan/Pension. (b) `AssetPage` projections in history mode still use the *live* `mortgageRate`/`mortgageTermYears`/`recommendedInvestment` (forward assumptions, not snapshotted). (c) `PensionPage` history shows snapshot pension balances but live `salaries`/`jobs` (contributions aren't snapshotted). (d) Let users hand-enter historical breakdowns to backfill months from before they used the app.
+- **Extend provenance badges to the remaining defaults** — fixed-expense seeds, whole `loan`/`homeowner`/`transition` objects, `savingsTargetPercent`. Consider a first-run setup flow that converts defaults into explicit choices, reusing `provenanceOf`.
+
+Known limitations:
+- **Provenance is a value-comparison heuristic** (`provenanceOf` in `src/lib/provenance.ts`): a user who deliberately sets a value equal to the default sees "Default". A true fix needs explicit provenance tracking in state (a `touched` set). The Dashboard "defaults nudge" count (`defaultAssumptions` in `src/pages/DashboardPage.tsx`) inherits the same heuristic.
+- **AssetPage growth RateChips are unbadged** — the compact chips at `src/pages/AssetPage.tsx:394-397` (which open the same editor as Settings) were left without badges to avoid clutter; the canonical badged surface for growth rates is Settings.
+- **`recommendedInvestment` on Assets is silently month-coupled** — it derives from `effectiveIncome` (month-scoped), so with the picker hidden on `/assets` the value still reflects whatever month was last selected on Budget/Dashboard. **Where**: `calcRecommendations(effectiveIncome, …)` at `src/context/FinanceContext.tsx:1654`, consumed in `src/pages/AssetPage.tsx`.
+- **Net-worth history editor covers a rolling 12-month window** matching the Dashboard chart. Editing months older than 12 back isn't exposed.
+
 ## PWA — raster home-screen icons
 
 The standalone-app setup (manifest + `apple-mobile-web-app-*` meta tags) is shipped, so the app now launches without Safari chrome. The home-screen / install icon is still the SVG favicon, which iOS does not render as an `apple-touch-icon` — it falls back to a screenshot of the page. Android/Chrome also prefer raster icons for the install prompt.
@@ -26,7 +41,7 @@ The POC C restyle and Settings page are shipped; the additional insight features
 
 - **Real sparkline data on metric tiles** — `DashboardPage.tsx` hero uses `netWorthHistory` (real) but the small tiles (Residual / Can Spend / Investment) fall back to synthetic series. Need: monthly residual derived from `monthlyIncomes - totalFixedExpenses` over the last 12 months; daily-burn series from `dailyData`; monthly investment contributions from `monthlyIncomes * (savingsTargetPercent/100)`.
 - **Spending-by-category bars** — `BudgetPage` "Fordelingsanalyse" already has a Recharts horizontal bar chart; add MoM delta chips per category by computing the previous month's totals from `dailyTransactions`.
-- **Net-worth composition timeline** — `AssetPage` currently has a single net-worth projection chart; add a stacked-area chart of Investment / Property Equity / Crypto / Cash across the months in `netWorthHistory` (history only stores total equity today — needs schema extension to keep per-asset snapshots, OR derive composition retroactively from current ratios — pick).
+- **Net-worth composition timeline** — `AssetPage` currently has a single net-worth projection chart; add a stacked-area chart of Investment / Property Equity / Crypto / Cash over time. Per-asset history now EXISTS via `balanceSnapshots` (`src/context/FinanceContext.tsx`) — derive each month's composition with `computeEquityBreakdown(balanceSnapshots[m].assets)` (`src/lib/equity.ts`). Snapshots only accrue going forward, so the series is sparse until data builds — fall back to estimates/current ratios for months without a snapshot.
 - **Loan affordability chip** — `LoanPage` should show `loan.laanebelop / totalEquity` as a chip near the top. Trivial.
 - **Headline insight banner on Dashboard** — auto-generated single-sentence insights like "You spent 14% less on food this month than the 6-month average." Computation belongs in a new `src/lib/insights.ts`. Needs category data on transactions to be useful.
 
@@ -62,8 +77,8 @@ break current usage:
 
 - **Loan capacity oversimplified** — `LoanPage` first-buyer `totalLaaneevne = 5*arslonn + egenkapital - eksisterendeGjeld` omits the two binding Norwegian rules: the 85% LTV / 15%-equity cap and the +3pp affordability stress test. Should surface `maxPrice = min(maxDebt + equity, equity/0.15)` and a stress-tested payment. **Where**: `src/pages/LoanPage.tsx` (`totalLaaneevne`).
 - **Trygdeavgift low-income band** — `norwegianTax.ts:101` charges `gross * 7.8%` once above the 99 650 threshold. Correct for normal salaries (the flat rate IS on full personinntekt), but it overcharges in the ~99 650–144 000 *opptrapping* band where the real avgift is capped at 25% of income above the threshold, and it has a hard cliff at the threshold. Also the 2025 rate is arguably 7.7%, not 7.8%. Low impact (only part-time/low earners). **Where**: `src/lib/norwegianTax.ts` (`trygde`).
-- **Dashboard investment bars denominator** — `DashboardPage` monthly-investment bars use `income * savingsTargetPercent` (% of *gross income*), inconsistent with the projection/recommendation which use `residual * ratio`. Pick one definition. **Where**: `src/pages/DashboardPage.tsx` (`investmentBars`, ~line 139).
-- **`ipsTaxSaving` hardcodes 22%** — `PensionPage` shows IPS tax saving as `contribution * 0.22`. Correct for the Norwegian regime, but in `region === 'generic'` the real saving is `customTaxRatePct`, so the displayed figure is wrong there. **Where**: `src/pages/PensionPage.tsx:38`.
+- **Dashboard investment bars denominator** — `DashboardPage` monthly-investment bars use `income * savingsTargetPercent` (% of *gross income*), inconsistent with the projection/recommendation which use `residual * ratio`. Pick one definition. **Where**: `src/pages/DashboardPage.tsx` (`investmentBars`, ~line 164).
+- **`ipsTaxSaving` hardcodes 22%** — `PensionPage` shows IPS tax saving as `contribution * 0.22`. Correct for the Norwegian regime, but in `region === 'generic'` the real saving is `customTaxRatePct`, so the displayed figure is wrong there. **Where**: `src/pages/PensionPage.tsx:44`.
 - **Bonus / overtime never reach the budget** — entered on SalaryPage and shown in the comp chart, but `derivedMonthlyIncome` ignores them (lumpy income). Likely by-design; if they should count, add them to annual gross *before* tax (progressive). **Where**: `src/context/FinanceContext.tsx` (`derivedMonthlyIncome`).
 
 **Unblock**: each is self-contained; none needs new server data. Confirm the intended product behavior (esp. loan-capacity rule and bonus/overtime) before implementing.

@@ -20,10 +20,15 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { useFinance, type Assets, type Pension } from '../context/FinanceContext';
+import { useFinance, DEFAULT_TAX_RATES, type Assets, type Pension } from '../context/FinanceContext';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
+import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
+import { provenanceOf } from '../lib/provenance';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
+import BalanceHistoryBar from '../components/BalanceHistoryBar';
+import { useBalanceHistory } from '../hooks/useBalanceHistory';
+import { computeEquityBreakdown } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear } from '../lib/calculations';
 
 interface ModalConfig {
@@ -39,14 +44,8 @@ const AssetPage: React.FC = () => {
   const {
     t,
     lang,
-    assets,
+    assets: liveAssets,
     updateAsset,
-    totalEquity,
-    taxOnGain,
-    netInvestment,
-    houseEquity,
-    cryptoTaxOnGain,
-    netCrypto,
     formatCurrency,
     growthReturnRate,
     setGrowthReturnRate,
@@ -57,13 +56,22 @@ const AssetPage: React.FC = () => {
     cryptoGrowthRate,
     setCryptoGrowthRate,
     recommendedInvestment,
-    pension,
+    pension: livePension,
     updatePension,
     mortgageRate,
     mortgageTermYears,
     restoreAssetTaxDefaults,
     restoreGrowthRateDefaults,
   } = useFinance();
+
+  // Time machine: when viewing a past month, render that month's snapshot (read-only).
+  const hist = useBalanceHistory();
+  const assets = hist.snapshot?.assets ?? liveAssets;
+  const pension = hist.snapshot?.pension ?? livePension;
+  const { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity } = useMemo(
+    () => computeEquityBreakdown(assets),
+    [assets],
+  );
 
     const [modal, setModal] = useState<ModalConfig | null>(null);
     const openModal = (config: ModalConfig) => setModal(config);
@@ -130,7 +138,12 @@ const AssetPage: React.FC = () => {
 
   const cashTotal = assets.bsu + assets.savings + assets.bufferAccount;
   return (
-    <div className="space-y-6 md:space-y-7">
+    <>
+    <BalanceHistoryBar hist={hist} />
+    <div
+      className={`space-y-6 md:space-y-7 ${hist.isLive ? '' : 'pointer-events-none select-none'}`}
+      style={{ opacity: hist.isLive ? 1 : 0.92 }}
+    >
       {/* Hero header */}
       <header className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
@@ -182,6 +195,7 @@ const AssetPage: React.FC = () => {
                 onEdit={() => openAssetEdit(t.taxRate, assets.taxRate, 'taxRate')}
                 formatCurrency={(v) => v.toFixed(2)}
                 icon={<Percent size={12} className="text-[var(--text-2)]" />}
+                badge={<ProvenanceBadge kind={provenanceOf(assets.taxRate, DEFAULT_TAX_RATES.stockTaxRate)} />}
               />
               <div className="flex justify-between py-3.5 text-[12px] text-[#ef4444] font-medium border-t border-[var(--border)] mt-1">
                 <span>{t.liabilityReserve}</span>
@@ -453,6 +467,7 @@ const AssetPage: React.FC = () => {
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
     </div>
+    </>
   );
 };
 
@@ -464,9 +479,10 @@ interface AssetRowProps {
   formatCurrency: (v: number) => string;
   isNegative?: boolean;
   icon?: React.ReactNode;
+  badge?: React.ReactNode;
 }
 
-function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, icon }: AssetRowProps) {
+function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, icon, badge }: AssetRowProps) {
   return (
     <div
       className={`flex justify-between items-center group py-3.5 border-b border-[var(--border)] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
@@ -475,6 +491,7 @@ function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, ic
       <span className={`text-[13px] font-medium flex items-center gap-1.5 transition-colors ${onEdit ? 'text-[var(--text-1)] group-hover:text-[#0ea5e9]' : 'text-[var(--text-2)]'}`}>
         {icon}
         {label}
+        {badge}
       </span>
       <div className="flex items-center gap-2">
         <span className={`text-[13px] font-mono font-medium transition-colors ${isNegative ? 'text-[#ef4444]' : onEdit ? 'text-[var(--text-1)] group-hover:opacity-70' : 'text-[var(--text-2)]'}`}>

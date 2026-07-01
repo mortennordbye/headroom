@@ -1,10 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Receipt, Layers, HandCoins } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
-import { calcEmployerCost, calcBillingRate } from '../lib/employerCost';
+import { calcEmployerCost, calcBillingRate, DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from '../lib/employerCost';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
+import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
+import { provenanceOf } from '../lib/provenance';
 
 const EmployerCostPage: React.FC = () => {
   const {
@@ -124,10 +126,10 @@ const EmployerCostPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-              <SliderRow label={feriepengerLabel} value={employerCostConfig.feriepengesatsPct} onChange={(v) => updateEmployerCostConfig('feriepengesatsPct', v)} min={0} max={16} step={0.1} suffix="%" />
-              <SliderRow label={payrollLabel} value={employerCostConfig.payrollTaxPct} onChange={(v) => updateEmployerCostConfig('payrollTaxPct', v)} min={0} max={20} step={0.1} suffix="%" />
-              <NumberRow label={ec.overheadFlat} value={employerCostConfig.overheadAnnual} onCommit={(v) => updateEmployerCostConfig('overheadAnnual', Math.max(0, v))} suffix="kr/år" />
-              <SliderRow label={ec.overheadPct} value={employerCostConfig.overheadPct} onChange={(v) => updateEmployerCostConfig('overheadPct', v)} min={0} max={50} step={1} suffix="%" />
+              <SliderRow label={feriepengerLabel} value={employerCostConfig.feriepengesatsPct} onChange={(v) => updateEmployerCostConfig('feriepengesatsPct', v)} min={0} max={16} step={0.1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.feriepengesatsPct, DEFAULT_EMPLOYER_COST_CONFIG.feriepengesatsPct)} />} />
+              <SliderRow label={payrollLabel} value={employerCostConfig.payrollTaxPct} onChange={(v) => updateEmployerCostConfig('payrollTaxPct', v)} min={0} max={20} step={0.1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.payrollTaxPct, DEFAULT_EMPLOYER_COST_CONFIG.payrollTaxPct)} />} />
+              <NumberRow label={ec.overheadFlat} value={employerCostConfig.overheadAnnual} onCommit={(v) => updateEmployerCostConfig('overheadAnnual', Math.max(0, v))} suffix="kr/år" badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.overheadAnnual, DEFAULT_EMPLOYER_COST_CONFIG.overheadAnnual)} />} />
+              <SliderRow label={ec.overheadPct} value={employerCostConfig.overheadPct} onChange={(v) => updateEmployerCostConfig('overheadPct', v)} min={0} max={50} step={1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.overheadPct, DEFAULT_EMPLOYER_COST_CONFIG.overheadPct)} />} />
             </div>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.overheadHint}</p>
 
@@ -170,8 +172,8 @@ const EmployerCostPage: React.FC = () => {
         </div>
 
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5">
-          <NumberRow label={ec.workHoursPerYear} value={billingConfig.workHoursPerYear} onCommit={(v) => updateBillingConfig('workHoursPerYear', Math.max(0, v))} suffix="t/år" />
-          <SliderRow label={ec.utilization} value={billingConfig.utilizationPct} onChange={(v) => updateBillingConfig('utilizationPct', v)} min={0} max={100} step={1} suffix="%" />
+          <NumberRow label={ec.workHoursPerYear} value={billingConfig.workHoursPerYear} onCommit={(v) => updateBillingConfig('workHoursPerYear', Math.max(0, v))} suffix="t/år" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.workHoursPerYear, DEFAULT_BILLING_CONFIG.workHoursPerYear)} />} />
+          <SliderRow label={ec.utilization} value={billingConfig.utilizationPct} onChange={(v) => updateBillingConfig('utilizationPct', v)} min={0} max={100} step={1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.utilizationPct, DEFAULT_BILLING_CONFIG.utilizationPct)} />} />
           <div>
             <div className="flex items-baseline justify-between mb-2">
               <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{ec.billableOverride}</label>
@@ -191,7 +193,7 @@ const EmployerCostPage: React.FC = () => {
               style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
             />
           </div>
-          <SliderRow label={ec.targetMargin} value={billingConfig.targetMarginPct} onChange={(v) => updateBillingConfig('targetMarginPct', v)} min={0} max={95} step={1} suffix="%" />
+          <SliderRow label={ec.targetMargin} value={billingConfig.targetMarginPct} onChange={(v) => updateBillingConfig('targetMarginPct', v)} min={0} max={95} step={1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.targetMarginPct, DEFAULT_BILLING_CONFIG.targetMarginPct)} />} />
         </div>
 
         <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -207,7 +209,7 @@ const EmployerCostPage: React.FC = () => {
           <StatBlock label={ec.annualRevenue} value={formatCurrency(billing.annualRevenueAtTarget)} />
           <StatBlock label={ec.annualProfit} value={formatCurrency(billing.profitAnnual)} color="var(--positive)" />
           <div className="col-span-2 lg:col-span-2 flex items-end">
-            <NumberRow label={ec.hoursPerDay} value={billingConfig.hoursPerDay} onCommit={(v) => updateBillingConfig('hoursPerDay', Math.max(0, v))} suffix="t" />
+            <NumberRow label={ec.hoursPerDay} value={billingConfig.hoursPerDay} onCommit={(v) => updateBillingConfig('hoursPerDay', Math.max(0, v))} suffix="t" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.hoursPerDay, DEFAULT_BILLING_CONFIG.hoursPerDay)} />} />
           </div>
         </div>
 
@@ -260,15 +262,18 @@ function BreakdownRow({ label, value, sub, muted, emphasis }: { label: string; v
   );
 }
 
-function NumberRow({ label, value, onCommit, suffix }: { label: string; value: number; onCommit: (v: number) => void; suffix?: string }) {
+function NumberRow({ label, value, onCommit, suffix, badge }: { label: string; value: number; onCommit: (v: number) => void; suffix?: string; badge?: React.ReactNode }) {
   const [draft, setDraft] = useState(value.toString());
   // Re-sync the editable draft when the committed value changes from outside.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setDraft(value.toString()); }, [value]);
   return (
     <div>
-      <div className="flex items-baseline justify-between mb-2">
-        <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</label>
+      <div className="flex items-baseline justify-between mb-2 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</label>
+          {badge}
+        </div>
         {suffix && <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{suffix}</span>}
       </div>
       <input
@@ -283,11 +288,14 @@ function NumberRow({ label, value, onCommit, suffix }: { label: string; value: n
   );
 }
 
-function SliderRow({ label, value, onChange, min, max, step, suffix }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step: number; suffix: string }) {
+function SliderRow({ label, value, onChange, min, max, step, suffix, badge }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step: number; suffix: string; badge?: React.ReactNode }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between mb-2">
-        <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</label>
+      <div className="flex items-baseline justify-between mb-2 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</label>
+          {badge}
+        </div>
         <span className="text-[18px] font-semibold tabular-nums">
           {value}
           {suffix && <span className="text-[12px] ml-1" style={{ color: 'var(--text-3)' }}>{suffix}</span>}

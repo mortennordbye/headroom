@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, type ReactNode } from 'react';
 import { format } from 'date-fns';
 import {
   Languages,
@@ -18,13 +18,20 @@ import {
   EyeOff,
   MonitorPlay,
 } from 'lucide-react';
-import { useFinance, type ExportPayload } from '../context/FinanceContext';
+import {
+  useFinance,
+  type ExportPayload,
+  DEFAULT_GROWTH_RATES,
+  DEFAULT_TAX_RATES,
+} from '../context/FinanceContext';
 import { NAV_ITEMS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { Button } from '../components/ui/Button';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { DeltaChip } from '../components/ui/DeltaChip';
+import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
+import { provenanceOf } from '../lib/provenance';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
 
@@ -57,6 +64,7 @@ export default function SettingsPage() {
     income,
     monthlyIncomes,
     netWorthHistory,
+    balanceSnapshots,
     fixedExpenses,
     dailyTransactions,
     recurringTemplates,
@@ -82,6 +90,8 @@ export default function SettingsPage() {
     toggleDemoMode,
     hiddenNavItems,
     toggleNavItem,
+    employerCostConfig,
+    billingConfig,
     importAll,
     resetAll,
   } = useFinance();
@@ -115,6 +125,7 @@ export default function SettingsPage() {
       income,
       monthlyIncomes,
       netWorthHistory,
+      balanceSnapshots,
       fixedExpenses,
       dailyTransactions,
       recurringTemplates,
@@ -143,6 +154,9 @@ export default function SettingsPage() {
       goals,
       region,
       customTaxRatePct,
+      employerCostConfig,
+      billingConfig,
+      hiddenNavItems,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -423,7 +437,10 @@ export default function SettingsPage() {
             {region === 'generic' && (
               <div className="space-y-3">
                 <div>
-                  <div className="text-[12px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-2)' }}>{t.settings.customTaxRate}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-[12px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-2)' }}>{t.settings.customTaxRate}</div>
+                    <ProvenanceBadge kind={provenanceOf(customTaxRatePct, DEFAULT_TAX_RATES.customTaxRatePct)} />
+                  </div>
                   <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{t.settings.customTaxRateDesc}</p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -506,6 +523,7 @@ export default function SettingsPage() {
               max={30}
               step={0.5}
               suffix="%"
+              badge={<ProvenanceBadge kind={provenanceOf(growthReturnRate, DEFAULT_GROWTH_RATES.growthReturnRate)} />}
             />
             <RangeRow
               label={t.settings.houseGrowthRate}
@@ -515,6 +533,7 @@ export default function SettingsPage() {
               max={20}
               step={0.5}
               suffix="%"
+              badge={<ProvenanceBadge kind={provenanceOf(houseGrowthRate, DEFAULT_GROWTH_RATES.houseGrowthRate)} />}
             />
             <RangeRow
               label={t.settings.cashGrowthRate}
@@ -524,6 +543,7 @@ export default function SettingsPage() {
               max={15}
               step={0.25}
               suffix="%"
+              badge={<ProvenanceBadge kind={provenanceOf(cashGrowthRate, DEFAULT_GROWTH_RATES.cashGrowthRate)} />}
             />
             <RangeRow
               label={t.settings.cryptoGrowthRate}
@@ -533,6 +553,7 @@ export default function SettingsPage() {
               max={100}
               step={1}
               suffix="%"
+              badge={<ProvenanceBadge kind={provenanceOf(cryptoGrowthRate, DEFAULT_GROWTH_RATES.cryptoGrowthRate)} />}
             />
           </div>
           <p className="mt-4 text-[12px]" style={{ color: 'var(--text-3)' }}>
@@ -894,6 +915,7 @@ function RangeRow({
   max,
   step,
   suffix,
+  badge,
 }: {
   label: string;
   value: number;
@@ -902,6 +924,7 @@ function RangeRow({
   max: number;
   step: number;
   suffix: string;
+  badge?: ReactNode;
 }) {
   const [draft, setDraft] = useState(value.toString());
   // Re-sync the editable draft when the committed value changes from outside.
@@ -917,12 +940,15 @@ function RangeRow({
   return (
     <div>
       <div className="flex items-baseline justify-between mb-2 gap-2">
-        <label
-          className="text-[11px] font-semibold uppercase tracking-[0.12em]"
-          style={{ color: 'var(--text-3)' }}
-        >
-          {label}
-        </label>
+        <div className="flex items-center gap-2 min-w-0">
+          <label
+            className="text-[11px] font-semibold uppercase tracking-[0.12em]"
+            style={{ color: 'var(--text-3)' }}
+          >
+            {label}
+          </label>
+          {badge}
+        </div>
         <div className="flex items-baseline gap-1">
           <input
             type="number"

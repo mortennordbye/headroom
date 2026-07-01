@@ -17,6 +17,11 @@ import { useFinance } from '../context/FinanceContext';
 
 import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 
+// Pages whose data is scoped to the selected month get the interactive month picker.
+const MONTH_SCOPED_ROUTES = ['/', '/overview'];
+// Pages with no time dimension at all hide the time marker entirely.
+const HIDE_TIME_MARKER_ROUTES = ['/settings'];
+
 const Layout: React.FC = () => {
   const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, hiddenNavItems, demoMode, toggleDemoMode } = useFinance();
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -25,6 +30,11 @@ const Layout: React.FC = () => {
   const moreActive = MORE_ROUTES.includes(location.pathname);
 
   const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
+
+  // The month picker only rules month-scoped pages (budget & dashboard).
+  // Everywhere else shows a static "as of today" marker, and settings hides it entirely.
+  const isMonthScoped = MONTH_SCOPED_ROUTES.includes(location.pathname);
+  const hideTimeMarker = HIDE_TIME_MARKER_ROUTES.includes(location.pathname);
 
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
@@ -77,58 +87,77 @@ const Layout: React.FC = () => {
           ))}
         </nav>
 
-        {/* Right cluster: month picker */}
+        {/* Right cluster: month picker (month-scoped pages) or static "as of today" marker */}
         <div className="flex items-center gap-2 shrink-0">
-          <div
-            className="flex items-center gap-1 rounded-full border p-1 transition-colors"
-            style={{
-              background: statusBg,
-              borderColor: isCurrentMonth ? 'color-mix(in srgb, var(--positive) 35%, transparent)' : 'var(--border)',
-            }}
-            title={statusLabel}
-          >
-            <button
-              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-              aria-label="Previous month"
-              className="grid place-items-center w-7 h-7 rounded-full transition-colors"
-              style={{ color: 'var(--text-2)' }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}
+          {isMonthScoped ? (
+            <>
+              <div
+                className="flex items-center gap-1 rounded-full border p-1 transition-colors"
+                style={{
+                  background: statusBg,
+                  borderColor: isCurrentMonth ? 'color-mix(in srgb, var(--positive) 35%, transparent)' : 'var(--border)',
+                }}
+                title={statusLabel}
+              >
+                <button
+                  onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                  aria-label="Previous month"
+                  className="grid place-items-center w-7 h-7 rounded-full transition-colors"
+                  style={{ color: 'var(--text-2)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}
+                >
+                  <ChevronLeft size={15} strokeWidth={2} />
+                </button>
+                <div className="flex items-center gap-1.5 px-2 min-w-[104px] justify-center">
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: statusColor }}
+                    aria-hidden
+                  />
+                  <span className="text-[13px] font-semibold tabular-nums">
+                    {format(currentMonth, 'MMM yyyy', { locale: dateLocale })}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                  aria-label="Next month"
+                  className="grid place-items-center w-7 h-7 rounded-full transition-colors"
+                  style={{ color: 'var(--text-2)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}
+                >
+                  <ChevronRight size={15} strokeWidth={2} />
+                </button>
+              </div>
+              {!isCurrentMonth && (
+                <button
+                  onClick={() => setCurrentMonth(startOfMonth(today))}
+                  className="hidden sm:inline-flex items-center px-3 h-8 rounded-full text-[12px] font-semibold transition-colors"
+                  style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 22%, transparent)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-bg)'; }}
+                  title={t.today}
+                >
+                  {t.today}
+                </button>
+              )}
+            </>
+          ) : hideTimeMarker ? null : (
+            <div
+              className="flex items-center gap-1.5 rounded-full border px-3 h-9"
+              style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--border)' }}
+              title={t.asOfTodayHint}
             >
-              <ChevronLeft size={15} strokeWidth={2} />
-            </button>
-            <div className="flex items-center gap-1.5 px-2 min-w-[104px] justify-center">
               <span
                 className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ background: statusColor }}
+                style={{ background: 'var(--text-3)' }}
                 aria-hidden
               />
-              <span className="text-[13px] font-semibold tabular-nums">
-                {format(currentMonth, 'MMM yyyy', { locale: dateLocale })}
+              <span className="text-[13px] font-medium tabular-nums" style={{ color: 'var(--text-2)' }}>
+                {t.asOfToday} · {format(today, 'd. MMM yyyy', { locale: dateLocale })}
               </span>
             </div>
-            <button
-              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-              aria-label="Next month"
-              className="grid place-items-center w-7 h-7 rounded-full transition-colors"
-              style={{ color: 'var(--text-2)' }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}
-            >
-              <ChevronRight size={15} strokeWidth={2} />
-            </button>
-          </div>
-          {!isCurrentMonth && (
-            <button
-              onClick={() => setCurrentMonth(startOfMonth(today))}
-              className="hidden sm:inline-flex items-center px-3 h-8 rounded-full text-[12px] font-semibold transition-colors"
-              style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 22%, transparent)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-bg)'; }}
-              title={t.today}
-            >
-              {t.today}
-            </button>
           )}
         </div>
       </header>

@@ -1,13 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import {
   TrendingUp, Wallet, Home, Zap, PiggyBank, BarChart2, Bitcoin, Shield, Receipt,
-  ArrowUpRight, BarChart3, LifeBuoy, Scale,
+  ArrowUpRight, BarChart3, LifeBuoy, Scale, Pencil, AlertTriangle,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { format, parse, format as fmtDate, subMonths } from 'date-fns';
-import { useFinance } from '../context/FinanceContext';
+import { useFinance, DEFAULT_GROWTH_RATES, DEFAULT_TAX_RATES } from '../context/FinanceContext';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
+import NetWorthHistoryModal from '../components/NetWorthHistoryModal';
 import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear,
   calcEmergencyFundStatus, calcDebtToIncome,
@@ -68,6 +70,18 @@ const DashboardPage: React.FC = () => {
   // ─── Financial-resilience metrics ───
   const emergencyFund = calcEmergencyFundStatus(assets.bufferAccount, totalFixedExpenses);
   const debtToIncome = calcDebtToIncome(assets.houseDebt, grossAnnualIncome);
+
+  // ─── How many market assumptions are still on their default value ───
+  // Surfaced as a nudge so the user knows their projections rest on untuned defaults.
+  const defaultAssumptions = useMemo(() => [
+    growthReturnRate === DEFAULT_GROWTH_RATES.growthReturnRate,
+    houseGrowthRate === DEFAULT_GROWTH_RATES.houseGrowthRate,
+    cashGrowthRate === DEFAULT_GROWTH_RATES.cashGrowthRate,
+    cryptoGrowthRate === DEFAULT_GROWTH_RATES.cryptoGrowthRate,
+    assets.taxRate === DEFAULT_TAX_RATES.stockTaxRate,
+    assets.cryptoTaxRate === DEFAULT_TAX_RATES.cryptoTaxRate,
+  ].filter(Boolean).length,
+  [growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, assets.taxRate, assets.cryptoTaxRate]);
 
   // ─── Net worth history (last 12 months) ───
   // Always produce exactly 12 monthly points on a fixed last-12-months grid.
@@ -130,6 +144,7 @@ const DashboardPage: React.FC = () => {
   // ─── Recent transactions ───
   type FilterMode = 'all' | 'income' | 'expense' | 'fixed';
   const [filter, setFilter] = useState<FilterMode>('all');
+  const [historyOpen, setHistoryOpen] = useState(false);
   const recentTransactions = useMemo(() => {
     const monthStr = format(currentMonth, 'yyyy-MM');
     let list = [...dailyTransactions]
@@ -272,6 +287,28 @@ const DashboardPage: React.FC = () => {
         </p>
       </header>
 
+      {/* Defaults nudge — market assumptions still untuned */}
+      {defaultAssumptions > 0 && (
+        <Link
+          to="/settings"
+          className="flex items-center justify-between gap-3 px-4 py-3 rounded-[var(--radius-md)] border text-[13px] transition-opacity hover:opacity-90"
+          style={{ background: 'var(--warning-bg)', borderColor: 'color-mix(in srgb, var(--warning) 30%, transparent)', color: 'var(--warning)' }}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span className="[overflow-wrap:anywhere]">
+              {lang === 'nb'
+                ? `${defaultAssumptions} av 6 markedsforutsetninger bruker fortsatt standardverdier — juster dem for mer presise prognoser.`
+                : `${defaultAssumptions} of 6 market assumptions still use default values — tune them for sharper projections.`}
+            </span>
+          </span>
+          <span className="shrink-0 font-semibold inline-flex items-center gap-1">
+            {lang === 'nb' ? 'Innstillinger' : 'Review'}
+            <ArrowUpRight size={14} />
+          </span>
+        </Link>
+      )}
+
       {/* Bento grid */}
       <div className="grid grid-cols-1 md:grid-cols-12 auto-rows-min gap-3 md:gap-4">
 
@@ -346,7 +383,19 @@ const DashboardPage: React.FC = () => {
                   </span>
                 )}
               </div>
-              <span style={{ color: 'var(--accent)' }}>{lang === 'nb' ? 'I dag' : 'Today'}</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setHistoryOpen(true)}
+                  className="inline-flex items-center gap-1 normal-case tracking-normal transition-colors"
+                  style={{ color: 'var(--text-2)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}
+                >
+                  <Pencil size={11} strokeWidth={2} />
+                  {t.netWorthEditor.edit}
+                </button>
+                <span style={{ color: 'var(--accent)' }}>{lang === 'nb' ? 'I dag' : 'Today'}</span>
+              </div>
             </div>
             <HeroChart
               history={netWorthSeries.map(p => ({ label: fmtDate(parse(p.monthKey, 'yyyy-MM', new Date()), 'MMM yy'), value: p.value, estimated: p.estimated }))}
@@ -853,6 +902,14 @@ const DashboardPage: React.FC = () => {
           )}
         </Card>
       </div>
+
+      {historyOpen && (
+        <NetWorthHistoryModal
+          series={netWorthSeries}
+          formatCurrency={formatCurrency}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
     </div>
   );
 };
