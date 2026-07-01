@@ -17,14 +17,6 @@ Known limitations:
 - **`recommendedInvestment` on Assets is silently month-coupled** — it derives from `effectiveIncome` (month-scoped), so with the picker hidden on `/assets` the value still reflects whatever month was last selected on Budget/Dashboard. **Where**: `calcRecommendations(effectiveIncome, …)` at `src/context/FinanceContext.tsx:1654`, consumed in `src/pages/AssetPage.tsx`.
 - **Net-worth history editor covers a rolling 12-month window** matching the Dashboard chart. Editing months older than 12 back isn't exposed.
 
-## Dark old-money theme — follow-ups
-
-The `theme/dark-old-money` branch reskins the whole app (tokens in `src/index.css`, restyled `Card`/`Button`/`Layout`, donut/pie → allocation-strip/bar-list, serif headings, mono figures, ≤8px radii, no gradients/shadows, new favicon). Deferred / noticed items:
-
-- **Fonts load from Google Fonts CDN** (`index.html`) — Cormorant Garamond, IBM Plex Mono, Inter. The PWA is offline-capable but these aren't precached (the service worker globs js/css/html/svg/webmanifest only), so an offline install falls back to system fonts. To guarantee the brand type offline, self-host the woff2 files under `public/` and `@font-face` them in `src/index.css` (or add the font files to the PWA precache glob).
-- **Expense-category colours are hash-based, not semantic.** `FixedExpense` has no `type` field (`src/context/FinanceContext.tsx`), so `getCategoryColor` in `src/pages/BudgetPage.tsx` hashes the name into the restricted role palette. The reference mockup colours categories by *type* (Fast=teal, Variabel=forest, Abonnement=slate, Forsikring=rust). To match it, add an expense `type` field (data-model change — was intentionally not done without sign-off) and map type→role colour.
-- **Pre-existing (not theme): `savingsTargetPercent` renders as a long unrounded float** in a few spots (e.g. Dashboard "Sparemål" chip, Settings slider readout). It's set to a raw ratio in `handleSpendingEdit`/`handleInvestmentEdit` (`src/components/SmartRecommendations.tsx`). Round on write or on display.
-
 ## Live SSB wage statistics
 
 `/api/wage-stats` currently returns a curated static series (server/index.js, `WAGE_STATS_STATIC`). Should query SSB table 11418 (or 13606) for live national median annual wage instead.

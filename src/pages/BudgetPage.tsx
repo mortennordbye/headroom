@@ -15,12 +15,13 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Cell,
   LabelList,
   type TooltipContentProps,
 } from 'recharts';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
-import { useFinance, type TransactionTemplate } from '../context/FinanceContext';
+import { useFinance, type TransactionTemplate, type ExpenseType } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -38,7 +39,15 @@ const CHART_COLORS = [
 const CHART_INK = '#9A9C8C';   // text-soft — axis labels
 const CHART_GRID = 'rgba(236,231,216,0.06)';
 const CHART_TRACK = 'rgba(236,231,216,0.05)';
-const TEAL = '#3F7373';
+
+// Fixed-expense type → role colour (matches the reference legend).
+const EXPENSE_TYPE_COLOR: Record<ExpenseType, string> = {
+  fixed: '#3F7373',        // teal — recurring/structural
+  variable: '#1F5A42',     // forest — variable spend
+  subscription: '#5B7280', // slate — subscriptions
+  insurance: '#B5533A',    // rust — insurance
+};
+const expenseColor = (type?: ExpenseType) => EXPENSE_TYPE_COLOR[type ?? 'fixed'];
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)] font-semibold';
@@ -107,17 +116,20 @@ const BudgetPage: React.FC = () => {
   };
 
   // --- Fixed Expenses ---
+  const typeOptions = (Object.keys(EXPENSE_TYPE_COLOR) as ExpenseType[]).map(v => ({ value: v, label: t.expenseType[v] }));
+
   const addFixedExpense = () => {
     openModal({
       title: t.fixedCosts,
       fields: [
         { key: 'name', label: t.newExpenseName, type: 'text', value: '', placeholder: 'Mat, Strøm...' },
         { key: 'amount', label: t.newAmount, type: 'number', value: '', placeholder: '0' },
+        { key: 'type', label: t.expenseTypeLabel, type: 'select', value: 'fixed', options: typeOptions },
       ],
       onSave: (vals) => {
         const amount = parsePositiveNumber(vals.amount);
         if (vals.name.trim() && amount !== null) {
-          setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: vals.name.trim(), amount }]);
+          setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: vals.name.trim(), amount, type: vals.type as ExpenseType }]);
           closeModal();
         } else {
           setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.newExpenseName + ' er påkrevd' : t.newAmount + ' må være et positivt tall' } : null);
@@ -126,17 +138,18 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  const editFixedExpense = (id: string, name: string, amount: number) => {
+  const editFixedExpense = (id: string, name: string, amount: number, type?: ExpenseType) => {
     openModal({
       title: name,
       fields: [
         { key: 'name', label: t.editName, type: 'text', value: name },
         { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
+        { key: 'type', label: t.expenseTypeLabel, type: 'select', value: type ?? 'fixed', options: typeOptions },
       ],
       onSave: (vals) => {
         const newAmount = parsePositiveNumber(vals.amount);
         if (vals.name.trim() && newAmount !== null) {
-          setFixedExpenses(fixedExpenses.map(e => e.id === id ? { ...e, name: vals.name.trim(), amount: newAmount } : e));
+          setFixedExpenses(fixedExpenses.map(e => e.id === id ? { ...e, name: vals.name.trim(), amount: newAmount, type: vals.type as ExpenseType } : e));
           closeModal();
         } else {
           setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.editName + ' er påkrevd' : t.editAmount + ' må være et positivt tall' } : null);
@@ -375,19 +388,28 @@ const BudgetPage: React.FC = () => {
               <PlusCircle size={18} strokeWidth={2} />
             </button>
           </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {(Object.keys(EXPENSE_TYPE_COLOR) as ExpenseType[]).map(ty => (
+              <span key={ty} className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
+                <span className="w-[7px] h-[7px] rounded-[2px]" style={{ background: EXPENSE_TYPE_COLOR[ty] }} />
+                {t.expenseType[ty]}
+              </span>
+            ))}
+          </div>
           <div className="space-y-0">
             {fixedExpenses.map((expense) => (
               <div key={expense.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0">
                 <span
-                  className="text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
-                  onClick={() => editFixedExpense(expense.id, expense.name, expense.amount)}
+                  className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0"
+                  onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type)}
                 >
-                  {expense.name}
+                  <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
+                  <span className="truncate">{expense.name}</span>
                 </span>
                 <div className="flex items-center gap-3">
                   <span
                     className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
-                    onClick={() => editFixedExpense(expense.id, expense.name, expense.amount)}
+                    onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type)}
                   >
                     {formatCurrency(expense.amount)}
                   </span>
@@ -453,9 +475,11 @@ const BudgetPage: React.FC = () => {
                   dataKey="amount"
                   radius={[0, 3, 3, 0]}
                   barSize={12}
-                  fill={TEAL}
                   background={{ fill: CHART_TRACK, radius: 3 } as unknown as React.ComponentProps<typeof Bar>['background']}
                 >
+                  {sortedExpenses.map((e, i) => (
+                    <Cell key={`cell-${i}`} fill={expenseColor(e.type)} />
+                  ))}
                   <LabelList
                     dataKey="amount"
                     position="right"

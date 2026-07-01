@@ -120,13 +120,13 @@ export default function SmartRecommendations() {
   const handleSpendingEdit = (newSpending: number) => {
     if (totalResidual <= 0) return;
     const clamped = Math.min(newSpending, totalResidual);
-    setSavingsTargetPercent(((totalResidual - clamped) / totalResidual) * 100);
+    setSavingsTargetPercent(Math.round(((totalResidual - clamped) / totalResidual) * 100));
   };
 
   const handleInvestmentEdit = (newInvest: number) => {
     if (totalResidual <= 0) return;
     const clamped = Math.min(newInvest, totalResidual);
-    setSavingsTargetPercent((clamped / totalResidual) * 100);
+    setSavingsTargetPercent(Math.round((clamped / totalResidual) * 100));
   };
 
   const totalSpentThisMonth = dailyData.reduce((s, d) => s + d.spent, 0);
@@ -191,7 +191,7 @@ export default function SmartRecommendations() {
             </div>
           ) : (
             <button onClick={() => setEditingPct(true)} className="flex items-center gap-1 group">
-              <span className="text-[13px] font-bold font-mono text-[var(--forest-light)]">{savingsTargetPercent}%</span>
+              <span className="text-[13px] font-bold font-mono text-[var(--forest-light)]">{Math.round(savingsTargetPercent)}%</span>
               <Edit2 size={11} className="text-[var(--text-2)] opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           )}
