@@ -35,6 +35,8 @@ const DashboardPage: React.FC = () => {
     monthlyIncomes,
     currentMonth,
     totalEquity,
+    totalDebt,
+    netWorth,
     netInvestment,
     netCrypto,
     houseEquity,
@@ -69,7 +71,7 @@ const DashboardPage: React.FC = () => {
 
   // ─── Financial-resilience metrics ───
   const emergencyFund = calcEmergencyFundStatus(assets.bufferAccount, totalFixedExpenses);
-  const debtToIncome = calcDebtToIncome(assets.houseDebt, grossAnnualIncome);
+  const debtToIncome = calcDebtToIncome(assets.houseDebt + totalDebt, grossAnnualIncome);
 
   // ─── How many market assumptions are still on their default value ───
   // Surfaced as a nudge so the user knows their projections rest on untuned defaults.
@@ -330,10 +332,10 @@ const DashboardPage: React.FC = () => {
               color: 'var(--text-1)',
             }}
           >
-            {formatCurrency(totalEquity)}
+            {formatCurrency(netWorth)}
           </div>
           <div className="text-[13px] mt-2" style={{ color: 'var(--text-2)' }}>
-            {lang === 'nb' ? 'Etter skatt, alle kontoer og formuesverdier' : 'Post-tax, all accounts & assets'}
+            {lang === 'nb' ? 'Etter skatt og all gjeld' : 'Post-tax, net of all debt'}
           </div>
 
           {/* Stat row */}
@@ -587,7 +589,7 @@ const DashboardPage: React.FC = () => {
             <span className="text-[11px] uppercase tracking-[0.1em] font-semibold" style={{ color: 'var(--text-3)' }}>
               {t.trueNetEquity}
             </span>
-            <span className="text-[18px] font-bold tabular-nums">{formatCurrency(Math.round(totalEquity))}</span>
+            <span className="text-[18px] font-bold tabular-nums">{formatCurrency(Math.round(netWorth))}</span>
           </div>
         </Card>
 
