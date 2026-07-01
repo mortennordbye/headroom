@@ -608,10 +608,10 @@ const DashboardPage: React.FC = () => {
                 {formatCurrency(recommendedInvestment)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb' ? `April · ${savingsTargetPercent}% mål nådd` : `${savingsTargetPercent}% target hit`}
+                {lang === 'nb' ? `April · ${Math.round(savingsTargetPercent)}% mål nådd` : `${Math.round(savingsTargetPercent)}% target hit`}
               </div>
             </div>
-            <DeltaChip tone="positive" size="sm">+{savingsTargetPercent}%</DeltaChip>
+            <DeltaChip tone="positive" size="sm">+{Math.round(savingsTargetPercent)}%</DeltaChip>
           </div>
 
           <MonthlyInvestmentBars bars={investmentBars} formatCurrency={formatCurrency} />

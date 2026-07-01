@@ -22,10 +22,14 @@ import {
 
 // --- Types ---
 
+// Category of a fixed expense — drives its colour role in the budget charts.
+export type ExpenseType = 'fixed' | 'variable' | 'subscription' | 'insurance';
+
 export interface FixedExpense {
   id: string;
   name: string;
   amount: number;
+  type?: ExpenseType; // optional for back-compat with older stored/imported data
 }
 
 export interface DailyTransaction {
@@ -257,6 +261,8 @@ export const translations = {
     editIncome: 'Sett månedsinntekt:',
     newExpenseName: 'Navn på utgift:',
     newAmount: 'Beløp:',
+    expenseTypeLabel: 'Type:',
+    expenseType: { fixed: 'Fast', variable: 'Variabel', subscription: 'Abonnement', insurance: 'Forsikring' },
     editName: 'Nytt navn:',
     editAmount: 'Nytt beløp:',
     editDescription: 'Ny beskrivelse:',
@@ -709,6 +715,8 @@ export const translations = {
     editIncome: 'Set monthly income:',
     newExpenseName: 'Expense name:',
     newAmount: 'Amount:',
+    expenseTypeLabel: 'Type:',
+    expenseType: { fixed: 'Fixed', variable: 'Variable', subscription: 'Subscription', insurance: 'Insurance' },
     editName: 'New name:',
     editAmount: 'New amount:',
     editDescription: 'New description:',
@@ -1126,14 +1134,14 @@ export const translations = {
 };
 
 const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
-  { id: '1', name: 'Huslån',          amount: 12000 },
-  { id: '2', name: 'Felleskostnader', amount: 3000  },
-  { id: '3', name: 'Forsikring',      amount: 400   },
-  { id: '4', name: 'Strøm',           amount: 1000  },
-  { id: '5', name: 'Trening',         amount: 500   },
-  { id: '6', name: 'Mobil',           amount: 400   },
-  { id: '7', name: 'Mat',             amount: 5000  },
-  { id: '8', name: 'Sparing',         amount: 5000  },
+  { id: '1', name: 'Huslån',          amount: 12000, type: 'fixed'        },
+  { id: '2', name: 'Felleskostnader', amount: 3000,  type: 'fixed'        },
+  { id: '3', name: 'Forsikring',      amount: 400,   type: 'insurance'    },
+  { id: '4', name: 'Strøm',           amount: 1000,  type: 'fixed'        },
+  { id: '5', name: 'Trening',         amount: 500,   type: 'subscription' },
+  { id: '6', name: 'Mobil',           amount: 400,   type: 'subscription' },
+  { id: '7', name: 'Mat',             amount: 5000,  type: 'variable'     },
+  { id: '8', name: 'Sparing',         amount: 5000,  type: 'fixed'        },
 ];
 
 // Data-based default assumptions. These are the researched starting points users

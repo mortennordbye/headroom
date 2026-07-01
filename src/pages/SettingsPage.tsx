@@ -508,7 +508,7 @@ export default function SettingsPage() {
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
             <RangeRow
               label={t.settings.savingsTargetPct}
-              value={savingsTargetPercent}
+              value={Math.round(savingsTargetPercent)}
               onChange={setSavingsTargetPercent}
               min={0}
               max={95}

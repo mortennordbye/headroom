@@ -118,13 +118,13 @@ export function getDemoData(): Partial<ExportPayload> {
     savingsTargetPercent: 20,
 
     fixedExpenses: [
-      { id: 'demo-fx-1', name: 'Huslån', amount: 16500 },
-      { id: 'demo-fx-2', name: 'Felleskostnader', amount: 3400 },
-      { id: 'demo-fx-3', name: 'Strøm', amount: 1300 },
-      { id: 'demo-fx-4', name: 'Forsikring', amount: 650 },
-      { id: 'demo-fx-5', name: 'Mobil/Internett', amount: 800 },
-      { id: 'demo-fx-6', name: 'Trening', amount: 500 },
-      { id: 'demo-fx-7', name: 'Mat', amount: 6500 },
+      { id: 'demo-fx-1', name: 'Huslån', amount: 16500, type: 'fixed' },
+      { id: 'demo-fx-2', name: 'Felleskostnader', amount: 3400, type: 'fixed' },
+      { id: 'demo-fx-3', name: 'Strøm', amount: 1300, type: 'fixed' },
+      { id: 'demo-fx-4', name: 'Forsikring', amount: 650, type: 'insurance' },
+      { id: 'demo-fx-5', name: 'Mobil/Internett', amount: 800, type: 'subscription' },
+      { id: 'demo-fx-6', name: 'Trening', amount: 500, type: 'subscription' },
+      { id: 'demo-fx-7', name: 'Mat', amount: 6500, type: 'variable' },
     ],
 
     dailyTransactions: [
