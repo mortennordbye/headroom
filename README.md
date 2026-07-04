@@ -37,6 +37,10 @@ make build
 
 Open http://localhost:8080.
 
+That's the whole setup — **no config files, no environment variables required.** Your data persists in the `headroom_data` volume across restarts and image upgrades. The container fixes its own storage permissions on startup, so persistent storage works out of the box with a Docker volume, a bind mount, NFS, or a Kubernetes PVC.
+
+**Running it on a server / behind a reverse proxy?** Just change the port binding (`-p 8080:3001` for all interfaces, or map it into your proxy) — nothing else is needed. See [Security](#security) before exposing it beyond localhost.
+
 ## Commands
 
 | Command | Description |
@@ -70,6 +74,18 @@ To use it from another device:
 - Reach it over a private network (VPN, Tailscale, WireGuard).
 
 Only change the binding to `0.0.0.0` (all interfaces) if you understand that this exposes unauthenticated access to everyone on the network.
+
+**Optional hardening:** set `ALLOWED_HOSTS` (see [Configuration](#configuration)) to reject requests whose `Host` header isn't one you expect — a small guard against DNS-rebinding. It's off by default so the app works behind any hostname without configuration.
+
+## Configuration
+
+All optional — the defaults are sensible and nothing needs to be set.
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `DATA_DIR` | `/data` (in Docker) | Where the SQLite database is stored. |
+| `PORT` | `3001` | Port the server listens on inside the container. |
+| `ALLOWED_HOSTS` | _(unset — all hosts allowed)_ | Comma-separated hostname allowlist, e.g. `finance.example.com,localhost`. When unset, no host filtering is applied. |
 
 ## Data persistence
 
