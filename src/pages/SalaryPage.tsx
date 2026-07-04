@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, lazy, Suspense } from 'react';
 import {
   TrendingUp,
   Briefcase,
@@ -44,6 +44,9 @@ import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isPositiveN
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+
+const TaxBreakdownChart = lazy(() => import('../components/charts/TaxBreakdownChart'));
+const MoneyFlowSankey = lazy(() => import('../components/charts/MoneyFlowSankey'));
 
 const WEEKS_PER_MONTH = 4.345;
 
@@ -833,6 +836,28 @@ const SalaryPage: React.FC = () => {
           value={current ? formatCurrency(trailingHourly) : '—'}
           sub={current ? `${current.hoursPerWeek.toFixed(1)} t/uke` : ''}
         />
+      </div>
+
+      {/* Tax breakdown + money flow */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
+        <div className={`${card} p-5 md:p-7`}>
+          <div className="pb-4 mb-2 border-b border-[var(--border)]">
+            <h3 className={sectionLabel}>{t.charts.taxBreakdownTitle}</h3>
+            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.taxBreakdownSub}</p>
+          </div>
+          <div className="h-[260px] w-full">
+            <Suspense fallback={<div className="h-full w-full" />}><TaxBreakdownChart /></Suspense>
+          </div>
+        </div>
+        <div className={`${card} p-5 md:p-7`}>
+          <div className="pb-4 mb-2 border-b border-[var(--border)]">
+            <h3 className={sectionLabel}>{t.charts.moneyFlowTitle}</h3>
+            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.moneyFlowSub}</p>
+          </div>
+          <div className="h-[260px] w-full">
+            <Suspense fallback={<div className="h-full w-full" />}><MoneyFlowSankey /></Suspense>
+          </div>
+        </div>
       </div>
 
       {/* Next salary review — forward-looking helper for negotiation moments. */}
