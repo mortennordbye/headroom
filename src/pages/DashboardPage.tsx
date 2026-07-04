@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, lazy, Suspense } from 'react';
 import {
   TrendingUp, Wallet, Home, Zap, PiggyBank, BarChart2, Bitcoin, Shield, Receipt,
   ArrowUpRight, BarChart3, LifeBuoy, Scale, Pencil, AlertTriangle,
@@ -15,6 +15,9 @@ import {
   calcEmergencyFundStatus, calcDebtToIncome,
 } from '../lib/calculations';
 import GoalsSection from '../components/GoalsSection';
+
+const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
+const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
 
 const DashboardPage: React.FC = () => {
   const {
@@ -712,6 +715,17 @@ const DashboardPage: React.FC = () => {
           </div>
         </Card>
 
+        {/* ─── Monthly cashflow (span 12) ─── */}
+        <Card padding="md" className="md:col-span-12">
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <SectionLabel icon={<Receipt />}>{t.charts.cashflowTitle}</SectionLabel>
+            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.charts.cashflowSub}</span>
+          </div>
+          <div className="h-[240px] w-full mt-2">
+            <Suspense fallback={<div className="h-full w-full" />}><CashflowChart /></Suspense>
+          </div>
+        </Card>
+
         {/* ─── Resilience row: emergency fund + debt-to-income (6 + 6) ─── */}
 
         {/* Emergency fund adequacy */}
@@ -732,14 +746,9 @@ const DashboardPage: React.FC = () => {
                     : 'Add fixed expenses to see coverage.'}
                 </div>
               ) : (
-                <>
-                  <div className="text-[24px] font-bold tracking-[-0.02em] leading-none mt-2">
-                    {emergencyFund.monthsCovered.toFixed(1)} {lang === 'nb' ? 'mnd' : 'mo'}
-                  </div>
-                  <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                    {formatCurrency(assets.bufferAccount)} · {lang === 'nb' ? 'mål' : 'target'} {emergencyFund.minMonths}–{emergencyFund.targetMonths} {lang === 'nb' ? 'mnd' : 'mo'}
-                  </div>
-                </>
+                <div className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
+                  {formatCurrency(assets.bufferAccount)} · {lang === 'nb' ? 'mål' : 'target'} {emergencyFund.minMonths}–{emergencyFund.targetMonths} {lang === 'nb' ? 'mnd' : 'mo'}
+                </div>
               )}
             </div>
             {totalFixedExpenses > 0 && (
@@ -758,21 +767,10 @@ const DashboardPage: React.FC = () => {
 
           {totalFixedExpenses > 0 && (
             <>
-              <div className="mt-4 relative h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-elev)' }}>
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${Math.min(100, (emergencyFund.monthsCovered / emergencyFund.targetMonths) * 100)}%`,
-                    background: emergencyFund.status === 'low' ? 'var(--warning)' : 'var(--positive)',
-                  }}
-                />
-                {/* recommended-minimum marker */}
-                <div
-                  className="absolute top-0 h-full w-px"
-                  style={{ left: `${(emergencyFund.minMonths / emergencyFund.targetMonths) * 100}%`, background: 'var(--text-3)' }}
-                />
+              <div className="h-[140px] w-full mt-2">
+                <Suspense fallback={<div className="h-full w-full" />}><EmergencyFundGauge /></Suspense>
               </div>
-              <div className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
+              <div className="text-[11px] text-center" style={{ color: 'var(--text-3)' }}>
                 {emergencyFund.shortfallToMin > 0
                   ? (lang === 'nb'
                       ? `${formatCurrency(emergencyFund.shortfallToMin)} unna ${emergencyFund.minMonths} mnd`

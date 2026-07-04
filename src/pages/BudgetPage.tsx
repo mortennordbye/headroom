@@ -18,6 +18,8 @@ import { StatCard } from '../components/ui/StatCard';
 // Recharts (~150 KB gz) is lazy-loaded so it stays off the first-paint critical
 // path of the default (Budget) route; it's precached after the first visit.
 const BudgetDistributionChart = lazy(() => import('../components/BudgetDistributionChart'));
+const SavingsRateChart = lazy(() => import('../components/charts/SavingsRateChart'));
+const SpendingHeatmap = lazy(() => import('../components/charts/SpendingHeatmap'));
 
 // Old-money category roles (concrete hex — recharts sets these as SVG attributes,
 // which do not resolve CSS var()). Restricted to the 4 category hues + neutrals;
@@ -496,6 +498,26 @@ const BudgetPage: React.FC = () => {
       </div>
 
       <FunBudget />
+
+      {/* Savings rate + spending heatmap */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
+        <div className={`${card} p-5 md:p-7`}>
+          <div className="pb-4 mb-2 border-b border-[var(--border)]">
+            <h2 className={sectionLabel}>{t.charts.savingsRateTitle}</h2>
+            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.savingsRateSub}</p>
+          </div>
+          <div className="h-[240px] w-full">
+            <Suspense fallback={<div className="h-full w-full" />}><SavingsRateChart /></Suspense>
+          </div>
+        </div>
+        <div className={`${card} p-5 md:p-7`}>
+          <div className="pb-4 mb-4 border-b border-[var(--border)]">
+            <h2 className={sectionLabel}>{t.charts.heatmapTitle}</h2>
+            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.heatmapSub}</p>
+          </div>
+          <Suspense fallback={<div className="h-[240px] w-full" />}><SpendingHeatmap /></Suspense>
+        </div>
+      </div>
 
       {/* Daily Tracker */}
       <div className={`${card} overflow-hidden`}>

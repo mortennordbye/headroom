@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import {
   TrendingUp,
@@ -55,6 +55,8 @@ interface ModalConfig {
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+
+const LtvChart = lazy(() => import('../components/charts/LtvChart'));
 
 const LoanPage: React.FC = () => {
   const {
@@ -548,6 +550,17 @@ const LoanPage: React.FC = () => {
             lang={lang}
             formatCurrency={formatCurrency}
           />
+
+          {/* Loan-to-value over time */}
+          <div className={`${card} p-5 md:p-7`}>
+            <div className="pb-4 mb-2 border-b border-[var(--border)]">
+              <h3 className={sectionLabel}>{t.charts.ltvTitle}</h3>
+              <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.ltvSub}</p>
+            </div>
+            <div className="h-[240px] w-full">
+              <Suspense fallback={<div className="h-full w-full" />}><LtvChart /></Suspense>
+            </div>
+          </div>
         </>
       )}
 

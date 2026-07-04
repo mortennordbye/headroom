@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, lazy, Suspense } from 'react';
 import {
   BarChart2,
   Percent,
@@ -41,6 +41,8 @@ interface ModalConfig {
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+
+const NetWorthCompositionChart = lazy(() => import('../components/charts/NetWorthCompositionChart'));
 
 const AssetPage: React.FC = () => {
   const {
@@ -386,6 +388,17 @@ const AssetPage: React.FC = () => {
 
       {/* Debt (non-mortgage) */}
       <DebtSection />
+
+      {/* Net-worth composition over time */}
+      <div className={`${card} p-5 md:p-7 space-y-4`}>
+        <div className="pb-4 border-b border-[var(--border)]">
+          <h3 className={sectionLabel}>{t.charts.compositionTitle}</h3>
+          <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.compositionSub}</p>
+        </div>
+        <div className="h-[260px] md:h-[300px] w-full">
+          <Suspense fallback={<div className="h-full w-full" />}><NetWorthCompositionChart /></Suspense>
+        </div>
+      </div>
 
       {/* Growth Projection */}
       <div className={`${card} p-5 md:p-7 space-y-5`}>
