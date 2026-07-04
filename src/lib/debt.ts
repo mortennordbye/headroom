@@ -122,7 +122,10 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
 
   const feasible = bal.every(b => b <= EPS);
   return {
-    months: month,
+    // Hitting the MAX_MONTHS cap without clearing every debt means "never pays
+    // off" — report Infinity (like the interest-infeasible path) so callers
+    // format it as "aldri/never" rather than a misleading "50 år".
+    months: feasible ? month : Infinity,
     totalInterest: interest.reduce((s, i) => s + i, 0),
     feasible,
     perDebt: active.map((d, i) => ({ id: d.id, payoffMonth: payoffMonth[i], interest: interest[i] })),

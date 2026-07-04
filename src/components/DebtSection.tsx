@@ -6,6 +6,7 @@ import EditModal, { type ModalField } from './EditModal';
 import ConfirmModal from './ConfirmModal';
 import ChartTooltip from './ChartTooltip';
 import { amortize, planPayoff, formatMonths, DEBT_TYPES, type PayoffStrategy } from '../lib/debt';
+import { parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -34,7 +35,7 @@ export default function DebtSection() {
 
   const d = t.debt;
   const typeOptions = DEBT_TYPES.map(v => ({ value: v, label: d.types[v] }));
-  const parseNum = (s: string) => { const n = parseFloat(s); return isNaN(n) || n < 0 ? null : n; };
+  const parseNum = (s: string) => { const n = parseLocaleNumber(s); return isNaN(n) || n < 0 ? null : n; };
 
   const debtFields = (val: Partial<Debt>): ModalField[] => [
     { key: 'name', label: d.name, type: 'text', value: val.name ?? '' },
@@ -88,7 +89,7 @@ export default function DebtSection() {
               const a = amortize(debt.balance, debt.rate, debt.minPayment);
               return (
                 <div key={debt.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0 gap-3">
-                  <div className="min-w-0 cursor-pointer" onClick={() => openEdit(debt)}>
+                  <button type="button" aria-label={`${t.edit} — ${debt.name}`} className="min-w-0 cursor-pointer text-left" onClick={() => openEdit(debt)}>
                     <div className="flex items-center gap-2">
                       <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: DEBT_TYPE_COLOR[debt.type] }} />
                       <span className="text-[13px] font-medium text-[var(--text-1)] truncate">{debt.name}</span>
@@ -101,12 +102,12 @@ export default function DebtSection() {
                         ? `${d.payoffIn} ${formatMonths(a.months, lang)} · ${formatCurrency(Math.round(a.totalInterest))} ${d.interestLabel}`
                         : d.never}
                     </div>
-                  </div>
+                  </button>
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer" onClick={() => openEdit(debt)}>
+                    <button type="button" aria-label={`${t.edit} — ${debt.name}`} className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer" onClick={() => openEdit(debt)}>
                       {formatCurrency(debt.balance)}
-                    </span>
-                    <button onClick={() => setPendingDelete(debt)} className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all" aria-label="delete">
+                    </button>
+                    <button onClick={() => setPendingDelete(debt)} className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all" aria-label={`${t.delete} — ${debt.name}`}>
                       <Trash2 size={14} />
                     </button>
                   </div>

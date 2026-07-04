@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
 import {
   getDaysInMonth,
   startOfMonth,
@@ -51,6 +51,12 @@ export interface DailyTransaction {
   description: string;
   amount: number;
   category?: string;
+  /**
+   * Whether this row is money out ('expense') or money in ('income'). Income is
+   * excluded from "spent" / burn-rate / category charts and instead adds to the
+   * running balance. Missing on legacy rows — treat undefined as 'expense'.
+   */
+  kind?: 'income' | 'expense';
 }
 
 export interface TransactionTemplate {
@@ -292,6 +298,11 @@ export const translations = {
     cancel: 'Avbryt',
     save: 'Lagre',
     delete: 'Slett',
+    add: 'Legg til',
+    edit: 'Rediger',
+    txKind: 'Type',
+    txIncome: 'Inntekt',
+    txExpense: 'Utgift',
     confirmDelete: 'Bekreft sletting',
     confirmDeleteExpenseMsg: 'Er du sikker på at du vil slette denne utgiften?',
     confirmDeleteTransactionMsg: 'Er du sikker på at du vil slette denne transaksjonen?',
@@ -458,6 +469,8 @@ export const translations = {
     },
     dataLoadError: 'Kunne ikke laste dataene dine. Sjekk tilkoblingen.',
     retry: 'Last på nytt',
+    saveError: 'Endringene dine ble ikke lagret. Prøver på nytt …',
+    saveRetry: 'Prøv igjen',
     today: 'I dag',
     viewingPast: 'Historisk måned',
     viewingFuture: 'Fremtidig måned',
@@ -755,6 +768,11 @@ export const translations = {
     cancel: 'Cancel',
     save: 'Save',
     delete: 'Delete',
+    add: 'Add',
+    edit: 'Edit',
+    txKind: 'Type',
+    txIncome: 'Income',
+    txExpense: 'Expense',
     confirmDelete: 'Confirm Delete',
     confirmDeleteExpenseMsg: 'Are you sure you want to delete this expense?',
     confirmDeleteTransactionMsg: 'Are you sure you want to delete this transaction?',
@@ -921,6 +939,8 @@ export const translations = {
     },
     dataLoadError: 'Could not load your data. Check your connection.',
     retry: 'Reload',
+    saveError: 'Your changes weren’t saved. Retrying …',
+    saveRetry: 'Try again',
     today: 'Today',
     viewingPast: 'Past month',
     viewingFuture: 'Future month',
@@ -1384,6 +1404,10 @@ interface FinanceContextType {
   demoMode: boolean;
   toggleDemoMode: () => void;
   dataLoadFailed: boolean;
+  /** True when the most recent save failed and changes are pending a retry. */
+  saveFailed: boolean;
+  /** Manually re-attempt a failed save (used by the "not saved" banner). */
+  retrySave: () => void;
 }
 
 // A full capture of the balance-relevant state as of a given month, so the
@@ -1504,6 +1528,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // data from the backend (which demo mode never overwrites).
   const demoSnapshot = useRef<Partial<ExportPayload> | null>(null);
   const [dataLoadFailed, setDataLoadFailed] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1526,10 +1551,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           setHomeowner({ ...DEFAULT_HOMEOWNER, ...(data.homeowner ?? {}) });
           setTransition({ ...DEFAULT_TRANSITION, ...(data.transition ?? {}) });
           if (data.lang) setLang(data.lang);
-          if (data.currentMonth) {
-            const [y, m] = data.currentMonth.split('-').map(Number);
-            if (!isNaN(y) && !isNaN(m)) setCurrentMonth(new Date(y, m - 1, 1));
-          }
+          // `currentMonth` is view state, no longer persisted — ignore any value
+          // in legacy blobs so each device opens on its own current month.
           if (data.savingsTargetPercent !== undefined) setSavingsTargetPercent(data.savingsTargetPercent);
           if (data.growthReturnRate !== undefined) setGrowthReturnRate(data.growthReturnRate);
           if (data.houseGrowthRate !== undefined) setHouseGrowthRate(data.houseGrowthRate);
@@ -1623,26 +1646,105 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       .catch(() => setInflationStale(true));
   }, [region]);
 
+  // Auto-save plumbing. The save is debounced (a slider drag or paging the month
+  // picker would otherwise fire dozens of full-state POSTs), in-flight requests
+  // are aborted so a slow save can't land after a newer one (last-write-wins with
+  // a stale payload), failures surface a banner + retry with backoff, and pending
+  // changes are flushed on tab hide/close so nothing is silently lost.
+  const payloadRef = useRef<Record<string, unknown> | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveAbort = useRef<AbortController | null>(null);
+  const saveDirty = useRef(false);
+  const saveRetries = useRef(0);
+  // Lets the backoff retry re-invoke the latest doSave without the callback
+  // referencing itself before it's declared.
+  const doSaveRef = useRef<() => void>(() => {});
+
+  const doSave = useCallback(async () => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    const payload = payloadRef.current;
+    if (!payload) return;
+    // Supersede any in-flight save so it can't complete after this one.
+    saveAbort.current?.abort();
+    const ctrl = new AbortController();
+    saveAbort.current = ctrl;
+    try {
+      const res = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      saveDirty.current = false;
+      saveRetries.current = 0;
+      setSaveFailed(false);
+    } catch {
+      if (ctrl.signal.aborted) return; // replaced by a newer save — not a failure
+      setSaveFailed(true);
+      // Exponential backoff, capped at 30s. saveDirty stays true.
+      saveRetries.current += 1;
+      const delay = Math.min(30_000, 1_000 * 2 ** (saveRetries.current - 1));
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => { doSaveRef.current(); }, delay);
+    }
+  }, []);
+  useEffect(() => { doSaveRef.current = doSave; }, [doSave]);
+
+  // Manual retry from the banner.
+  const retrySave = useCallback(() => { saveRetries.current = 0; void doSave(); }, [doSave]);
+
   useEffect(() => {
     if (!loaded.current) return;
     // Never persist while showing demo data — that would clobber the user's real
     // data on the backend. The real data stays safe in `demoSnapshot` until exit.
     if (demoMode) return;
-    const payload = {
+    payloadRef.current = {
       income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
       assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
-      lang, currentMonth: format(currentMonth, 'yyyy-MM'),
+      lang,
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
       customCurrencyCode, customCurrencyRate,
       jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
       region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems,
     };
-    fetch('/api/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-  }, [income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode]);
+    saveDirty.current = true;
+    // Debounce: reschedule on every change; the trailing call flushes once quiet.
+    saveRetries.current = 0;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => { void doSave(); }, 500);
+    // NB: `currentMonth` is deliberately NOT persisted or in these deps — it's
+    // view state, so paging the month picker must not fire saves, and two devices
+    // shouldn't fight over which month is "current".
+  }, [income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode, doSave]);
+
+  // Flush pending changes when the tab is hidden or closed. sendBeacon survives
+  // page teardown where a normal fetch would be cancelled; the server accepts the
+  // JSON blob the same as a normal POST.
+  useEffect(() => {
+    const flush = () => {
+      if (!loaded.current || demoMode || !saveDirty.current || !payloadRef.current) return;
+      const ok = navigator.sendBeacon?.(
+        '/api/data',
+        new Blob([JSON.stringify(payloadRef.current)], { type: 'application/json' }),
+      );
+      if (ok) saveDirty.current = false;
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Only nag when a save is actually failing — a clean close flushes via the
+      // beacon above, so we don't want to prompt on every debounced edit.
+      if (saveFailed && saveDirty.current && !demoMode) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [demoMode, saveFailed]);
 
   // --- Calculations ---
 
@@ -1661,12 +1763,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Derived monthly net income from the salary system (latest applicable salary + on-call → tax → net).
   // Falls back to the legacy static `income` when no salaries have been entered.
-  const derivedMonthlyIncome = useMemo(() => {
+  // Net monthly income derived from the salary system for an arbitrary month
+  // (falls back to the legacy static `income` when no salaries exist).
+  const derivedNetMonthlyFor = useCallback((mKey: string): number => {
     if (salaries.length === 0) return income;
-    const totalAnnual = calcActiveGrossAnnual(salaries, jobs, monthKey);
+    const totalAnnual = calcActiveGrossAnnual(salaries, jobs, mKey);
     if (totalAnnual === 0) return income;
     return Math.round(calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly);
-  }, [salaries, jobs, monthKey, region, customTaxRatePct, income, pension.ipsAnnualContribution]);
+  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution]);
+
+  const derivedMonthlyIncome = useMemo(
+    () => derivedNetMonthlyFor(monthKey),
+    [derivedNetMonthlyFor, monthKey],
+  );
 
   // Gross annual employment income active this month (before tax) — falls back to
   // the legacy static `income` annualised when no salaries have been entered.
@@ -1682,19 +1791,31 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     monthlyIncomes[monthKey] ?? derivedMonthlyIncome,
   [monthlyIncomes, monthKey, derivedMonthlyIncome]);
 
-  const averageIncome = useMemo(() => {
-    const values = Object.values(monthlyIncomes);
-    if (values.length === 0) return derivedMonthlyIncome;
-    return Math.round(values.reduce((s, v) => s + v, 0) / values.length);
-  }, [monthlyIncomes, derivedMonthlyIncome]);
+  // Last-12-months income series (relative to the selected month): each month is
+  // its manual override if set, otherwise the income derived for THAT month. This
+  // reflects real income history — averaging only the overrides map (any months
+  // ever set, including the future) badly skews the mean and volatility.
+  const incomeSeries = useMemo(() => {
+    const series: number[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const mKey = format(subMonths(currentMonth, i), 'yyyy-MM');
+      series.push(monthlyIncomes[mKey] ?? derivedNetMonthlyFor(mKey));
+    }
+    return series;
+  }, [monthlyIncomes, currentMonth, derivedNetMonthlyFor]);
+
+  const averageIncome = useMemo(
+    () => Math.round(incomeSeries.reduce((s, v) => s + v, 0) / incomeSeries.length),
+    [incomeSeries],
+  );
 
   const incomeVolatility = useMemo(() => {
-    const values = Object.values(monthlyIncomes);
-    if (values.length < 2) return 0;
-    const mean = averageIncome;
-    const variance = values.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / values.length;
+    // Divide by the EXACT mean (not the rounded averageIncome).
+    const mean = incomeSeries.reduce((s, v) => s + v, 0) / incomeSeries.length;
+    if (mean <= 0) return 0;
+    const variance = incomeSeries.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / incomeSeries.length;
     return Math.sqrt(variance) / mean;
-  }, [monthlyIncomes, averageIncome]);
+  }, [incomeSeries]);
 
   const { recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason } = useMemo(() =>
     calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent),
@@ -1753,12 +1874,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     for (const day of monthInterval) {
       const dateStr = format(day, 'yyyy-MM-dd');
       const dayTransactions = transactionsForMonth.filter(t => t.date === dateStr);
-      const totalSpentToday = dayTransactions.reduce((sum, t) => sum + t.amount, 0);
-      runningBalance += dailyBudget - totalSpentToday;
+      // Only expenses count as "spent"; income (undefined kind = expense for
+      // legacy rows) instead adds to the running balance.
+      const spentToday = dayTransactions
+        .filter(t => t.kind !== 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const incomeToday = dayTransactions
+        .filter(t => t.kind === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+      runningBalance += dailyBudget - spentToday + incomeToday;
       result.push({
         date: day,
         dateStr,
-        spent: totalSpentToday,
+        spent: spentToday,
         balance: runningBalance,
         transactions: dayTransactions
       });
@@ -1804,6 +1932,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const updateAsset = (key: keyof Assets, value: number) => {
     setAssets(prev => ({ ...prev, [key]: value }));
+    // In homeowner mode the mortgage is one real debt edited in two places
+    // (assets.houseDebt drives net worth; homeowner.currentMortgageBalance drives
+    // LTV/payment). Keep them in lockstep so the two views can't contradict.
+    if (key === 'houseDebt' && housingMode === 'homeowner') {
+      setHomeowner(prev => ({ ...prev, currentMortgageBalance: value }));
+    }
   };
 
   const updateLoan = (key: keyof LoanData, value: number | string) => {
@@ -1828,10 +1962,26 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const updateHomeowner = (key: keyof HomeownerData, value: number) => {
     setHomeowner(prev => ({ ...prev, [key]: value }));
+    // Mirror the mortgage balance into assets.houseDebt (see updateAsset) so net
+    // worth and the loan page never show contradictory debt in homeowner mode.
+    if (key === 'currentMortgageBalance' && housingMode === 'homeowner') {
+      setAssets(prev => ({ ...prev, houseDebt: value }));
+    }
   };
 
   const updateTransition = (key: keyof TransitionData, value: number) => {
     setTransition(prev => ({ ...prev, [key]: value }));
+  };
+
+  // User-facing housing-mode switch. Entering homeowner mode reconciles any
+  // pre-existing drift by treating currentMortgageBalance (the actively-
+  // maintained real mortgage) as canonical for net worth. Internal load paths
+  // use the raw setHousingMode so they don't trigger this side effect.
+  const changeHousingMode = (mode: HousingMode) => {
+    setHousingMode(mode);
+    if (mode === 'homeowner') {
+      setAssets(prev => ({ ...prev, houseDebt: homeowner.currentMortgageBalance }));
+    }
   };
 
   const makeId = (prefix: string) =>
@@ -1919,10 +2069,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.homeowner) setHomeowner({ ...DEFAULT_HOMEOWNER, ...data.homeowner });
     if (data.transition) setTransition({ ...DEFAULT_TRANSITION, ...data.transition });
     if (data.lang) setLang(data.lang);
-    if (data.currentMonth) {
-      const [y, m] = data.currentMonth.split('-').map(Number);
-      if (!isNaN(y) && !isNaN(m)) setCurrentMonth(new Date(y, m - 1, 1));
-    }
+    // `currentMonth` is view state, not persisted — ignore it on import too.
     if (data.savingsTargetPercent !== undefined) setSavingsTargetPercent(data.savingsTargetPercent);
     if (data.growthReturnRate !== undefined) setGrowthReturnRate(data.growthReturnRate);
     if (data.houseGrowthRate !== undefined) setHouseGrowthRate(data.houseGrowthRate);
@@ -2114,7 +2261,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       debts, setDebts, totalDebt, netWorth,
       recurringTemplates, setRecurringTemplates,
       assets, updateAsset, loan, updateLoan, pension, updatePension,
-      housingMode, setHousingMode, homeowner, updateHomeowner, transition, updateTransition,
+      housingMode, setHousingMode: changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
       mortgageRate, mortgageTermYears,
       growthReturnRate, setGrowthReturnRate,
       houseGrowthRate, setHouseGrowthRate,
@@ -2138,6 +2285,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
       demoMode, toggleDemoMode,
       dataLoadFailed,
+      saveFailed, retrySave,
     }}>
       {children}
     </FinanceContext.Provider>

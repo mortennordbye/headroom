@@ -26,13 +26,26 @@ export function isOptionalYearMonth(s: string): boolean {
   return s === '' || isValidYearMonth(s);
 }
 
+/**
+ * Parse a number from user input, accepting the Norwegian decimal comma
+ * ("4,5" → 4.5). Returns NaN for anything that isn't a clean number — including
+ * trailing garbage like "4,5kr", which `parseFloat` would silently truncate to
+ * 4. Use this in every text-input save handler instead of `parseFloat`.
+ */
+export function parseLocaleNumber(s: string): number {
+  const cleaned = s.trim().replace(',', '.');
+  // Only an optional sign, digits and at most one decimal point — nothing else.
+  if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(cleaned)) return NaN;
+  return parseFloat(cleaned);
+}
+
 export function isPositiveNumber(s: string): boolean {
-  const n = parseFloat(s);
+  const n = parseLocaleNumber(s);
   return !isNaN(n) && isFinite(n) && n >= 0;
 }
 
 export function isFiniteNumber(s: string): boolean {
-  const n = parseFloat(s);
+  const n = parseLocaleNumber(s);
   return !isNaN(n) && isFinite(n);
 }
 

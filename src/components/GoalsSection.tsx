@@ -3,7 +3,7 @@ import { Target, Plus, Edit2, Trash2 } from 'lucide-react';
 import { useFinance, type Goal, type GoalSource } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
-import { isValidYearMonth, isOptionalYearMonth, isPositiveNumber, isNonEmpty } from '../lib/validators';
+import { isValidYearMonth, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -93,9 +93,9 @@ const GoalsSection: React.FC = () => {
         }
         const payload: Omit<Goal, 'id'> = {
           name: vals.name.trim(),
-          target: parseFloat(vals.target),
+          target: parseLocaleNumber(vals.target),
           source: vals.source as GoalSource,
-          manualCurrent: vals.source === 'manual' ? parseFloat(vals.manualCurrent) || 0 : undefined,
+          manualCurrent: vals.source === 'manual' ? parseLocaleNumber(vals.manualCurrent) || 0 : undefined,
           deadline: isValidYearMonth(vals.deadline) ? vals.deadline : undefined,
           notes: vals.notes.trim() || undefined,
         };
@@ -161,10 +161,10 @@ const GoalsSection: React.FC = () => {
                     <span className="text-[12px] font-mono font-semibold tabular-nums" style={{ color: barColor }}>
                       {progress.toFixed(0)}%
                     </span>
-                    <button onClick={() => openModal(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[var(--text-1)] opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button aria-label={`${t.edit} — ${g.name}`} onClick={() => openModal(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[var(--text-1)] opacity-0 group-hover:opacity-100 transition-opacity">
                       <Edit2 size={12} />
                     </button>
-                    <button onClick={() => confirmDelete(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[#B5533A] opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button aria-label={`${t.delete} — ${g.name}`} onClick={() => confirmDelete(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[#B5533A] opacity-0 group-hover:opacity-100 transition-opacity">
                       <Trash2 size={12} />
                     </button>
                   </div>

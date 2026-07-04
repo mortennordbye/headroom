@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, type Ref } from 'react';
+import { useState, useRef, useId, type Ref } from 'react';
 import ReactDOM from 'react-dom';
 import { X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 export interface ModalFieldOption {
   value: string;
@@ -34,21 +35,11 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
     () => Object.fromEntries(fields.map(f => [f.key, f.value]))
   );
   const firstInputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
+  const dialogRef = useFocusTrap<HTMLDivElement>(onCancel, firstInputRef);
+  const titleId = useId();
+  const fieldId = (key: string) => `${titleId}-${key}`;
   const actualCancelLabel = cancelLabel ?? t.cancel;
   const actualSaveLabel = saveLabel ?? t.save;
-
-  useEffect(() => {
-    firstInputRef.current?.focus();
-    if (firstInputRef.current && firstInputRef.current instanceof HTMLInputElement) {
-      firstInputRef.current.select();
-    }
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
 
   const handleSave = () => onSave(values);
 
@@ -61,11 +52,18 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
       className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
-      <div className="w-full sm:w-auto sm:min-w-[360px] sm:max-w-sm bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 space-y-5 border border-[var(--border)]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full sm:w-auto sm:min-w-[360px] sm:max-w-sm bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 space-y-5 border border-[var(--border)]"
+      >
         <div className="flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold text-[var(--text-1)]">{title}</h3>
+          <h3 id={titleId} className="text-[14px] font-semibold text-[var(--text-1)]">{title}</h3>
           <button
             onClick={onCancel}
+            aria-label={t.cancel}
             className="p-1 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"
           >
             <X size={16} />
@@ -75,11 +73,12 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
         <div className="space-y-3">
           {fields.map((field, idx) => (
             <div key={field.key} className="space-y-1.5">
-              <label className="text-[11px] font-medium text-[var(--text-2)] uppercase tracking-wide">
+              <label htmlFor={fieldId(field.key)} className="text-[11px] font-medium text-[var(--text-2)] uppercase tracking-wide">
                 {field.label}
               </label>
               {field.type === 'select' ? (
                 <select
+                  id={fieldId(field.key)}
                   ref={idx === 0 ? (firstInputRef as Ref<HTMLSelectElement>) : undefined}
                   value={values[field.key]}
                   onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
@@ -93,6 +92,7 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
               ) : (
                 <>
                   <input
+                    id={fieldId(field.key)}
                     ref={idx === 0 ? (firstInputRef as Ref<HTMLInputElement>) : undefined}
                     type={field.type}
                     inputMode={field.type === 'number' ? 'decimal' : undefined}

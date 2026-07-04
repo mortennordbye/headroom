@@ -40,7 +40,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { calcTaxByRegion } from '../lib/norwegianTax';
-import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isPositiveNumber, isNonEmpty } from '../lib/validators';
+import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -478,7 +478,7 @@ const SalaryPage: React.FC = () => {
           return;
         }
         const onCallRaw = vals.onCallAnnual?.trim() ?? '';
-        const onCallNum = onCallRaw === '' ? null : parseFloat(onCallRaw);
+        const onCallNum = onCallRaw === '' ? null : parseLocaleNumber(onCallRaw);
         if (onCallNum !== null && (isNaN(onCallNum) || onCallNum < 0)) {
           setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Vakttillegg må være et positivt tall' : 'On-call pay must be a positive number' });
           return;
@@ -486,7 +486,7 @@ const SalaryPage: React.FC = () => {
         const initialSalaryRaw = vals.initialSalary?.trim() ?? '';
         let initialSalaryNum: number | null = null;
         if (!existing && initialSalaryRaw !== '') {
-          const parsed = parseFloat(initialSalaryRaw);
+          const parsed = parseLocaleNumber(initialSalaryRaw);
           if (isNaN(parsed) || parsed <= 0) {
             setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Startlønn må være et positivt tall' : 'Initial salary must be a positive number' });
             return;
@@ -498,7 +498,7 @@ const SalaryPage: React.FC = () => {
           role: vals.role.trim(),
           startDate: vals.startDate,
           endDate: isValidYearMonth(vals.endDate) ? vals.endDate : null,
-          contractedHoursPerWeek: parseFloat(vals.contractedHoursPerWeek),
+          contractedHoursPerWeek: parseLocaleNumber(vals.contractedHoursPerWeek),
           onCallAnnual: onCallNum,
         };
         if (existing) {
@@ -568,7 +568,7 @@ const SalaryPage: React.FC = () => {
         const payload = {
           jobId: vals.jobId,
           effectiveDate: vals.effectiveDate,
-          grossAnnual: parseFloat(vals.grossAnnual),
+          grossAnnual: parseLocaleNumber(vals.grossAnnual),
           changeType: vals.changeType as SalaryChangeType,
           notes: vals.notes.trim() || undefined,
         };
@@ -624,7 +624,7 @@ const SalaryPage: React.FC = () => {
         const payload = {
           jobId: vals.jobId || undefined,
           date: vals.date,
-          amount: parseFloat(vals.amount),
+          amount: parseLocaleNumber(vals.amount),
           type: vals.type as BonusType,
           notes: vals.notes.trim() || undefined,
         };
@@ -665,8 +665,8 @@ const SalaryPage: React.FC = () => {
         const payload = {
           jobId: vals.jobId || undefined,
           date: vals.date,
-          hours: parseFloat(vals.hours),
-          amount: parseFloat(vals.amount),
+          hours: parseLocaleNumber(vals.hours),
+          amount: parseLocaleNumber(vals.amount),
           notes: vals.notes.trim() || undefined,
         };
         if (existing) updateOvertime(existing.id, payload);
@@ -705,7 +705,7 @@ const SalaryPage: React.FC = () => {
         const payload = {
           jobId: vals.jobId || undefined,
           periodMonth: vals.periodMonth,
-          actualHoursPerWeek: parseFloat(vals.actualHoursPerWeek),
+          actualHoursPerWeek: parseLocaleNumber(vals.actualHoursPerWeek),
           notes: vals.notes.trim() || undefined,
         };
         if (existing) updateHoursSnapshot(existing.id, payload);
@@ -1135,6 +1135,8 @@ const SalaryPage: React.FC = () => {
         icon={<Briefcase size={14} className="text-[var(--text-2)]" />}
         onAdd={() => openJobModal()}
         empty={t.salary.noEntries}
+        editLabel={t.edit}
+        deleteLabel={t.delete}
         items={jobs.map(j => ({
           id: j.id,
           primary: `${j.employer} — ${j.role}`,
@@ -1206,6 +1208,8 @@ const SalaryPage: React.FC = () => {
               icon={<TrendingUp size={14} className="text-[var(--text-2)]" />}
               onAdd={() => openSalaryModal()}
               empty={t.salary.noEntries}
+        editLabel={t.edit}
+        deleteLabel={t.delete}
               items={[...sortedSalaries]
                 .filter(s => matchesFilter(s.jobId))
                 .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))
@@ -1252,6 +1256,8 @@ const SalaryPage: React.FC = () => {
               icon={<Gift size={14} className="text-[var(--text-2)]" />}
               onAdd={() => openBonusModal()}
               empty={t.salary.noEntries}
+        editLabel={t.edit}
+        deleteLabel={t.delete}
               items={[...bonuses]
                 .filter(b => matchesFilter(b.jobId))
                 .sort((a, b) => b.date.localeCompare(a.date))
@@ -1278,6 +1284,8 @@ const SalaryPage: React.FC = () => {
               icon={<Timer size={14} className="text-[var(--text-2)]" />}
               onAdd={() => openOvertimeModal()}
               empty={t.salary.noEntries}
+        editLabel={t.edit}
+        deleteLabel={t.delete}
               items={[...overtime]
                 .filter(o => matchesFilter(o.jobId))
                 .sort((a, b) => b.date.localeCompare(a.date))
@@ -1294,6 +1302,8 @@ const SalaryPage: React.FC = () => {
               icon={<Clock size={14} className="text-[var(--text-2)]" />}
               onAdd={() => openHoursModal()}
               empty={t.salary.noEntries}
+        editLabel={t.edit}
+        deleteLabel={t.delete}
               items={[...hoursSnapshots]
                 .filter(h => matchesFilter(h.jobId))
                 .sort((a, b) => b.periodMonth.localeCompare(a.periodMonth))
@@ -1351,9 +1361,11 @@ interface EntryListProps {
   onAdd: () => void;
   empty: string;
   items: EntryItem[];
+  editLabel: string;
+  deleteLabel: string;
 }
 
-const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, empty, items }) => (
+const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, empty, items, editLabel, deleteLabel }) => (
   <div className={`${card} p-5 md:p-7 space-y-4`}>
     <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
       <div className="flex items-center gap-2">
@@ -1381,10 +1393,10 @@ const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, empty, items 
               <div className="text-[11px] text-[var(--text-2)] truncate">{item.secondary}</div>
             </div>
             <div className="flex items-center gap-1 shrink-0 ml-2">
-              <button onClick={item.onEdit} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors">
+              <button aria-label={`${editLabel} — ${item.primary}`} onClick={item.onEdit} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors">
                 <Edit2 size={13} />
               </button>
-              <button onClick={item.onDelete} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[#B5533A] hover:bg-[var(--bg-elev)] transition-colors">
+              <button aria-label={`${deleteLabel} — ${item.primary}`} onClick={item.onDelete} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[#B5533A] hover:bg-[var(--bg-elev)] transition-colors">
                 <Trash2 size={13} />
               </button>
             </div>

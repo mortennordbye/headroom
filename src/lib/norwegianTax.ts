@@ -1,42 +1,66 @@
 /**
- * Approximate Norwegian wage tax (lønnsinntekt) for 2025.
+ * Approximate Norwegian wage tax (lønnsinntekt).
  *
  * Components:
  *   - Skatt på alminnelig inntekt (22%) on income after minstefradrag og personfradrag
  *   - Trinnskatt (progressive bracket tax) on gross
  *   - Trygdeavgift (7.8%) on gross above the lower threshold
  *
- * Brackets and deductions are 2025 estimates rounded to public figures.
- * Real tax depends on residence, marital status, deductions etc. — this is a
+ * Brackets and deductions are estimates rounded to public figures. Real tax
+ * depends on residence, marital status, deductions etc. — this is a
  * "good-enough" estimate for take-home calculations, not a tax return.
+ *
+ * All year-specific constants live in the `TAX_PARAMS` table below so a new tax
+ * year is a single-place update and staleness is visible. `TAX_YEAR` selects the
+ * active set and is exported for display in the UI.
  */
 
-const SKATT_ALMINNELIG_RATE = 0.22;
-const TRYGDEAVGIFT_RATE = 0.078;
-const TRYGDEAVGIFT_LOWER_LIMIT = 99_650;
-const MINSTEFRADRAG_RATE = 0.46;
-const MINSTEFRADRAG_MAX = 92_000;
-const PERSONFRADRAG = 88_250;
+export interface TaxParams {
+  skattAlminneligRate: number;
+  trygdeavgiftRate: number;
+  trygdeavgiftLowerLimit: number;
+  minstefradragRate: number;
+  minstefradragMax: number;
+  personfradrag: number;
+  /** Trinnskatt brackets (NOK lower bound, rate). */
+  trinnskatt: Array<{ from: number; rate: number }>;
+}
+
+export const TAX_PARAMS: Record<number, TaxParams> = {
+  2025: {
+    skattAlminneligRate: 0.22,
+    trygdeavgiftRate: 0.078,
+    trygdeavgiftLowerLimit: 99_650,
+    minstefradragRate: 0.46,
+    minstefradragMax: 92_000,
+    personfradrag: 108_550,
+    trinnskatt: [
+      { from: 0,          rate: 0      },
+      { from: 217_400,    rate: 0.017  },
+      { from: 306_050,    rate: 0.040  },
+      { from: 697_150,    rate: 0.137  },
+      { from: 942_400,    rate: 0.167  },
+      { from: 1_410_750,  rate: 0.177  },
+    ],
+  },
+};
+
+/** Active tax year. Update alongside a new `TAX_PARAMS` entry. */
+export const TAX_YEAR = 2025;
+
+const PARAMS = TAX_PARAMS[TAX_YEAR];
+
 export const IPS_MAX_DEDUCTION = 15_000;
 
-/** Trinnskatt brackets 2025 (NOK lower bound, rate). */
-const TRINNSKATT: Array<{ from: number; rate: number }> = [
-  { from: 0,          rate: 0      },
-  { from: 217_400,    rate: 0.017  },
-  { from: 306_050,    rate: 0.040  },
-  { from: 697_150,    rate: 0.137  },
-  { from: 942_400,    rate: 0.167  },
-  { from: 1_410_750,  rate: 0.177  },
-];
-
 function trinnskatt(gross: number): number {
+  const brackets = PARAMS.trinnskatt;
   let tax = 0;
-  for (let i = 0; i < TRINNSKATT.length; i++) {
-    const lower = TRINNSKATT[i].from;
-    const upper = i + 1 < TRINNSKATT.length ? TRINNSKATT[i + 1].from : Infinity;
+  for (let i = 0; i < brackets.length; i++) {
+    const lower = brackets[i].from;
+    const upper = i + 1 < brackets.length ? brackets[i + 1].from : Infinity;
     if (gross <= lower) break;
     const inBracket = Math.min(gross, upper) - lower;
-    tax += inBracket * TRINNSKATT[i].rate;
+    tax += inBracket * brackets[i].rate;
   }
   return tax;
 }
@@ -91,14 +115,14 @@ export function calcNorwegianTax(grossAnnual: number, ipsContribution: number = 
   const gross = Math.max(0, grossAnnual);
   const ipsDeduction = Math.min(Math.max(0, ipsContribution), IPS_MAX_DEDUCTION);
 
-  const minstefradrag = Math.min(gross * MINSTEFRADRAG_RATE, MINSTEFRADRAG_MAX);
+  const minstefradrag = Math.min(gross * PARAMS.minstefradragRate, PARAMS.minstefradragMax);
   const alminneligInntekt = Math.max(0, gross - minstefradrag - ipsDeduction);
-  const skattegrunnlag = Math.max(0, alminneligInntekt - PERSONFRADRAG);
-  const inntektsskatt = skattegrunnlag * SKATT_ALMINNELIG_RATE;
+  const skattegrunnlag = Math.max(0, alminneligInntekt - PARAMS.personfradrag);
+  const inntektsskatt = skattegrunnlag * PARAMS.skattAlminneligRate;
 
   const trinn = trinnskatt(gross);
 
-  const trygde = gross > TRYGDEAVGIFT_LOWER_LIMIT ? gross * TRYGDEAVGIFT_RATE : 0;
+  const trygde = gross > PARAMS.trygdeavgiftLowerLimit ? gross * PARAMS.trygdeavgiftRate : 0;
 
   const totalTax = inntektsskatt + trinn + trygde;
   // IPS contribution leaves the paycheck (locked savings) — subtract from take-home.

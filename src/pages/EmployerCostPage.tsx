@@ -7,6 +7,7 @@ import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
+import { currentMonthKey } from '../lib/date';
 
 const EmployerCostPage: React.FC = () => {
   const {
@@ -21,7 +22,7 @@ const EmployerCostPage: React.FC = () => {
 
   // Salary auto-filled from the salary system, with manual override.
   const derivedGross = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 7);
+    const today = currentMonthKey();
     return calcActiveGrossAnnual(salaries, jobs, today);
   }, [salaries, jobs]);
   const [salaryOverride, setSalaryOverride] = useState<number | null>(null);

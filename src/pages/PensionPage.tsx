@@ -10,6 +10,7 @@ import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
+import { currentMonthKey } from '../lib/date';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import ChartTooltip from '../components/ChartTooltip';
@@ -35,7 +36,7 @@ const PensionPage: React.FC = () => {
 
   // Pensionable income: latest salary + on-call.
   const pensionableIncome = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 7);
+    const today = currentMonthKey();
     return calcActiveGrossAnnual(salaries, jobs, today);
   }, [salaries, jobs]);
 

@@ -13,6 +13,7 @@ import {
 import { format, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 
@@ -22,11 +23,12 @@ const MONTH_SCOPED_ROUTES = ['/', '/overview'];
 const HIDE_TIME_MARKER_ROUTES = ['/settings'];
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, hiddenNavItems, demoMode, toggleDemoMode } = useFinance();
+  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, retrySave, hiddenNavItems, demoMode, toggleDemoMode } = useFinance();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = MORE_ROUTES.includes(location.pathname);
+  const sheetRef = useFocusTrap<HTMLDivElement>(() => setMoreOpen(false), undefined, moreOpen);
 
   const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
 
@@ -192,6 +194,22 @@ const Layout: React.FC = () => {
             </button>
           </div>
         )}
+        {saveFailed && (
+          <div
+            className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"
+            style={{ background: 'var(--negative-bg)', borderColor: 'color-mix(in srgb, var(--negative) 35%, transparent)', color: 'var(--negative)' }}
+            role="alert"
+          >
+            <span>{t.saveError}</span>
+            <button
+              onClick={retrySave}
+              className="shrink-0 px-3 h-8 rounded-[6px] text-[12px] font-semibold"
+              style={{ background: 'var(--negative)', color: 'var(--bg-page)' }}
+            >
+              {t.saveRetry}
+            </button>
+          </div>
+        )}
         <Outlet />
       </main>
 
@@ -204,6 +222,7 @@ const Layout: React.FC = () => {
             onClick={() => setMoreOpen(false)}
           />
           <div
+            ref={sheetRef}
             className="absolute bottom-0 left-0 right-0 animate-sheet-rise rounded-t-[var(--radius-xl)] border-t px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))]"
             style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
           >
@@ -220,7 +239,7 @@ const Layout: React.FC = () => {
               </span>
               <button
                 onClick={() => setMoreOpen(false)}
-                aria-label="Close"
+                aria-label={t.cancel}
                 className="grid place-items-center w-8 h-8 rounded-[6px]"
                 style={{ background: 'var(--bg-2)', color: 'var(--text-2)' }}
               >

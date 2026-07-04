@@ -38,7 +38,9 @@ export function calcAmortizationSchedule(
     balance = Math.max(0, balance);
     schedule.push({
       year: y,
-      annualPayment: monthlyPayment * 12,
+      // Sum of the year's actual payments, not monthlyPayment × 12 — the payoff
+      // year has fewer than 12 payments, so a flat ×12 overstates its total.
+      annualPayment: yearPrincipal + yearInterest,
       principalPaid: yearPrincipal,
       interestPaid: yearInterest,
       balance,
@@ -264,8 +266,15 @@ export function calcHouseEquityByYear(
   let value = houseValue;
   for (let y = 0; y <= years; y++) {
     // schedule[y - 1] is the balance at the end of year y; once the loan is
-    // paid off the schedule runs out and the remaining balance is 0.
-    const debt = y === 0 ? houseDebt : schedule[y - 1]?.balance ?? 0;
+    // paid off the schedule runs out and the remaining balance is 0. But when
+    // there's NO schedule at all (term ≤ 0), the debt doesn't amortize — carry
+    // houseDebt forward instead of vanishing it to 0.
+    const debt =
+      y === 0
+        ? houseDebt
+        : schedule.length > 0
+          ? schedule[y - 1]?.balance ?? 0
+          : houseDebt;
     equity.push(value - debt);
     value = value * (1 + appreciationRate / 100);
   }

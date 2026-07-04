@@ -31,6 +31,7 @@ import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear } from '../lib/calculations';
+import { parseLocaleNumber } from '../lib/validators';
 
 interface ModalConfig {
   title: string;
@@ -86,7 +87,7 @@ const AssetPage: React.FC = () => {
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: currentVal.toString() }],
       onSave: (vals) => {
-        const n = parseFloat(vals.value);
+        const n = parseLocaleNumber(vals.value);
         if (!isNaN(n) && n >= 0) updateAsset(key, n);
         closeModal();
       },
@@ -98,7 +99,7 @@ const AssetPage: React.FC = () => {
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: currentVal.toString() }],
       onSave: (vals) => {
-        const n = parseFloat(vals.value);
+        const n = parseLocaleNumber(vals.value);
         if (!isNaN(n) && n >= 0) updatePension(key, n);
         closeModal();
       },
@@ -133,7 +134,7 @@ const AssetPage: React.FC = () => {
       title: label,
       fields: [{ key: 'rate', label: t.annualReturn, type: 'number', value: current.toString() }],
       onSave: (vals) => {
-        const n = parseFloat(vals.rate);
+        const n = parseLocaleNumber(vals.rate);
         if (!isNaN(n) && n >= 0 && n <= 100) onCommit(n);
         closeModal();
       },
