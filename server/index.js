@@ -36,19 +36,21 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// Reject requests whose Host header isn't in the allowlist. Guards the
-// unauthenticated loopback service against DNS-rebinding (an attacker page on a
-// domain that resolves to 127.0.0.1). Reverse-proxy users set ALLOWED_HOSTS to
-// their external hostname(s).
-const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || 'localhost,127.0.0.1,[::1]')
+// Optional Host-header allowlist (a DNS-rebinding guard). OFF by default so the
+// app works behind any hostname / reverse proxy / ingress out of the box. To
+// enable it, set ALLOWED_HOSTS to a comma-separated list of the hostname(s) the
+// app is served on, e.g. ALLOWED_HOSTS=finance.example.com,localhost.
+const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '')
   .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
-app.use((req, res, next) => {
-  const host = (req.hostname || '').toLowerCase();
-  if (host && !ALLOWED_HOSTS.includes(host)) {
-    return res.status(403).json({ error: 'host not allowed' });
-  }
-  next();
-});
+if (ALLOWED_HOSTS.length > 0) {
+  app.use((req, res, next) => {
+    const host = (req.hostname || '').toLowerCase();
+    if (host && !ALLOWED_HOSTS.includes(host)) {
+      return res.status(403).json({ error: 'host not allowed' });
+    }
+    next();
+  });
+}
 
 // The whole dataset is a single JSON blob that grows as transactions/snapshots
 // accumulate. Keep the limit generous so a large history doesn't start silently
