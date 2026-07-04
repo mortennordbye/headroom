@@ -61,7 +61,19 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-const db = new Database(path.join(DATA_DIR, 'database.sqlite'));
+const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
+let db;
+try {
+  db = new Database(DB_PATH);
+} catch (err) {
+  // Almost always a permissions problem: the data volume isn't writable by the
+  // container user. Fail with a clear, actionable message instead of a raw
+  // SQLITE_CANTOPEN stack trace.
+  console.error(`[db] Could not open ${DB_PATH}: ${err.message}`);
+  console.error(`[db] Ensure DATA_DIR (${DATA_DIR}) is writable by uid ${process.getuid ? process.getuid() : '?'}. ` +
+    `For Docker, either let the container start as root (it drops to 'node' after fixing perms) or chown the volume to that user.`);
+  process.exit(1);
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS finance_data (
