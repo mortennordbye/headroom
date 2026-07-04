@@ -4,5 +4,22 @@ dist/
 .claude/
 data/database.sqlite
 data/*.db
+data/*.sqlite
+backups/
 screenshots/
 *.log
+
+# Local artifacts (gitignored) that would otherwise bloat the build context
+.playwright-mcp/
+.env
+.env.local
+.env.*.local
+.DS_Store
+/*.png
+/*-snapshot.md
+/*-refs.md
+AUDIT.md
+FEATURES.md
+BACKLOG.md
+*.test.ts
+*.test.tsx

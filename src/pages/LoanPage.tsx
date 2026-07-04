@@ -45,6 +45,7 @@ import {
   calcBridgeLoanCost,
   calcMonthlyPayment,
 } from '../lib/calculations';
+import { parseLocaleNumber } from '../lib/validators';
 
 interface ModalConfig {
   title: string;
@@ -87,8 +88,10 @@ const LoanPage: React.FC = () => {
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: current.toString() }],
       onSave: (vals) => {
-        const n = parseFloat(vals.value);
-        if (!isNaN(n)) updateLoan(key, n);
+        const n = parseLocaleNumber(vals.value);
+        // Loan amounts, rates and terms are all non-negative; a negative term in
+        // particular breaks the amortization math.
+        if (!isNaN(n) && n >= 0) updateLoan(key, n);
         closeModal();
       },
     });
@@ -110,8 +113,8 @@ const LoanPage: React.FC = () => {
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: current.toString() }],
       onSave: (vals) => {
-        const n = parseFloat(vals.value);
-        if (!isNaN(n)) updateHomeowner(key, n);
+        const n = parseLocaleNumber(vals.value);
+        if (!isNaN(n) && n >= 0) updateHomeowner(key, n);
         closeModal();
       },
     });
@@ -122,8 +125,8 @@ const LoanPage: React.FC = () => {
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: current.toString() }],
       onSave: (vals) => {
-        const n = parseFloat(vals.value);
-        if (!isNaN(n)) updateTransition(key, n);
+        const n = parseLocaleNumber(vals.value);
+        if (!isNaN(n) && n >= 0) updateTransition(key, n);
         closeModal();
       },
     });
@@ -133,9 +136,9 @@ const LoanPage: React.FC = () => {
   const calc = useMemo(() => {
     const monthlyRate = loan.rente / 100 / 12;
     const n = loan.nedbetalingstid * 12;
-    const monthlyPaymentBase = monthlyRate === 0
-      ? loan.laanebelop / n
-      : loan.laanebelop * monthlyRate / (1 - Math.pow(1 + monthlyRate, -n));
+    // Shared helper (guards term ≤ 0 → 0, avoiding Infinity/NaN); do not inline
+    // the annuity formula here — see calculations.ts:calcMonthlyPayment.
+    const monthlyPaymentBase = calcMonthlyPayment(loan.laanebelop, loan.rente, loan.nedbetalingstid);
     const monthlyPaymentWithFee = monthlyPaymentBase + loan.termingebyr;
     const totalInterest = monthlyPaymentBase * n - loan.laanebelop;
     const totalCost = loan.laanebelop + totalInterest + loan.etableringsgebyr + loan.termingebyr * n;

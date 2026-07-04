@@ -1,4 +1,4 @@
-.PHONY: build up down restart clean seed seed-reset seed-local logs
+.PHONY: build up down restart clean seed seed-reset seed-local logs backup
 
 # Build images and bring everything up (rebuilds if already running)
 build:
@@ -43,6 +43,15 @@ down:
 # Restart without rebuilding
 restart:
 	docker-compose restart
+
+# Back up the SQLite database out of the volume to ./backups/ (timestamped).
+# The only automatic safety net besides the manual JSON export in the UI.
+backup:
+	@mkdir -p backups
+	@docker cp headroom:/data/database.sqlite backups/headroom-$$(date +%Y%m%d-%H%M%S).sqlite
+	@echo ""
+	@echo "  Backed up to backups/headroom-$$(date +%Y%m%d-%H%M%S).sqlite"
+	@echo ""
 
 # Tail container logs
 logs:

@@ -1,11 +1,59 @@
 const express = require('express');
+const helmet = require('helmet');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
 
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+
+// Security headers. CSP is tailored to what the app actually loads: same-origin
+// scripts/assets, inline styles (Tailwind v4 + Recharts inject them), and Google
+// Fonts. `connect-src 'self'` keeps the API same-origin only.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      workerSrc: ["'self'"],
+      manifestSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
+      // The app is served over plain HTTP by design (loopback / reverse proxy
+      // terminates TLS). Don't force sub-resources to https — that would break
+      // same-origin asset loads when accessed over http on a non-loopback host.
+      upgradeInsecureRequests: null,
+    },
+  },
+  // HSTS is pointless (and can lock users out) for a plain-HTTP loopback service.
+  hsts: false,
+  // Fonts/assets are same-origin; the default 'require-corp' would block them.
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Reject requests whose Host header isn't in the allowlist. Guards the
+// unauthenticated loopback service against DNS-rebinding (an attacker page on a
+// domain that resolves to 127.0.0.1). Reverse-proxy users set ALLOWED_HOSTS to
+// their external hostname(s).
+const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || 'localhost,127.0.0.1,[::1]')
+  .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+app.use((req, res, next) => {
+  const host = (req.hostname || '').toLowerCase();
+  if (host && !ALLOWED_HOSTS.includes(host)) {
+    return res.status(403).json({ error: 'host not allowed' });
+  }
+  next();
+});
+
+// The whole dataset is a single JSON blob that grows as transactions/snapshots
+// accumulate. Keep the limit generous so a large history doesn't start silently
+// 413-ing saves; the size warning below flags when it's getting big.
+app.use(express.json({ limit: '10mb' }));
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
 
@@ -49,13 +97,49 @@ function monthCount(fromMonth, toMonth) {
   return (ty - fy) * 12 + (tm - fm) + 1;
 }
 
+// Cheap liveness probe: exercises the DB so a hung event loop / broken SQLite
+// handle fails the healthcheck instead of staying "Up" forever.
+const healthStmt = db.prepare('SELECT 1 AS ok');
+app.get('/healthz', (_req, res) => {
+  try {
+    healthStmt.get();
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
+
 app.get('/api/data', (req, res) => {
   const row = getStmt.get('headroom');
   res.json(row ? JSON.parse(row.content) : null);
 });
 
+// Minimal shape check so a stray/garbage POST can't overwrite the single data
+// row with junk (`[]`, `42`, undefined body from a missing JSON content-type).
+// Not a full schema — just enough to reject anything that clearly isn't the
+// finance blob. Acts as a corruption firewall.
+function isValidFinancePayload(body) {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
+  // Expect the core domain keys the client always persists.
+  return (
+    typeof body.income === 'number' &&
+    typeof body.assets === 'object' && body.assets !== null &&
+    Array.isArray(body.fixedExpenses) &&
+    Array.isArray(body.dailyTransactions)
+  );
+}
+
+const SIZE_WARN_BYTES = 2 * 1024 * 1024; // warn once the blob passes ~2 MB
+
 app.post('/api/data', (req, res) => {
-  upsertStmt.run('headroom', JSON.stringify(req.body));
+  if (!isValidFinancePayload(req.body)) {
+    return res.status(400).json({ error: 'invalid finance payload' });
+  }
+  const content = JSON.stringify(req.body);
+  if (content.length > SIZE_WARN_BYTES) {
+    console.warn(`[data] payload is ${(content.length / 1024 / 1024).toFixed(1)} MB — approaching the body limit`);
+  }
+  upsertStmt.run('headroom', content);
   res.json({ ok: true });
 });
 

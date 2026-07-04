@@ -7,11 +7,24 @@ import { useRegisterSW } from 'virtual:pwa-register/react';
  * only takes over on this user-triggered reload, the running tab never loses
  * the chunks it's using mid-session.
  */
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly
+
 export default function UpdatePrompt() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
-  } = useRegisterSW();
+  } = useRegisterSW({
+    // An installed PWA kept open for days otherwise only checks for a new SW on a
+    // hard navigation. Poll hourly and whenever the tab becomes visible so the
+    // "new version" prompt actually appears (guards the stale-cache failure mode).
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+      setInterval(() => { void registration.update(); }, UPDATE_CHECK_INTERVAL_MS);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void registration.update();
+      });
+    },
+  });
 
   if (!needRefresh) return null;
 

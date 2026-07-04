@@ -6,6 +6,7 @@ import { TrendingUp, Wallet, Activity } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
+import { currentMonthKey } from '../lib/date';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -17,19 +18,21 @@ function formatAxisInt(val: number): string {
 }
 
 const ForecastPage: React.FC = () => {
-  const { t, lang, totalEquity, salaries, jobs, loan, formatCurrency, region, customTaxRatePct, pension } = useFinance();
+  const { t, lang, totalEquity, salaries, jobs, loan, income, housingMode, homeowner, formatCurrency, region, customTaxRatePct, pension } = useFinance();
 
   // Find current salary (most recent effectiveDate <= today).
   const currentGross = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 7);
+    const today = currentMonthKey();
     const eligible = salaries.filter(s => s.effectiveDate <= today);
-    if (eligible.length === 0) return 800_000;
+    // Fall back to the legacy monthly `income` annualized (matching
+    // grossAnnualIncome elsewhere) rather than a fabricated magic number.
+    if (eligible.length === 0) return income * 12;
     return eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b)).grossAnnual;
-  }, [salaries]);
+  }, [salaries, income]);
 
   // Current job's on-call annual (for OTP base).
   const currentOnCall = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 7);
+    const today = currentMonthKey();
     const eligible = salaries.filter(s => s.effectiveDate <= today);
     if (eligible.length === 0) return 0;
     const latest = eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b));
@@ -72,14 +75,21 @@ const ForecastPage: React.FC = () => {
   const [inflationPct, setInflationPct] = useState(3);
   const [years, setYears] = useState(15);
 
-  const startingMortgage = loan.laanebelop ?? 0;
-  const mortgageRate = (loan.rente ?? 5) / 100;
-  const mortgageTermYears = loan.nedbetalingstid ?? 25;
+  // Select the real mortgage by housing mode, exactly as the context does for
+  // net-worth projections: homeowner uses the `homeowner` inputs; first-buyer &
+  // transitioning use the `loan` planning inputs. Otherwise a homeowner's tile
+  // would forecast a hypothetical first-buyer loan instead of their actual one.
+  const isHomeowner = housingMode === 'homeowner';
+  const startingMortgage = (isHomeowner ? homeowner.currentMortgageBalance : loan.laanebelop) ?? 0;
+  const mortgageRate = ((isHomeowner ? homeowner.rente : loan.rente) ?? 5) / 100;
+  const mortgageTermYears = (isHomeowner ? homeowner.nedbetalingstid : loan.nedbetalingstid) ?? 25;
   // Annual mortgage payment = annuitet
   const annualMortgagePayment = useMemo(() => {
-    if (!startingMortgage || mortgageRate <= 0 || mortgageTermYears <= 0) return 0;
+    if (!startingMortgage || mortgageTermYears <= 0) return 0;
     const r = mortgageRate;
     const n = mortgageTermYears;
+    // A 0% rate has no annuity denominator — pay the principal off linearly.
+    if (r <= 0) return startingMortgage / n;
     return (startingMortgage * r) / (1 - Math.pow(1 + r, -n));
   }, [startingMortgage, mortgageRate, mortgageTermYears]);
 

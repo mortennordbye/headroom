@@ -23,7 +23,9 @@
 
   --text: #ECE7D8;
   --text-soft: #9A9C8C;
-  --text-dim: #5F6555;
+  /* Lightened from #5F6555 (~3.2:1) to meet WCAG 4.5:1 for small text — it's
+     used pervasively for 10–12px captions/labels via --text-3. */
+  --text-dim: #767C6B;
 
   --forest: #1F5A42;        /* large fills, chart areas */
   --forest-light: #7FCBA0;  /* strokes, small accents, positive values */

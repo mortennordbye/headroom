@@ -2,11 +2,21 @@ services:
   headroom:
     build: .
     ports:
-      - "8080:3001"
+      # Bind to loopback only — the app has no authentication, so it must not be
+      # reachable from other hosts on the LAN. Put it behind a reverse proxy with
+      # auth (or a VPN) to expose it beyond this machine. See README "Security".
+      - "127.0.0.1:8080:3001"
     volumes:
       - headroom_data:/data
     restart: unless-stopped
     container_name: headroom
+    healthcheck:
+      # Node has no curl/wget in the alpine image; use the runtime itself.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   headroom_data:

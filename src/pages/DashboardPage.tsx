@@ -127,6 +127,16 @@ const DashboardPage: React.FC = () => {
     return { netWorthSeries: series, isEstimated: series.some(p => p.estimated) };
   }, [netWorthHistory, totalEquity]);
 
+  // Month-over-month change in NET EQUITY (from the series above), for the hero
+  // card chip and subtitle. Previously these showed income MoM — an honest but
+  // wrong figure for a "net equity" label.
+  const netEquityDelta = useMemo(() => {
+    if (netWorthSeries.length < 2) return null;
+    const curr = netWorthSeries[netWorthSeries.length - 1].value;
+    const prev = netWorthSeries[netWorthSeries.length - 2].value;
+    return prev > 0 ? ((curr - prev) / prev) * 100 : null;
+  }, [netWorthSeries]);
+
   const annualSavings = Math.max(0, recommendedInvestment * 12);
   const cashStart = assets.savings + assets.bsu + assets.bufferAccount;
   const projectionRates = { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate };
@@ -144,7 +154,7 @@ const DashboardPage: React.FC = () => {
   ].filter(r => r.value > 0), [netInvestment, houseEquity, netCrypto, assets, lang, t]);
 
   // ─── Recent transactions ───
-  type FilterMode = 'all' | 'income' | 'expense' | 'fixed';
+  type FilterMode = 'all' | 'income' | 'expense';
   const [filter, setFilter] = useState<FilterMode>('all');
   const [historyOpen, setHistoryOpen] = useState(false);
   const recentTransactions = useMemo(() => {
@@ -152,8 +162,8 @@ const DashboardPage: React.FC = () => {
     let list = [...dailyTransactions]
       .filter(tx => tx.date.startsWith(monthStr))
       .sort((a, b) => b.date.localeCompare(a.date));
-    if (filter === 'income') list = list.filter(tx => (tx.category ?? '').toLowerCase().includes('inntekt'));
-    else if (filter === 'expense') list = list.filter(tx => !(tx.category ?? '').toLowerCase().includes('inntekt'));
+    if (filter === 'income') list = list.filter(tx => tx.kind === 'income');
+    else if (filter === 'expense') list = list.filter(tx => tx.kind !== 'income');
     return list.slice(0, 7);
   }, [dailyTransactions, currentMonth, filter]);
 
@@ -187,7 +197,8 @@ const DashboardPage: React.FC = () => {
     const groupBy = (predicate: (m: string) => boolean) => {
       const map = new Map<string, number>();
       dailyTransactions
-        .filter(tx => predicate(tx.date))
+        // Only expenses belong in a spending-by-category breakdown.
+        .filter(tx => predicate(tx.date) && tx.kind !== 'income')
         .forEach(tx => {
           const cat = tx.category || (lang === 'nb' ? 'Annet' : 'Other');
           map.set(cat, (map.get(cat) ?? 0) + tx.amount);
@@ -249,8 +260,8 @@ const DashboardPage: React.FC = () => {
   const subtitle = useMemo(() => {
     if (lang === 'nb') {
       const parts: string[] = [];
-      if (incomeDelta !== null) {
-        parts.push(`Netto egenkapital ${incomeDelta >= 0 ? 'opp' : 'ned'} ${Math.abs(incomeDelta).toFixed(1)}% denne måneden`);
+      if (netEquityDelta !== null) {
+        parts.push(`Netto egenkapital ${netEquityDelta >= 0 ? 'opp' : 'ned'} ${Math.abs(netEquityDelta).toFixed(1)}% denne måneden`);
       }
       if (monthlyBudget > 0 && totalSpent > 0) {
         const usagePct = (totalSpent / monthlyBudget) * 100;
@@ -259,15 +270,15 @@ const DashboardPage: React.FC = () => {
       return parts.length ? parts.join('. ') + '.' : 'Du er i gang. Legg til transaksjoner for å se trender.';
     }
     const parts: string[] = [];
-    if (incomeDelta !== null) {
-      parts.push(`Net equity ${incomeDelta >= 0 ? 'up' : 'down'} ${Math.abs(incomeDelta).toFixed(1)}% this month`);
+    if (netEquityDelta !== null) {
+      parts.push(`Net equity ${netEquityDelta >= 0 ? 'up' : 'down'} ${Math.abs(netEquityDelta).toFixed(1)}% this month`);
     }
     if (monthlyBudget > 0 && totalSpent > 0) {
       const usagePct = (totalSpent / monthlyBudget) * 100;
       parts.push(`you've used ${usagePct.toFixed(0)}% of this month's spending budget`);
     }
     return parts.length ? parts.join('. ') + '.' : "You're set up. Log some transactions to see trends.";
-  }, [incomeDelta, monthlyBudget, totalSpent, lang]);
+  }, [netEquityDelta, monthlyBudget, totalSpent, lang]);
 
   // ── Render ──
   return (
@@ -318,9 +329,9 @@ const DashboardPage: React.FC = () => {
         <Card variant="hero" padding="lg" className="md:col-span-7 md:row-span-2 flex flex-col">
           <div className="flex items-start justify-between gap-3">
             <SectionLabel icon={<TrendingUp />}>{t.totalEquity}</SectionLabel>
-            {incomeDelta !== null && (
-              <DeltaChip tone={incomeDelta >= 0 ? 'positive' : 'negative'} showArrow>
-                {(incomeDelta >= 0 ? '+' : '') + incomeDelta.toFixed(1)}% MoM
+            {netEquityDelta !== null && (
+              <DeltaChip tone={netEquityDelta >= 0 ? 'positive' : 'negative'} showArrow>
+                {(netEquityDelta >= 0 ? '+' : '') + netEquityDelta.toFixed(1)}% MoM
               </DeltaChip>
             )}
           </div>
@@ -610,10 +621,11 @@ const DashboardPage: React.FC = () => {
                 {formatCurrency(recommendedInvestment)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb' ? `April · ${Math.round(savingsTargetPercent)}% mål nådd` : `${Math.round(savingsTargetPercent)}% target hit`}
+                {lang === 'nb'
+                  ? `${format(currentMonth, 'MMM')} · ${Math.round(savingsTargetPercent)}% spareandel`
+                  : `${format(currentMonth, 'MMM')} · ${Math.round(savingsTargetPercent)}% savings rate`}
               </div>
             </div>
-            <DeltaChip tone="positive" size="sm">+{Math.round(savingsTargetPercent)}%</DeltaChip>
           </div>
 
           <MonthlyInvestmentBars bars={investmentBars} formatCurrency={formatCurrency} />
@@ -873,7 +885,7 @@ const DashboardPage: React.FC = () => {
             <div>
               {recentTransactions.map(tx => {
                 const date = new Date(tx.date + 'T00:00:00');
-                const isIncome = (tx.category ?? '').toLowerCase().includes('inntekt');
+                const isIncome = tx.kind === 'income';
                 return (
                   <div
                     key={tx.id}

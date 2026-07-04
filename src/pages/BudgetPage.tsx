@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import {
   PlusCircle,
   Trash2,
@@ -7,23 +7,17 @@ import {
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import FunBudget from '../components/FunBudget';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  LabelList,
-  type TooltipContentProps,
-} from 'recharts';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance, type TransactionTemplate, type ExpenseType } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
+import { parseLocaleNumber } from '../lib/validators';
 import ConfirmModal from '../components/ConfirmModal';
+import { StatCard } from '../components/ui/StatCard';
+
+// Recharts (~150 KB gz) is lazy-loaded so it stays off the first-paint critical
+// path of the default (Budget) route; it's precached after the first visit.
+const BudgetDistributionChart = lazy(() => import('../components/BudgetDistributionChart'));
 
 // Old-money category roles (concrete hex — recharts sets these as SVG attributes,
 // which do not resolve CSS var()). Restricted to the 4 category hues + neutrals;
@@ -36,10 +30,6 @@ const CHART_COLORS = [
   '#7FCBA0', // forest-light
   '#5F6555', // text-dim (→ "Annet")
 ];
-const CHART_INK = '#9A9C8C';   // text-soft — axis labels
-const CHART_GRID = 'rgba(236,231,216,0.06)';
-const CHART_TRACK = 'rgba(236,231,216,0.05)';
-
 // Fixed-expense type → role colour (matches the reference legend).
 const EXPENSE_TYPE_COLOR: Record<ExpenseType, string> = {
   fixed: '#3F7373',        // teal — recurring/structural
@@ -110,10 +100,17 @@ const BudgetPage: React.FC = () => {
 
   // --- Validation helpers ---
   const parsePositiveNumber = (val: string): number | null => {
-    const n = parseFloat(val);
+    const n = parseLocaleNumber(val);
     if (isNaN(n) || n < 0) return null;
     return n;
   };
+  const kindField = (value: 'income' | 'expense'): ModalField => ({
+    key: 'kind', label: t.txKind, type: 'select', value,
+    options: [
+      { value: 'expense', label: t.txExpense },
+      { value: 'income', label: t.txIncome },
+    ],
+  });
 
   // --- Fixed Expenses ---
   const typeOptions = (Object.keys(EXPENSE_TYPE_COLOR) as ExpenseType[]).map(v => ({ value: v, label: t.expenseType[v] }));
@@ -180,6 +177,7 @@ const BudgetPage: React.FC = () => {
         { key: 'description', label: t.transactionDetails, type: 'text', value: prefill?.description ?? '', placeholder: 'Dagligvare, Kaffe...' },
         { key: 'amount', label: t.impact, type: 'number', value: prefill?.amount?.toString() ?? '', placeholder: '0' },
         { key: 'category', label: t.category, type: 'text', value: prefill?.category ?? '', placeholder: t.uncategorized },
+        kindField('expense'),
       ],
       onSave: (vals) => {
         const amount = parsePositiveNumber(vals.amount);
@@ -190,6 +188,7 @@ const BudgetPage: React.FC = () => {
             description: vals.description.trim(),
             amount,
             category: vals.category.trim() || undefined,
+            kind: vals.kind === 'income' ? 'income' : 'expense',
           }]);
           closeModal();
         } else {
@@ -199,19 +198,20 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  const editDailyTransaction = (id: string, description: string, amount: number, category?: string) => {
+  const editDailyTransaction = (id: string, description: string, amount: number, category?: string, kind?: 'income' | 'expense') => {
     openModal({
       title: description,
       fields: [
         { key: 'description', label: t.editDescription, type: 'text', value: description },
         { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
         { key: 'category', label: t.category, type: 'text', value: category ?? '', placeholder: t.uncategorized },
+        kindField(kind === 'income' ? 'income' : 'expense'),
       ],
       onSave: (vals) => {
         const newAmount = parsePositiveNumber(vals.amount);
         if (vals.description.trim() && newAmount !== null) {
           setDailyTransactions(dailyTransactions.map(tx => tx.id === id
-            ? { ...tx, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined }
+            ? { ...tx, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, kind: vals.kind === 'income' ? 'income' : 'expense' }
             : tx
           ));
           closeModal();
@@ -320,9 +320,10 @@ const BudgetPage: React.FC = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card
+        <StatCard
           title={t.monthlyIncome}
           value={formatCurrency(effectiveIncome)}
+          editLabel={`${t.edit} — ${t.monthlyIncome}`}
           sublabel={(
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span style={{ color: isMonthlyIncomeOverridden ? 'var(--warning)' : 'var(--positive)' }}>
@@ -369,9 +370,9 @@ const BudgetPage: React.FC = () => {
             },
           })}
         />
-        <Card title={t.monthlyBudget} value={formatCurrency(monthlyBudget)} accent />
-        <Card title={t.dailyBudget} value={formatCurrency(dailyBudget)} />
-        <Card title={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} />
+        <StatCard title={t.monthlyBudget} value={formatCurrency(monthlyBudget)} accent />
+        <StatCard title={t.dailyBudget} value={formatCurrency(dailyBudget)} />
+        <StatCard title={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} />
       </div>
 
       <SmartRecommendations />
@@ -383,6 +384,7 @@ const BudgetPage: React.FC = () => {
             <h2 className={sectionLabel}>{t.fixedCosts}</h2>
             <button
               onClick={addFixedExpense}
+              aria-label={`${t.add} — ${t.fixedCosts}`}
               className="text-[var(--accent)] hover:opacity-70 transition-opacity"
             >
               <PlusCircle size={18} strokeWidth={2} />
@@ -399,22 +401,27 @@ const BudgetPage: React.FC = () => {
           <div className="space-y-0">
             {fixedExpenses.map((expense) => (
               <div key={expense.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0">
-                <span
-                  className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0"
+                <button
+                  type="button"
+                  aria-label={`${t.edit} — ${expense.name}`}
+                  className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
                   onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type)}
                 >
                   <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
                   <span className="truncate">{expense.name}</span>
-                </span>
+                </button>
                 <div className="flex items-center gap-3">
-                  <span
+                  <button
+                    type="button"
+                    aria-label={`${t.edit} — ${expense.name}`}
                     className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
                     onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type)}
                   >
                     {formatCurrency(expense.amount)}
-                  </span>
+                  </button>
                   <button
                     onClick={() => removeFixedExpense(expense.id, expense.name)}
+                    aria-label={`${t.delete} — ${expense.name}`}
                     className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                   >
                     <Trash2 size={14} />
@@ -435,63 +442,16 @@ const BudgetPage: React.FC = () => {
             {t.distributionAnalysis}
           </h2>
           <div className="h-[280px] md:h-[340px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
+            <Suspense fallback={<div className="h-full w-full" />}>
+              <BudgetDistributionChart
                 data={sortedExpenses}
-                layout="vertical"
-                margin={{ top: 4, right: 60, left: 16, bottom: 4 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART_GRID} />
-                <XAxis type="number" hide />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  width={88}
-                  tick={{ fontSize: 11, fill: CHART_INK, fontWeight: 500 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  cursor={{ fill: CHART_TRACK }}
-                  content={({ active, payload }: TooltipContentProps) => {
-                    if (!active || !payload?.length) return null;
-                    const d = payload[0].payload as { name: string; amount: number };
-                    const pct = totalFixedExpenses > 0 ? (d.amount / totalFixedExpenses) * 100 : 0;
-                    return (
-                      <div
-                        className="rounded-[6px] px-3.5 py-2.5"
-                        style={{ background: 'var(--bg-card)', border: '1px solid var(--rule)' }}
-                      >
-                        <div className="text-[13px] font-semibold text-[var(--text-1)]">{d.name}</div>
-                        <div className="text-[13px] font-mono text-[var(--text-2)] mt-0.5">{formatCurrency(d.amount)}</div>
-                        <div className="text-[11px] text-[var(--text-3)] mt-1">
-                          {pct.toFixed(1)}% {lang === 'nb' ? 'av faste utgifter' : 'of fixed costs'}
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar
-                  dataKey="amount"
-                  radius={[0, 3, 3, 0]}
-                  barSize={12}
-                  background={{ fill: CHART_TRACK, radius: 3 } as unknown as React.ComponentProps<typeof Bar>['background']}
-                >
-                  {sortedExpenses.map((e, i) => (
-                    <Cell key={`cell-${i}`} fill={expenseColor(e.type)} />
-                  ))}
-                  <LabelList
-                    dataKey="amount"
-                    position="right"
-                    offset={10}
-                    fill={CHART_INK}
-                    fontSize={11}
-                    fontWeight={600}
-                    formatter={(v: unknown) => formatCurrencyShort(Number(v ?? 0))}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                totalFixedExpenses={totalFixedExpenses}
+                expenseColor={expenseColor}
+                formatCurrency={formatCurrency}
+                formatCurrencyShort={formatCurrencyShort}
+                lang={lang}
+              />
+            </Suspense>
           </div>
 
           {/* Category breakdown — direct-labeled bar list (top 4 + "Annet"), no pie */}
@@ -588,10 +548,10 @@ const BudgetPage: React.FC = () => {
                       )}
                       <span>{tx.description}</span>
                       <span className="font-mono text-[var(--text-2)]">{formatCurrency(tx.amount)}</span>
-                      <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
+                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
                         <Edit2 size={11} />
                       </button>
-                      <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
+                      <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
                         <Trash2 size={11} />
                       </button>
                     </span>
@@ -647,16 +607,17 @@ const BudgetPage: React.FC = () => {
                           {tx.category && (
                             <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{tx.category}</span>
                           )}
-                          <button onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
+                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
                             <Edit2 size={12} />
                           </button>
-                          <button onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
+                          <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
                             <Trash2 size={12} />
                           </button>
                         </span>
                       ))}
                       <button
                         onClick={() => addDailyTransaction(day.dateStr)}
+                        aria-label={t.add}
                         className="text-[var(--accent)] hover:opacity-70 p-1 transition-opacity"
                       >
                         <PlusCircle size={18} strokeWidth={2} />
@@ -714,59 +675,5 @@ const BudgetPage: React.FC = () => {
   );
 };
 
-interface CardProps {
-  title: string;
-  value: string;
-  sublabel?: React.ReactNode;
-  accent?: boolean;
-  editable?: boolean;
-  onEdit?: () => void;
-}
-
-function Card({ title, value, sublabel, accent, editable, onEdit }: CardProps) {
-  // The highlighted stat is set apart by a brass hairline only — no glow, no gradient.
-  const accentStyle: React.CSSProperties = accent
-    ? { background: 'var(--bg-3)', borderColor: 'var(--brass-dim)' }
-    : { background: 'var(--bg-card)', borderColor: 'var(--border)' };
-
-  return (
-    <div
-      className="p-5 md:p-6 rounded-[8px] border flex flex-col gap-3"
-      style={accentStyle}
-    >
-      <span
-        className="text-[11px] font-semibold uppercase tracking-[0.14em]"
-        style={{ color: accent ? 'var(--brass)' : 'var(--text-3)' }}
-      >
-        {title}
-      </span>
-      <div className="flex items-baseline gap-2">
-        <span
-          className="text-[24px] md:text-[28px] font-mono font-medium tracking-[-0.02em] leading-none tabular-nums"
-          style={{ color: 'var(--text-1)' }}
-        >
-          {value}
-        </span>
-        {editable && (
-          <button
-            onClick={onEdit}
-            className="p-1 rounded-md transition-colors"
-            style={{ color: 'var(--text-3)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
-            aria-label="Edit"
-          >
-            <Edit2 size={13} />
-          </button>
-        )}
-      </div>
-      {sublabel && (
-        <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-          {sublabel}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default BudgetPage;

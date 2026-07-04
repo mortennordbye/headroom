@@ -8,6 +8,9 @@ dist/
 data/*.sqlite
 data/*.db
 
+# Database backups (make backup) — contain real financial data
+backups/
+
 # Local IDE / Claude Code settings
 .claude/
 

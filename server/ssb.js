@@ -60,6 +60,9 @@ async function fetchCpi(fromMonth, toMonth) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body),
+    // Bound the upstream call so a black-holed connection can't hang
+    // /api/inflation for minutes — the caller falls back to cached data.
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
