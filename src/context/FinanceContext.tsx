@@ -212,6 +212,20 @@ export interface HoursSnapshot {
   notes?: string;
 }
 
+/**
+ * A payslip's actual figures for one month, imported from a PDF and stored
+ * per month (keyed 'YYYY-MM') to give the budget real numbers instead of
+ * tax-estimated ones. `net` also drives that month's budget income (via a
+ * matching monthly-income override set at import time).
+ */
+export interface MonthlyPayslip {
+  gross: number;        // period gross pay (Bruttolønn)
+  net: number;          // period net pay (Netto til utbetaling)
+  tax: number;          // period tax withheld (Forskuddstrekk), positive
+  base: number;         // base monthly salary (Månedslønn)
+  holidayPay?: number;  // holiday pay accrued this year (period column)
+}
+
 export interface InflationPoint {
   month: string;                  // 'YYYY-MM'
   cpiIndex: number;
@@ -520,6 +534,41 @@ export const translations = {
       backToToday: 'Tilbake til i dag',
     },
     salary: {
+      importPayslip: {
+        button: 'Importer lønnsslipp',
+        title: 'Importer fra lønnsslipp',
+        intro: 'Velg en PDF-lønnsslipp. Filen leses lokalt i nettleseren og lagres aldri – kun tallene under hentes ut og lagres for måneden.',
+        chooseFile: 'Velg PDF',
+        parsing: 'Leser lønnsslipp…',
+        parseError: 'Fant ingen gjenkjennelig lønnsslipp i denne PDF-en.',
+        readError: 'Kunne ikke lese PDF-filen.',
+        period: 'Periode',
+        payDate: 'Utbetalt',
+        month: 'Måned',
+        setsIncome: 'Nettolønn settes som månedsinntekt',
+        storedLabel: 'Lagres for måneden',
+        extraBase: 'Månedslønn',
+        extraGross: 'Bruttolønn',
+        extraNet: 'Nettolønn',
+        extraTax: 'Forskuddstrekk',
+        extraHolidayPay: 'Feriepenger (i år)',
+        overwriteNote: 'Erstatter lønnsslippen som allerede er lagret for denne måneden.',
+        importAction: 'Importer',
+        noNetFound: 'Fant ingen nettolønn i lønnsslippen.',
+        savedTitle: 'Lønnsslipp for måneden',
+        remove: 'Fjern',
+        preview: 'Forhåndsvisning',
+        clickToEnlarge: 'Klikk for å forstørre',
+        closePreview: 'Lukk',
+        supports: 'Støtter Visma-lønnsslipper – én måned eller alle på én gang.',
+        payslipsFound: 'lønnsslipper funnet',
+        view: 'Vis',
+        selectAll: 'Velg alle',
+        deselectAll: 'Fjern alle',
+        loadingPreview: 'Gjengir side…',
+        providerLabel: 'Lønnssystem',
+        moreProviders: 'Flere leverandører kommer',
+      },
       title: 'Lønn',
       heroLabel: 'Lønn',
       heroTitlePre: 'Lønn over',
@@ -1007,6 +1056,41 @@ export const translations = {
       backToToday: 'Back to today',
     },
     salary: {
+      importPayslip: {
+        button: 'Import payslip',
+        title: 'Import from payslip',
+        intro: 'Choose a PDF payslip. The file is read locally in your browser and never stored — only the figures below are extracted and saved for the month.',
+        chooseFile: 'Choose PDF',
+        parsing: 'Reading payslip…',
+        parseError: 'Couldn’t find a recognisable payslip in this PDF.',
+        readError: 'Could not read the PDF file.',
+        period: 'Period',
+        payDate: 'Paid',
+        month: 'Month',
+        setsIncome: 'Net pay becomes this month’s income',
+        storedLabel: 'Saved for the month',
+        extraBase: 'Monthly salary',
+        extraGross: 'Gross',
+        extraNet: 'Net',
+        extraTax: 'Tax withheld',
+        extraHolidayPay: 'Holiday pay (this year)',
+        overwriteNote: 'Replaces the payslip already saved for this month.',
+        importAction: 'Import',
+        noNetFound: 'No net pay found in the payslip.',
+        savedTitle: 'Payslip for the month',
+        remove: 'Remove',
+        preview: 'Preview',
+        clickToEnlarge: 'Click to enlarge',
+        closePreview: 'Close',
+        supports: 'Supports Visma payslips — one month or all at once.',
+        payslipsFound: 'payslips found',
+        view: 'View',
+        selectAll: 'Select all',
+        deselectAll: 'Clear all',
+        loadingPreview: 'Rendering page…',
+        providerLabel: 'Payroll system',
+        moreProviders: 'More providers coming',
+      },
       title: 'Salary',
       heroLabel: 'Salary',
       heroTitlePre: 'Pay over',
@@ -1328,6 +1412,9 @@ interface FinanceContextType {
   monthlyIncomes: Record<string, number>;
   setMonthlyIncomeForMonth: (monthKey: string, amount: number) => void;
   clearMonthlyIncomeForMonth: (monthKey: string) => void;
+  payslips: Record<string, MonthlyPayslip>;
+  setPayslip: (monthKey: string, data: MonthlyPayslip) => void;
+  removePayslip: (monthKey: string) => void;
   derivedMonthlyIncome: number;
   grossAnnualIncome: number;
   isMonthlyIncomeOverridden: boolean;
@@ -1466,6 +1553,7 @@ export interface ExportPayload {
   pension?: Pension;
   recurringTemplates: TransactionTemplate[];
   monthlyIncomes?: Record<string, number>;
+  payslips?: Record<string, MonthlyPayslip>;
   netWorthHistory?: Record<string, number>;
   balanceSnapshots?: Record<string, BalanceSnapshot>;
   housingMode?: HousingMode;
@@ -1523,6 +1611,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const [income, setIncome] = useState<number>(55000);
   const [monthlyIncomes, setMonthlyIncomes] = useState<Record<string, number>>({});
+  const [payslips, setPayslips] = useState<Record<string, MonthlyPayslip>>({});
   const [netWorthHistory, setNetWorthHistory] = useState<Record<string, number>>({});
   const [balanceSnapshots, setBalanceSnapshots] = useState<Record<string, BalanceSnapshot>>({});
   const [savingsTargetPercent, setSavingsTargetPercent] = useState<number>(20);
@@ -1572,6 +1661,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         if (data) {
           setIncome(data.income ?? 55000);
           setMonthlyIncomes(data.monthlyIncomes ?? {});
+          setPayslips(data.payslips ?? {});
           setNetWorthHistory(data.netWorthHistory ?? {});
           setBalanceSnapshots(data.balanceSnapshots ?? {});
           setFixedExpenses(data.fixedExpenses ?? DEFAULT_FIXED_EXPENSES);
@@ -1734,7 +1824,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // data on the backend. The real data stays safe in `demoSnapshot` until exit.
     if (demoMode) return;
     payloadRef.current = {
-      income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
+      income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
       assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
       lang,
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
@@ -1750,7 +1840,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // NB: `currentMonth` is deliberately NOT persisted or in these deps — it's
     // view state, so paging the month picker must not fire saves, and two devices
     // shouldn't fight over which month is "current".
-  }, [income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode, doSave]);
+  }, [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode, doSave]);
 
   // Flush pending changes when the tab is hidden or closed. sendBeacon survives
   // page teardown where a normal fetch would be cancelled; the server accepts the
@@ -1861,6 +1951,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const clearMonthlyIncomeForMonth = (key: string) => {
     setMonthlyIncomes(prev => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const setPayslip = (key: string, data: MonthlyPayslip) => {
+    setPayslips(prev => ({ ...prev, [key]: data }));
+  };
+
+  const removePayslip = (key: string) => {
+    setPayslips(prev => {
       if (!(key in prev)) return prev;
       const next = { ...prev };
       delete next[key];
@@ -2090,6 +2193,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const importAll = (data: Partial<ExportPayload>) => {
     if (data.income !== undefined) setIncome(data.income);
     if (data.monthlyIncomes !== undefined) setMonthlyIncomes(data.monthlyIncomes);
+    if (data.payslips !== undefined) setPayslips(data.payslips);
     if (data.netWorthHistory !== undefined) setNetWorthHistory(data.netWorthHistory);
     if (data.balanceSnapshots !== undefined) setBalanceSnapshots(data.balanceSnapshots);
     if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses);
@@ -2132,7 +2236,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const enableDemoMode = () => {
     if (demoMode) return;
     demoSnapshot.current = {
-      income, monthlyIncomes, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
+      income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
       assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
       lang, currentMonth: format(currentMonth, 'yyyy-MM'),
       savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
@@ -2286,6 +2390,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
       currentMonth, setCurrentMonth, income, setIncome,
       monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
+      payslips, setPayslip, removePayslip,
       derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
       netWorthHistory, setNetWorthForMonth, clearNetWorthForMonth, balanceSnapshots, prevMonthIncome, prevMonthSpending,
       effectiveIncome, averageIncome,

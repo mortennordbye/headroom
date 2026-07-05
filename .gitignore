@@ -39,3 +39,6 @@ screenshots/*
 /*.png
 /*-snapshot.md
 /*-refs.md
+
+# Payslip PDFs — parsed client-side, never stored/committed
+*.pdf

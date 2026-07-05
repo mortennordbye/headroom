@@ -113,6 +113,7 @@ export function getDemoData(): Partial<ExportPayload> {
   return {
     income: 62000,
     monthlyIncomes: {},
+    payslips: {},
     netWorthHistory,
     balanceSnapshots,
     savingsTargetPercent: 20,

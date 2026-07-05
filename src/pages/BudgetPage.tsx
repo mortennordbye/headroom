@@ -4,9 +4,12 @@ import {
   Trash2,
   Edit2,
   Download,
+  FileUp,
+  ChevronDown,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import FunBudget from '../components/FunBudget';
+import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance, type TransactionTemplate, type ExpenseType } from '../context/FinanceContext';
@@ -72,6 +75,8 @@ const BudgetPage: React.FC = () => {
     lang,
     currentMonth,
     monthlyIncomes,
+    payslips,
+    removePayslip,
     setMonthlyIncomeForMonth,
     setCurrentMonth,
     clearMonthlyIncomeForMonth,
@@ -92,6 +97,8 @@ const BudgetPage: React.FC = () => {
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [payslipOpen, setPayslipOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -270,6 +277,8 @@ const BudgetPage: React.FC = () => {
 
   const dateLocale = lang === 'nb' ? nb : enUS;
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: dateLocale });
+  const monthKey = format(currentMonth, 'yyyy-MM');
+  const monthPayslip = payslips[monthKey];
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
@@ -305,6 +314,13 @@ const BudgetPage: React.FC = () => {
               → {t.today}
             </button>
           )}
+          <button
+            onClick={() => setPayslipOpen(true)}
+            className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-[4px] transition-colors"
+            style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
+          >
+            <FileUp size={12} /> {t.salary.importPayslip.button}
+          </button>
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {lang === 'nb' ? (
@@ -376,6 +392,40 @@ const BudgetPage: React.FC = () => {
         <StatCard title={t.dailyBudget} value={formatCurrency(dailyBudget)} />
         <StatCard title={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} />
       </div>
+
+      {/* Imported payslip for this month */}
+      {monthPayslip && (
+        <div className={`${card} p-5 md:p-6`}>
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-[var(--border)]">
+            <div className="flex items-center gap-2">
+              <FileUp size={14} className="text-[var(--text-2)]" />
+              <h3 className="text-[13px] font-semibold text-[var(--text-1)]">{t.salary.importPayslip.savedTitle}</h3>
+            </div>
+            <button
+              onClick={() => removePayslip(monthKey)}
+              className="text-[11px] font-medium text-[var(--text-2)] hover:text-[#B5533A] transition-colors"
+            >
+              {t.salary.importPayslip.remove}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2">
+            {([
+              { label: t.salary.importPayslip.extraNet, value: monthPayslip.net },
+              { label: t.salary.importPayslip.extraGross, value: monthPayslip.gross },
+              { label: t.salary.importPayslip.extraTax, value: monthPayslip.tax },
+              { label: t.salary.importPayslip.extraBase, value: monthPayslip.base },
+              ...(monthPayslip.holidayPay != null
+                ? [{ label: t.salary.importPayslip.extraHolidayPay, value: monthPayslip.holidayPay }]
+                : []),
+            ]).map(f => (
+              <div key={f.label}>
+                <div className="text-[10px] uppercase tracking-[0.1em] font-semibold" style={{ color: 'var(--text-3)' }}>{f.label}</div>
+                <div className="text-[14px] font-mono tabular-nums text-[var(--text-1)]">{formatCurrency(f.value)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <SmartRecommendations />
 
@@ -521,10 +571,21 @@ const BudgetPage: React.FC = () => {
 
       {/* Daily Tracker */}
       <div className={`${card} overflow-hidden`}>
-        <div className="px-5 py-4 md:px-7 md:py-5 border-b border-[var(--border)] flex items-center justify-between">
-          <h2 className={sectionLabel}>{t.operationalLog}</h2>
+        <div className={`px-5 py-4 md:px-7 md:py-5 flex items-center justify-between ${logOpen ? 'border-b border-[var(--border)]' : ''}`}>
+          <button
+            onClick={() => setLogOpen(o => !o)}
+            aria-expanded={logOpen}
+            className="flex items-center gap-2 min-w-0 group"
+          >
+            <ChevronDown
+              size={15}
+              className="text-[var(--text-2)] transition-transform group-hover:text-[var(--text-1)]"
+              style={{ transform: logOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+            />
+            <h2 className={sectionLabel}>{t.operationalLog}</h2>
+          </button>
           <div className="flex items-center gap-2">
-            {totalSpentThisMonth > 0 && (
+            {logOpen && totalSpentThisMonth > 0 && (
               <button
                 onClick={exportCSV}
                 className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors px-2 py-1 rounded-lg hover:bg-[var(--bg-elev)]"
@@ -536,6 +597,7 @@ const BudgetPage: React.FC = () => {
           </div>
         </div>
 
+        {logOpen && (<>
         {/* Mobile */}
         <div className="md:hidden divide-y divide-[var(--border)]">
           {dailyData.map((day) => (
@@ -680,6 +742,7 @@ const BudgetPage: React.FC = () => {
             </tfoot>
           </table>
         </div>
+        </>)}
       </div>
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
@@ -693,6 +756,7 @@ const BudgetPage: React.FC = () => {
           onCancel={() => setPendingDelete(null)}
         />
       )}
+      {payslipOpen && <PayslipImportModal onClose={() => setPayslipOpen(false)} />}
     </div>
   );
 };

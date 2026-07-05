@@ -2,6 +2,13 @@
 
 Items deferred from prior work. When an item is finished, remove it.
 
+## Payslip importer — follow-ups
+
+Shipped (2026-07): client-side Visma payslip import on the Budget page. PDFs are parsed entirely in-browser (pdf.js, lazy-loaded) and never stored; a single-month PDF opens a detailed editable review, a multi-page archive opens a batch list that fills income history back in time. Per-month figures live in `payslips: Record<month, MonthlyPayslip>` (`src/context/FinanceContext.tsx`), and net pay is written as that month's income override. Parser + tests in `src/lib/payslip/` (`parseVismaPayslip.ts`, `parsePayslipAmount.ts`, provider registry in `index.ts`); browser extraction/render in `extractPdfText.ts`; UI in `src/components/PayslipImportModal.tsx` + `src/pages/BudgetPage.tsx`. Remaining:
+
+- **Only Visma is supported.** The provider registry (`src/lib/payslip/index.ts`, `parsePayslip` iterating `PARSERS`) is built to take more formats, but only `parseVismaPayslip` exists. Adding another payroll provider = write a `PayslipParser` (returns `null` when it doesn't recognise the text) and push it onto `PARSERS`. **Unblock**: a sample PDF from the new provider to build a fixture from (tests inline the extracted text lines, never the binary).
+- **Line items (on-call / overtime) aren't parsed into their own entries.** The Visma parser deliberately drops the pay-line table (Fastlønn / On-Call / Feriepenger rows) because the thousands-space and column-separator are the same character, making per-column amounts ambiguous (e.g. `On-Call ... 24/7 108,00` mis-bridges to `7 108,00`). Only the headline figures (gross/net/tax/base/holiday) are extracted. **What would unblock**: column parsing anchored on the payslip's fixed X positions (available from pdf.js `transform[4]`) instead of regex over the joined line, then map rows to `OvertimeEntry`/`BonusEntry`. **Where**: `src/lib/payslip/parseVismaPayslip.ts` (extraction), `src/lib/payslip/extractPdfText.ts` (would need to preserve per-item X), `src/components/PayslipImportModal.tsx` (write mapping).
+
 ## Debt modeling — follow-ups
 
 Non-mortgage debts (studielån / forbrukslån / kredittkort) now exist (`Debt` in `src/context/FinanceContext.tsx`, math in `src/lib/debt.ts`, UI in `src/components/DebtSection.tsx` on the Formue page). They reduce the headline net worth (`netWorth = totalEquity − totalDebt`) and feed the gjeldsgrad metric. Remaining:
