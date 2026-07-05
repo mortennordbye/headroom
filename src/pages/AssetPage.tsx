@@ -187,7 +187,7 @@ const AssetPage: React.FC = () => {
         {/* Left column */}
         <div className="space-y-4 md:space-y-6">
           {/* Market Positions */}
-          <div className={`${card} p-5 md:p-7 space-y-5`}>
+          <div data-tour="market-positions" className={`${card} p-5 md:p-7 space-y-5`}>
             <div className="flex items-center justify-between gap-2 pb-4 border-b border-[var(--border)]">
               <div className="flex items-center gap-2">
                 <BarChart2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
@@ -229,7 +229,7 @@ const AssetPage: React.FC = () => {
           </div>
 
           {/* Real Estate */}
-          <div className={`${card} p-5 md:p-7 space-y-5`}>
+          <div data-tour="real-estate" className={`${card} p-5 md:p-7 space-y-5`}>
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
               <Home size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h3 className={sectionLabel}>{t.realEstate}</h3>
@@ -256,7 +256,7 @@ const AssetPage: React.FC = () => {
           </div>
 
           {/* Pension wealth (locked — not in totalEquity) */}
-          <div className={`${card} p-5 md:p-7 space-y-5`}>
+          <div data-tour="pension" className={`${card} p-5 md:p-7 space-y-5`}>
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
               <Briefcase size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h3 className={sectionLabel}>{t.pensionWealth}</h3>
@@ -290,7 +290,7 @@ const AssetPage: React.FC = () => {
         {/* Right column */}
         <div className="space-y-4 md:space-y-6">
           {/* Cash Reserves */}
-          <div className={`${card} p-5 md:p-7 space-y-5`}>
+          <div data-tour="cash-reserves" className={`${card} p-5 md:p-7 space-y-5`}>
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
               <PiggyBank size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h3 className={sectionLabel}>{t.cashReserves}</h3>
@@ -319,7 +319,7 @@ const AssetPage: React.FC = () => {
           </div>
 
           {/* Crypto */}
-          <div className={`${card} p-5 md:p-7 space-y-5`}>
+          <div data-tour="crypto" className={`${card} p-5 md:p-7 space-y-5`}>
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
               <Bitcoin size={14} strokeWidth={2} className="text-[var(--text-2)]" />
               <h3 className={sectionLabel}>{t.crypto}</h3>
@@ -453,7 +453,7 @@ const AssetPage: React.FC = () => {
       </div>
 
       {/* Growth Projection */}
-      <div className={`${card} p-5 md:p-7 space-y-5`}>
+      <div data-tour="growth-projection" className={`${card} p-5 md:p-7 space-y-5`}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
             <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />

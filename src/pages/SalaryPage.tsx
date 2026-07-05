@@ -772,7 +772,7 @@ const SalaryPage: React.FC = () => {
       </header>
 
       {/* Summary tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div data-tour="salary-overview" className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <SummaryTile
           label={t.salary.currentSalary}
           value={current ? formatCurrency(current.totalAnnual) : '—'}

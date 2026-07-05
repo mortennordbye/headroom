@@ -149,7 +149,7 @@ export default function SmartRecommendations() {
   const slicePct = (v: number) => (pieTotal > 0 ? (v / pieTotal) * 100 : 0);
 
   return (
-    <div className={`${card} p-5 md:p-7`}>
+    <div data-tour="budget-plan" className={`${card} p-5 md:p-7`}>
       {conservativeMode && (
         <div className="mb-4 flex items-center gap-2 border bg-[var(--warning-bg)] border-[color-mix(in_srgb,var(--warning)_30%,transparent)] rounded-[6px] px-4 py-2.5 text-[12px] text-[var(--warning)] font-medium">
           <AlertTriangle size={13} className="shrink-0" />

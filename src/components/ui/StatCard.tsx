@@ -9,13 +9,15 @@ interface StatCardProps {
   onEdit?: () => void;
   /** Accessible name for the edit button (translated by the caller). */
   editLabel?: string;
+  /** Optional `data-tour` anchor for the onboarding highlight. */
+  dataTour?: string;
 }
 
 /**
  * A labelled stat tile (title + big value + optional sublabel/edit). Named
  * StatCard so it doesn't shadow the layout `ui/Card` primitive.
  */
-export function StatCard({ title, value, sublabel, accent, editable, onEdit, editLabel }: StatCardProps) {
+export function StatCard({ title, value, sublabel, accent, editable, onEdit, editLabel, dataTour }: StatCardProps) {
   // The highlighted stat is set apart by a brass hairline only — no glow, no gradient.
   const accentStyle: React.CSSProperties = accent
     ? { background: 'var(--bg-3)', borderColor: 'var(--brass-dim)' }
@@ -23,7 +25,8 @@ export function StatCard({ title, value, sublabel, accent, editable, onEdit, edi
 
   return (
     <div
-      className="p-5 md:p-6 rounded-[8px] border flex flex-col gap-3"
+      data-tour={dataTour}
+      className="p-5 md:p-6 rounded-[8px] border flex flex-col gap-3 min-w-0"
       style={accentStyle}
     >
       <span
@@ -34,7 +37,7 @@ export function StatCard({ title, value, sublabel, accent, editable, onEdit, edi
       </span>
       <div className="flex items-baseline gap-2">
         <span
-          className="text-[24px] md:text-[28px] font-mono font-medium tracking-[-0.02em] leading-none tabular-nums"
+          className="text-[20px] sm:text-[24px] md:text-[28px] font-mono font-medium tracking-[-0.02em] leading-none tabular-nums truncate"
           style={{ color: 'var(--text-1)' }}
         >
           {value}

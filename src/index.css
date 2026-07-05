@@ -179,6 +179,19 @@ textarea,
   color: var(--text-1);
 }
 
+/* Onboarding spotlight. The huge box-shadow spread paints a viewport-wide dim
+   AROUND the highlighted section while a brass inset ring frames it — no rect
+   math, so it tracks the element through scroll/resize. Raised above app chrome
+   (header z-20, bottom nav z-40) but below the tour's click-blocker (z-58) and
+   coach panel (z-60). */
+.tour-highlight {
+  position: relative;
+  z-index: 56;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 2px var(--brass), 0 0 0 9999px rgba(0, 0, 0, 0.66);
+  transition: box-shadow 0.25s ease;
+}
+
 :focus-visible {
   outline: 1px solid var(--forest-light);
   outline-offset: 2px;

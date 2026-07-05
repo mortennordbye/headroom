@@ -9,11 +9,13 @@ import {
   LineChart as LineChartIcon,
   Menu as MenuIcon,
   X,
+  HelpCircle,
 } from 'lucide-react';
 import { format, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import OnboardingTour from './onboarding/OnboardingTour';
 
 import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 
@@ -23,7 +25,7 @@ const MONTH_SCOPED_ROUTES = ['/', '/overview'];
 const HIDE_TIME_MARKER_ROUTES = ['/settings'];
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, retrySave, hiddenNavItems, demoMode, toggleDemoMode } = useFinance();
+  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, retrySave, hiddenNavItems, demoMode, toggleDemoMode, startOnboarding } = useFinance();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -87,6 +89,20 @@ const Layout: React.FC = () => {
 
         {/* Right cluster: month picker (month-scoped pages) or static "as of today" marker */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Setup guide — desktop header (mobile uses the "More" sheet entry to
+              avoid crowding the month picker). Always available so the tour can
+              be (re)started with data too. */}
+          <button
+            onClick={startOnboarding}
+            aria-label={t.onboarding.guide}
+            title={t.onboarding.guide}
+            className="hidden sm:grid place-items-center w-8 h-8 rounded-[6px] border transition-colors"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brass)'; e.currentTarget.style.borderColor = 'var(--brass-dim)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+          >
+            <HelpCircle size={16} strokeWidth={2} />
+          </button>
           {isMonthScoped ? (
             <>
               <div
@@ -253,6 +269,15 @@ const Layout: React.FC = () => {
                   <SheetItem key={item.path} to={item.path} icon={item.icon} label={t.nav[item.key]} onNavigate={() => setMoreOpen(false)} />
                 ))}
             </div>
+            {/* Setup guide — the mobile trigger for the guided tour */}
+            <button
+              onClick={() => { setMoreOpen(false); startOnboarding(); }}
+              className="mt-2 w-full flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
+              style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)', color: 'var(--text-1)' }}
+            >
+              <HelpCircle size={18} strokeWidth={1.75} />
+              <span>{t.onboarding.guide}</span>
+            </button>
           </div>
         </div>
       )}
@@ -279,6 +304,9 @@ const Layout: React.FC = () => {
           <span className="truncate max-w-full px-0.5">{t.nav.more}</span>
         </button>
       </nav>
+
+      {/* First-run guided setup (renders only when active; portals to body) */}
+      <OnboardingTour />
     </div>
   );
 };

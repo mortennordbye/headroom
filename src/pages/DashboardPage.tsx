@@ -287,7 +287,7 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-6 md:space-y-7">
       {/* Hero header */}
-      <header className="max-w-4xl">
+      <header data-tour="dashboard-hero" className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
           {lang === 'nb' ? 'God dag' : 'Good afternoon'}
         </div>

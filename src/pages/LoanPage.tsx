@@ -231,7 +231,7 @@ const LoanPage: React.FC = () => {
     >
 
       {/* Hero header */}
-      <header className="max-w-4xl">
+      <header data-tour="loan-hero" className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
           {lang === 'nb' ? 'Boliglån' : 'Mortgage'}
         </div>

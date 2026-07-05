@@ -147,7 +147,7 @@ const ForecastPage: React.FC = () => {
   return (
     <div className="space-y-6 md:space-y-7">
       {/* Hero header */}
-      <header className="max-w-4xl">
+      <header data-tour="forecast-hero" className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
           {t.forecast.heroLabel}
         </div>

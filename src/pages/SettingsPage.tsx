@@ -17,6 +17,7 @@ import {
   Eye,
   EyeOff,
   MonitorPlay,
+  Sparkles,
 } from 'lucide-react';
 import {
   useFinance,
@@ -90,6 +91,8 @@ export default function SettingsPage() {
     restoreCustomTaxRateDefault,
     demoMode,
     toggleDemoMode,
+    onboardingCompleted,
+    startOnboarding,
     hiddenNavItems,
     toggleNavItem,
     employerCostConfig,
@@ -161,6 +164,7 @@ export default function SettingsPage() {
       employerCostConfig,
       billingConfig,
       hiddenNavItems,
+      onboardingCompleted,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -583,19 +587,28 @@ export default function SettingsPage() {
               </span>
             )}
           </div>
-          <Button
-            variant={demoMode ? 'secondary' : 'primary'}
-            size="md"
-            className="mt-5"
-            leadingIcon={<MonitorPlay />}
-            onClick={toggleDemoMode}
-          >
-            {demoMode ? t.settings.demoDeactivate : t.settings.demoActivate}
-          </Button>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button
+              variant={demoMode ? 'secondary' : 'primary'}
+              size="md"
+              leadingIcon={<MonitorPlay />}
+              onClick={toggleDemoMode}
+            >
+              {demoMode ? t.settings.demoDeactivate : t.settings.demoActivate}
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              leadingIcon={<Sparkles />}
+              onClick={startOnboarding}
+            >
+              {t.onboarding.replay}
+            </Button>
+          </div>
         </Card>
 
         {/* ──── Data management (span 12) ──── */}
-        <Card padding="lg" className="md:col-span-12">
+        <Card padding="lg" className="md:col-span-12" data-tour="settings-data">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <SectionLabel icon={<Database />}>{t.settings.dataManagement}</SectionLabel>

@@ -342,6 +342,63 @@ export const translations = {
       mortgageToday: 'Boliglån i dag', debtFreeYear: 'Gjeldfri',
       plusOtherDebt: '+ {amount} annen gjeld (studielån/forbruk) — se oversikten over.',
     },
+    onboarding: {
+      title: 'Oppsettsguide',
+      hubIntro: 'Velg hva som helst nedenfor for å sette det opp eller lære hva det gjør — i hvilken som helst rekkefølge. Endringene lagres underveis.',
+      progress: '{done} av {total} dekket',
+      sampleData: 'Utforsk med eksempeldata',
+      replay: 'Kjør oppsettsguiden på nytt',
+      guide: 'Oppsettsguide',
+      finish: 'Fullfør',
+      backToGuide: 'Guide',
+      done: 'Ferdig',
+      close: 'Lukk',
+      groups: {
+        essentials: 'Grunnleggende',
+        wealth: 'Formue',
+        learn: 'Forstå appen',
+      },
+      topics: {
+        prefs: { title: 'Språk og region', hint: 'Språk og skattemodell', body: 'Velg språk og region. Regionen bestemmer hvilken skattemodell Headroom bruker — Norge for full norsk skatt, eller en generisk flat sats.' },
+        income: { title: 'Månedlig inntekt', hint: 'Det du får utbetalt', body: 'Det du faktisk får utbetalt hver måned. Dette styrer budsjettet og hvor mye du har å bruke.' },
+        savingsTarget: { title: 'Sparemål', hint: 'Hvor mye du vil spare', body: 'Andelen av inntekten du sikter på å spare hver måned. Headroom bruker den til å regne ut hvor mye du trygt kan bruke til daglig.' },
+        fixedExpenses: { title: 'Faste utgifter', hint: 'Faste månedlige regninger', body: 'Regninger som går hver måned — husleie/lån, strøm, abonnement. Vi har lagt inn noen eksempler; legg til, endre eller slett dem rett på dette kortet.' },
+        cash: { title: 'Kontanter og sparing', hint: 'Penger du når nå', body: 'Sparekonto, bufferkonto og BSU — pengene du har tilgang til nå. Til sammen er dette likviditeten din.' },
+        home: { title: 'Bolig og lån', hint: 'Boligverdi og gjeld', body: 'Verdien på boligen din og hvor mye du skylder. Differansen er boligegenkapitalen din.' },
+        stocks: { title: 'Investeringer', hint: 'Aksjer og fond', body: 'Aksje- og fondsporteføljen din, og hvor mye som er urealisert gevinst — brukes til å anslå skatt ved salg.' },
+        crypto: { title: 'Krypto', hint: 'Digitale verdier', body: 'Kryptoverdiene dine, hvis du har noen. La stå på 0 hvis ikke.' },
+        pension: { title: 'Pensjon', hint: 'OTP- og IPS-saldo', body: 'Saldo for tjenestepensjon (OTP) og egen pensjonssparing (IPS). Holdes utenfor likvid formue fordi den er låst til pensjonsalder.' },
+        debt: { title: 'Gjeld', hint: 'Lån utenom boliglånet', body: 'Studielån, forbruksgjeld og kort hører hjemme her. Legg dem inn så formue og nedbetalingsplan blir riktige.' },
+        growth: { title: 'Vekstforutsetninger', hint: 'Slik vokser prognosen', body: 'De årlige avkastningsratene som brukes til å projisere formuen din. Trykk på en rate for å justere — forsiktige standardverdier er satt for deg.' },
+        dashboard: { title: 'Oversikt', hint: 'Økonomien på et blikk', body: 'Oversikten samler alt — formue, kontantstrøm og hvordan måneden ligger an mot planen din.' },
+        salary: { title: 'Lønn og skatt', hint: 'Jobber, lønnsøkning, skatt', body: 'Legg inn jobber og lønnshistorikk for nøyaktig skatt og nettolønn. Økninger og bonuser bygger inntektstidslinjen din.' },
+        forecast: { title: 'Prognose', hint: 'Dit du er på vei', body: 'Projiserer formuen din år fram i tid fra dagens saldoer, sparing og vekstrater — så du ser det lange løpet.' },
+        loan: { title: 'Lånekalkulator', hint: 'Hva du kan låne og tåle', body: 'Modellér et boliglån — terminbeløp, renter og hvor mye bolig som passer inntekten og egenkapitalen din.' },
+        settings: { title: 'Innstillinger og backup', hint: 'Eksport, import, valg', body: 'Dataene dine bor på din egen enhet. Eksportér en JSON-backup når som helst, importér den igjen, eller kjør denne guiden på nytt herfra.' },
+      },
+      fields: {
+        income: 'Månedlig nettoinntekt',
+        savingsTarget: 'Sparemål (%)',
+        savings: 'Sparekonto',
+        bufferAccount: 'Bufferkonto',
+        bsu: 'BSU',
+        houseValue: 'Boligverdi',
+        houseDebt: 'Boliglån',
+        portfolio: 'Portefølje',
+        unrealizedGain: 'Urealisert gevinst',
+        crypto: 'Krypto',
+        otpBalance: 'OTP-saldo',
+        ipsBalance: 'IPS-saldo',
+        language: 'Språk',
+        region: 'Region',
+      },
+      options: {
+        norwegian: 'Norsk',
+        english: 'Engelsk',
+        regionNo: 'Norge',
+        regionGeneric: 'Annet / generisk',
+      },
+    },
     confirmDelete: 'Bekreft sletting',
     confirmDeleteExpenseMsg: 'Er du sikker på at du vil slette denne utgiften?',
     confirmDeleteTransactionMsg: 'Er du sikker på at du vil slette denne transaksjonen?',
@@ -871,6 +928,63 @@ export const translations = {
       debtFree: 'Debt-free on your home — no mortgage to pay down.',
       mortgageToday: 'Mortgage today', debtFreeYear: 'Debt-free',
       plusOtherDebt: '+ {amount} other debt (student/consumer) — see the section above.',
+    },
+    onboarding: {
+      title: 'Setup guide',
+      hubIntro: 'Pick anything below to set it up or learn what it does — in any order. Your changes save as you go.',
+      progress: '{done} of {total} covered',
+      sampleData: 'Explore with sample data',
+      replay: 'Replay setup guide',
+      guide: 'Setup guide',
+      finish: 'Finish',
+      backToGuide: 'Guide',
+      done: 'Done',
+      close: 'Close',
+      groups: {
+        essentials: 'Essentials',
+        wealth: 'Wealth',
+        learn: 'Understand the app',
+      },
+      topics: {
+        prefs: { title: 'Language & region', hint: 'How the app speaks & taxes', body: 'Pick your language and region. Region sets which tax model Headroom uses — Norway for full Norwegian tax, or a generic flat rate.' },
+        income: { title: 'Monthly income', hint: 'What lands in your account', body: 'What actually lands in your account each month. This drives your budget and how much you have to spend.' },
+        savingsTarget: { title: 'Savings target', hint: 'How much to set aside', body: 'The share of income you aim to save each month. Headroom uses it to work out how much is safe to spend day to day.' },
+        fixedExpenses: { title: 'Fixed expenses', hint: 'Recurring monthly bills', body: 'Bills that recur every month — rent/mortgage, power, subscriptions. We seeded a few examples; add, edit or delete them right on this card.' },
+        cash: { title: 'Cash & savings', hint: 'Money you can reach now', body: 'Savings, buffer account and BSU — the money you can access right now. Together this is your liquidity.' },
+        home: { title: 'Home & mortgage', hint: 'Property value and debt', body: 'Your home’s value and what you owe on the mortgage. The difference is your property equity.' },
+        stocks: { title: 'Investments', hint: 'Stocks & funds', body: 'Your stock and fund portfolio, and how much of it is unrealized gain — used to estimate tax if you sell.' },
+        crypto: { title: 'Crypto', hint: 'Digital assets', body: 'Your crypto holdings, if any. Leave at 0 otherwise.' },
+        pension: { title: 'Pension', hint: 'OTP & IPS balances', body: 'Occupational pension (OTP) and private pension (IPS) balances. Kept out of liquid net worth since it’s locked until retirement.' },
+        debt: { title: 'Debt', hint: 'Loans beyond the mortgage', body: 'Student loans, consumer debt and cards live here. Add them so your true net worth and payoff timeline are accurate.' },
+        growth: { title: 'Growth assumptions', hint: 'How the forecast grows', body: 'The annual return rates used to project your wealth forward. Tap any rate to tune it — conservative defaults are set for you.' },
+        dashboard: { title: 'Dashboard', hint: 'Your money at a glance', body: 'The overview pulls everything together — net worth, cashflow and how this month is tracking against your plan.' },
+        salary: { title: 'Salary & tax', hint: 'Jobs, raises, tax', body: 'Add jobs and salary history here for accurate tax and take-home. Raises and bonuses build your income timeline.' },
+        forecast: { title: 'Forecast', hint: 'Where you’re heading', body: 'Projects your net worth years ahead from today’s balances, savings and growth rates — so you can see the long game.' },
+        loan: { title: 'Loan calculator', hint: 'What you can borrow & afford', body: 'Model a mortgage — payments, interest and how much house fits your income and equity.' },
+        settings: { title: 'Settings & backup', hint: 'Export, import, preferences', body: 'Your data lives on your own device. Export a JSON backup anytime, re-import it, or replay this guide from here.' },
+      },
+      fields: {
+        income: 'Monthly net income',
+        savingsTarget: 'Savings target (%)',
+        savings: 'Savings account',
+        bufferAccount: 'Buffer account',
+        bsu: 'BSU',
+        houseValue: 'Home value',
+        houseDebt: 'Mortgage',
+        portfolio: 'Portfolio',
+        unrealizedGain: 'Unrealized gain',
+        crypto: 'Crypto',
+        otpBalance: 'OTP balance',
+        ipsBalance: 'IPS balance',
+        language: 'Language',
+        region: 'Region',
+      },
+      options: {
+        norwegian: 'Norwegian',
+        english: 'English',
+        regionNo: 'Norway',
+        regionGeneric: 'Other / generic',
+      },
     },
     confirmDelete: 'Confirm Delete',
     confirmDeleteExpenseMsg: 'Are you sure you want to delete this expense?',
@@ -1540,6 +1654,13 @@ interface FinanceContextType {
   restoreEmployerCostDefaults: () => void;
   demoMode: boolean;
   toggleDemoMode: () => void;
+  /** First-run guided setup. `onboardingCompleted` persists; `onboardingActive`
+   *  drives the tour overlay. `startOnboarding` opens it (Settings "replay"),
+   *  `completeOnboarding` marks it done and closes it. */
+  onboardingCompleted: boolean;
+  onboardingActive: boolean;
+  startOnboarding: () => void;
+  completeOnboarding: () => void;
   dataLoadFailed: boolean;
   /** True when the most recent save failed and changes are pending a retry. */
   saveFailed: boolean;
@@ -1597,6 +1718,7 @@ export interface ExportPayload {
   employerCostConfig?: EmployerCostConfig;
   billingConfig?: BillingRateConfig;
   hiddenNavItems?: string[];
+  onboardingCompleted?: boolean;
 }
 
 export interface DailyDataEntry {
@@ -1660,6 +1782,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
   const [demoMode, setDemoMode] = useState(false);
+  // First-run guided setup. `onboardingCompleted` is the persisted flag;
+  // `onboardingActive` (not persisted) is whether the tour overlay is showing.
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [onboardingActive, setOnboardingActive] = useState(false);
 
   const loaded = useRef(false);
   // Holds the user's real data while demo mode is active, so it can be restored
@@ -1713,6 +1839,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...(data.employerCostConfig ?? {}) });
           setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...(data.billingConfig ?? {}) });
           if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
+          // Legacy blobs pre-date this flag — a user who already has data is
+          // treated as onboarded (?? true) so they never get the first-run tour.
+          // Brand-new users hit `data === null`, skip this branch, and keep the
+          // initial `false`, which is what triggers the auto-launch below.
+          setOnboardingCompleted(data.onboardingCompleted ?? true);
         }
     };
 
@@ -1732,6 +1863,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           if (cancelled) return;
           applyData(data);
           loaded.current = true;
+          // Launch the first-run guided setup for a brand-new user (empty DB →
+          // data === null) or one who reloaded mid-tour (flag explicitly false).
+          if (data === null || data?.onboardingCompleted === false) {
+            setOnboardingActive(true);
+          }
           return;
         } catch {
           if (attempt < ATTEMPTS) {
@@ -1847,6 +1983,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       customCurrencyCode, customCurrencyRate,
       jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
       region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems,
+      onboardingCompleted,
     };
     saveDirty.current = true;
     // Debounce: reschedule on every change; the trailing call flushes once quiet.
@@ -1856,7 +1993,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // NB: `currentMonth` is deliberately NOT persisted or in these deps — it's
     // view state, so paging the month picker must not fire saves, and two devices
     // shouldn't fight over which month is "current".
-  }, [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, demoMode, doSave]);
+  }, [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted, demoMode, doSave]);
 
   // Flush pending changes when the tab is hidden or closed. sendBeacon survives
   // page teardown where a normal fetch would be cancelled; the server accepts the
@@ -2244,6 +2381,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.employerCostConfig) setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...data.employerCostConfig });
     if (data.billingConfig) setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...data.billingConfig });
     if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
+    if (typeof data.onboardingCompleted === 'boolean') setOnboardingCompleted(data.onboardingCompleted);
   };
 
   // --- Demo mode: swap real data for a fictional dataset, then restore it ---
@@ -2259,6 +2397,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
       jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
       region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems,
+      onboardingCompleted,
     };
     setDemoMode(true);
     importAll(getDemoData());
@@ -2320,7 +2459,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setGoals([]);
     setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
     setBillingConfig(DEFAULT_BILLING_CONFIG);
+    // A full wipe is effectively a fresh start — re-run the guided setup.
+    setOnboardingCompleted(false);
+    setOnboardingActive(true);
   };
+
+  // --- First-run guided setup controls ---
+  const startOnboarding = useCallback(() => setOnboardingActive(true), []);
+  const completeOnboarding = useCallback(() => {
+    setOnboardingCompleted(true);
+    setOnboardingActive(false);
+  }, []);
 
   // --- Restore data-based defaults (assumptions only — never touches balances/data) ---
   const restoreGrowthRateDefaults = () => {
@@ -2439,6 +2588,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       restoreGrowthRateDefaults, restoreAssetTaxDefaults, restoreCustomTaxRateDefault,
       restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
       demoMode, toggleDemoMode,
+      onboardingCompleted, onboardingActive, startOnboarding, completeOnboarding,
       dataLoadFailed,
       saveFailed, retrySave,
     }}>

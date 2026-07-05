@@ -339,6 +339,7 @@ const BudgetPage: React.FC = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
+          dataTour="income"
           title={t.monthlyIncome}
           value={formatCurrency(effectiveIncome)}
           editLabel={`${t.edit} — ${t.monthlyIncome}`}
@@ -431,7 +432,7 @@ const BudgetPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
         {/* Fixed Expenses */}
-        <div className={`lg:col-span-1 ${card} p-5 md:p-7 space-y-5`}>
+        <div data-tour="fixed-expenses" className={`lg:col-span-1 ${card} p-5 md:p-7 space-y-5`}>
           <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
             <h2 className={sectionLabel}>{t.fixedCosts}</h2>
             <button
