@@ -3,6 +3,7 @@ import {
   calcMonthlyPayment,
   calcAmortizationSchedule,
   calcHouseEquityByYear,
+  calcMortgageBalanceByYear,
   calcRecommendations,
   calcEmergencyFundStatus,
   calcDebtToIncome,
@@ -119,5 +120,31 @@ describe('calcDebtToIncome', () => {
 
   it('computes remaining borrowing headroom', () => {
     expect(calcDebtToIncome(2_000_000, 600_000).borrowingHeadroom).toBe(5 * 600_000 - 2_000_000);
+  });
+});
+
+describe('calcMortgageBalanceByYear', () => {
+  it('starts at the current debt and amortizes to 0 by the end of the term', () => {
+    const b = calcMortgageBalanceByYear(1_000_000, 5, 10, 15);
+    expect(b).toHaveLength(16); // years 0..15 inclusive
+    expect(b[0]).toBe(1_000_000);
+    expect(b[10]).toBe(0);
+    expect(b[15]).toBe(0);
+  });
+
+  it('is monotonically non-increasing', () => {
+    const b = calcMortgageBalanceByYear(2_500_000, 4.5, 25, 15);
+    for (let i = 1; i < b.length; i++) {
+      expect(b[i]).toBeLessThanOrEqual(b[i - 1]);
+    }
+  });
+
+  it('carries the debt flat when there is no amortizing term', () => {
+    const b = calcMortgageBalanceByYear(500_000, 5, 0, 5);
+    expect(b).toEqual([500_000, 500_000, 500_000, 500_000, 500_000, 500_000]);
+  });
+
+  it('is all zeros when there is no debt', () => {
+    expect(calcMortgageBalanceByYear(0, 5, 20, 4)).toEqual([0, 0, 0, 0, 0]);
   });
 });

@@ -429,7 +429,7 @@ const BudgetPage: React.FC = () => {
 
       <SmartRecommendations />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
         {/* Fixed Expenses */}
         <div className={`lg:col-span-1 ${card} p-5 md:p-7 space-y-5`}>
           <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
@@ -489,11 +489,11 @@ const BudgetPage: React.FC = () => {
         </div>
 
         {/* Charts */}
-        <div className={`lg:col-span-2 ${card} p-5 md:p-7 space-y-5`}>
+        <div className={`lg:col-span-2 ${card} p-5 md:p-7 flex flex-col gap-5`}>
           <h2 className={`${sectionLabel} pb-4 border-b border-[var(--border)]`}>
             {t.distributionAnalysis}
           </h2>
-          <div className="h-[280px] md:h-[340px] w-full">
+          <div className="flex-1 min-h-[280px] md:min-h-[340px] w-full">
             <Suspense fallback={<div className="h-full w-full" />}>
               <BudgetDistributionChart
                 data={sortedExpenses}
@@ -550,13 +550,13 @@ const BudgetPage: React.FC = () => {
       <FunBudget />
 
       {/* Savings rate + spending heatmap */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
-        <div className={`${card} p-5 md:p-7`}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <div className={`${card} p-5 md:p-7 flex flex-col`}>
           <div className="pb-4 mb-2 border-b border-[var(--border)]">
             <h2 className={sectionLabel}>{t.charts.savingsRateTitle}</h2>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.savingsRateSub}</p>
           </div>
-          <div className="h-[240px] w-full">
+          <div className="flex-1 min-h-[240px] w-full">
             <Suspense fallback={<div className="h-full w-full" />}><SavingsRateChart /></Suspense>
           </div>
         </div>

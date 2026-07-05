@@ -30,7 +30,7 @@ import ChartTooltip from '../components/ChartTooltip';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown } from '../lib/equity';
-import { calcNetWorthProjectionByBucket, calcHouseEquityByYear } from '../lib/calculations';
+import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { parseLocaleNumber } from '../lib/validators';
 
 interface ModalConfig {
@@ -43,6 +43,9 @@ const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const NetWorthCompositionChart = lazy(() => import('../components/charts/NetWorthCompositionChart'));
+const AllocationDonut = lazy(() => import('../components/charts/AllocationDonut'));
+const LiquidLockedBar = lazy(() => import('../components/charts/LiquidLockedBar'));
+const DebtPayoffChart = lazy(() => import('../components/charts/DebtPayoffChart'));
 
 const AssetPage: React.FC = () => {
   const {
@@ -144,6 +147,16 @@ const AssetPage: React.FC = () => {
   };
 
   const cashTotal = assets.bsu + assets.savings + assets.bufferAccount;
+  const pensionTotal = pension.otpBalance + pension.ipsBalance;
+  // Allocation / liquidity views. Liquid = what you can actually reach today;
+  // locked = property equity + pension (tied up / retirement-locked).
+  const liquidWealth = netInvestment + netCrypto + cashTotal;
+  const lockedWealth = houseEquity + pensionTotal;
+  const projectionStartYear = new Date().getFullYear();
+  const mortgageBalances = useMemo(
+    () => calcMortgageBalanceByYear(assets.houseDebt, mortgageRate, mortgageTermYears, 15),
+    [assets.houseDebt, mortgageRate, mortgageTermYears],
+  );
   return (
     <>
     <BalanceHistoryBar hist={hist} />
@@ -242,41 +255,34 @@ const AssetPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Crypto */}
+          {/* Pension wealth (locked — not in totalEquity) */}
           <div className={`${card} p-5 md:p-7 space-y-5`}>
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
-              <Bitcoin size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-              <h3 className={sectionLabel}>{t.crypto}</h3>
+              <Briefcase size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+              <h3 className={sectionLabel}>{t.pensionWealth}</h3>
             </div>
             <div className="space-y-0">
               <AssetRow
-                label={t.cryptoPortfolio}
-                value={assets.crypto}
-                onEdit={() => openAssetEdit(t.cryptoPortfolio, assets.crypto, 'crypto')}
+                label={t.otpBalance}
+                value={pension.otpBalance}
+                onEdit={() => openPensionEdit(t.otpBalance, pension.otpBalance, 'otpBalance')}
                 formatCurrency={formatCurrency}
               />
               <AssetRow
-                label={t.cryptoGain}
-                value={assets.cryptoUnrealizedGain}
-                onEdit={() => openAssetEdit(t.cryptoGain, assets.cryptoUnrealizedGain, 'cryptoUnrealizedGain')}
+                label={t.ipsBalance}
+                value={pension.ipsBalance}
+                onEdit={() => openPensionEdit(t.ipsBalance, pension.ipsBalance, 'ipsBalance')}
                 formatCurrency={formatCurrency}
               />
-              <AssetRow
-                label={t.cryptoTaxRate}
-                value={assets.cryptoTaxRate}
-                suffix="%"
-                onEdit={() => openAssetEdit(t.cryptoTaxRate, assets.cryptoTaxRate, 'cryptoTaxRate')}
-                formatCurrency={(v) => v.toFixed(2)}
-                icon={<Percent size={12} className="text-[var(--text-2)]" />}
-              />
-              <div className="flex justify-between py-3.5 text-[12px] text-[#B5533A] font-medium border-t border-[var(--border)] mt-1">
-                <span>{t.cryptoTaxLabel}</span>
-                <span className="font-mono">−{formatCurrency(cryptoTaxOnGain)}</span>
+              <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)] border-t border-[var(--border)] mt-1">
+                <span>{t.pensionWealth}</span>
+                <span className="font-mono text-[#7FCBA0]">{formatCurrency(pension.otpBalance + pension.ipsBalance)}</span>
               </div>
-              <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
-                <span>{t.netCrypto}</span>
-                <span className="font-mono text-[#7FCBA0]">{formatCurrency(netCrypto)}</span>
-              </div>
+              <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
+                {lang === 'nb'
+                  ? 'Låst til pensjonsalder. Holdes utenfor faktisk egenkapital.'
+                  : 'Locked until retirement age. Excluded from liquid net equity.'}
+              </p>
             </div>
           </div>
         </div>
@@ -312,34 +318,41 @@ const AssetPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Pension wealth (locked — not in totalEquity) */}
+          {/* Crypto */}
           <div className={`${card} p-5 md:p-7 space-y-5`}>
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
-              <Briefcase size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-              <h3 className={sectionLabel}>{t.pensionWealth}</h3>
+              <Bitcoin size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+              <h3 className={sectionLabel}>{t.crypto}</h3>
             </div>
             <div className="space-y-0">
               <AssetRow
-                label={t.otpBalance}
-                value={pension.otpBalance}
-                onEdit={() => openPensionEdit(t.otpBalance, pension.otpBalance, 'otpBalance')}
+                label={t.cryptoPortfolio}
+                value={assets.crypto}
+                onEdit={() => openAssetEdit(t.cryptoPortfolio, assets.crypto, 'crypto')}
                 formatCurrency={formatCurrency}
               />
               <AssetRow
-                label={t.ipsBalance}
-                value={pension.ipsBalance}
-                onEdit={() => openPensionEdit(t.ipsBalance, pension.ipsBalance, 'ipsBalance')}
+                label={t.cryptoGain}
+                value={assets.cryptoUnrealizedGain}
+                onEdit={() => openAssetEdit(t.cryptoGain, assets.cryptoUnrealizedGain, 'cryptoUnrealizedGain')}
                 formatCurrency={formatCurrency}
               />
-              <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)] border-t border-[var(--border)] mt-1">
-                <span>{t.pensionWealth}</span>
-                <span className="font-mono text-[#7FCBA0]">{formatCurrency(pension.otpBalance + pension.ipsBalance)}</span>
+              <AssetRow
+                label={t.cryptoTaxRate}
+                value={assets.cryptoTaxRate}
+                suffix="%"
+                onEdit={() => openAssetEdit(t.cryptoTaxRate, assets.cryptoTaxRate, 'cryptoTaxRate')}
+                formatCurrency={(v) => v.toFixed(2)}
+                icon={<Percent size={12} className="text-[var(--text-2)]" />}
+              />
+              <div className="flex justify-between py-3.5 text-[12px] text-[#B5533A] font-medium border-t border-[var(--border)] mt-1">
+                <span>{t.cryptoTaxLabel}</span>
+                <span className="font-mono">−{formatCurrency(cryptoTaxOnGain)}</span>
               </div>
-              <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb'
-                  ? 'Låst til pensjonsalder. Holdes utenfor faktisk egenkapital.'
-                  : 'Locked until retirement age. Excluded from liquid net equity.'}
-              </p>
+              <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
+                <span>{t.netCrypto}</span>
+                <span className="font-mono text-[#7FCBA0]">{formatCurrency(netCrypto)}</span>
+              </div>
             </div>
           </div>
 
@@ -386,8 +399,47 @@ const AssetPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Allocation snapshot + liquidity split */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-stretch">
+        <div className={`${card} p-5 md:p-7 flex flex-col`}>
+          <div className="pb-4 border-b border-[var(--border)]">
+            <h3 className={sectionLabel}>{t.charts.allocationTitle}</h3>
+            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.allocationSub}</p>
+          </div>
+          <div className="flex-1 min-h-[260px] w-full mt-4">
+            <Suspense fallback={<div className="h-full w-full" />}>
+              <AllocationDonut stocks={netInvestment} house={houseEquity} cash={cashTotal} crypto={netCrypto} pension={pensionTotal} />
+            </Suspense>
+          </div>
+        </div>
+        <div className={`${card} p-5 md:p-7 flex flex-col`}>
+          <div className="pb-4 border-b border-[var(--border)]">
+            <h3 className={sectionLabel}>{t.charts.liquidLockedTitle}</h3>
+            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.liquidLockedSub}</p>
+          </div>
+          <div className="flex-1 flex flex-col justify-center mt-6">
+            <Suspense fallback={<div className="h-full w-full" />}>
+              <LiquidLockedBar liquid={liquidWealth} locked={lockedWealth} />
+            </Suspense>
+          </div>
+        </div>
+      </div>
+
       {/* Debt (non-mortgage) */}
       <DebtSection />
+
+      {/* Mortgage payoff over time */}
+      <div className={`${card} p-5 md:p-7 space-y-4`}>
+        <div className="pb-4 border-b border-[var(--border)]">
+          <h3 className={sectionLabel}>{t.charts.debtPayoffTitle}</h3>
+          <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.debtPayoffSub}</p>
+        </div>
+        <div className="h-[300px] md:h-[340px] w-full">
+          <Suspense fallback={<div className="h-full w-full" />}>
+            <DebtPayoffChart balances={mortgageBalances} startYear={projectionStartYear} nonMortgageDebt={totalDebt} />
+          </Suspense>
+        </div>
+      </div>
 
       {/* Net-worth composition over time */}
       <div className={`${card} p-5 md:p-7 space-y-4`}>

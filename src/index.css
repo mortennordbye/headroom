@@ -86,7 +86,9 @@ html, body {
 body {
   /* Flat fill only — no gradients, no glow (old-money theme). */
   background: var(--bg);
-  min-height: 100vh;
+  /* dvh, not vh: 100vh counts the mobile URL bar and clips content under the
+     bottom nav. dvh tracks the actual visible viewport. */
+  min-height: 100dvh;
   color: var(--text-1);
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11", "tnum";
@@ -94,6 +96,35 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.4;
+  /* Standalone/PWA feel: no rubber-band bounce revealing the page edge, no grey
+     tap-flash box, no long-press selection of chrome. */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* Text content stays selectable — only chrome/controls opt out of selection. */
+input,
+textarea,
+[contenteditable],
+[data-selectable] {
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* iOS Safari force-zooms the viewport when focusing a form control whose
+   font-size is < 16px — that's the jarring shift when the keyboard opens.
+   Floor every control at 16px below the `sm` breakpoint. The `:not()` clauses
+   push each selector's specificity above Tailwind's arbitrary `text-[…]`
+   utilities (a single class), so this reliably overrides the components'
+   compact 13–15px sizes on phones while desktop (≥640px) keeps them. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select:not(:disabled),
+  textarea:not(:disabled) {
+    font-size: 16px;
+  }
 }
 
 ::-webkit-scrollbar {

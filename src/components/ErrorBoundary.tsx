@@ -57,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div
-        className="grid place-items-center min-h-screen px-6 text-center"
+        className="grid place-items-center min-h-[100dvh] px-6 text-center"
         style={{ color: 'var(--text-2)', background: 'var(--bg)' }}
       >
         <div className="max-w-md">

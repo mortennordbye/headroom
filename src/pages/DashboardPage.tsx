@@ -515,7 +515,7 @@ const DashboardPage: React.FC = () => {
             {availablePct > 0 && <div style={{ width: `${availablePct}%`, background: 'var(--positive)' }} />}
           </div>
 
-          <div className="mt-5 grid grid-cols-3 gap-4">
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <LegendItem dot="var(--teal)" name={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} pct={`${budgetUsedPct.toFixed(1)}%`} />
             <LegendItem dot="var(--warning)" name={t.monthSpent} value={formatCurrency(totalSpent)} pct={`${spentPct.toFixed(1)}%`} />
             <LegendItem

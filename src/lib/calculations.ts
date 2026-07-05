@@ -282,6 +282,35 @@ export function calcHouseEquityByYear(
 }
 
 /**
+ * Mortgage balance remaining at the end of each year, index 0..years (year 0 is
+ * the current balance). Mirrors the debt half of `calcHouseEquityByYear`: once
+ * the loan amortizes away the balance is 0; with no term (≤ 0) the debt can't
+ * amortize, so it's carried flat rather than vanished.
+ */
+export function calcMortgageBalanceByYear(
+  houseDebt: number,
+  loanRate: number,
+  loanTermYears: number,
+  years: number
+): number[] {
+  const schedule =
+    houseDebt > 0 && loanTermYears > 0
+      ? calcAmortizationSchedule(houseDebt, loanRate, loanTermYears)
+      : [];
+  const out: number[] = [];
+  for (let y = 0; y <= years; y++) {
+    const debt =
+      y === 0
+        ? houseDebt
+        : schedule.length > 0
+          ? schedule[y - 1]?.balance ?? 0
+          : houseDebt;
+    out.push(Math.round(Math.max(0, debt)));
+  }
+  return out;
+}
+
+/**
  * Project each asset bucket forward at its own annual growth rate.
  * `annualSavings` accrues to the stocks bucket each year (assumption:
  * discretionary savings flow into investments).

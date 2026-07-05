@@ -57,7 +57,7 @@ const Layout: React.FC = () => {
       : t.viewingFuture;
 
   return (
-    <div className="min-h-screen text-[var(--text-1)] font-sans">
+    <div className="min-h-[100dvh] text-[var(--text-1)] font-sans">
       {/* ─── Top nav ─────────────────────────── */}
       <header
         className="sticky top-0 z-20 flex items-center justify-between gap-4 px-5 md:px-8 py-4 border-b"
