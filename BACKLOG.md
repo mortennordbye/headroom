@@ -122,10 +122,17 @@ data volume. Remaining:
 - **Cron isn't installed by anything.** The daily `curl` schedule is documented in
   `scripts/enable-banking/README.md` but must be added to the homelab crontab (or a Docker
   sidecar) by hand. Consider shipping a compose service / entrypoint hook.
-- **`EB_REDIRECT` / key handling is manual.** Linking needs `EB_REDIRECT` set and the `.pem`
-  mounted in the data volume (`$DATA_DIR/eb-key.pem`); the status card shows
-  `configured:false` until then. Consider deriving the redirect from the request host and a
-  first-run setup hint. **Where**: `server/bank.js`, `src/components/BankSyncCard.tsx`.
+- **Managed encryption key is co-located.** The key is always AES-256-GCM encrypted at rest;
+  without `EB_KEY_SECRET` the app manages its own key in `$DATA_DIR/eb-master.key` (chmod 600),
+  which guards against the key file leaking in isolation but not a full-volume breach (the
+  master key is in the same volume). Real at-rest protection still needs `EB_KEY_SECRET` set
+  out-of-band. Config (redirect URL) + key are now set entirely in-app (Settings → Bank sync;
+  `POST /api/bank/config`, `POST /api/bank/key`); env vars are optional overrides. **Where**:
+  `server/bank.js`.
+- **Bank endpoints are unauthenticated** like the rest of the app — `config` and `key` are
+  write-only and validated, but on a network-reachable deploy anyone could overwrite the
+  redirect/key (integrity/DoS, not disclosure) or read `/api/data`. Gate behind app auth /
+  reverse-proxy / VPN. Tracked with §1.3 / the no-auth posture. **Where**: `server/index.js`.
 - **Pending rows excluded.** `mapEBTransactions` drops `PDNG` (they churn until booked); very
   recent spending is invisible until it books. Revisit if the lag matters.
 - **`out/` + `.cert/` leftovers** from the retired CLI prototype live under

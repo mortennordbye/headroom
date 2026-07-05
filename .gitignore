@@ -10,6 +10,9 @@ data/*.db
 # Enable Banking session/consent state (bearer session id) — never commit
 data/eb-session.json
 data/eb-pending.json
+# Enable Banking app-managed encryption key + config — never commit
+data/eb-master.key
+data/eb-config.json
 
 # Database backups (make backup) — contain real financial data
 backups/

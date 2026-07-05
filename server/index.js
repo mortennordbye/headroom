@@ -252,6 +252,32 @@ app.get('/api/bank/status', (_req, res) => {
   res.json(bank.getStatus());
 });
 
+// Upload the app's private key (write-only — never read back). Validates the
+// PEM and verifies it against Enable Banking before storing it (chmod 600,
+// encrypted at rest when EB_KEY_SECRET is set).
+app.post('/api/bank/key', async (req, res) => {
+  try {
+    const pem = req.body && req.body.pem;
+    if (typeof pem !== 'string' || !pem.includes('PRIVATE KEY')) {
+      return res.status(400).json({ error: 'expected a PEM private key' });
+    }
+    const { verified, encrypted } = await bank.saveKey(pem);
+    res.json({ ok: true, verified, encrypted, ...bank.getStatus() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Set the redirect (callback) URL — a non-secret setting stored server-side.
+app.post('/api/bank/config', (req, res) => {
+  try {
+    bank.setRedirect(String((req.body && req.body.redirectUrl) || ''));
+    res.json({ ok: true, ...bank.getStatus() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Start BankID: returns the redirect url the client sends the browser to.
 app.post('/api/bank/link', async (_req, res) => {
   try {
