@@ -4,6 +4,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
+const bank = require('./bank');
 
 const app = express();
 
@@ -145,11 +146,40 @@ function isValidFinancePayload(body) {
 
 const SIZE_WARN_BYTES = 2 * 1024 * 1024; // warn once the blob passes ~2 MB
 
+// Bank-imported transactions carry this id prefix (see server/bank.js).
+const EB_ID_PREFIX = bank.EB_ID_PREFIX;
+
+// Anti-clobber: the daily bank sync (scripts/enable-banking/sync.ts) writes
+// imported rows straight into the blob. If a client tab was open during a sync,
+// its next full-blob autosave would be missing those rows and drop them. Re-add
+// any stored eb- rows the incoming payload doesn't have, so the cron can't be
+// clobbered. (Trade-off: deleting an imported row in the UI can resurrect it —
+// tracked in BACKLOG.md.)
+function reconcileBankTransactions(incoming) {
+  const row = getStmt.get('headroom');
+  if (!row) return incoming;
+  let stored;
+  try {
+    stored = JSON.parse(row.content);
+  } catch {
+    return incoming;
+  }
+  const storedTx = Array.isArray(stored.dailyTransactions) ? stored.dailyTransactions : [];
+  const incomingTx = Array.isArray(incoming.dailyTransactions) ? incoming.dailyTransactions : [];
+  const incomingIds = new Set(incomingTx.map((t) => t && t.id));
+  const missing = storedTx.filter(
+    (t) => t && typeof t.id === 'string' && t.id.startsWith(EB_ID_PREFIX) && !incomingIds.has(t.id),
+  );
+  if (missing.length === 0) return incoming;
+  console.log(`[data] re-adding ${missing.length} bank tx missing from client payload`);
+  return { ...incoming, dailyTransactions: [...incomingTx, ...missing] };
+}
+
 app.post('/api/data', (req, res) => {
   if (!isValidFinancePayload(req.body)) {
     return res.status(400).json({ error: 'invalid finance payload' });
   }
-  const content = JSON.stringify(req.body);
+  const content = JSON.stringify(reconcileBankTransactions(req.body));
   if (content.length > SIZE_WARN_BYTES) {
     console.warn(`[data] payload is ${(content.length / 1024 / 1024).toFixed(1)} MB — approaching the body limit`);
   }
@@ -213,6 +243,61 @@ const WAGE_STATS_STATIC = [
 
 app.get('/api/wage-stats', (_req, res) => {
   res.json({ points: WAGE_STATS_STATIC, source: 'static-curated' });
+});
+
+// ── Bank sync (Enable Banking) ───────────────────────────────────
+// Drives the in-app link/re-link/sync flow. Engine in server/bank.js.
+
+app.get('/api/bank/status', (_req, res) => {
+  res.json(bank.getStatus());
+});
+
+// Start BankID: returns the redirect url the client sends the browser to.
+app.post('/api/bank/link', async (_req, res) => {
+  try {
+    res.json(await bank.startLink());
+  } catch (err) {
+    console.error('[bank] link failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// BankID redirect lands here; exchange the code, save the session, bounce to Settings.
+app.get('/api/bank/callback', async (req, res) => {
+  try {
+    if (req.query.error) throw new Error(String(req.query.error));
+    await bank.finishLink(String(req.query.code || ''), String(req.query.state || ''));
+    res.redirect('/settings?bank=linked');
+  } catch (err) {
+    console.error('[bank] callback failed:', err.message);
+    res.redirect(`/settings?bank=error&reason=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// Fetch new transactions and merge them into the finance blob.
+app.post('/api/bank/sync', async (_req, res) => {
+  try {
+    const mapped = await bank.fetchMappedTransactions();
+    const row = getStmt.get('headroom');
+    if (!row) return res.status(409).json({ error: 'no finance data yet — open the app first' });
+    const blob = JSON.parse(row.content);
+    const existing = Array.isArray(blob.dailyTransactions) ? blob.dailyTransactions : [];
+    const before = existing.length;
+    blob.dailyTransactions = bank.mergeTransactions(existing, mapped);
+    upsertStmt.run('headroom', JSON.stringify(blob));
+    bank.recordSync();
+    res.json({
+      ok: true,
+      fetched: mapped.length,
+      added: blob.dailyTransactions.length - before,
+      total: blob.dailyTransactions.length,
+      dailyTransactions: blob.dailyTransactions,
+    });
+  } catch (err) {
+    if (err.needsRelink) return res.status(409).json({ error: err.message, needsRelink: true });
+    console.error('[bank] sync failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const DIST = path.join(__dirname, 'dist');

@@ -7,6 +7,9 @@ dist/
 # Data (contains real user financial data — never commit)
 data/*.sqlite
 data/*.db
+# Enable Banking session/consent state (bearer session id) — never commit
+data/eb-session.json
+data/eb-pending.json
 
 # Database backups (make backup) — contain real financial data
 backups/
@@ -42,3 +45,11 @@ screenshots/*
 
 # Payslip PDFs — parsed client-side, never stored/committed
 *.pdf
+
+# Private keys / certs (e.g. Enable Banking app RSA key) — never commit
+*.pem
+*.key
+
+# Enable Banking extractor: real financial data + local self-signed cert
+scripts/enable-banking/out/
+scripts/enable-banking/.cert/

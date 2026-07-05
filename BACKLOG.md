@@ -97,6 +97,40 @@ OTP + IPS tracking is shipped (balance, contribution, growth, retirement-readine
 - **Foreign pension / IRA / 401k** — multi-currency pension buckets for users who worked abroad.
 - **Pension contribution from variable comp** — `otpAnnual` calc currently uses `currentGross + currentOnCall` only. Real OTP base may include bonuses and is capped at 12G (~1.4M). Refine if it becomes inaccurate for high earners.
 
+## Bank transaction import (Enable Banking) — follow-ups
+
+Shipped (2026-07): in-app Bank Norwegian → Headroom transaction sync via Enable Banking
+(PSD2 AIS, free own-accounts tier). Self-contained CommonJS engine `server/bank.js`
+(ships in the Node-22 image; JWT auth, link/callback/sync/status, session in
+`$DATA_DIR/eb-session.json`, pure mapper + dedup-merge). Routes in `server/index.js`
+(`/api/bank/{status,link,callback,sync}`). Settings UI `src/components/BankSyncCard.tsx`
+(Connect/Re-link with BankID, "Sync now", consent-expiry indicator; i18n under
+`settings.bank`). Anti-clobber reconcile in `server/index.js` re-adds `eb-`-prefixed rows a
+stale tab dropped. Mapping tested in `src/lib/bank.test.ts`. Daily sync = cron `curl -X POST
+/api/bank/sync`. Requires `EB_REDIRECT` (registered HTTPS callback) + the RSA key in the
+data volume. Remaining:
+
+- **Deleting an imported row can resurrect it.** `reconcileBankTransactions` (and the next
+  sync) re-add any stored `eb-` row missing from an incoming payload, so deleting a bank
+  transaction in the UI reappears. Needs a soft-delete / exclusion set (e.g. a
+  `deletedBankIds: string[]` in the blob the reconcile + `mergeTransactions` honour).
+  **Where**: `server/index.js` (`reconcileBankTransactions`), `server/bank.js`
+  (`mergeTransactions`), `src/context/FinanceContext.tsx`.
+- **No auto-categorisation.** `mapEBTransaction` leaves `category` undefined; the bank's
+  `bank_transaction_code` / `merchant_category_code` are dropped. Map them (or the merchant
+  name) to Headroom budget categories. **Where**: `server/bank.js` (`mapEBTransaction`).
+- **Cron isn't installed by anything.** The daily `curl` schedule is documented in
+  `scripts/enable-banking/README.md` but must be added to the homelab crontab (or a Docker
+  sidecar) by hand. Consider shipping a compose service / entrypoint hook.
+- **`EB_REDIRECT` / key handling is manual.** Linking needs `EB_REDIRECT` set and the `.pem`
+  mounted in the data volume (`$DATA_DIR/eb-key.pem`); the status card shows
+  `configured:false` until then. Consider deriving the redirect from the request host and a
+  first-run setup hint. **Where**: `server/bank.js`, `src/components/BankSyncCard.tsx`.
+- **Pending rows excluded.** `mapEBTransactions` drops `PDNG` (they churn until booked); very
+  recent spending is invisible until it books. Revisit if the lag matters.
+- **`out/` + `.cert/` leftovers** from the retired CLI prototype live under
+  `scripts/enable-banking/` (gitignored, `out/` holds a real-data dump). Safe to delete.
+
 ## Audit (2026-07-04) — deferred architecture & data-safety items
 
 Most of `AUDIT.md` is done (see its "Progress log"). These remaining entries are larger refactors, several touching the persistence backbone — deferred because they can't be safely exercised against the user's real data volume without a throwaway `DATA_DIR` and careful diffing.

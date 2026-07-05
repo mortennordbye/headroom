@@ -34,6 +34,7 @@ import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { DeltaChip } from '../components/ui/DeltaChip';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
+import { BankSyncCard } from '../components/BankSyncCard';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
 
@@ -248,6 +249,9 @@ export default function SettingsPage() {
 
       {/* Bento grid */}
       <div data-tour="settings-all" className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* ──── Bank sync (span 12) ──── */}
+        <BankSyncCard />
+
         {/* ──── Currency (span 7) ──── */}
         <Card padding="lg" className="md:col-span-7">
           <SectionLabel icon={<Coins />}>{t.settings.currency}</SectionLabel>
