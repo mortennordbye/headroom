@@ -352,29 +352,51 @@ export const translations = {
       finish: 'Fullfør',
       backToGuide: 'Guide',
       done: 'Ferdig',
+      next: 'Neste',
+      back: 'Tilbake',
+      stepOf: 'Steg {n} av {total}',
+      add: 'Legg til',
+      itemName: 'Navn',
+      monthlyAmount: 'Beløp per måned',
+      remove: 'Fjern',
+      expensePlaceholder: 'f.eks. Strøm',
+      debtPlaceholder: 'f.eks. Studielån',
       close: 'Lukk',
+      skip: 'Hopp over',
+      resetGuide: 'Nullstill guiden',
+      welcomeTitle: 'Velkommen til Headroom',
+      welcomeBody: 'La oss få på plass det viktigste — det tar et par minutter. Du kan utforske resten etterpå.',
+      setupEssentials: 'Sett opp det viktigste',
+      essentialsChoice: 'Bare det viktigste',
+      essentialsChoiceSub: 'Kom i gang på et minutt',
+      fullGuideChoice: 'Hele guiden',
+      fullGuideChoiceSub: 'Gå gjennom hele appen',
+      essentialsIntro: 'Bare det grunnleggende for å komme i gang. Du kan utforske resten etterpå.',
+      seeTheRest: 'Se resten av appen',
+      seeTheRestSub: '{count} temaer til — formue, prognose, skatt og hvordan alt henger sammen',
+      essentialsDone: 'Bra jobba — det viktigste er på plass. Vil du utforske resten?',
       groups: {
         essentials: 'Grunnleggende',
         wealth: 'Formue',
         learn: 'Forstå appen',
       },
       topics: {
-        prefs: { title: 'Språk og region', hint: 'Språk og skattemodell', body: 'Velg språk og region. Regionen bestemmer hvilken skattemodell Headroom bruker — Norge for full norsk skatt, eller en generisk flat sats.' },
-        income: { title: 'Månedlig inntekt', hint: 'Det du får utbetalt', body: 'Det du faktisk får utbetalt hver måned. Dette styrer budsjettet og hvor mye du har å bruke.' },
-        savingsTarget: { title: 'Sparemål', hint: 'Hvor mye du vil spare', body: 'Andelen av inntekten du sikter på å spare hver måned. Headroom bruker den til å regne ut hvor mye du trygt kan bruke til daglig.' },
-        fixedExpenses: { title: 'Faste utgifter', hint: 'Faste månedlige regninger', body: 'Regninger som går hver måned — husleie/lån, strøm, abonnement. Vi har lagt inn noen eksempler; legg til, endre eller slett dem rett på dette kortet.' },
-        cash: { title: 'Kontanter og sparing', hint: 'Penger du når nå', body: 'Sparekonto, bufferkonto og BSU — pengene du har tilgang til nå. Til sammen er dette likviditeten din.' },
-        home: { title: 'Bolig og lån', hint: 'Boligverdi og gjeld', body: 'Verdien på boligen din og hvor mye du skylder. Differansen er boligegenkapitalen din.' },
-        stocks: { title: 'Investeringer', hint: 'Aksjer og fond', body: 'Aksje- og fondsporteføljen din, og hvor mye som er urealisert gevinst — brukes til å anslå skatt ved salg.' },
-        crypto: { title: 'Krypto', hint: 'Digitale verdier', body: 'Kryptoverdiene dine, hvis du har noen. La stå på 0 hvis ikke.' },
-        pension: { title: 'Pensjon', hint: 'OTP- og IPS-saldo', body: 'Saldo for tjenestepensjon (OTP) og egen pensjonssparing (IPS). Holdes utenfor likvid formue fordi den er låst til pensjonsalder.' },
-        debt: { title: 'Gjeld', hint: 'Lån utenom boliglånet', body: 'Studielån, forbruksgjeld og kort hører hjemme her. Legg dem inn så formue og nedbetalingsplan blir riktige.' },
-        growth: { title: 'Vekstforutsetninger', hint: 'Slik vokser prognosen', body: 'De årlige avkastningsratene som brukes til å projisere formuen din. Trykk på en rate for å justere — forsiktige standardverdier er satt for deg.' },
-        dashboard: { title: 'Oversikt', hint: 'Økonomien på et blikk', body: 'Oversikten samler alt — formue, kontantstrøm og hvordan måneden ligger an mot planen din.' },
-        salary: { title: 'Lønn og skatt', hint: 'Jobber, lønnsøkning, skatt', body: 'Legg inn jobber og lønnshistorikk for nøyaktig skatt og nettolønn. Økninger og bonuser bygger inntektstidslinjen din.' },
-        forecast: { title: 'Prognose', hint: 'Dit du er på vei', body: 'Projiserer formuen din år fram i tid fra dagens saldoer, sparing og vekstrater — så du ser det lange løpet.' },
-        loan: { title: 'Lånekalkulator', hint: 'Hva du kan låne og tåle', body: 'Modellér et boliglån — terminbeløp, renter og hvor mye bolig som passer inntekten og egenkapitalen din.' },
-        settings: { title: 'Innstillinger og backup', hint: 'Eksport, import, valg', body: 'Dataene dine bor på din egen enhet. Eksportér en JSON-backup når som helst, importér den igjen, eller kjør denne guiden på nytt herfra.' },
+        prefs: { title: 'Språk og region', hint: 'Språk og skattemodell', body: 'Velg språk og region. Regionen bestemmer hvilken skattemodell Headroom bruker — Norge gir full norsk inntektsskatt, trinnskatt og trygdeavgift, mens Generisk bruker én flat sats du velger selv. Alt annet — valuta, lønns- og pensjonsberegning — følger av dette, så det er lurt å få det riktig først.' },
+        income: { title: 'Månedlig inntekt', hint: 'Det du får utbetalt', body: 'Månedlig nettolønn — det som faktisk havner på konto etter skatt. Headroom bruker den til å bygge budsjettet: faste utgifter trekkes først, så sparemålet, og det som er igjen er forbruket ditt til daglig. Du kan sette den per måned, eller la den komme automatisk fra Lønn-siden.' },
+        savingsTarget: { title: 'Sparemål', hint: 'Hvor mye du vil spare', body: 'Andelen av inntekten du sikter på å sette av hver måned. Headroom trekker den fra budsjettet før den regner ut daglig forbruk, slik at sparing skjer først — ikke med det som tilfeldigvis blir til overs. Et vanlig utgangspunkt er 20 %; juster til noe du faktisk klarer å holde.' },
+        fixedExpenses: { title: 'Faste utgifter', hint: 'Faste månedlige regninger', body: 'Regninger som går hver måned — husleie eller boliglån, strøm, forsikring, abonnement. Disse trekkes rett fra inntekten før alt annet, så nøyaktige tall gjør resten av budsjettet ærlig. Vi har lagt inn noen eksempler; legg til, endre, merk eller slett dem rett på dette kortet.' },
+        cash: { title: 'Kontanter og sparing', hint: 'Penger du når nå', body: 'Pengene du når akkurat nå — hverdagssparing, en buffer for uforutsette ting, og eventuell BSU. Til sammen er dette likviditeten din: hvor mye du kan dekke en krise eller mulighet med, uten å selge investeringer eller ta opp gjeld.' },
+        home: { title: 'Bolig og lån', hint: 'Boligverdi og gjeld', body: 'Boligens markedsverdi i dag og hvor mye som står igjen på boliglånet. Differansen er boligegenkapitalen — ofte den største enkeltdelen av formuen. Headroom følger hvordan den egenkapitalen vokser når du nedbetaler lånet og boligen stiger i verdi.' },
+        stocks: { title: 'Investeringer', hint: 'Aksjer og fond', body: 'Aksje- og fondsporteføljen din til markedsverdi, pluss hvor mye av det som er urealisert gevinst. Gevinsten er viktig fordi Headroom setter av skatten du ville skyldt ved salg, så formuen viser hva du faktisk sitter igjen med — ikke bare pålydende verdi.' },
+        crypto: { title: 'Krypto', hint: 'Digitale verdier', body: 'Markedsverdien av krypto du eier, med egen urealisert gevinst og skattesats. Det behandles som en egen bøtte med høyere risiko i fordelingen og prognosen. La stå på 0 hvis det ikke gjelder deg.' },
+        pension: { title: 'Pensjon', hint: 'OTP- og IPS-saldo', body: 'Saldo i tjenestepensjon (OTP, fra arbeidsgiver) og eventuell egen pensjonssparing (IPS). Dette er reell formue, men den er låst til pensjonsalder — derfor holder Headroom den utenfor likvid formue og viser den for seg, så dagens brukbare bilde forblir ærlig.' },
+        debt: { title: 'Gjeld', hint: 'Lån utenom boliglånet', body: 'Lån utenom boliglånet — studielån, forbruksgjeld, kredittkort. Legg dem inn her så den reelle formuen trekker dem fra, og så nedbetalingsoversikten kan vise når du er kvitt dem. Hver gjeld følger sin egen saldo, rente og innbetaling.' },
+        growth: { title: 'Vekstforutsetninger', hint: 'Slik vokser prognosen', body: 'Forutsetningene om årlig avkastning bak alle prognoser — egne rater for aksjer, bolig, kontanter og krypto, siden de ikke vokser likt. Forsiktige standardverdier er satt for deg; trykk på en rate for å justere. Disse styrer prognosen, så små endringer her flytter de langsiktige tallene mye.' },
+        dashboard: { title: 'Oversikt', hint: 'Økonomien på et blikk', body: 'Økonomien på et blikk — formue, kontantstrøm og hvordan måneden ligger an mot planen, samlet fra alt annet du legger inn. Dette er siden du åpner først hver gang: en rask peiling på om du er i rute før du graver i detaljene.' },
+        salary: { title: 'Lønn og skatt', hint: 'Jobber, lønnsøkning, skatt', body: 'Her registrerer du jobber, lønnshistorikk, lønnsøkninger og bonuser. Headroom gjør dette om til et nøyaktig brutto-til-netto-bilde med regionens skatteregler, og mater månedsinntekten og nettolønnen din. Over tid viser den også hvordan lønnen har vokst mot inflasjonen.' },
+        forecast: { title: 'Prognose', hint: 'Dit du er på vei', body: 'Projiserer formuen din år fram i tid fra dagens saldoer, den månedlige sparingen og vekstratene. Dette er det lange løpet — se omtrent hvor du havner om 5, 10 eller 15 år, og hvordan endret sparing eller forutsetninger flytter kurven.' },
+        loan: { title: 'Lånekalkulator', hint: 'Hva du kan låne og tåle', body: 'En kalkulator for lån — modellér terminbeløp, samlede renter og hvor mye bolig som passer inntekten og egenkapitalen din. Siden har tre moduser: førstegangskjøper (hva du kan kjøpe), boligeier (nedbetaling av eksisterende lån) og boligbytte (kjøpe og selge samtidig, med mellomfinansiering). Velg den som passer situasjonen din.' },
+        settings: { title: 'Innstillinger og backup', hint: 'Eksport, import, valg', body: 'Dataene dine bor på din egen enhet — ingenting sendes til en server. Eksportér en full JSON-backup når som helst, importér den på en annen enhet, bytt språk eller valuta, eller kjør denne guiden på nytt. Her ligger også demomodus og «tilbakestill alle data».' },
       },
       fields: {
         income: 'Månedlig nettoinntekt',
@@ -939,29 +961,51 @@ export const translations = {
       finish: 'Finish',
       backToGuide: 'Guide',
       done: 'Done',
+      next: 'Next',
+      back: 'Back',
+      stepOf: 'Step {n} of {total}',
+      add: 'Add',
+      itemName: 'Name',
+      monthlyAmount: 'Amount per month',
+      remove: 'Remove',
+      expensePlaceholder: 'e.g. Power',
+      debtPlaceholder: 'e.g. Student loan',
       close: 'Close',
+      skip: 'Skip for now',
+      resetGuide: 'Reset guide',
+      welcomeTitle: 'Welcome to Headroom',
+      welcomeBody: 'Let’s get the essentials in place — it takes a couple of minutes. You can explore everything else afterward.',
+      setupEssentials: 'Set up the essentials',
+      essentialsChoice: 'Just the essentials',
+      essentialsChoiceSub: 'Get set up in a minute',
+      fullGuideChoice: 'Full guide',
+      fullGuideChoiceSub: 'Walk through the whole app',
+      essentialsIntro: 'Just the basics to get going. You can explore the rest afterward.',
+      seeTheRest: 'See the rest of the app',
+      seeTheRestSub: '{count} more topics — wealth, forecast, tax, and how it all fits together',
+      essentialsDone: 'Nice — the essentials are in place. Want to explore the rest?',
       groups: {
         essentials: 'Essentials',
         wealth: 'Wealth',
         learn: 'Understand the app',
       },
       topics: {
-        prefs: { title: 'Language & region', hint: 'How the app speaks & taxes', body: 'Pick your language and region. Region sets which tax model Headroom uses — Norway for full Norwegian tax, or a generic flat rate.' },
-        income: { title: 'Monthly income', hint: 'What lands in your account', body: 'What actually lands in your account each month. This drives your budget and how much you have to spend.' },
-        savingsTarget: { title: 'Savings target', hint: 'How much to set aside', body: 'The share of income you aim to save each month. Headroom uses it to work out how much is safe to spend day to day.' },
-        fixedExpenses: { title: 'Fixed expenses', hint: 'Recurring monthly bills', body: 'Bills that recur every month — rent/mortgage, power, subscriptions. We seeded a few examples; add, edit or delete them right on this card.' },
-        cash: { title: 'Cash & savings', hint: 'Money you can reach now', body: 'Savings, buffer account and BSU — the money you can access right now. Together this is your liquidity.' },
-        home: { title: 'Home & mortgage', hint: 'Property value and debt', body: 'Your home’s value and what you owe on the mortgage. The difference is your property equity.' },
-        stocks: { title: 'Investments', hint: 'Stocks & funds', body: 'Your stock and fund portfolio, and how much of it is unrealized gain — used to estimate tax if you sell.' },
-        crypto: { title: 'Crypto', hint: 'Digital assets', body: 'Your crypto holdings, if any. Leave at 0 otherwise.' },
-        pension: { title: 'Pension', hint: 'OTP & IPS balances', body: 'Occupational pension (OTP) and private pension (IPS) balances. Kept out of liquid net worth since it’s locked until retirement.' },
-        debt: { title: 'Debt', hint: 'Loans beyond the mortgage', body: 'Student loans, consumer debt and cards live here. Add them so your true net worth and payoff timeline are accurate.' },
-        growth: { title: 'Growth assumptions', hint: 'How the forecast grows', body: 'The annual return rates used to project your wealth forward. Tap any rate to tune it — conservative defaults are set for you.' },
-        dashboard: { title: 'Dashboard', hint: 'Your money at a glance', body: 'The overview pulls everything together — net worth, cashflow and how this month is tracking against your plan.' },
-        salary: { title: 'Salary & tax', hint: 'Jobs, raises, tax', body: 'Add jobs and salary history here for accurate tax and take-home. Raises and bonuses build your income timeline.' },
-        forecast: { title: 'Forecast', hint: 'Where you’re heading', body: 'Projects your net worth years ahead from today’s balances, savings and growth rates — so you can see the long game.' },
-        loan: { title: 'Loan calculator', hint: 'What you can borrow & afford', body: 'Model a mortgage — payments, interest and how much house fits your income and equity.' },
-        settings: { title: 'Settings & backup', hint: 'Export, import, preferences', body: 'Your data lives on your own device. Export a JSON backup anytime, re-import it, or replay this guide from here.' },
+        prefs: { title: 'Language & region', hint: 'How the app speaks & taxes', body: 'Pick your language and region. Region sets the tax model Headroom uses — Norway applies full Norwegian income tax, bracket tax and national insurance, while Generic uses a single flat rate you choose. Everything else — currency, salary and pension math — follows from this, so it’s worth getting right first.' },
+        income: { title: 'Monthly income', hint: 'What lands in your account', body: 'Your monthly take-home — what actually lands in your account after tax. Headroom uses it to build your budget: fixed costs come off first, then your savings target, and what’s left is your day-to-day spending. You can set it per month, or let it come automatically from your Salary page.' },
+        savingsTarget: { title: 'Savings target', hint: 'How much to set aside', body: 'The share of income you aim to put aside each month. Headroom subtracts it from your budget before working out your daily allowance, so saving happens first rather than with whatever’s left. A common starting point is 20% — set it to something you can actually stick to.' },
+        fixedExpenses: { title: 'Fixed expenses', hint: 'Recurring monthly bills', body: 'Bills that recur every month — rent or mortgage, power, insurance, subscriptions. These come straight off your income before anything else, so keeping them accurate makes the rest of your budget honest. We seeded a few examples; add, edit, tag or delete them right on this card.' },
+        cash: { title: 'Cash & savings', hint: 'Money you can reach now', body: 'The money you can reach right now — everyday savings, a rainy-day buffer, and any BSU. Together this is your liquidity: how much you could cover an emergency or an opportunity with, without selling investments or taking on debt.' },
+        home: { title: 'Home & mortgage', hint: 'Property value and debt', body: 'Your home’s current market value and the balance left on your mortgage. The difference is your property equity — usually the biggest single piece of net worth. Headroom tracks how that equity grows as you pay down the loan and the home appreciates.' },
+        stocks: { title: 'Investments', hint: 'Stocks & funds', body: 'Your stock and fund portfolio at market value, plus how much of that is unrealized gain. The gain matters because Headroom sets aside the tax you’d owe if you sold, so your net worth reflects what you’d actually keep — not just the sticker value.' },
+        crypto: { title: 'Crypto', hint: 'Digital assets', body: 'The market value of any crypto you hold, with its own unrealized gain and tax rate. It’s treated as a separate, higher-risk bucket in your allocation and forecast. Leave it at 0 if it doesn’t apply to you.' },
+        pension: { title: 'Pension', hint: 'OTP & IPS balances', body: 'Balances in your occupational pension (OTP, from your employer) and any private pension savings (IPS). This is real wealth, but it’s locked until retirement age — so Headroom keeps it out of your liquid net worth and shows it separately, so today’s spendable picture stays honest.' },
+        debt: { title: 'Debt', hint: 'Loans beyond the mortgage', body: 'Loans beyond your mortgage — student loans, consumer debt, credit cards. Add them here so your true net worth nets them out, and so the debt-payoff view can show when you’ll be free of them. Each debt tracks its own balance, rate and payment.' },
+        growth: { title: 'Growth assumptions', hint: 'How the forecast grows', body: 'The annual return assumptions behind every projection — separate rates for stocks, property, cash and crypto, since they don’t grow alike. Conservative defaults are set for you; tap any rate to tune it. These drive the forecast, so small changes here move the long-term numbers a lot.' },
+        dashboard: { title: 'Dashboard', hint: 'Your money at a glance', body: 'Your money at a glance — net worth, cashflow, and how this month is tracking against your plan, pulled together from everything else you enter. It’s the page to open first each time: a quick read on whether you’re on track before you dig into the details.' },
+        salary: { title: 'Salary & tax', hint: 'Jobs, raises, tax', body: 'Where you record jobs, salary history, raises and bonuses. Headroom turns this into an accurate gross-to-net picture using your region’s tax rules, and feeds your monthly income and take-home. Over time it also charts how your pay has grown against inflation.' },
+        forecast: { title: 'Forecast', hint: 'Where you’re heading', body: 'Projects your net worth years into the future from today’s balances, your monthly savings and the growth rates. It’s the long game — see roughly where you land in 5, 10 or 15 years, and how changing your savings or assumptions shifts the curve.' },
+        loan: { title: 'Loan calculator', hint: 'What you can borrow & afford', body: 'A calculator for borrowing — model a mortgage’s monthly payment, total interest, and how much home fits your income and equity. It has three modes: first-time buyer (what you can afford to buy), homeowner (paying down an existing mortgage), and moving (buying and selling at once, with bridge financing). Pick the one that matches your situation.' },
+        settings: { title: 'Settings & backup', hint: 'Export, import, preferences', body: 'Your data lives on your own device — nothing is sent to a server. Export a full JSON backup anytime, re-import it on another device, switch language or currency, or replay this guide. This is also where demo mode and ‘reset all data’ live.' },
       },
       fields: {
         income: 'Monthly net income',
@@ -1659,7 +1703,13 @@ interface FinanceContextType {
    *  `completeOnboarding` marks it done and closes it. */
   onboardingCompleted: boolean;
   onboardingActive: boolean;
-  startOnboarding: () => void;
+  /** 'welcome' opens the essentials-first intro; 'hub' opens the full topic hub. */
+  onboardingEntry: 'welcome' | 'hub';
+  /** Bumped on every open/reset so the guide remounts fresh. */
+  onboardingNonce: number;
+  startOnboarding: (entry?: 'welcome' | 'hub') => void;
+  /** Full reset: reopen from the welcome and mark the guide not-done. */
+  resetGuide: () => void;
   completeOnboarding: () => void;
   dataLoadFailed: boolean;
   /** True when the most recent save failed and changes are pending a retry. */
@@ -1786,6 +1836,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // `onboardingActive` (not persisted) is whether the tour overlay is showing.
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [onboardingActive, setOnboardingActive] = useState(false);
+  // Where the guide opens: 'welcome' = the short essentials-first intro (new
+  // users / reset), 'hub' = straight to the full topic hub (manual replay).
+  const [onboardingEntry, setOnboardingEntry] = useState<'welcome' | 'hub'>('welcome');
+  // Bumped on every open/reset so the guide panel always remounts fresh (picks
+  // up the right entry phase) even when it was already open.
+  const [onboardingNonce, setOnboardingNonce] = useState(0);
 
   const loaded = useRef(false);
   // Holds the user's real data while demo mode is active, so it can be restored
@@ -1865,7 +1921,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           loaded.current = true;
           // Launch the first-run guided setup for a brand-new user (empty DB →
           // data === null) or one who reloaded mid-tour (flag explicitly false).
+          // First-run always opens the gentle essentials-first welcome.
           if (data === null || data?.onboardingCompleted === false) {
+            setOnboardingEntry('welcome');
+            setOnboardingNonce(n => n + 1);
             setOnboardingActive(true);
           }
           return;
@@ -2459,13 +2518,29 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setGoals([]);
     setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
     setBillingConfig(DEFAULT_BILLING_CONFIG);
-    // A full wipe is effectively a fresh start — re-run the guided setup.
+    // A full wipe is effectively a fresh start — re-run the guided setup from the top.
     setOnboardingCompleted(false);
+    setOnboardingEntry('welcome');
+    setOnboardingNonce(n => n + 1);
     setOnboardingActive(true);
   };
 
   // --- First-run guided setup controls ---
-  const startOnboarding = useCallback(() => setOnboardingActive(true), []);
+  // Manual open (header ?, Settings replay) jumps to the full hub by default;
+  // pass 'welcome' to start from the gentle intro.
+  const startOnboarding = useCallback((entry: 'welcome' | 'hub' = 'hub') => {
+    setOnboardingEntry(entry);
+    setOnboardingNonce(n => n + 1);
+    setOnboardingActive(true);
+  }, []);
+  // Full reset: mark the guide un-done AND reopen it from the welcome, so it
+  // behaves exactly like a first run (and auto-launches again on next load).
+  const resetGuide = useCallback(() => {
+    setOnboardingCompleted(false);
+    setOnboardingEntry('welcome');
+    setOnboardingNonce(n => n + 1);
+    setOnboardingActive(true);
+  }, []);
   const completeOnboarding = useCallback(() => {
     setOnboardingCompleted(true);
     setOnboardingActive(false);
@@ -2588,7 +2663,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       restoreGrowthRateDefaults, restoreAssetTaxDefaults, restoreCustomTaxRateDefault,
       restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
       demoMode, toggleDemoMode,
-      onboardingCompleted, onboardingActive, startOnboarding, completeOnboarding,
+      onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce, startOnboarding, resetGuide, completeOnboarding,
       dataLoadFailed,
       saveFailed, retrySave,
     }}>

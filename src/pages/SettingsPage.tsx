@@ -18,6 +18,7 @@ import {
   EyeOff,
   MonitorPlay,
   Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 import {
   useFinance,
@@ -93,6 +94,7 @@ export default function SettingsPage() {
     toggleDemoMode,
     onboardingCompleted,
     startOnboarding,
+    resetGuide,
     hiddenNavItems,
     toggleNavItem,
     employerCostConfig,
@@ -245,7 +247,7 @@ export default function SettingsPage() {
       </header>
 
       {/* Bento grid */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+      <div data-tour="settings-all" className="grid grid-cols-1 md:grid-cols-12 gap-4">
         {/* ──── Currency (span 7) ──── */}
         <Card padding="lg" className="md:col-span-7">
           <SectionLabel icon={<Coins />}>{t.settings.currency}</SectionLabel>
@@ -600,9 +602,17 @@ export default function SettingsPage() {
               variant="secondary"
               size="md"
               leadingIcon={<Sparkles />}
-              onClick={startOnboarding}
+              onClick={() => startOnboarding('hub')}
             >
               {t.onboarding.replay}
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              leadingIcon={<RotateCcw />}
+              onClick={resetGuide}
+            >
+              {t.onboarding.resetGuide}
             </Button>
           </div>
         </Card>

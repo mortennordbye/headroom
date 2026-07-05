@@ -93,7 +93,7 @@ const Layout: React.FC = () => {
               avoid crowding the month picker). Always available so the tour can
               be (re)started with data too. */}
           <button
-            onClick={startOnboarding}
+            onClick={() => startOnboarding('hub')}
             aria-label={t.onboarding.guide}
             title={t.onboarding.guide}
             className="hidden sm:grid place-items-center w-8 h-8 rounded-[6px] border transition-colors"

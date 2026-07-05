@@ -178,7 +178,7 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
   { id: 'salary', group: 'learn', kind: 'learn', route: '/salary', target: 'salary-overview', fields: [] },
   { id: 'forecast', group: 'learn', kind: 'learn', route: '/forecast', target: 'forecast-hero', fields: [] },
   { id: 'loan', group: 'learn', kind: 'learn', route: '/loan', target: 'loan-hero', fields: [] },
-  { id: 'settings', group: 'learn', kind: 'learn', route: '/settings', target: 'settings-data', fields: [] },
+  { id: 'settings', group: 'learn', kind: 'learn', route: '/settings', target: 'settings-all', fields: [] },
 ];
 
 export const ONBOARDING_TOPIC_COUNT = ONBOARDING_TOPICS.length;
