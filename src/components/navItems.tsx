@@ -25,8 +25,8 @@ export interface NavItem {
 
 /** Canonical, ordered nav list — drives the desktop pills and the mobile "Mer" sheet. */
 export const NAV_ITEMS: NavItem[] = [
-  { path: '/overview', key: 'dashboard', icon: <LayoutDashboard size={20} strokeWidth={1.75} /> },
-  { path: '/', key: 'budget', icon: <BarChart3 size={20} strokeWidth={1.75} /> },
+  { path: '/', key: 'dashboard', icon: <LayoutDashboard size={20} strokeWidth={1.75} /> },
+  { path: '/budget', key: 'budget', icon: <BarChart3 size={20} strokeWidth={1.75} /> },
   { path: '/assets', key: 'assets', icon: <TrendingUp size={20} strokeWidth={1.75} /> },
   { path: '/salary', key: 'salary', icon: <LineChartIcon size={20} strokeWidth={1.75} /> },
   { path: '/forecast', key: 'forecast', icon: <Activity size={20} strokeWidth={1.75} /> },

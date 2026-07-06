@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { FinanceProvider } from './context/FinanceContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import UpdatePrompt from './components/UpdatePrompt';
@@ -31,8 +31,10 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Layout />}>
-              <Route index element={<Suspense fallback={<RouteFallback />}><BudgetPage /></Suspense>} />
-              <Route path="overview" element={<Suspense fallback={<RouteFallback />}><DashboardPage /></Suspense>} />
+              <Route index element={<Suspense fallback={<RouteFallback />}><DashboardPage /></Suspense>} />
+              <Route path="budget" element={<Suspense fallback={<RouteFallback />}><BudgetPage /></Suspense>} />
+              {/* Dashboard moved from /overview to the index; keep the old path working. */}
+              <Route path="overview" element={<Navigate to="/" replace />} />
               <Route path="assets" element={<Suspense fallback={<RouteFallback />}><AssetPage /></Suspense>} />
               <Route path="loan" element={<Suspense fallback={<RouteFallback />}><LoanPage /></Suspense>} />
               <Route path="salary" element={<Suspense fallback={<RouteFallback />}><SalaryPage /></Suspense>} />

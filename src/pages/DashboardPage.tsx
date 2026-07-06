@@ -69,7 +69,11 @@ const DashboardPage: React.FC = () => {
   } = useFinance();
 
   // ─── Derived numbers ───
-  const totalSpent = dailyData.reduce((sum, d) => sum + d.spent, 0);
+  // Discretionary spend, not raw spend: envelope-covered spend (food, etc.) is
+  // already accounted for inside totalFixedExpenses, so the budget-composition
+  // bar, burn rate and pacing all measure only what draws down the daily budget —
+  // otherwise the enveloped amount would be double-counted here.
+  const totalSpent = dailyData.reduce((sum, d) => sum + d.discretionary, 0);
   const monthEndSurplus = dailyData[dailyData.length - 1]?.balance ?? 0;
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayEntry = dailyData.find(d => d.dateStr === todayStr);
@@ -232,7 +236,7 @@ const DashboardPage: React.FC = () => {
     const upToToday = dailyData.slice(0, todayIdx + 1);
     const cumulative: number[] = [];
     let running = 0;
-    upToToday.forEach(d => { running += d.spent; cumulative.push(running); });
+    upToToday.forEach(d => { running += d.discretionary; cumulative.push(running); });
     return {
       todayIdx,
       total: dailyData.length,

@@ -11,14 +11,20 @@ import { Button } from './ui/Button';
 // Per-category monthly budgets: progress bars (actual vs cap) for the selected
 // month with over-budget warnings, plus an inline editor to set/clear caps.
 export function CategoryBudgets() {
-  const { t, currentMonth, dailyTransactions, categoryBudgets, setCategoryBudget, formatCurrency } = useFinance();
+  const { t, currentMonth, dailyTransactions, categoryBudgets, setCategoryBudget, formatCurrency, reconciliation } = useFinance();
   const [editing, setEditing] = useState(false);
 
   const monthKey = format(currentMonth, 'yyyy-MM');
+  // A category with an envelope (a linked fixed expense) is budgeted there; its
+  // envelope supersedes a soft cap here, so it drops out of this list to avoid
+  // two competing plans for the same category. Any stored cap is kept, not
+  // deleted — it reappears if the category is unlinked.
+  const enveloped = reconciliation.envelopedCategories;
   const progress = useMemo(
-    () => budgetProgress(dailyTransactions, monthKey, categoryBudgets),
-    [dailyTransactions, monthKey, categoryBudgets],
+    () => budgetProgress(dailyTransactions, monthKey, categoryBudgets).filter((p) => !enveloped.has(p.category)),
+    [dailyTransactions, monthKey, categoryBudgets, enveloped],
   );
+  const budgetableCategories = CATEGORIES.filter((c) => c.key !== 'income' && !enveloped.has(c.key));
 
   const label = (key: CategoryKey) => t.categoryLabels[key];
 
@@ -38,7 +44,10 @@ export function CategoryBudgets() {
 
       {editing ? (
         <div className="mt-4 flex flex-col gap-2.5">
-          {CATEGORIES.filter((c) => c.key !== 'income').map((c) => {
+          {enveloped.size > 0 && (
+            <p className="text-[11px] leading-snug" style={{ color: 'var(--text-3)' }}>{t.envelopeManagedNote}</p>
+          )}
+          {budgetableCategories.map((c) => {
             const Icon = c.icon;
             return (
               <label key={c.key} className="flex items-center gap-3 text-[13px]">

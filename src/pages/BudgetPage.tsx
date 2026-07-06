@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useMemo, lazy, Suspense } from 'react';
 import {
   PlusCircle,
   Trash2,
@@ -7,6 +7,7 @@ import {
   FileUp,
   ChevronDown,
   Info,
+  Wallet,
   X,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
@@ -18,6 +19,7 @@ import { useFinance, type TransactionTemplate, type ExpenseType } from '../conte
 import EditModal, { type ModalField } from '../components/EditModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES } from '../lib/categories';
+import { suggestEnvelopeLinks, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
@@ -53,6 +55,39 @@ const expenseColor = (type?: ExpenseType) => EXPENSE_TYPE_COLOR[type ?? 'fixed']
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)] font-semibold';
+
+// Envelope draw-down status → colour token (under = healthy, near = caution, over = alert).
+const ENVELOPE_STATUS_COLOR: Record<EnvelopeStatus, string> = {
+  under: 'var(--accent)',
+  near: 'var(--warning)',
+  over: 'var(--negative)',
+};
+
+// Slim actual-vs-budgeted meter shown under a linked fixed expense: how much of
+// the envelope real spending has drawn down, and what's left (or overspent).
+function EnvelopeBar({ envelope, formatCurrency, labels }: {
+  envelope: Envelope;
+  formatCurrency: (n: number) => string;
+  labels: { left: string; over: string };
+}) {
+  const color = ENVELOPE_STATUS_COLOR[envelope.status];
+  const pct = envelope.budgeted > 0 ? Math.min(100, (envelope.actual / envelope.budgeted) * 100) : 0;
+  return (
+    <div className="mt-2 pl-[15px] space-y-1">
+      <div className="h-[3px] rounded-full bg-[var(--bg-elev)] overflow-hidden">
+        <div className="h-full rounded-full transition-[width]" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-2)]">
+        <span>{formatCurrency(envelope.actual)} / {formatCurrency(envelope.budgeted)}</span>
+        <span style={{ color }}>
+          {envelope.overspent > 0
+            ? `${formatCurrency(envelope.overspent)} ${labels.over}`
+            : `${formatCurrency(envelope.remaining)} ${labels.left}`}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function getCategoryColor(category: string): string {
   let hash = 0;
@@ -105,6 +140,7 @@ const BudgetPage: React.FC = () => {
     setFixedExpenses,
     debts,
     dailyData,
+    reconciliation,
     dailyTransactions,
     setDailyTransactions,
     formatCurrency,
@@ -158,6 +194,17 @@ const BudgetPage: React.FC = () => {
 
   // --- Fixed Expenses ---
   const typeOptions = (Object.keys(EXPENSE_TYPE_COLOR) as ExpenseType[]).map(v => ({ value: v, label: t.expenseType[v] }));
+  // Optional envelope link: a fixed expense tracked against a spending category
+  // (see src/lib/envelopes.ts). Blank = a plain reserved amount (the default).
+  const trackCategoryOptions = [
+    { value: '', label: t.trackCategoryNone },
+    ...CATEGORIES.filter(c => c.key !== 'income').map(c => ({ value: c.key, label: t.categoryLabels[c.key] })),
+  ];
+  const trackCategoryField = (value?: string) => ({
+    key: 'category', label: t.trackCategoryLabel, type: 'select' as const,
+    value: value ?? '', options: trackCategoryOptions, hint: t.trackCategoryHint,
+  });
+  const parseTrackedCategory = (value: string) => (isCategoryKey(value) ? value : undefined);
 
   const addFixedExpense = () => {
     openModal({
@@ -166,11 +213,12 @@ const BudgetPage: React.FC = () => {
         { key: 'name', label: t.newExpenseName, type: 'text', value: '', placeholder: 'Mat, Strøm...' },
         { key: 'amount', label: t.newAmount, type: 'number', value: '', placeholder: '0' },
         { key: 'type', label: t.expenseTypeLabel, type: 'select', value: 'fixed', options: typeOptions },
+        trackCategoryField(),
       ],
       onSave: (vals) => {
         const amount = parsePositiveNumber(vals.amount);
         if (vals.name.trim() && amount !== null) {
-          setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: vals.name.trim(), amount, type: vals.type as ExpenseType }]);
+          setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: vals.name.trim(), amount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category) }]);
           closeModal();
         } else {
           setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.newExpenseName + ' er påkrevd' : t.newAmount + ' må være et positivt tall' } : null);
@@ -179,18 +227,19 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  const editFixedExpense = (id: string, name: string, amount: number, type?: ExpenseType) => {
+  const editFixedExpense = (id: string, name: string, amount: number, type?: ExpenseType, category?: string) => {
     openModal({
       title: name,
       fields: [
         { key: 'name', label: t.editName, type: 'text', value: name },
         { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
         { key: 'type', label: t.expenseTypeLabel, type: 'select', value: type ?? 'fixed', options: typeOptions },
+        trackCategoryField(category),
       ],
       onSave: (vals) => {
         const newAmount = parsePositiveNumber(vals.amount);
         if (vals.name.trim() && newAmount !== null) {
-          setFixedExpenses(fixedExpenses.map(e => e.id === id ? { ...e, name: vals.name.trim(), amount: newAmount, type: vals.type as ExpenseType } : e));
+          setFixedExpenses(fixedExpenses.map(e => e.id === id ? { ...e, name: vals.name.trim(), amount: newAmount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category) } : e));
           closeModal();
         } else {
           setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.editName + ' er påkrevd' : t.editAmount + ' må være et positivt tall' } : null);
@@ -308,10 +357,31 @@ const BudgetPage: React.FC = () => {
 
   const totalSpentThisMonth = dailyData.reduce((sum, d) => sum + d.spent, 0);
 
+  // The linked fixed-expense name covering a transaction's category, if any — used
+  // to tag drawn-down transactions in the log so it's clear why they don't move the
+  // daily balance. Returns undefined for income and non-enveloped spend.
+  const envelopeNameFor = (tx: { category?: string; kind?: 'income' | 'expense' }): string | undefined => {
+    if (tx.kind === 'income' || !isCategoryKey(tx.category)) return undefined;
+    const env = reconciliation.byCategory.get(tx.category);
+    if (!env) return undefined;
+    return fixedExpenses.find(e => e.id === env.expenseIds[0])?.name;
+  };
+
   const dateLocale = lang === 'nb' ? nb : enUS;
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: dateLocale });
   const monthKey = format(currentMonth, 'yyyy-MM');
   const monthPayslip = payslips[monthKey];
+
+  // Collision detector: unlinked fixed expenses that look like they double-count
+  // with tracked spending (e.g. a "Mat" line while groceries also flow in as
+  // transactions). Dismissable per session; linking resolves it for good.
+  const [dismissedLinks, setDismissedLinks] = useState<Set<string>>(new Set());
+  const linkSuggestions = useMemo(
+    () => suggestEnvelopeLinks(fixedExpenses, dailyTransactions, monthKey).filter(s => !dismissedLinks.has(s.expenseId)),
+    [fixedExpenses, dailyTransactions, monthKey, dismissedLinks],
+  );
+  const linkExpenseToCategory = (expenseId: string, category: string) =>
+    setFixedExpenses(fixedExpenses.map(e => e.id === expenseId ? { ...e, category: isCategoryKey(category) ? category : undefined } : e));
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
@@ -494,6 +564,38 @@ const BudgetPage: React.FC = () => {
               <PlusCircle size={18} strokeWidth={2} />
             </button>
           </div>
+          {linkSuggestions.length > 0 && (
+            <div className="rounded-[6px] border border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[var(--warning-bg)] p-3 space-y-2.5">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-1)]">
+                <Wallet size={13} className="text-[var(--warning)]" />
+                {t.envelopeSuggestTitle}
+              </div>
+              {linkSuggestions.map(s => (
+                <div key={s.expenseId} className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] leading-snug text-[var(--text-2)] min-w-0">
+                    {t.envelopeSuggestText
+                      .replace('{name}', s.expenseName)
+                      .replace('{amount}', formatCurrency(s.spent))
+                      .replace('{category}', t.categoryLabels[s.category])}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => linkExpenseToCategory(s.expenseId, s.category)}
+                      className="px-2.5 py-1 rounded-[4px] text-[11px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-opacity"
+                    >
+                      {t.envelopeSuggestLink}
+                    </button>
+                    <button
+                      onClick={() => setDismissedLinks(prev => new Set(prev).add(s.expenseId))}
+                      className="px-2 py-1 rounded-[4px] text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
+                    >
+                      {t.envelopeSuggestDismiss}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
             {(Object.keys(EXPENSE_TYPE_COLOR) as ExpenseType[]).map(ty => (
               <span key={ty} className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
@@ -503,36 +605,47 @@ const BudgetPage: React.FC = () => {
             ))}
           </div>
           <div className="space-y-0">
-            {fixedExpenses.map((expense) => (
-              <div key={expense.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0">
-                <button
-                  type="button"
-                  aria-label={`${t.edit} — ${expense.name}`}
-                  className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
-                  onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type)}
-                >
-                  <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
-                  <span className="truncate">{expense.name}</span>
-                </button>
-                <div className="flex items-center gap-3">
+            {fixedExpenses.map((expense) => {
+              // Envelope reconciliation, shown only for a linked expense that has
+              // real spend this month (keeps the list quiet for non-syncers). When
+              // several expenses share a category, the shared bar renders once,
+              // under the first of them.
+              const envelope = isCategoryKey(expense.category) ? reconciliation.byCategory.get(expense.category) : undefined;
+              const showEnvelope = !!envelope && envelope.actual > 0 && envelope.expenseIds[0] === expense.id;
+              return (
+              <div key={expense.id} className="py-3 border-b border-[var(--border)] last:border-0">
+                <div className="flex items-center justify-between group">
                   <button
                     type="button"
                     aria-label={`${t.edit} — ${expense.name}`}
-                    className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
-                    onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type)}
+                    className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
+                    onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category)}
                   >
-                    {formatCurrency(expense.amount)}
+                    <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
+                    <span className="truncate">{expense.name}</span>
                   </button>
-                  <button
-                    onClick={() => removeFixedExpense(expense.id, expense.name)}
-                    aria-label={`${t.delete} — ${expense.name}`}
-                    className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      aria-label={`${t.edit} — ${expense.name}`}
+                      className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
+                      onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category)}
+                    >
+                      {formatCurrency(expense.amount)}
+                    </button>
+                    <button
+                      onClick={() => removeFixedExpense(expense.id, expense.name)}
+                      aria-label={`${t.delete} — ${expense.name}`}
+                      className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
+                {showEnvelope && <EnvelopeBar envelope={envelope} formatCurrency={formatCurrency} labels={{ left: t.envelopeLeft, over: t.envelopeOver }} />}
               </div>
-            ))}
+              );
+            })}
             <div className="pt-5 flex justify-between items-baseline">
               <span className={sectionLabel}>{t.aggregate}</span>
               <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(totalFixedExpenses)}</span>
@@ -661,13 +774,16 @@ const BudgetPage: React.FC = () => {
 
               {day.transactions.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {day.transactions.map((tx) => (
-                    <span key={tx.id} className="inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
+                  {day.transactions.map((tx) => {
+                    const coveredBy = envelopeNameFor(tx);
+                    return (
+                    <span key={tx.id} title={coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className="inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
                       {tx.category && (
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                       )}
                       <span>{tx.description}</span>
-                      <span className="font-mono text-[var(--text-2)]">{formatCurrency(tx.amount)}</span>
+                      <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
+                      {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
                       <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
                         <Edit2 size={11} />
                       </button>
@@ -675,7 +791,8 @@ const BudgetPage: React.FC = () => {
                         <Trash2 size={11} />
                       </button>
                     </span>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -717,13 +834,16 @@ const BudgetPage: React.FC = () => {
                   </td>
                   <td className="px-7 py-4">
                     <div className="flex flex-wrap gap-2">
-                      {day.transactions.map((tx) => (
-                        <span key={tx.id} className="inline-flex items-center gap-2 bg-[var(--bg-raised)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
+                      {day.transactions.map((tx) => {
+                        const coveredBy = envelopeNameFor(tx);
+                        return (
+                        <span key={tx.id} title={coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className="inline-flex items-center gap-2 bg-[var(--bg-raised)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
                           {tx.category && (
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                           )}
                           <span>{tx.description}</span>
-                          <span className="font-mono text-[var(--text-2)]">{formatCurrency(tx.amount)}</span>
+                          <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
+                          {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
                           {tx.category && (
                             <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{isCategoryKey(tx.category) ? t.categoryLabels[tx.category] : tx.category}</span>
                           )}
@@ -734,7 +854,8 @@ const BudgetPage: React.FC = () => {
                             <Trash2 size={12} />
                           </button>
                         </span>
-                      ))}
+                        );
+                      })}
                       <button
                         onClick={() => addDailyTransaction(day.dateStr)}
                         aria-label={t.add}

@@ -17,6 +17,7 @@ export interface ModalField {
   placeholder?: string;
   options?: ModalFieldOption[]; // required when type === 'select'
   suggestions?: string[];       // text fields only — populates a <datalist> for autocomplete
+  hint?: string;                // optional helper text rendered under the field
 }
 
 interface EditModalProps {
@@ -126,6 +127,9 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
                     </div>
                   )}
                 </>
+              )}
+              {field.hint && (
+                <p className="text-[11px] leading-snug text-[var(--text-2)] normal-case tracking-normal">{field.hint}</p>
               )}
             </div>
           ))}

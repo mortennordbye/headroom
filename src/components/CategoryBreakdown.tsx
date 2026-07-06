@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { format, subMonths } from 'date-fns';
-import { ChevronRight, TrendingUp, TrendingDown, Circle } from 'lucide-react';
+import { ChevronRight, TrendingUp, TrendingDown, Circle, Wallet } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { categoryMeta, isCategoryKey } from '../lib/categories';
 import { categoryMoM } from '../lib/categoryStats';
@@ -10,7 +10,7 @@ import { DeltaChip } from './ui/DeltaChip';
 // colour + share bar, a month-over-month chip, and click-to-drill into the
 // category's transactions. Reads everything from context (month, transactions).
 export function CategoryBreakdown() {
-  const { t, currentMonth, dailyTransactions, formatCurrency } = useFinance();
+  const { t, currentMonth, dailyTransactions, formatCurrency, reconciliation } = useFinance();
   const [open, setOpen] = useState<string | null>(null);
 
   const monthKey = format(currentMonth, 'yyyy-MM');
@@ -62,6 +62,11 @@ export function CategoryBreakdown() {
                     <Icon size={12} />
                   </span>
                   <span className="truncate">{label(r.category)}</span>
+                  {isCategoryKey(r.category) && reconciliation.envelopedCategories.has(r.category) && (
+                    <span className="shrink-0 text-[var(--text-3)] inline-flex" title={t.envelopeTracked} aria-label={t.envelopeTracked}>
+                      <Wallet size={12} aria-hidden />
+                    </span>
+                  )}
                   {r.pct !== null && (
                     <DeltaChip
                       size="sm"

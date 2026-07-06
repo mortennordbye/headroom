@@ -128,7 +128,9 @@ export default function SmartRecommendations() {
     setSavingsTargetPercent(Math.round((clamped / totalResidual) * 100));
   };
 
-  const totalSpentThisMonth = dailyData.reduce((s, d) => s + d.spent, 0);
+  // Discretionary spend (envelope-covered spend is already reserved in fixed
+  // expenses), so pacing against recommendedSpending isn't double-counted.
+  const totalSpentThisMonth = dailyData.reduce((s, d) => s + d.discretionary, 0);
   const spendingPct = recommendedSpending > 0
     ? Math.min(100, (totalSpentThisMonth / recommendedSpending) * 100)
     : 0;

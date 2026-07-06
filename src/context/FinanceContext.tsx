@@ -19,6 +19,7 @@ import { translations, type Language, type Translations } from '../i18n/translat
 export type { Language } from '../i18n/translations';
 import { categorize } from '../lib/categorize';
 import type { CategoryKey } from '../lib/categories';
+import { reconcile, runningEnvelopeBalance, type Reconciliation } from '../lib/envelopes';
 import { sanitizePayload } from '../lib/sanitizePayload';
 import {
   type EmployerCostConfig,
@@ -37,6 +38,15 @@ export interface FixedExpense {
   name: string;
   amount: number;
   type?: ExpenseType; // optional for back-compat with older stored/imported data
+  /**
+   * Optional link to a tracked transaction category (e.g. 'groceries'). When set,
+   * this fixed expense becomes an *envelope*: its amount is still reserved up front,
+   * but real transactions in that category draw down the envelope instead of hitting
+   * the daily budget a second time (see src/lib/envelopes.ts). Absent on committed
+   * bills that never appear as tracked spending (mortgage, insurance) and on all
+   * legacy/imported data — those behave exactly as before.
+   */
+  category?: CategoryKey;
 }
 
 // Non-mortgage debts (studielån, forbrukslån, kredittkort, …). Modeled separately
@@ -552,6 +562,7 @@ interface FinanceDerivedContextType {
   monthlyBudget: number;
   dailyBudget: number;
   dailyData: DailyDataEntry[];
+  reconciliation: Reconciliation;
   totalEquity: number;
   taxOnGain: number;
   netInvestment: number;
@@ -622,7 +633,8 @@ export interface ExportPayload {
 export interface DailyDataEntry {
   date: Date;
   dateStr: string;
-  spent: number;
+  spent: number;         // raw expense total that day (what actually left the account)
+  discretionary: number; // portion that drew down the daily budget (spillover + non-enveloped)
   balance: number;
   transactions: DailyTransaction[];
 }
@@ -1215,31 +1227,34 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, [dailyTransactions, currentMonth]);
 
+  // Envelope reconciliation: fixed expenses linked to a tracked category are
+  // reserved up front (in totalFixedExpenses) AND their real transactions draw the
+  // envelope down instead of hitting the daily budget a second time. Single source
+  // of truth shared with the budget UI and charts (src/lib/envelopes.ts).
+  const reconciliation = useMemo(
+    () => reconcile(fixedExpenses, dailyTransactions, monthKey),
+    [fixedExpenses, dailyTransactions, monthKey],
+  );
+
   const dailyData: DailyDataEntry[] = useMemo(() => {
-    const result: DailyDataEntry[] = [];
-    let runningBalance = 0;
-    for (const day of monthInterval) {
-      const dateStr = format(day, 'yyyy-MM-dd');
-      const dayTransactions = transactionsForMonth.filter(t => t.date === dateStr);
-      // Only expenses count as "spent"; income (undefined kind = expense for
-      // legacy rows) instead adds to the running balance.
-      const spentToday = dayTransactions
-        .filter(t => t.kind !== 'income')
-        .reduce((sum, t) => sum + t.amount, 0);
-      const incomeToday = dayTransactions
-        .filter(t => t.kind === 'income')
-        .reduce((sum, t) => sum + t.amount, 0);
-      runningBalance += dailyBudget - spentToday + incomeToday;
-      result.push({
+    const orderedDays = monthInterval.map(day => format(day, 'yyyy-MM-dd'));
+    // Envelope-covered spend is excluded from the running balance; only the
+    // discretionary portion (spillover past a full envelope + all non-enveloped
+    // spend) draws it down.
+    const points = runningEnvelopeBalance(orderedDays, transactionsForMonth, dailyBudget, reconciliation);
+    return monthInterval.map((day, i) => {
+      const dateStr = orderedDays[i];
+      const point = points[i];
+      return {
         date: day,
         dateStr,
-        spent: spentToday,
-        balance: runningBalance,
-        transactions: dayTransactions
-      });
-    }
-    return result;
-  }, [monthInterval, transactionsForMonth, dailyBudget]);
+        spent: point.spent,
+        discretionary: point.discretionary,
+        balance: point.balance,
+        transactions: transactionsForMonth.filter(t => t.date === dateStr),
+      };
+    });
+  }, [monthInterval, transactionsForMonth, dailyBudget, reconciliation]);
 
   // Latent tax floored at 0: a loss (negative gain) is not a liquid asset, so it
   // must not inflate net worth. The UI clamps inputs ≥0 but JSON import does not.
@@ -1714,14 +1729,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, mortgageRate, mortgageTermYears,
-    totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData,
+    totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   }), [
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, mortgageRate, mortgageTermYears,
-    totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData,
+    totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   ]);
 

@@ -166,6 +166,48 @@ data volume. Remaining:
 - **`out/` + `.cert/` leftovers** from the retired CLI prototype live under
   `scripts/enable-banking/` (gitignored, `out/` holds a real-data dump). Safe to delete.
 
+## Envelope budgeting (fixed-expense ↔ category reconciliation) — follow-ups
+
+Shipped (2026-07): a fixed expense can be linked to a tracked spending category (optional
+`FixedExpense.category`), turning it into an *envelope*. Its amount is still reserved up front
+(in `totalFixedExpenses` → daily budget), but real transactions in that category draw the
+envelope down instead of being counted against the daily budget a second time — fixing the
+double-count where e.g. a "Mat" fixed line and grocery transactions both hit the remaining
+budget. Overspend past a full envelope spills into the daily budget, day-accurate. Single
+source of truth: pure engine `src/lib/envelopes.ts` (`reconcile` / `createEnvelopeLedger` /
+`runningEnvelopeBalance` / `suggestEnvelopeLinks`, 22 unit tests). Consumed by `dailyData`
+(`FinanceContext.tsx`, adds `discretionary` to `DailyDataEntry` + exposes `reconciliation` on
+the derived context); UI in `BudgetPage.tsx` (link picker in the add/edit modal, per-envelope
+progress bar, "covered by {name}" tags in the daily log, and a collision-detector nudge that
+offers one-tap linking). Category budgets defer to envelopes (an enveloped category drops out
+of `CategoryBudgets`); `CategoryBreakdown` marks enveloped categories; Dashboard/SmartRecs
+pacing use `discretionary` so the fix propagates. Non-syncers (no transactions) are unaffected —
+the exclusion set is empty and every number matches pre-feature behavior. No migration
+(`category` optional, round-trips through sanitize/persist/export untouched).
+
+Design decision (worth revisiting): **unused envelope money is NOT folded into the daily
+running-balance surplus.** The running balance stays discretionary-only; envelope
+under/overspend is surfaced separately on the envelope bar. The plan originally said "release
+unused to surplus," but folding *current* unused into the projected month-end surplus is
+misleading mid-month (you'll likely still spend the envelope), so it was deliberately kept as
+two separate pools. Overspend spillover (the correctness-critical half) IS reflected in the
+balance.
+
+Remaining:
+- **Cross-month envelope rollover.** Unused envelope room doesn't carry to next month; each
+  month's envelope is the current fixed-expense amount. True rollover needs per-month envelope
+  state (a persisted map) and a cross-month reconciliation. **Where**: `src/lib/envelopes.ts`,
+  `FinanceContext.tsx`.
+- **Time-versioned fixed-expense amounts.** Envelopes for *historical* months use the *current*
+  budgeted amount (fixed expenses aren't snapshotted per month — a pre-existing app limitation
+  the envelope view inherits). Accurate history needs a per-month fixed-expense snapshot.
+- **Distribution chart (Fordelingsanalyse) budgeted-vs-actual overlay** — deliberately skipped;
+  the per-envelope bars in the fixed-expense list already deliver the reconciliation view.
+  Revisit if a combined chart is wanted. **Where**: `src/components/BudgetDistributionChart.tsx`.
+- **Name→category hints are a small keyword map** (`NAME_HINTS` in `src/lib/envelopes.ts`),
+  tuned for common Norwegian fixed-expense names (Mat/Strøm/Trening/…). Extend as gaps surface;
+  the collision nudge only fires when the guessed category has real spend, so misses are silent.
+
 ## Audit (2026-07-04) — deferred architecture & data-safety items
 
 Most of `AUDIT.md` is done (see its "Progress log"). These remaining entries are larger refactors, several touching the persistence backbone — deferred because they can't be safely exercised against the user's real data volume without a throwaway `DATA_DIR` and careful diffing.

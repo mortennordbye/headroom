@@ -34,6 +34,7 @@ const mockCtx = {
     spendingTrend: 'Trend', trendMonths: 'Last 6', categoryBudgets: 'Category budgets',
     budgetLabel: 'Budget', remainingLabel: 'Left', overBudgetBy: 'Over by',
     setBudgets: 'Set budgets', noBudgetsSet: 'No budgets', done: 'Done',
+    envelopeManagedNote: 'Managed as envelopes', envelopeTracked: 'Tracked by an envelope',
   },
   currentMonth: new Date('2026-07-15T00:00:00'),
   dailyTransactions: TRANSACTIONS,
@@ -41,6 +42,10 @@ const mockCtx = {
   setCategoryBudget: vi.fn(),
   formatCurrency: (n: number) => `kr ${Math.round(n)}`,
   formatCurrencyShort: (n: number) => `${Math.round(n / 1000)}k`,
+  reconciliation: {
+    envelopes: [], byCategory: new Map(), envelopedCategories: new Set<string>(),
+    totals: { budgeted: 0, actual: 0, overspent: 0, unused: 0 },
+  },
 };
 
 vi.mock('../context/FinanceContext', () => ({ useFinance: () => mockCtx }));
@@ -76,5 +81,27 @@ describe('category UI render smoke', () => {
 
   it('CategoryTrendChart renders without throwing', () => {
     expect(() => renderToStaticMarkup(<CategoryTrendChart />)).not.toThrow();
+  });
+
+  it('hides an enveloped category from CategoryBudgets (envelope supersedes the cap)', () => {
+    mockCtx.reconciliation = {
+      envelopes: [], byCategory: new Map(),
+      envelopedCategories: new Set(['groceries']),
+      totals: { budgeted: 0, actual: 0, overspent: 0, unused: 0 },
+    };
+    const html = renderToStaticMarkup(<CategoryBudgets />);
+    expect(html).not.toContain('Groceries'); // superseded by its envelope
+    expect(html).toContain('Over by');       // transport cap still tracked
+    mockCtx.reconciliation = {
+      envelopes: [], byCategory: new Map(), envelopedCategories: new Set<string>(),
+      totals: { budgeted: 0, actual: 0, overspent: 0, unused: 0 },
+    };
+  });
+
+  it('marks an enveloped category as tracked in CategoryBreakdown', () => {
+    mockCtx.reconciliation.envelopedCategories = new Set(['groceries']);
+    const html = renderToStaticMarkup(<CategoryBreakdown />);
+    expect(html).toContain('Tracked by an envelope');
+    mockCtx.reconciliation.envelopedCategories = new Set<string>();
   });
 });

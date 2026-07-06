@@ -20,7 +20,7 @@ import OnboardingTour from './onboarding/OnboardingTour';
 import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 
 // Pages whose data is scoped to the selected month get the interactive month picker.
-const MONTH_SCOPED_ROUTES = ['/', '/overview'];
+const MONTH_SCOPED_ROUTES = ['/', '/budget'];
 // Pages with no time dimension at all hide the time marker entirely.
 const HIDE_TIME_MARKER_ROUTES = ['/settings'];
 
@@ -306,8 +306,8 @@ const Layout: React.FC = () => {
           borderColor: 'var(--rule)',
         }}
       >
-        <MobileNavTab to="/overview" icon={<LayoutDashboard size={20} strokeWidth={1.75} />} label={t.nav.dashboard} />
-        <MobileNavTab to="/" icon={<BarChart3 size={20} strokeWidth={1.75} />} label={t.nav.budget} />
+        <MobileNavTab to="/" icon={<LayoutDashboard size={20} strokeWidth={1.75} />} label={t.nav.dashboard} />
+        <MobileNavTab to="/budget" icon={<BarChart3 size={20} strokeWidth={1.75} />} label={t.nav.budget} />
         <MobileNavTab to="/assets" icon={<TrendingUp size={20} strokeWidth={1.75} />} label={t.nav.assets} />
         <MobileNavTab to="/salary" icon={<LineChartIcon size={20} strokeWidth={1.75} />} label={t.nav.salary} />
         <button
