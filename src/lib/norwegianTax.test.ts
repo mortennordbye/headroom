@@ -32,6 +32,21 @@ describe('calcNorwegianTax', () => {
     expect(calcNorwegianTax(limit + 1).trygdeavgift).toBeGreaterThan(0);
   });
 
+  it('caps trygdeavgift at 25% of income above the limit in the opptrapping band', () => {
+    const { trygdeavgiftLowerLimit: limit, trygdeavgiftRate: rate } = TAX_PARAMS[TAX_YEAR];
+    // Just above the limit the phased-in cap (25% of the excess) binds, not the
+    // full rate — so no hard cliff at the threshold.
+    const gross = limit + 20_000;
+    expect(calcNorwegianTax(gross).trygdeavgift).toBeCloseTo(0.25 * 20_000, 6);
+    expect(0.25 * 20_000).toBeLessThan(gross * rate); // the cap really is the binding one
+  });
+
+  it('applies the full trygdeavgift rate once past the opptrapping crossover', () => {
+    const { trygdeavgiftRate: rate } = TAX_PARAMS[TAX_YEAR];
+    const gross = 250_000; // well above the ~144.8k crossover
+    expect(calcNorwegianTax(gross).trygdeavgift).toBeCloseTo(gross * rate, 6);
+  });
+
   it('applies minstefradrag up to its ceiling', () => {
     const { minstefradragMax, minstefradragRate } = TAX_PARAMS[TAX_YEAR];
     // Well above the ceiling: minstefradrag is capped at the max.

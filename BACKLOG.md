@@ -13,8 +13,7 @@ Shipped (2026-07): client-side Visma payslip import on the Budget page. PDFs are
 
 Non-mortgage debts (studielån / forbrukslån / kredittkort) now exist (`Debt` in `src/context/FinanceContext.tsx`, math in `src/lib/debt.ts`, UI in `src/components/DebtSection.tsx` on the Formue page). They reduce the headline net worth (`netWorth = totalEquity − totalDebt`) and feed the gjeldsgrad metric. Remaining:
 
-- **Debts aren't historized or projected.** The Dashboard 12-month net-worth chart and the Formue growth projection are asset-equity based, so when debts > 0 the hero/highlight net-worth number sits slightly below the chart's latest point, and the growth projection's "Nå" starts from asset equity (excludes other debt). To fix: snapshot `debts` in `BalanceSnapshot` and factor debt paydown into `calcNetWorthProjectionByBucket` (mirrors the existing "contributions/rates not snapshotted" caveats).
-- **Debt payments don't flow into the budget.** A debt's `minPayment` isn't reflected as a fixed expense on the Budget page — consider surfacing total monthly debt service there.
+- **Debts aren't historized or projected.** The Dashboard 12-month net-worth chart and the Formue growth projection are asset-equity based, so when debts > 0 the hero/highlight net-worth number sits slightly below the chart's latest point, and the growth projection's "Nå" starts from asset equity (excludes other debt). To fix: snapshot `debts` in `BalanceSnapshot` and factor debt paydown into `calcNetWorthProjectionByBucket` (mirrors the existing "contributions/rates not snapshotted" caveats). *Larger + touches the projection math — deferred for careful handling.*
 
 ## Time/data-model rethink — follow-ups
 
@@ -39,23 +38,9 @@ Known limitations:
 
 **Where**: `server/ssb.js`, `server/index.js`. The frontend already consumes `/api/wage-stats` and renders a comparison line on the salary timeline.
 
-## Phase 3 — financial insights expansion (deferred)
-
-The POC C restyle and Settings page are shipped; the additional insight features the user asked for are not yet wired to real data. Sparklines on metric tiles currently use synthetic series where real history is sparse.
-
-- **Real sparkline data on metric tiles** — `DashboardPage.tsx` hero uses `netWorthHistory` (real) but the small tiles (Residual / Can Spend / Investment) fall back to synthetic series. Need: monthly residual derived from `monthlyIncomes - totalFixedExpenses` over the last 12 months; daily-burn series from `dailyData`; monthly investment contributions from `monthlyIncomes * (savingsTargetPercent/100)`.
-- **Net-worth composition timeline** — `AssetPage` currently has a single net-worth projection chart; add a stacked-area chart of Investment / Property Equity / Crypto / Cash over time. Per-asset history now EXISTS via `balanceSnapshots` (`src/context/FinanceContext.tsx`) — derive each month's composition with `computeEquityBreakdown(balanceSnapshots[m].assets)` (`src/lib/equity.ts`). Snapshots only accrue going forward, so the series is sparse until data builds — fall back to estimates/current ratios for months without a snapshot.
-- **Headline insight banner on Dashboard** — auto-generated single-sentence insights like "You spent 14% less on food this month than the 6-month average." Computation belongs in a new `src/lib/insights.ts`. Needs category data on transactions to be useful.
-
-**Unblock**: Phase 3 can start any time. All inputs live in `FinanceContext`; no new server endpoints needed. The `Sparkline` primitive at `src/components/ui/Sparkline.tsx` is ready.
-
-**Where**: `src/pages/DashboardPage.tsx`, `src/pages/BudgetPage.tsx`, `src/pages/AssetPage.tsx`, plus a new `src/lib/insights.ts`.
-
 ## Polish items noticed during the restyle
 
-- **Recharts tooltips and grids** in `BudgetPage`, `AssetPage`, `LoanPage` still use literal hex (`#2a2a2a`) inline rather than the `--border` / `--text-3` CSS variables. Functional but inconsistent. Where: every `<CartesianGrid stroke="...">` and `<Tooltip contentStyle={{ ... }}>` in those three pages.
-- **Recharts chart palettes** (e.g. `BudgetPage` `CHART_COLORS` array, `AssetPage` chart colors) still use the old `#0ea5e9 / #10b981 / #f59e0b` set. The body of the app uses the new `--chart-1`…`--chart-6` tokens. Migrate the arrays.
-- **Per-file `card` and `sectionLabel` string constants** still exist in `AssetPage`, `BudgetPage`, `LoanPage`, `SmartRecommendations`, `FunBudget`. Functional but the new `Card` and `SectionLabel` primitives in `src/components/ui/` would consolidate them. Dashboard is already using the primitives.
+- **Per-file `card` and `sectionLabel` string constants** still exist in `AssetPage`, `BudgetPage`, `LoanPage`, `SmartRecommendations`, `FunBudget`. Functional but the new `Card` and `SectionLabel` primitives in `src/components/ui/` would consolidate them. Dashboard is already using the primitives. (Cosmetic; deferred — a broad JSX churn across many render sites with only visual verification to catch regressions.)
 - **`isDarkMode` field in `ExportPayload`** was removed from the producer side, but old JSON exports from before the dark-mode removal still carry the field. The importer ignores it gracefully — no action needed unless we want to clean very old export files.
 
 ## Job-centric salary tracking — phase 2
@@ -77,13 +62,10 @@ daily-budget divisor, latent-tax floor, projection-growth denominator, burn-rate
 guard). These lower-priority findings were **intentionally left** and are not bugs that
 break current usage:
 
-- **Loan capacity oversimplified** — `LoanPage` first-buyer `totalLaaneevne = 5*arslonn + egenkapital - eksisterendeGjeld` omits the two binding Norwegian rules: the 85% LTV / 15%-equity cap and the +3pp affordability stress test. Should surface `maxPrice = min(maxDebt + equity, equity/0.15)` and a stress-tested payment. **Where**: `src/pages/LoanPage.tsx` (`totalLaaneevne`).
-- **Trygdeavgift low-income band** — `norwegianTax.ts:101` charges `gross * 7.8%` once above the 99 650 threshold. Correct for normal salaries (the flat rate IS on full personinntekt), but it overcharges in the ~99 650–144 000 *opptrapping* band where the real avgift is capped at 25% of income above the threshold, and it has a hard cliff at the threshold. Also the 2025 rate is arguably 7.7%, not 7.8%. Low impact (only part-time/low earners). **Where**: `src/lib/norwegianTax.ts` (`trygde`).
-- **Dashboard investment bars denominator** — `DashboardPage` monthly-investment bars use `income * savingsTargetPercent` (% of *gross income*), inconsistent with the projection/recommendation which use `residual * ratio`. Pick one definition. **Where**: `src/pages/DashboardPage.tsx` (`investmentBars`, ~line 164).
-- **`ipsTaxSaving` hardcodes 22%** — `PensionPage` shows IPS tax saving as `contribution * 0.22`. Correct for the Norwegian regime, but in `region === 'generic'` the real saving is `customTaxRatePct`, so the displayed figure is wrong there. **Where**: `src/pages/PensionPage.tsx:44`.
-- **Bonus / overtime never reach the budget** — entered on SalaryPage and shown in the comp chart, but `derivedMonthlyIncome` ignores them (lumpy income). Likely by-design; if they should count, add them to annual gross *before* tax (progressive). **Where**: `src/context/FinanceContext.tsx` (`derivedMonthlyIncome`).
+- **Trygdeavgift rate 7.7 vs 7.8%** — the ~99 650–144 000 *opptrapping* cap (25% of income above the limit) and the hard cliff are now fixed in `norwegianTax.ts` (`trygde`). What remains is confirming whether the flat rate for the active tax year should be 7.7% or 7.8% (`TAX_PARAMS[TAX_YEAR].trygdeavgiftRate`) — this affects every salary, so leave until the correct statutory rate is confirmed.
+Done (2026-07): `ipsTaxSaving` now uses `customTaxRatePct` under the generic region (`PensionPage`); Dashboard monthly-investment bars now use `residual * ratio` to match the projection/recommendation; trygdeavgift opptrapping cap added; LoanPage first-buyer capacity replaced with `calcBorrowingCapacity` (min of 5× income cap and 15%-equity/85%-LTV cap, plus a +3pp stress-tested payment) — `src/lib/calculations.ts`; bonus/overtime entries now carry a per-entry `includeInBudget` toggle (SalaryPage modals) that folds the opted-in gross into that month's `derivedMonthlyIncome` at the marginal rate.
 
-**Unblock**: each is self-contained; none needs new server data. Confirm the intended product behavior (esp. loan-capacity rule and bonus/overtime) before implementing.
+**Unblock**: the remaining trygde-rate item needs the correct statutory rate confirmed.
 
 ## Pension — phase 2
 
@@ -108,12 +90,6 @@ stale tab dropped. Mapping tested in `src/lib/bank.test.ts`. Daily sync = cron `
 /api/bank/sync`. Requires `EB_REDIRECT` (registered HTTPS callback) + the RSA key in the
 data volume. Remaining:
 
-- **Deleting an imported row can resurrect it.** `reconcileBankTransactions` (and the next
-  sync) re-add any stored `eb-` row missing from an incoming payload, so deleting a bank
-  transaction in the UI reappears. Needs a soft-delete / exclusion set (e.g. a
-  `deletedBankIds: string[]` in the blob the reconcile + `mergeTransactions` honour).
-  **Where**: `server/index.js` (`reconcileBankTransactions`), `server/bank.js`
-  (`mergeTransactions`), `src/context/FinanceContext.tsx`.
 - **Auto-categorisation — shipped (2026-07), viewing follow-ups remain.** A canonical
   category taxonomy (`src/lib/categories.ts`, 12 keys with i18n labels + palette colours +
   icons) and a local rule-based categorizer (`src/lib/categorize.ts`, Norwegian-merchant
@@ -170,10 +146,9 @@ data volume. Remaining:
 
 Most of `AUDIT.md` is done (see its "Progress log"). These remaining entries are larger refactors, several touching the persistence backbone — deferred because they can't be safely exercised against the user's real data volume without a throwaway `DATA_DIR` and careful diffing.
 
-- **§4.1 Memoize the context value + stabilize actions.** The provider passes a fresh ~110-field object literal every render and none of the ~40 callbacks are memoized, so any state change re-renders every consumer (which then recompute derived series — `BudgetPage` has no `useMemo`). **Fix**: `useMemo` the value, `useCallback` the actions (or one stable actions object), ideally split into settings/data/derived contexts. Highest-leverage frontend perf change but broad and regression-prone. **Where**: `src/context/FinanceContext.tsx` (provider value ~2200+, action defs).
-- **§4.3 Unify i18n.** The typed translations table coexists with 145+ ad-hoc `lang === 'nb' ? … : …` ternaries (visible gaps: hardcoded `'estimert'`, always-Norwegian validation errors, Norwegian placeholders). **Fix**: move component copy into the table; rule "`lang` never appears in JSX except locale selection"; consider extracting the ~930-line table to `src/i18n/` (also re-enables Fast Refresh in FinanceContext). **Where**: `FinanceContext.tsx` table, all pages.
+- **§4.1 Memoize the context value + stabilize actions — DONE (2026-07).** All ~40 actions are now `useCallback`-stabilized; the provider is split into three memoized contexts — `FinanceSettingsContext` / `FinanceDataContext` / `FinanceDerivedContext` — with `useFinanceSettings`/`useFinanceData`/`useFinanceDerived` hooks and a memoized `useFinance()` shim (`{...settings,...data,...derived}`) for backward compat. `Layout` migrated to `useFinanceSettings()` (settings-only → no re-render on data edits). `demoMode`/`toggleDemoMode` live in Settings (demo actions read `buildPayload`/`currentMonth` via refs to stay stable). **Not migrated**: `BudgetPage`/`DashboardPage` genuinely read all three slices, so the shim is already optimal for them — splitting their destructures would be churn with no re-render reduction. Migrating any *future* single-slice-heavy component to a granular hook is the way to extend the win.
+- **§4.3 Unify i18n.** The typed translations table coexists with 145+ ad-hoc `lang === 'nb' ? … : …` ternaries (visible gaps: hardcoded `'estimert'`, always-Norwegian validation errors, Norwegian placeholders). **Fix**: move component copy into the table; rule "`lang` never appears in JSX except locale selection". **Done (2026-07)**: the ~1.3k-line table is extracted to `src/i18n/translations.ts` (with `Language`/`Translations` types); FinanceContext imports it. **Remaining**: migrate the 145 in-JSX ternaries into table keys. **Where**: all pages.
 - **§4.4 Move page-embedded domain logic to `src/lib/`.** `SalaryPage` inline month math + `salaryAt` (duplicates `calcActiveGrossAnnual`), `DashboardPage` 12-month interpolation. Unlocks unit tests. **Where**: `src/pages/SalaryPage.tsx`, `src/pages/DashboardPage.tsx` → new `src/lib/salary.ts` etc.
 - **§4.5 Unify the two charting systems.** `DashboardPage` has 4 bespoke SVG charts + a private `ChartTip` duplicating `ChartTooltip.tsx` and hardcoding hex, while every other page uses Recharts. **Fix**: one token-based chart primitive family, or accept Recharts here too (~400 lines out of DashboardPage). **Where**: `src/pages/DashboardPage.tsx:925-1472`.
-- **§1.3 Concurrent-write conflict detection.** Two tabs/devices clobber each other (whole-blob last-write-wins). **Fix (cheapest)**: add a `rev`/`updated_at` to the row; server rejects a POST whose `rev` doesn't match; client refetches + warns. Even refetch-on-`visibilitychange` removes most risk. **Where**: `server/index.js` (schema + POST), `src/context/FinanceContext.tsx` (save/load).
 - **§7.2 Self-host fonts + offline read-only data.** Fonts load from Google (fail offline, ping Google on every cold load); `/api/data` is network-only so offline shows the error banner over empty defaults. **Fix**: self-host fonts (Fontsource variable, or `public/fonts` + `@font-face`) so they precache — then the CSP can drop the Google allowlist too; optionally a NetworkFirst runtime cache for `GET /api/data` with an "offline — last synced" banner (keep POSTs network-only). **Where**: `index.html`, `vite.config.ts`, `server/index.js` CSP.
 - **§5.5 ESLint depth.** Baseline only — no `recommendedTypeChecked`, no `eslint-plugin-jsx-a11y` (would auto-catch icon-button/label regressions), no formatter/pre-commit hooks. `no-unused-vars` is now configured. **Where**: `eslint.config.js`.

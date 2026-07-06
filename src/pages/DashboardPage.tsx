@@ -15,6 +15,7 @@ import {
   calcEmergencyFundStatus, calcDebtToIncome,
 } from '../lib/calculations';
 import GoalsSection from '../components/GoalsSection';
+import InsightBanner from '../components/InsightBanner';
 
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
@@ -175,15 +176,20 @@ const DashboardPage: React.FC = () => {
     const months: { key: string; label: string; value: number; projected?: boolean }[] = [];
     const sorted = Object.keys(monthlyIncomes).sort();
     const last12 = sorted.slice(-12);
+    // Match the recommendation/projection definition: invest a share of the
+    // monthly *residual* (income − fixed expenses), not of gross income. Fixed
+    // expenses aren't historized, so the current total is the best proxy.
+    const investFrom = (monthlyIncome: number) =>
+      Math.max(0, monthlyIncome - totalFixedExpenses) * (savingsTargetPercent / 100);
     last12.forEach(k => {
-      const v = monthlyIncomes[k] * (savingsTargetPercent / 100);
+      const v = investFrom(monthlyIncomes[k]);
       const d = parse(k, 'yyyy-MM', new Date());
       months.push({ key: k, label: fmtDate(d, 'MMM'), value: Math.round(v) });
     });
     // 2 projected months ahead
     if (last12.length > 0) {
       const lastKey = last12[last12.length - 1];
-      const baseVal = monthlyIncomes[lastKey] * (savingsTargetPercent / 100);
+      const baseVal = investFrom(monthlyIncomes[lastKey]);
       for (let i = 1; i <= 2; i++) {
         const d = parse(lastKey, 'yyyy-MM', new Date());
         d.setMonth(d.getMonth() + i);
@@ -191,7 +197,7 @@ const DashboardPage: React.FC = () => {
       }
     }
     return months;
-  }, [monthlyIncomes, savingsTargetPercent]);
+  }, [monthlyIncomes, savingsTargetPercent, totalFixedExpenses]);
 
   // ─── Insight 2: top categories MoM ───
   const categoryDeltas = useMemo(() => {
@@ -327,6 +333,9 @@ const DashboardPage: React.FC = () => {
 
       {/* Bento grid */}
       <div className="grid grid-cols-1 md:grid-cols-12 auto-rows-min gap-3 md:gap-4">
+
+        {/* ─── Auto-generated spending headline (hidden when nothing notable) ─── */}
+        <InsightBanner />
 
         {/* ─── HERO: Net Equity (span 7, row 1) ─── */}
         <Card variant="hero" padding="lg" className="md:col-span-7 md:row-span-2 flex flex-col">

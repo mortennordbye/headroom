@@ -128,4 +128,16 @@ describe('mergeTransactions', () => {
     expect(merged[0].category).toBe('groceries'); // but the label survives
     expect(merged[0].categorySource).toBe('manual');
   });
+
+  it('does not resurrect a soft-deleted row on re-sync', () => {
+    const incoming = mapEBTransactions([tx()]);
+    const merged = mergeTransactions([manual], incoming, ['eb-ref-1']);
+    expect(merged.map((t: { id: string }) => t.id)).toEqual(['manual-1']);
+  });
+
+  it('drops an already-stored row whose id was soft-deleted', () => {
+    const stored = mapEBTransactions([tx()]);
+    const merged = mergeTransactions(stored, [], ['eb-ref-1']);
+    expect(merged).toHaveLength(0);
+  });
 });

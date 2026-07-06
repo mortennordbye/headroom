@@ -7,6 +7,7 @@ import {
   calcRecommendations,
   calcEmergencyFundStatus,
   calcDebtToIncome,
+  calcBorrowingCapacity,
 } from './calculations';
 
 describe('calcMonthlyPayment', () => {
@@ -146,5 +147,45 @@ describe('calcMortgageBalanceByYear', () => {
 
   it('is all zeros when there is no debt', () => {
     expect(calcMortgageBalanceByYear(0, 5, 20, 4)).toEqual([0, 0, 0, 0, 0]);
+  });
+});
+
+describe('calcBorrowingCapacity', () => {
+  it('is income-bound when equity is ample', () => {
+    // income 600k → maxDebt 3.0M; equity 2M → LTV cap = 2M/0.15 = 13.3M.
+    // Income cap (3M+2M=5M) is lower, so it binds.
+    const c = calcBorrowingCapacity(600_000, 2_000_000, 0, 5, 25);
+    expect(c.maxDebt).toBe(3_000_000);
+    expect(c.maxPrice).toBe(5_000_000);
+    expect(c.ltvBound).toBe(false);
+    expect(c.debtAtMaxPrice).toBe(3_000_000);
+  });
+
+  it('is LTV-bound when equity is thin relative to income', () => {
+    // income 1.2M → maxDebt 6M; equity 400k → LTV cap = 400k/0.15 ≈ 2.67M,
+    // far below the income cap (6.4M), so the 15%-equity rule binds.
+    const c = calcBorrowingCapacity(1_200_000, 400_000, 0, 5, 25);
+    expect(c.ltvBound).toBe(true);
+    expect(c.maxPrice).toBeCloseTo(400_000 / 0.15, 4);
+    // debt at the LTV cap is price − equity, i.e. 85% of price
+    expect(c.debtAtMaxPrice).toBeCloseTo(c.maxPrice - 400_000, 4);
+  });
+
+  it('subtracts existing debt from the 5× income headroom', () => {
+    const c = calcBorrowingCapacity(600_000, 2_000_000, 500_000, 5, 25);
+    expect(c.maxDebt).toBe(2_500_000); // 3.0M − 0.5M
+  });
+
+  it('stress-tests the payment at +3pp', () => {
+    const c = calcBorrowingCapacity(600_000, 2_000_000, 0, 5, 25);
+    expect(c.stressRatePct).toBe(8);
+    expect(c.stressedMonthlyPayment).toBeCloseTo(calcMonthlyPayment(c.debtAtMaxPrice, 8, 25), 6);
+  });
+
+  it('never returns negative capacity when debt swamps income', () => {
+    const c = calcBorrowingCapacity(300_000, 0, 5_000_000, 5, 25);
+    expect(c.maxDebt).toBe(0);
+    expect(c.maxPrice).toBe(0);
+    expect(c.stressedMonthlyPayment).toBe(0);
   });
 });

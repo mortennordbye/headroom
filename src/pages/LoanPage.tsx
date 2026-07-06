@@ -35,6 +35,7 @@ import {
 } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
+import { CHART } from '../lib/chartColors';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown } from '../lib/equity';
@@ -44,6 +45,7 @@ import {
   calcNetSaleProceeds,
   calcBridgeLoanCost,
   calcMonthlyPayment,
+  calcBorrowingCapacity,
 } from '../lib/calculations';
 import { parseLocaleNumber } from '../lib/validators';
 
@@ -152,9 +154,13 @@ const LoanPage: React.FC = () => {
       balance -= (monthlyPaymentBase - interest);
     }
     const taxDeduction = yearOneInterest * (loan.skattefradragssats / 100);
-    const totalLaaneevne = 5 * loan.arslonn + loan.egenkapital - loan.eksisterendeGjeld;
+    // Real Norwegian lending limits: the affordable price is the lower of the
+    // 5× income cap and the 15%-equity (85% LTV) cap, plus a +3pp stress test.
+    const capacity = calcBorrowingCapacity(
+      loan.arslonn, loan.egenkapital, loan.eksisterendeGjeld, loan.rente, loan.nedbetalingstid,
+    );
     const totalpris = loan.betingetLaan + loan.egenkapital;
-    return { monthlyPaymentBase, monthlyPaymentWithFee, totalInterest, totalCost, yearOneInterest, taxDeduction, totalLaaneevne, totalpris };
+    return { monthlyPaymentBase, monthlyPaymentWithFee, totalInterest, totalCost, yearOneInterest, taxDeduction, capacity, totalpris };
   }, [loan]);
 
   const amortizationSchedule = useMemo(
@@ -299,9 +305,13 @@ const LoanPage: React.FC = () => {
                 <LoanRow label="Egenkapital" notes="Oppspart kapital (BSU, fond, kontoer)"
                   value={fmtNum(loan.egenkapital)}
                   onEdit={() => editNum('Egenkapital', 'egenkapital', loan.egenkapital)} />
-                <LoanRow label="Total låneevne" notes="5x inntekt + EK – gjeld"
-                  value={fmtNum(calc.totalLaaneevne)}
+                <LoanRow label="Maks kjøpesum" notes={calc.capacity.ltvBound ? 'Begrenset av 15 % egenkapital (85 % belåning)' : 'Begrenset av 5x inntekt – gjeld'}
+                  value={fmtNum(Math.round(calc.capacity.maxPrice))}
                   highlight />
+                <LoanRow label="Maks lån" notes="Kjøpesum – egenkapital"
+                  value={fmtNum(Math.round(calc.capacity.debtAtMaxPrice))} />
+                <LoanRow label="Stresstest (rente +3 pp)" notes={`Månedlig betaling ved ${fmtPct(calc.capacity.stressRatePct)}`}
+                  value={`${fmtNum(Math.round(calc.capacity.stressedMonthlyPayment))}/mnd`} />
               </div>
             </div>
 
@@ -365,7 +375,7 @@ const LoanPage: React.FC = () => {
                 </div>
                 <button
                   onClick={() => editText('Gyldig til', 'gyldigTil', loan.gyldigTil)}
-                  className="flex items-center gap-1 text-[var(--text-2)] hover:text-[#7FCBA0] transition-colors shrink-0 ml-2"
+                  className="flex items-center gap-1 text-[var(--text-2)] hover:text-[var(--positive)] transition-colors shrink-0 ml-2"
                 >
                   <Clock size={11} />
                   <span className="text-[10px] font-medium whitespace-nowrap">Gyldig til {loan.gyldigTil}</span>
@@ -447,7 +457,7 @@ const LoanPage: React.FC = () => {
                 </div>
                 <Link
                   to="/assets"
-                  className="text-[10px] text-[var(--text-2)] hover:text-[#7FCBA0] transition-colors whitespace-nowrap"
+                  className="text-[10px] text-[var(--text-2)] hover:text-[var(--positive)] transition-colors whitespace-nowrap"
                 >
                   {t.editInAssets}
                 </Link>
@@ -467,7 +477,7 @@ const LoanPage: React.FC = () => {
                   </div>
                   <div className="h-2 rounded-full bg-[var(--bg-elev)] overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-[#7FCBA0] transition-all"
+                      className="h-full rounded-full bg-[var(--positive)] transition-all"
                       style={{ width: `${Math.min(100, Math.max(0, (houseEquity / assets.houseValue) * 100))}%` }}
                     />
                   </div>
@@ -729,17 +739,17 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
             <div className="h-[200px] md:h-[260px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={'#262A20'} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.rule} />
                   <XAxis
                     dataKey="year"
-                    tick={{ fontSize: 11, fill: '#5F6555' }}
+                    tick={{ fontSize: 11, fill: CHART.textDim }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) => `${lang === 'nb' ? 'År' : 'Yr'} ${v}`}
                   />
                   <YAxis
                     tickFormatter={(v) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : `${Math.round(v / 1_000)}k`}
-                    tick={{ fontSize: 11, fill: '#5F6555' }}
+                    tick={{ fontSize: 11, fill: CHART.textDim }}
                     axisLine={false}
                     tickLine={false}
                     width={48}
@@ -755,11 +765,11 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
                         principalPaid: t.principalPayment,
                         interestPaid: t.interestPayment,
                       };
-                      return <span style={{ fontSize: '11px', color: '#5F6555' }}>{labels[value] ?? value}</span>;
+                      return <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>{labels[value] ?? value}</span>;
                     }}
                   />
-                  <Bar dataKey="principalPaid" name={t.principalPayment} stackId="a" fill="#7FCBA0" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="interestPaid" name={t.interestPayment} stackId="a" fill="#B5533A80" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="principalPaid" name={t.principalPayment} stackId="a" fill={CHART.forestLight} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="interestPaid" name={t.interestPayment} stackId="a" fill={CHART.rust} fillOpacity={0.5} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -780,8 +790,8 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
                   <tr key={row.year} className="hover:bg-[var(--bg-raised)] transition-colors">
                     <td className="px-5 md:px-7 py-3 text-[12px] font-mono font-medium text-[var(--text-1)]">{row.year}</td>
                     <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[var(--text-2)]">{formatCurrency(Math.round(row.annualPayment))}</td>
-                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#7FCBA0]">{formatCurrency(Math.round(row.principalPaid))}</td>
-                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[#B5533A]">{formatCurrency(Math.round(row.interestPaid))}</td>
+                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[var(--positive)]">{formatCurrency(Math.round(row.principalPaid))}</td>
+                    <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right text-[var(--negative)]">{formatCurrency(Math.round(row.interestPaid))}</td>
                     <td className="px-5 md:px-7 py-3 text-[12px] font-mono text-right font-semibold text-[var(--text-1)]">{formatCurrency(Math.round(row.balance))}</td>
                   </tr>
                 ))}
@@ -811,8 +821,8 @@ function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blu
     ? highlightColor === 'green'
       ? 'text-[var(--positive)]'
       : highlightColor === 'red'
-        ? 'text-[#B5533A]'
-        : 'text-[#7FCBA0]'
+        ? 'text-[var(--negative)]'
+        : 'text-[var(--positive)]'
     : isCalculated
       ? 'text-[var(--text-2)]'
       : 'text-[var(--text-1)]';
@@ -870,7 +880,7 @@ function SummaryTile({ label, value, accent }: SummaryTileProps) {
   return (
     <div className={`rounded-[8px] p-3 border ${accent ? 'bg-[var(--bg-3)] border-[var(--brass-dim)]' : 'bg-[var(--bg-raised)] border-[var(--border)]'}`}>
       <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)] mb-1">{label}</div>
-      <div className={`text-[14px] font-mono font-semibold ${accent ? 'text-[#7FCBA0]' : 'text-[var(--text-1)]'}`}>{value}</div>
+      <div className={`text-[14px] font-mono font-semibold ${accent ? 'text-[var(--positive)]' : 'text-[var(--text-1)]'}`}>{value}</div>
     </div>
   );
 }

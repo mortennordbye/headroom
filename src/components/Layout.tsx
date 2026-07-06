@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { format, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
-import { useFinance } from '../context/FinanceContext';
+import { useFinanceSettings } from '../context/FinanceContext';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import OnboardingTour from './onboarding/OnboardingTour';
 
@@ -25,7 +25,7 @@ const MONTH_SCOPED_ROUTES = ['/', '/overview'];
 const HIDE_TIME_MARKER_ROUTES = ['/settings'];
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, retrySave, hiddenNavItems, demoMode, toggleDemoMode, startOnboarding } = useFinance();
+  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded, hiddenNavItems, demoMode, toggleDemoMode, startOnboarding } = useFinanceSettings();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -223,6 +223,22 @@ const Layout: React.FC = () => {
               style={{ background: 'var(--negative)', color: 'var(--bg-page)' }}
             >
               {t.saveRetry}
+            </button>
+          </div>
+        )}
+        {dataReloaded && (
+          <div
+            className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"
+            style={{ background: 'var(--warning-bg)', borderColor: 'color-mix(in srgb, var(--warning) 35%, transparent)', color: 'var(--warning)' }}
+            role="status"
+          >
+            <span>{t.dataReloadedNotice}</span>
+            <button
+              onClick={dismissDataReloaded}
+              className="shrink-0 px-3 h-8 rounded-[6px] text-[12px] font-semibold"
+              style={{ background: 'var(--warning)', color: 'var(--bg-page)' }}
+            >
+              {t.dismiss}
             </button>
           </div>
         )}

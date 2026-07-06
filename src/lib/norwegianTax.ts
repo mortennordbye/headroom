@@ -52,6 +52,11 @@ const PARAMS = TAX_PARAMS[TAX_YEAR];
 
 export const IPS_MAX_DEDUCTION = 15_000;
 
+// In the opptrapping band just above the lower limit, trygdeavgift is capped at
+// 25% of income exceeding the limit — a statutory rate that phases the avgift in
+// smoothly instead of it jumping to the full rate at the threshold.
+const TRYGDE_OPPTRAPPING_RATE = 0.25;
+
 function trinnskatt(gross: number): number {
   const brackets = PARAMS.trinnskatt;
   let tax = 0;
@@ -122,7 +127,12 @@ export function calcNorwegianTax(grossAnnual: number, ipsContribution: number = 
 
   const trinn = trinnskatt(gross);
 
-  const trygde = gross > PARAMS.trygdeavgiftLowerLimit ? gross * PARAMS.trygdeavgiftRate : 0;
+  const trygde = gross > PARAMS.trygdeavgiftLowerLimit
+    ? Math.min(
+        gross * PARAMS.trygdeavgiftRate,
+        TRYGDE_OPPTRAPPING_RATE * (gross - PARAMS.trygdeavgiftLowerLimit),
+      )
+    : 0;
 
   const totalTax = inntektsskatt + trinn + trygde;
   // IPS contribution leaves the paycheck (locked savings) — subtract from take-home.

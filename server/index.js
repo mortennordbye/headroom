@@ -90,8 +90,25 @@ db.exec(`
   );
 `);
 
-const getStmt = db.prepare('SELECT content FROM finance_data WHERE id = ?');
-const upsertStmt = db.prepare('INSERT OR REPLACE INTO finance_data (id, content) VALUES (?, ?)');
+// Optimistic-concurrency revision. Existing volumes predate the column, so add
+// it if missing (SQLite has no ADD COLUMN IF NOT EXISTS). Every write bumps rev;
+// a POST carrying a stale rev is rejected (409) instead of clobbering a newer
+// write from another tab/device or the bank-sync cron.
+if (!db.prepare('PRAGMA table_info(finance_data)').all().some((c) => c.name === 'rev')) {
+  db.exec('ALTER TABLE finance_data ADD COLUMN rev INTEGER NOT NULL DEFAULT 0');
+}
+
+const getStmt = db.prepare('SELECT content, rev FROM finance_data WHERE id = ?');
+const writeStmt = db.prepare(
+  'INSERT INTO finance_data (id, content, rev) VALUES (@id, @content, @rev) ' +
+  'ON CONFLICT(id) DO UPDATE SET content = @content, rev = @rev'
+);
+// Persist `content` for `id`, bumping rev from `prevRev`. Returns the new rev.
+function writeBlob(id, content, prevRev) {
+  const rev = (prevRev ?? 0) + 1;
+  writeStmt.run({ id, content, rev });
+  return rev;
+}
 
 const inflationGetRange = db.prepare(
   'SELECT month, cpi_index AS cpiIndex, fetched_at AS fetchedAt FROM inflation_cache WHERE month >= ? AND month <= ? ORDER BY month ASC'
@@ -126,6 +143,8 @@ app.get('/healthz', (_req, res) => {
 
 app.get('/api/data', (req, res) => {
   const row = getStmt.get('headroom');
+  // The client echoes this rev back on save so we can detect a stale write.
+  res.set('X-Data-Rev', String(row ? row.rev : 0));
   res.json(row ? JSON.parse(row.content) : null);
 });
 
@@ -167,8 +186,12 @@ function reconcileBankTransactions(incoming) {
   const storedTx = Array.isArray(stored.dailyTransactions) ? stored.dailyTransactions : [];
   const incomingTx = Array.isArray(incoming.dailyTransactions) ? incoming.dailyTransactions : [];
   const incomingIds = new Set(incomingTx.map((t) => t && t.id));
+  // A row the user deleted in the UI carries its id in deletedBankIds; don't
+  // resurrect it even though it's still in the stored blob.
+  const deletedIds = new Set(Array.isArray(incoming.deletedBankIds) ? incoming.deletedBankIds : []);
   const missing = storedTx.filter(
-    (t) => t && typeof t.id === 'string' && t.id.startsWith(EB_ID_PREFIX) && !incomingIds.has(t.id),
+    (t) => t && typeof t.id === 'string' && t.id.startsWith(EB_ID_PREFIX)
+      && !incomingIds.has(t.id) && !deletedIds.has(t.id),
   );
   if (missing.length === 0) return incoming;
   console.log(`[data] re-adding ${missing.length} bank tx missing from client payload`);
@@ -179,12 +202,25 @@ app.post('/api/data', (req, res) => {
   if (!isValidFinancePayload(req.body)) {
     return res.status(400).json({ error: 'invalid finance payload' });
   }
+  const stored = getStmt.get('headroom');
+  // Optimistic concurrency: if the client sent the rev it last saw and it no
+  // longer matches, a newer write landed in between — reject so we don't clobber
+  // it. A client that sends no rev (legacy) keeps the old last-write-wins path.
+  const clientRev = req.get('X-Data-Rev');
+  if (stored && clientRev != null && Number(clientRev) !== stored.rev) {
+    return res.status(409).json({
+      error: 'stale revision — data changed elsewhere',
+      currentRev: stored.rev,
+      current: JSON.parse(stored.content),
+    });
+  }
   const content = JSON.stringify(reconcileBankTransactions(req.body));
   if (content.length > SIZE_WARN_BYTES) {
     console.warn(`[data] payload is ${(content.length / 1024 / 1024).toFixed(1)} MB — approaching the body limit`);
   }
-  upsertStmt.run('headroom', content);
-  res.json({ ok: true });
+  const rev = writeBlob('headroom', content, stored ? stored.rev : 0);
+  res.set('X-Data-Rev', String(rev));
+  res.json({ ok: true, rev });
 });
 
 app.get('/api/inflation', async (req, res) => {
@@ -309,8 +345,11 @@ app.post('/api/bank/sync', async (_req, res) => {
     const blob = JSON.parse(row.content);
     const existing = Array.isArray(blob.dailyTransactions) ? blob.dailyTransactions : [];
     const before = existing.length;
-    blob.dailyTransactions = bank.mergeTransactions(existing, mapped);
-    upsertStmt.run('headroom', JSON.stringify(blob));
+    const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
+    blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds);
+    // Bump rev so an open client's next autosave sees the conflict and refetches
+    // the freshly-synced rows instead of overwriting them.
+    writeBlob('headroom', JSON.stringify(blob), row.rev);
     bank.recordSync();
     res.json({
       ok: true,

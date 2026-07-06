@@ -22,7 +22,7 @@ function formatAxisInt(val: number): string {
 }
 
 const PensionPage: React.FC = () => {
-  const { t, lang, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults } = useFinance();
+  const { t, lang, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct } = useFinance();
 
   // Time machine: when viewing a past month, render that month's pension snapshot (read-only).
   const hist = useBalanceHistory();
@@ -42,7 +42,10 @@ const PensionPage: React.FC = () => {
 
   const otpAnnualContribution = pensionableIncome * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
   const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
-  const ipsTaxSaving = ipsAnnualContribution * 0.22;
+  // IPS lowers alminnelig inntekt, taxed at 22% in Norway. Under the generic
+  // region there's no fixed rate, so the saving is the user's own marginal rate.
+  const ipsDeductionRate = region === 'generic' ? (customTaxRatePct ?? 22) / 100 : 0.22;
+  const ipsTaxSaving = ipsAnnualContribution * ipsDeductionRate;
 
   // Year-by-year projection.
   const projection = useMemo(() => {

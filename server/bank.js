@@ -275,9 +275,12 @@ function mapEBTransactions(txs, opts = {}) {
   return out;
 }
 
-function mergeTransactions(existing, incoming) {
-  const byId = new Map(existing.map((t) => [t.id, t]));
+function mergeTransactions(existing, incoming, deletedIds = []) {
+  const deleted = new Set(deletedIds);
+  // A row the user soft-deleted in the UI must not come back on the next sync.
+  const byId = new Map(existing.filter((t) => !deleted.has(t.id)).map((t) => [t.id, t]));
   for (const t of incoming) {
+    if (deleted.has(t.id)) continue; // honor client-side soft-deletes
     const prior = byId.get(t.id);
     // Re-synced rows come back category-less from the bank. Carry forward any
     // label the client already assigned (auto or manual) so a re-sync never

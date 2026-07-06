@@ -13,6 +13,10 @@ import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { getDemoData } from '../lib/demoData';
+import { translations, type Language, type Translations } from '../i18n/translations';
+
+// Re-exported so existing consumers can keep importing these from the context.
+export type { Language } from '../i18n/translations';
 import { categorize } from '../lib/categorize';
 import type { CategoryKey } from '../lib/categories';
 import { sanitizePayload } from '../lib/sanitizePayload';
@@ -120,7 +124,6 @@ export interface LoanData {
   gyldigTil: string;
 }
 
-export type Language = 'en' | 'nb';
 
 export type Region = 'no' | 'generic';
 
@@ -205,6 +208,7 @@ export interface BonusEntry {
   amount: number;                 // gross NOK
   type: BonusType;
   jobId?: string;                 // optional FK to JobEntry — undefined = unassigned
+  includeInBudget?: boolean;      // count this gross toward the month's budget income
   notes?: string;
 }
 
@@ -214,6 +218,7 @@ export interface OvertimeEntry {
   hours: number;
   amount: number;                 // gross NOK paid
   jobId?: string;                 // optional FK to JobEntry — undefined = unassigned
+  includeInBudget?: boolean;      // count this gross toward the month's budget income
   notes?: string;
 }
 
@@ -262,1352 +267,6 @@ export interface WageStatPoint {
   median: number;                 // gross annual NOK, national median for full-time employees
 }
 
-// --- Translations ---
-
-// This module deliberately co-locates the provider, the useFinance hook, types
-// and the translations table; splitting them out is not worth the churn, so
-// Fast Refresh's component-only export rule is disabled for these exports.
-// eslint-disable-next-line react-refresh/only-export-components
-export const translations = {
-  nb: {
-    title: 'Headroom',
-    subtitle: 'Administrer din personlige økonomi',
-    systemActive: 'System Aktiv // Overvåker Portefølje',
-    monthlyIncome: 'Månedsinntekt',
-    totalEquity: 'Total Egenkapital',
-    monthlyBudget: 'Budsjett / Måned',
-    dailyBudget: 'Budsjett / Dag',
-    assetInventory: 'Formuesoversikt',
-    marketPositions: 'Markedsposisjoner',
-    realEstate: 'Boligverdier',
-    cashReserves: 'Likviditetsreserver',
-    portfolio: 'Investeringsportefølje',
-    unrealizedGain: 'Urealisert gevinst',
-    taxRate: 'Skattesats',
-    liabilityReserve: 'Latent Skatt (Beregnet)',
-    netLiquidity: 'Netto Likviditetsposisjon',
-    houseValue: 'Boligverdi',
-    houseDebt: 'Boliggjeld',
-    propertyEquity: 'Boligegenkapital',
-    bsu: 'BSU-konto',
-    savings: 'Sparekonto',
-    trueNetEquity: 'Faktisk Egenkapital etter Skatt',
-    grossAssets: 'Brutto Formue',
-    liabilities: 'Gjeld & Skatt',
-    fixedCosts: 'Faste Utgifter',
-    distributionAnalysis: 'Fordelingsanalyse',
-    operationalLog: 'Forbrukslogg',
-    timestamp: 'Tidspunkt',
-    transactionDetails: 'Transaksjonsdetaljer',
-    impact: 'Effekt',
-    runningBalance: 'Budsjettbalanse',
-    endPeriodSurplus: 'Overskudd ved periodeslutt',
-    aggregate: 'Totalt',
-    allocation: 'Allokering',
-    editIncome: 'Sett månedsinntekt:',
-    newExpenseName: 'Navn på utgift:',
-    newAmount: 'Beløp:',
-    expenseTypeLabel: 'Type:',
-    expenseType: { fixed: 'Fast', variable: 'Variabel', subscription: 'Abonnement', insurance: 'Forsikring' },
-    debt: {
-      title: 'Gjeld', add: 'Legg til gjeld', none: 'Ingen gjeld registrert.',
-      name: 'Navn:', balance: 'Saldo:', rate: 'Rente (% p.a.):', minPayment: 'Månedlig betaling:', typeLabel: 'Type:',
-      sum: 'Sum gjeld', payoffIn: 'Nedbetalt om', interestLabel: 'renter', never: 'Dekker ikke renten',
-      planner: 'Nedbetalingsplan', strategy: 'Strategi', avalanche: 'Høyest rente først', snowball: 'Minst saldo først',
-      extra: 'Ekstra per måned', debtFree: 'Gjeldfri om', totalInterest: 'Totale renter',
-      interestSaved: 'Spart i renter', vsMinimum: 'vs. kun minstebetaling',
-      types: { student: 'Studielån', consumer: 'Forbrukslån', credit_card: 'Kredittkort', other: 'Annet' },
-    },
-    editName: 'Nytt navn:',
-    editAmount: 'Nytt beløp:',
-    editDescription: 'Ny beskrivelse:',
-    days: ['Søndag', 'Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag'],
-    cancel: 'Avbryt',
-    save: 'Lagre',
-    delete: 'Slett',
-    add: 'Legg til',
-    edit: 'Rediger',
-    txKind: 'Type',
-    txIncome: 'Inntekt',
-    txExpense: 'Utgift',
-    charts: {
-      income: 'Inntekt', expenses: 'Utgifter', net: 'Netto',
-      cash: 'Kontanter', stocks: 'Aksjer', house: 'Bolig', crypto: 'Krypto', pension: 'Pensjon',
-      netTakeHome: 'Netto', incomeTax: 'Inntektsskatt', bracketTax: 'Trinnskatt', socialSecurity: 'Trygdeavgift', tax: 'Skatt', effectiveRate: 'eff. skatt',
-      covered: 'dekket', target: 'Mål', savingsRate: 'Spareandel', less: 'mindre', more: 'mer',
-      ltv: 'Belåningsgrad', ltvCap: 'Maks 85 %',
-      gross: 'Bruttolønn', savings: 'Sparing', discretionary: 'Fritt forbruk', fixedExpenses: 'Faste utgifter',
-      buildsOverTime: 'Bygges opp etter hvert som du legger inn data.',
-      cashflowTitle: 'Kontantstrøm', cashflowSub: 'Inn vs ut siste 12 måneder',
-      compositionTitle: 'Formuessammensetning', compositionSub: 'Fordeling over tid',
-      taxBreakdownTitle: 'Skattefordeling', taxBreakdownSub: 'Hvor bruttolønnen din går',
-      emergencyFundTitle: 'Bufferkonto', emergencyFundSub: 'Måneder dekket',
-      savingsRateTitle: 'Spareandel', savingsRateSub: 'Andel av inntekt igjen etter utgifter',
-      heatmapTitle: 'Forbruksmønster', heatmapSub: 'Daglig forbruk denne måneden',
-      ltvTitle: 'Belåningsgrad over tid', ltvSub: 'Synker når lånet nedbetales og boligen stiger i verdi',
-      moneyFlowTitle: 'Pengestrøm', moneyFlowSub: 'Hvor månedslønnen går',
-      allocationTitle: 'Formuesfordeling', allocationSub: 'Sammensetning akkurat nå', allocationCenter: 'Totalt',
-      liquid: 'Tilgjengelig', locked: 'Bundet',
-      liquidSub: 'Aksjer, kontanter, krypto', lockedSub: 'Boligegenkapital + pensjon',
-      liquidLockedTitle: 'Tilgjengelig vs bundet', liquidLockedSub: 'Hvor mye du faktisk har tilgang til',
-      debtPayoffTitle: 'Nedbetaling av lån', debtPayoffSub: 'Boliglånet ned mot null',
-      debtFree: 'Gjeldfri på boligen — ingen boliglån å nedbetale.',
-      mortgageToday: 'Boliglån i dag', debtFreeYear: 'Gjeldfri',
-      plusOtherDebt: '+ {amount} annen gjeld (studielån/forbruk) — se oversikten over.',
-    },
-    onboarding: {
-      title: 'Oppsettsguide',
-      hubIntro: 'Velg hva som helst nedenfor for å sette det opp eller lære hva det gjør — i hvilken som helst rekkefølge. Endringene lagres underveis.',
-      progress: '{done} av {total} dekket',
-      sampleData: 'Utforsk med eksempeldata',
-      replay: 'Kjør oppsettsguiden på nytt',
-      guide: 'Oppsettsguide',
-      finish: 'Fullfør',
-      backToGuide: 'Guide',
-      done: 'Ferdig',
-      next: 'Neste',
-      back: 'Tilbake',
-      stepOf: 'Steg {n} av {total}',
-      add: 'Legg til',
-      itemName: 'Navn',
-      monthlyAmount: 'Beløp per måned',
-      remove: 'Fjern',
-      expensePlaceholder: 'f.eks. Strøm',
-      debtPlaceholder: 'f.eks. Studielån',
-      close: 'Lukk',
-      skip: 'Hopp over',
-      resetGuide: 'Nullstill guiden',
-      welcomeTitle: 'Velkommen til Headroom',
-      welcomeBody: 'La oss få på plass det viktigste — det tar et par minutter. Du kan utforske resten etterpå.',
-      setupEssentials: 'Sett opp det viktigste',
-      essentialsChoice: 'Bare det viktigste',
-      essentialsChoiceSub: 'Kom i gang på et minutt',
-      fullGuideChoice: 'Hele guiden',
-      fullGuideChoiceSub: 'Gå gjennom hele appen',
-      essentialsIntro: 'Bare det grunnleggende for å komme i gang. Du kan utforske resten etterpå.',
-      seeTheRest: 'Se resten av appen',
-      seeTheRestSub: '{count} temaer til — formue, prognose, skatt og hvordan alt henger sammen',
-      essentialsDone: 'Bra jobba — det viktigste er på plass. Vil du utforske resten?',
-      groups: {
-        essentials: 'Grunnleggende',
-        wealth: 'Formue',
-        learn: 'Forstå appen',
-      },
-      topics: {
-        prefs: { title: 'Språk og region', hint: 'Språk og skattemodell', body: 'Velg språk og region. Regionen bestemmer hvilken skattemodell Headroom bruker — Norge gir full norsk inntektsskatt, trinnskatt og trygdeavgift, mens Generisk bruker én flat sats du velger selv. Alt annet — valuta, lønns- og pensjonsberegning — følger av dette, så det er lurt å få det riktig først.' },
-        income: { title: 'Månedlig inntekt', hint: 'Det du får utbetalt', body: 'Månedlig nettolønn — det som faktisk havner på konto etter skatt. Headroom bruker den til å bygge budsjettet: faste utgifter trekkes først, så sparemålet, og det som er igjen er forbruket ditt til daglig. Du kan sette den per måned, eller la den komme automatisk fra Lønn-siden.' },
-        savingsTarget: { title: 'Sparemål', hint: 'Hvor mye du vil spare', body: 'Andelen av inntekten du sikter på å sette av hver måned. Headroom trekker den fra budsjettet før den regner ut daglig forbruk, slik at sparing skjer først — ikke med det som tilfeldigvis blir til overs. Et vanlig utgangspunkt er 20 %; juster til noe du faktisk klarer å holde.' },
-        fixedExpenses: { title: 'Faste utgifter', hint: 'Faste månedlige regninger', body: 'Regninger som går hver måned — husleie eller boliglån, strøm, forsikring, abonnement. Disse trekkes rett fra inntekten før alt annet, så nøyaktige tall gjør resten av budsjettet ærlig. Vi har lagt inn noen eksempler; legg til, endre, merk eller slett dem rett på dette kortet.' },
-        cash: { title: 'Kontanter og sparing', hint: 'Penger du når nå', body: 'Pengene du når akkurat nå — hverdagssparing, en buffer for uforutsette ting, og eventuell BSU. Til sammen er dette likviditeten din: hvor mye du kan dekke en krise eller mulighet med, uten å selge investeringer eller ta opp gjeld.' },
-        home: { title: 'Bolig og lån', hint: 'Boligverdi og gjeld', body: 'Boligens markedsverdi i dag og hvor mye som står igjen på boliglånet. Differansen er boligegenkapitalen — ofte den største enkeltdelen av formuen. Headroom følger hvordan den egenkapitalen vokser når du nedbetaler lånet og boligen stiger i verdi.' },
-        stocks: { title: 'Investeringer', hint: 'Aksjer og fond', body: 'Aksje- og fondsporteføljen din til markedsverdi, pluss hvor mye av det som er urealisert gevinst. Gevinsten er viktig fordi Headroom setter av skatten du ville skyldt ved salg, så formuen viser hva du faktisk sitter igjen med — ikke bare pålydende verdi.' },
-        crypto: { title: 'Krypto', hint: 'Digitale verdier', body: 'Markedsverdien av krypto du eier, med egen urealisert gevinst og skattesats. Det behandles som en egen bøtte med høyere risiko i fordelingen og prognosen. La stå på 0 hvis det ikke gjelder deg.' },
-        pension: { title: 'Pensjon', hint: 'OTP- og IPS-saldo', body: 'Saldo i tjenestepensjon (OTP, fra arbeidsgiver) og eventuell egen pensjonssparing (IPS). Dette er reell formue, men den er låst til pensjonsalder — derfor holder Headroom den utenfor likvid formue og viser den for seg, så dagens brukbare bilde forblir ærlig.' },
-        debt: { title: 'Gjeld', hint: 'Lån utenom boliglånet', body: 'Lån utenom boliglånet — studielån, forbruksgjeld, kredittkort. Legg dem inn her så den reelle formuen trekker dem fra, og så nedbetalingsoversikten kan vise når du er kvitt dem. Hver gjeld følger sin egen saldo, rente og innbetaling.' },
-        growth: { title: 'Vekstforutsetninger', hint: 'Slik vokser prognosen', body: 'Forutsetningene om årlig avkastning bak alle prognoser — egne rater for aksjer, bolig, kontanter og krypto, siden de ikke vokser likt. Forsiktige standardverdier er satt for deg; trykk på en rate for å justere. Disse styrer prognosen, så små endringer her flytter de langsiktige tallene mye.' },
-        dashboard: { title: 'Oversikt', hint: 'Økonomien på et blikk', body: 'Økonomien på et blikk — formue, kontantstrøm og hvordan måneden ligger an mot planen, samlet fra alt annet du legger inn. Dette er siden du åpner først hver gang: en rask peiling på om du er i rute før du graver i detaljene.' },
-        salary: { title: 'Lønn og skatt', hint: 'Jobber, lønnsøkning, skatt', body: 'Her registrerer du jobber, lønnshistorikk, lønnsøkninger og bonuser. Headroom gjør dette om til et nøyaktig brutto-til-netto-bilde med regionens skatteregler, og mater månedsinntekten og nettolønnen din. Over tid viser den også hvordan lønnen har vokst mot inflasjonen.' },
-        forecast: { title: 'Prognose', hint: 'Dit du er på vei', body: 'Projiserer formuen din år fram i tid fra dagens saldoer, den månedlige sparingen og vekstratene. Dette er det lange løpet — se omtrent hvor du havner om 5, 10 eller 15 år, og hvordan endret sparing eller forutsetninger flytter kurven.' },
-        loan: { title: 'Lånekalkulator', hint: 'Hva du kan låne og tåle', body: 'En kalkulator for lån — modellér terminbeløp, samlede renter og hvor mye bolig som passer inntekten og egenkapitalen din. Siden har tre moduser: førstegangskjøper (hva du kan kjøpe), boligeier (nedbetaling av eksisterende lån) og boligbytte (kjøpe og selge samtidig, med mellomfinansiering). Velg den som passer situasjonen din.' },
-        settings: { title: 'Innstillinger og backup', hint: 'Eksport, import, valg', body: 'Dataene dine bor på din egen enhet — ingenting sendes til en server. Eksportér en full JSON-backup når som helst, importér den på en annen enhet, bytt språk eller valuta, eller kjør denne guiden på nytt. Her ligger også demomodus og «tilbakestill alle data».' },
-      },
-      fields: {
-        income: 'Månedlig nettoinntekt',
-        savingsTarget: 'Sparemål (%)',
-        savings: 'Sparekonto',
-        bufferAccount: 'Bufferkonto',
-        bsu: 'BSU',
-        houseValue: 'Boligverdi',
-        houseDebt: 'Boliglån',
-        portfolio: 'Portefølje',
-        unrealizedGain: 'Urealisert gevinst',
-        crypto: 'Krypto',
-        otpBalance: 'OTP-saldo',
-        ipsBalance: 'IPS-saldo',
-        language: 'Språk',
-        region: 'Region',
-      },
-      options: {
-        norwegian: 'Norsk',
-        english: 'Engelsk',
-        regionNo: 'Norge',
-        regionGeneric: 'Annet / generisk',
-      },
-    },
-    confirmDelete: 'Bekreft sletting',
-    confirmDeleteExpenseMsg: 'Er du sikker på at du vil slette denne utgiften?',
-    confirmDeleteTransactionMsg: 'Er du sikker på at du vil slette denne transaksjonen?',
-    templates: 'Maler',
-    addTemplate: 'Ny mal',
-    exportCSV: 'Eksporter CSV',
-    category: 'Kategori',
-    uncategorized: 'Ukategorisert',
-    categoryLabels: {
-      groceries: 'Dagligvarer',
-      dining: 'Servering',
-      transport: 'Transport',
-      health: 'Helse',
-      entertainment: 'Underholdning',
-      shopping: 'Shopping',
-      utilities: 'Strøm & tele',
-      subscriptions: 'Abonnement',
-      housing: 'Bolig',
-      transfers: 'Overføringer',
-      income: 'Inntekt',
-      other: 'Annet',
-    },
-    spendingByCategory: 'Forbruk per kategori',
-    newThisMonth: 'ny',
-    noSpendingThisMonth: 'Ingen registrert forbruk denne måneden.',
-    spendingTrend: 'Forbrukstrend',
-    trendMonths: 'Siste 6 måneder',
-    categoryBudgets: 'Kategoribudsjett',
-    budgetLabel: 'Budsjett',
-    remainingLabel: 'Igjen',
-    overBudgetBy: 'Over med',
-    setBudgets: 'Sett budsjett',
-    noBudgetsSet: 'Ingen budsjett satt ennå. Sett et månedlig tak per kategori.',
-    done: 'Ferdig',
-    growthProjection: 'Vekstprognose',
-    annualReturn: 'Forventet avkastning (% p.a.)',
-    projectedNetWorth: 'Beregnet formue',
-    bucketStocks: 'Aksjer',
-    bucketCrypto: 'Krypto',
-    bucketCash: 'Kontant/BSU',
-    bucketHouse: 'Boligformue',
-    pension: 'Pensjon',
-    pensionWealth: 'Pensjonsformue',
-    otpBalance: 'OTP-saldo',
-    otpEmployerPct: 'OTP arbeidsgiver %',
-    otpEmployeePct: 'OTP egen %',
-    ipsBalance: 'IPS-saldo',
-    ipsAnnualContribution: 'IPS årlig innskudd',
-    ipsHint: 'Maks 15 000 kr/år gir skattefradrag (~22%).',
-    retirementAge: 'Pensjonsalder',
-    birthYear: 'Fødselsår',
-    yearsToRetirement: 'år til pensjon',
-    pensionAtRetirement: 'Pensjonsformue ved pensjon',
-    otpGrowthRate: 'OTP-avkastning',
-    ipsGrowthRate: 'IPS-avkastning',
-    setBirthYearHint: 'Sett fødselsår i Innstillinger',
-    amortizationSchedule: 'Nedbetalingsplan',
-    year: 'År',
-    annualPayment: 'Årsbeløp',
-    principalPayment: 'Avdrag',
-    interestPayment: 'Renter',
-    remainingBalance: 'Restgjeld',
-    showSchedule: 'Vis nedbetalingsplan',
-    hideSchedule: 'Skjul plan',
-    monthSpent: 'Brukt denne måneden',
-    remainingBudget: 'Gjenstående budsjett',
-    loanCapacity: 'Låneevne',
-    overviewTitle: 'Oversikt',
-    budgetHealth: 'Budsjettfordeling',
-    assetAllocation: 'Formuesfordeling',
-    recentTransactions: 'Siste transaksjoner',
-    noTransactions: 'Ingen transaksjoner denne måneden',
-    investmentNet: 'Investering (netto)',
-    propertyEquityShort: 'Boligegenkapital',
-    cashTotal: 'Kontanter',
-    importExportTitle: 'Import / Eksport',
-    exportSection: 'Eksport',
-    exportDesc: 'Last ned alle dataene dine som en JSON-fil for sikkerhetskopiering eller migrering.',
-    importSection: 'Import',
-    importDesc: 'Gjenopprett data fra en tidligere eksportert JSON-fil.',
-    importWarning: 'Dette vil erstatte alle eksisterende data.',
-    downloadJSON: 'Last ned JSON',
-    chooseFile: 'Slipp JSON-fil her eller klikk for å bla',
-    replaceData: 'Erstatt alle data',
-    importReadyTitle: 'Klar til import',
-    invalidFile: 'Ugyldig fil — forventet en budget-eksport JSON.',
-    crypto: 'Kryptoaktiva',
-    cryptoPortfolio: 'Kryptoportefølje',
-    cryptoGain: 'Urealisert gevinst (krypto)',
-    cryptoTaxRate: 'Skattesats (krypto)',
-    cryptoTaxLabel: 'Latent skatt (krypto)',
-    netCrypto: 'Netto krypto',
-    bufferAccount: 'Bufferkonto',
-    smartRecommendations: 'Smarte anbefalinger',
-    canSpend: 'Kan bruke',
-    shouldInvest: 'Investering',
-    avgIncome: 'Snittinntekt',
-    conservativeWarning: 'Inntekt under snitt — vurder å spare 10% mer',
-    volatileIncomeWarning: 'Uregelmessig inntekt — vurder å spare 10% mer',
-    spentOfRecommended: 'av anbefalt',
-    savingsTarget: 'Sparemål',
-    funBudget: 'Morsomme penger',
-    funBudgetAllocated: 'Budsjett',
-    funBudgetSpent: 'Brukt',
-    funBudgetRemaining: 'Igjen',
-    funBudgetOverspent: 'Overskredet med',
-    residual: 'Budsjettbalanse',
-    housingModeFirstBuyer: 'Førstegangskjøper',
-    housingModeHomeowner: 'Boligeier',
-    housingModeTransitioning: 'Kjøpe & selge',
-    currentMortgageBalance: 'Restgjeld',
-    originalLoanAmount: 'Opprinnelig lånebeløp',
-    yearsRemaining: 'Gjenværende år',
-    monthlyPaymentCalc: 'Månedlig betaling',
-    equityPercent: 'Egenkapitalprosent',
-    editInAssets: '→ Rediger i Formue',
-    annualTaxBenefit: 'Skattelettelse per år',
-    currentHouseValue: 'Antatt salgsverdi',
-    agentFeePercent: 'Meglerprovisjon (%)',
-    documentFee: 'Tinglysingsgebyr',
-    otherSaleCosts: 'Andre salgskostnader',
-    agentCost: 'Meglerkostnad',
-    netSaleProceeds: 'Netto salgsproveny',
-    bridgeMonths: 'Mellomfinansieringsperiode (mnd)',
-    bridgeLoanRate: 'Rente mellomfinansiering (%)',
-    bridgeCost: 'Mellomfinansieringskostnad',
-    equityFromSale: 'Egenkapital fra salg',
-    additionalEquity: 'Ekstra egenkapital',
-    totalEquityNew: 'Total egenkapital',
-    newLoanNeeded: 'Nytt lånebehov',
-    newMonthlyPayment: 'Ny månedlig betaling',
-    totalTransactionCosts: 'Totale transaksjonskostnader',
-    saleCard: 'Salg av nåværende bolig',
-    bridgeCard: 'Mellomfinansieringsperiode',
-    newHouseCard: 'Ny bolig – lånekalkulator',
-    summaryCard: 'Transaksjonsoppsummering',
-    netWorthHistory: 'Formuesutvikling',
-    vsLastMonth: 'vs. forrige mnd',
-    buildingHistory: 'Samler formuesdata...',
-    nav: {
-      budget: 'Budsjett',
-      assets: 'Formue',
-      loan: 'Boliglån',
-      dashboard: 'Oversikt',
-      settings: 'Innstillinger',
-      salary: 'Lønn',
-      forecast: 'Prognose',
-      pension: 'Pensjon',
-      employerCost: 'Lønnskostnad',
-      more: 'Mer',
-    },
-    employerCost: {
-      heroLabel: 'Lønnskostnad',
-      subtitle: 'Se hva du faktisk koster arbeidsgiveren — og hvilken timepris en bedrift må ta for å dekke deg.',
-      grossSalary: 'Brutto årslønn',
-      totalCost: 'Total arbeidsgiverkostnad',
-      loading: 'Påslag over lønn',
-      targetRate: 'Måltimepris',
-      salaryInput: 'Årslønn',
-      salaryHint: 'Hentes fra Lønn-siden. Overstyr for å regne på en hypotetisk lønn.',
-      costBreakdown: 'Kostnadsoppbygging',
-      gross: 'Brutto lønn',
-      feriepenger: 'Feriepenger',
-      benefitsLeave: 'Goder / fri',
-      employerPension: 'OTP (arbeidsgiver)',
-      employerPensionGeneric: 'Arbeidsgiverpensjon',
-      employerPensionHint: 'Settes på Pensjon-siden (OTP arbeidsgiver %).',
-      payrollTax: 'Arbeidsgiveravgift',
-      payrollTaxGeneric: 'Lønnsskatt',
-      payrollTaxBase: 'Grunnlag for avgift',
-      overheadFlat: 'Faste kostnader (kr/år)',
-      overheadPct: 'Faste kostnader (% av lønn)',
-      overheadHint: 'Standardestimat: kontorplass, utstyr, programvare og forsikring. Juster etter din situasjon.',
-      total: 'Total kostnad',
-      billingTitle: 'Timepris for konsulent',
-      billingSubtitle: 'For konsulenter / frilansere',
-      workHoursPerYear: 'Arbeidstimer per år',
-      utilization: 'Fakturerbar andel',
-      billableHours: 'Fakturerbare timer/år',
-      billableOverride: 'Overstyr fakturerbare timer',
-      breakEven: 'Dekningspris (timepris)',
-      targetMargin: 'Målmargin (av omsetning)',
-      markupOnCost: 'påslag på kostnad',
-      targetHourly: 'Måltimepris',
-      dailyRate: 'Dagsrate',
-      hoursPerDay: 'Timer per dag',
-      annualRevenue: 'Årlig omsetning',
-      annualProfit: 'Årlig fortjeneste',
-      caveat: 'Estimat: feriepenger opptjenes i år og utbetales neste år, og arbeidsgiveravgiften varierer med sone. Tallene er en god pekepinn, ikke en lønnskjøring.',
-    },
-    dataLoadError: 'Kunne ikke laste dataene dine. Sjekk tilkoblingen.',
-    retry: 'Last på nytt',
-    saveError: 'Endringene dine ble ikke lagret. Prøver på nytt …',
-    saveRetry: 'Prøv igjen',
-    today: 'I dag',
-    viewingPast: 'Historisk måned',
-    viewingFuture: 'Fremtidig måned',
-    viewingCurrent: 'Denne måneden',
-    asOfToday: 'Per i dag',
-    asOfTodayHint: 'Denne siden viser tall per i dag – ikke påvirket av månedsvelgeren.',
-    provenance: {
-      default: 'Standard',
-      custom: 'Ditt',
-      estimate: 'Estimert',
-      defaultHint: 'Standardverdi – du har ikke endret denne ennå.',
-      customHint: 'Du har satt denne verdien selv.',
-      estimateHint: 'Beregnet fra dine data.',
-    },
-    netWorthEditor: {
-      edit: 'Rediger historikk',
-      title: 'Formueshistorikk',
-      desc: 'Legg inn din faktiske nettoformue for tidligere måneder. Måneder du fyller inn blir ekte datapunkter; resten estimeres til du fyller dem inn.',
-      live: 'Live',
-      liveHint: 'Denne måneden oppdateres automatisk fra din nåværende egenkapital.',
-      placeholderEstimate: 'estimat',
-      reset: 'Nullstill',
-      done: 'Ferdig',
-      snapshotSaved: 'Full tilstand lagret – tilgjengelig for tidsmaskin senere',
-    },
-    timeMachine: {
-      viewing: 'Viser',
-      liveLabel: 'I dag (live)',
-      readOnly: 'Skrivebeskyttet historikk – gå til i dag for å redigere',
-      backToToday: 'Tilbake til i dag',
-    },
-    salary: {
-      importPayslip: {
-        button: 'Importer lønnsslipp',
-        title: 'Importer fra lønnsslipp',
-        intro: 'Velg en PDF-lønnsslipp. Filen leses lokalt i nettleseren og lagres aldri – kun tallene under hentes ut og lagres for måneden.',
-        chooseFile: 'Velg PDF',
-        parsing: 'Leser lønnsslipp…',
-        parseError: 'Fant ingen gjenkjennelig lønnsslipp i denne PDF-en.',
-        readError: 'Kunne ikke lese PDF-filen.',
-        period: 'Periode',
-        payDate: 'Utbetalt',
-        month: 'Måned',
-        setsIncome: 'Nettolønn settes som månedsinntekt',
-        storedLabel: 'Lagres for måneden',
-        extraBase: 'Månedslønn',
-        extraGross: 'Bruttolønn',
-        extraNet: 'Nettolønn',
-        extraTax: 'Forskuddstrekk',
-        extraHolidayPay: 'Feriepenger (i år)',
-        overwriteNote: 'Erstatter lønnsslippen som allerede er lagret for denne måneden.',
-        importAction: 'Importer',
-        noNetFound: 'Fant ingen nettolønn i lønnsslippen.',
-        savedTitle: 'Lønnsslipp for måneden',
-        remove: 'Fjern',
-        preview: 'Forhåndsvisning',
-        clickToEnlarge: 'Klikk for å forstørre',
-        closePreview: 'Lukk',
-        supports: 'Støtter Visma-lønnsslipper – én måned eller alle på én gang.',
-        payslipsFound: 'lønnsslipper funnet',
-        view: 'Vis',
-        selectAll: 'Velg alle',
-        deselectAll: 'Fjern alle',
-        loadingPreview: 'Gjengir side…',
-        providerLabel: 'Lønnssystem',
-        moreProviders: 'Flere leverandører kommer',
-      },
-      title: 'Lønn',
-      heroLabel: 'Lønn',
-      heroTitlePre: 'Lønn over',
-      heroTitleEm: 'tid',
-      subtitle: 'Spor lønnsutvikling, bonus og faktiske arbeidstimer. Sammenlign med inflasjon (KPI) fra SSB for å se hva du egentlig sitter igjen med.',
-      currentSalary: 'Total årslønn',
-      cumulativeGrowth: 'Vekst totalt',
-      yoyVsInflation: 'År-over-år vs KPI',
-      effectiveHourly: 'Effektiv timelønn',
-      nextReviewTitle: 'Neste lønnsforhandling',
-      nextReviewDesc: 'Hva «bare inflasjon» betyr, og hva et reelt løft krever.',
-      lastRaiseLabel: 'Lønnsgrunnlag',
-      timeSinceLabel: 'Tid siden',
-      cpiSinceLabel: 'KPI siden den gang',
-      cpiRolling12Label: 'KPI siste 12 mnd',
-      inflationOnlyTarget: 'Inflasjonsnøytral lønn',
-      inflationOnlyTargetDesc: 'Beløpet som tilsvarer akkurat KPI siden forrige økning.',
-      proposedSalaryLabel: 'Foreslått ny lønn',
-      proposedSalaryHint: 'Skriv inn tilbudet for å se reell økning.',
-      proposedIncreaseLabel: 'Økning',
-      realRaiseSinceLabel: 'Reelt løft (vs KPI siden sist)',
-      realRaiseRollingLabel: 'Reelt løft (vs siste 12 mnd KPI)',
-      monthsAgo: 'mnd siden',
-      vsCpi: 'vs KPI',
-      noPriorRaise: 'Ingen tidligere lønnsøkning registrert.',
-      realHourlyRate: 'Reell timelønn',
-      realHourlyRateDesc: 'Nominell vs inflasjonsjustert timelønn over tid.',
-      nominal: 'Nominell',
-      real: 'Inflasjonsjustert',
-      salaryTimeline: 'Lønnsutvikling',
-      salaryTimelineDesc: 'Hver endring (lønnsøkning, forfremmelse eller jobbytte) er en markør.',
-      yoyChart: 'År-over-år: lønn vs inflasjon',
-      yoyChartDesc: 'Stolpe per år. Grønn betyr at lønnen slo KPI.',
-      totalCompChart: 'Total godtgjørelse per år',
-      totalCompChartDesc: 'Grunnlønn, vakt, bonus og overtid stablet.',
-      hoursVsComp: 'Timer vs timelønn',
-      hoursVsCompDesc: 'Når timene øker raskere enn lønnen, går effektiv timelønn ned.',
-      jobs: 'Jobber',
-      addJob: 'Ny jobb',
-      employer: 'Arbeidsgiver',
-      role: 'Stilling',
-      startDate: 'Startdato (YYYY-MM)',
-      endDate: 'Sluttdato (YYYY-MM, tom = nåværende)',
-      contractedHours: 'Avtalte timer/uke',
-      initialSalary: 'Startlønn (brutto/år, valgfri)',
-      initialSalaryHint: 'Lag startlønn-oppføring automatisk.',
-      onCallAnnual: 'Vakttillegg (kr/år)',
-      onCallHint: 'La stå tom om du ikke har vaktordning.',
-      onCallLabel: 'Vakt',
-      onCallShort: 'vakt',
-      salaries: 'Lønnsendringer',
-      addSalary: 'Ny lønnsendring',
-      effectiveDate: 'Gjelder fra (YYYY-MM)',
-      grossAnnual: 'Brutto årslønn',
-      changeType: 'Type endring',
-      changeTypeInitial: 'Startlønn',
-      changeTypeRaise: 'Lønnsøkning',
-      changeTypePromotion: 'Forfremmelse',
-      changeTypeJobChange: 'Jobbytte',
-      changeTypeAdjustment: 'Justering',
-      job: 'Jobb',
-      bonuses: 'Bonuser',
-      addBonus: 'Ny bonus',
-      bonusAmount: 'Beløp (brutto)',
-      bonusType: 'Type',
-      bonusDate: 'Dato (YYYY-MM-DD)',
-      bonusTypeAnnual: 'Årsbonus',
-      bonusTypePerformance: 'Ytelsesbonus',
-      bonusTypeSigning: 'Signeringsbonus',
-      bonusTypeHolidayPay: 'Feriepenger',
-      bonusTypeProfitShare: 'Overskuddsdeling',
-      bonusTypeOther: 'Annet',
-      overtime: 'Overtid',
-      addOvertime: 'Ny overtid',
-      overtimeHours: 'Timer',
-      overtimeAmount: 'Beløp (brutto)',
-      overtimeDate: 'Dato (YYYY-MM-DD)',
-      hoursSnapshots: 'Faktiske timer',
-      addHoursSnapshot: 'Ny timeregistrering',
-      actualHours: 'Faktiske timer/uke',
-      periodMonth: 'Måned (YYYY-MM)',
-      notes: 'Notater',
-      noEntries: 'Ingen oppføringer enda.',
-      noJobsHint: 'Legg til en jobb først, så kan du registrere lønnsendringer.',
-      allJobs: 'Alle jobber',
-      unassigned: 'Uten jobb',
-      updateBudgetTitle: 'Oppdater budsjettinntekt?',
-      updateBudgetMsg: 'Vil du oppdatere månedsinntekten i budsjettet basert på den nye lønnen? Gjelder fra angitt måned og fremover.',
-      updateBudgetConfirm: 'Oppdater inntekt',
-      updateBudgetKeep: 'Behold som er',
-      incomeAuto: 'auto fra lønn',
-      incomeOverride: 'manuelt overstyrt',
-      incomeResetAuto: 'Bruk auto',
-      growthSinceFirst: 'siden start',
-      beatsCpi: 'slår KPI',
-      losesCpi: 'under KPI',
-      inflationSource: 'Inflasjonsdata: SSB tabell 03013 (KPI). Oppdateres månedlig.',
-      inflationOffline: 'Inflasjonsdata utilgjengelig — kunne ikke nå SSB.',
-      nationalMedian: 'Nasjonal median',
-      vsNationalMedian: 'vs nasjonal median',
-    },
-    forecast: {
-      title: 'Prognose',
-      heroLabel: 'Prognose',
-      heroTitlePre: 'Hva hvis',
-      heroTitleEm: '...',
-      subtitle: 'Juster forutsetningene — se hvordan formue, takehome og gjeld endrer seg over tid.',
-      raiseAssumption: 'Årlig lønnsøkning',
-      savingsRateAssumption: 'Sparing av netto',
-      returnAssumption: 'Forventet realavkastning',
-      years: 'Antall år',
-      inflationAssumption: 'Forventet inflasjon',
-      summaryNow: 'Nå',
-      summaryEnd: 'Etter',
-      grossSalary: 'Bruttolønn',
-      netTakeHome: 'Netto takehome',
-      netWorthProjected: 'Beregnet formue',
-      mortgageRemaining: 'Restgjeld',
-      realGrowth: 'Reell vekst',
-      forecastChart: 'Formuesutvikling',
-      forecastChartDesc: 'Beregnet formue per år gitt valgte forutsetninger.',
-      salaryChart: 'Lønn over tid',
-      salaryChartDesc: 'Bruttolønn og netto takehome år for år.',
-      year: 'År',
-    },
-    goals: {
-      title: 'Mål',
-      subtitle: 'Spar mot konkrete mål med synlig fremgang.',
-      empty: 'Ingen mål enda. Legg til ditt første sparemål for å se fremgang.',
-      addGoal: 'Nytt mål',
-      name: 'Navn',
-      target: 'Målbeløp',
-      source: 'Kilde',
-      manualCurrent: 'Nåværende beløp',
-      deadline: 'Frist (YYYY-MM, valgfri)',
-      notes: 'Notater',
-      sourceManual: 'Manuelt registrert',
-      sourceBsu: 'BSU-konto',
-      sourceSavings: 'Sparekonto',
-      sourceTotalEquity: 'Total egenkapital',
-      sourcePortfolio: 'Aksjeportefølje',
-      sourceBufferAccount: 'Bufferkonto',
-      progress: 'Fremgang',
-      remaining: 'Gjenstår',
-      completed: 'Fullført',
-      monthsLeft: 'mnd igjen',
-      overdue: 'Frist passert',
-    },
-    settings: {
-      title: 'Innstillinger',
-      subtitle: 'Tilpass Headroom og administrer dataene dine.',
-      currency: 'Valuta',
-      currencyDesc: 'Velg hvilken valuta som vises i hele appen.',
-      language: 'Språk',
-      languageDesc: 'Velg språk for hele grensesnittet.',
-      display: 'Visningsinnstillinger',
-      displayDesc: 'Juster sparemål og forventet vekst.',
-      savingsTargetPct: 'Sparemål',
-      growthReturnRate: 'Aksjeavkastning',
-      houseGrowthRate: 'Boligpris-vekst',
-      cashGrowthRate: 'Kontant/BSU-rente',
-      cryptoGrowthRate: 'Krypto-avkastning',
-      growthRatesDesc: 'Egne vekstrater per aktivaklasse. Aksjer brukes kun på aksjeporteføljen — bolig, kontant og krypto vokser med egne rater.',
-      restoreDefaults: 'Tilbakestill til standard',
-      demoTitle: 'Demomodus',
-      demoDesc: 'Bytt ut tallene dine med eksempeldata, slik at du kan vise appen uten å avsløre din egen økonomi. Dine ekte data lagres trygt og hentes tilbake når du slår av.',
-      demoActivate: 'Aktiver demomodus',
-      demoDeactivate: 'Avslutt demomodus — gjenopprett mine data',
-      demoActive: 'Demomodus er på',
-      demoBanner: 'Demomodus — viser eksempeldata, ikke din egen økonomi.',
-      demoExit: 'Avslutt',
-      dataManagement: 'Datahåndtering',
-      dataDesc: 'Eksporter eller importer alle dataene dine som JSON.',
-      about: 'Om Headroom',
-      aboutDesc: 'Selvhostet personlig økonomi. Alle data lagres lokalt i SQLite på din egen server.',
-      version: 'Versjon',
-      storage: 'Lagring',
-      rateNokToUsd: 'Kurs NOK → USD',
-      customCurrencyLabel: 'Egendefinert valuta',
-      customCurrencyHint: '3-bokstavs kode (f.eks. EUR). Kurs er antall enheter per 1 NOK.',
-      currencyCode: 'Kode',
-      currencyRate: 'Kurs',
-      english: 'Engelsk',
-      norwegian: 'Norsk',
-      region: 'Region',
-      regionDesc: 'Norge bruker SSB-data og norsk skattemodell. "Generisk" skjuler norsk-spesifikke funksjoner.',
-      navVisibility: 'Navigasjon',
-      navVisibilityDesc: 'Velg hvilke sider som vises i menyen. Innstillinger vises alltid.',
-      regionNorway: 'Norge',
-      regionGeneric: 'Generisk',
-      customTaxRate: 'Effektiv skatteprosent',
-      customTaxRateDesc: 'Brukes i Generisk-modus i stedet for trinnskatt + trygdeavgift.',
-      exportData: 'Eksporter alle data',
-      importData: 'Importer data',
-      replaceWarning: 'Dette vil erstatte alle eksisterende data.',
-      replaceConfirm: 'Erstatt alle data',
-      dropZone: 'Slipp JSON-filen her',
-      browseFile: 'eller klikk for å bla',
-      importReady: 'Klar til import',
-      importDone: 'Data importert.',
-      resetTitle: 'Tilbakestill alle data',
-      resetDesc: 'Nullstill all økonomisk data. Innstillinger som språk, valuta og region beholdes.',
-      resetButton: 'Tilbakestill alle data',
-      resetWarning: 'Dette kan ikke angres. Alle inntekter, utgifter, transaksjoner, aktiva, lån, jobber og mål slettes.',
-      resetConfirm: 'Ja, slett alt',
-      resetCancel: 'Avbryt',
-      resetDone: 'Alle data ble tilbakestilt.',
-      bank: {
-        title: 'Banksynkronisering',
-        desc: 'Hent transaksjoner automatisk fra Bank Norwegian via Enable Banking.',
-        notConfigured: 'Ikke konfigurert. Sett EB_REDIRECT og legg nøkkelfilen i datamappen på serveren.',
-        notLinked: 'Ingen bank tilkoblet.',
-        connect: 'Koble til Bank Norwegian',
-        relink: 'Koble til på nytt',
-        syncNow: 'Synkroniser nå',
-        linkedTo: 'Tilkoblet',
-        lastSync: 'Sist synkronisert',
-        never: 'aldri',
-        expiresIn: 'Samtykke utløper om {n} dager',
-        needsRelink: 'Samtykke utløpt — koble til på nytt med BankID.',
-        syncing: 'Synkroniserer…',
-        connecting: 'Kobler til…',
-        synced: 'La til {n} nye transaksjoner.',
-        syncError: 'Synkronisering feilet.',
-        linkedOk: 'Bank tilkoblet.',
-        linkError: 'Tilkobling feilet.',
-        uploadKey: 'Last opp nøkkel (.pem)',
-        keyInstalled: 'Nøkkel installert',
-        keyMissing: 'Mangler privat nøkkel — last opp .pem-filen fra Enable Banking.',
-        keyInvalid: 'Ugyldig nøkkelfil.',
-        keyOkVerified: 'Nøkkel installert og bekreftet.',
-        keyOkUnverified: 'Nøkkel lagret (kunne ikke bekrefte mot Enable Banking).',
-        redirectLabel: 'Callback-URL',
-        redirectHint: 'Registrer nøyaktig denne URL-en på Enable Banking-appen.',
-        save: 'Lagre',
-        saved: 'Lagret.',
-        keyEncManaged: 'kryptert (app-administrert nøkkel)',
-        keyEncEnv: 'kryptert (EB_KEY_SECRET)',
-        keyPlaintextLabel: 'ukryptert',
-        uploading: 'Laster opp…',
-      },
-    }
-  },
-  en: {
-    title: 'Headroom',
-    subtitle: 'Manage your personal finances',
-    systemActive: 'System Active // Monitoring Portfolio',
-    monthlyIncome: 'Monthly Income',
-    totalEquity: 'Total Net Equity',
-    monthlyBudget: 'Budget / Month',
-    dailyBudget: 'Budget / Day',
-    assetInventory: 'Asset Inventory',
-    marketPositions: 'Market Positions',
-    realEstate: 'Real Estate Assets',
-    cashReserves: 'Cash Reserves',
-    portfolio: 'Investment Portfolio',
-    unrealizedGain: 'Unrealized Gain',
-    taxRate: 'Tax Rate',
-    liabilityReserve: 'Liability Reserve (Tax)',
-    netLiquidity: 'Net Liquidity Position',
-    houseValue: 'Property Value',
-    houseDebt: 'Mortgage Debt',
-    propertyEquity: 'Property Equity',
-    bsu: 'BSU Account',
-    savings: 'Savings Account',
-    trueNetEquity: 'True Net Equity Post-Tax',
-    grossAssets: 'Gross Assets',
-    liabilities: 'Liabilities & Tax',
-    fixedCosts: 'Fixed Costs',
-    distributionAnalysis: 'Distribution Analysis',
-    operationalLog: 'Spending Log',
-    timestamp: 'Timestamp',
-    transactionDetails: 'Transaction Details',
-    impact: 'Impact',
-    runningBalance: 'Running Balance',
-    endPeriodSurplus: 'End of Period Surplus',
-    aggregate: 'Aggregate',
-    allocation: 'Allocation',
-    editIncome: 'Set monthly income:',
-    newExpenseName: 'Expense name:',
-    newAmount: 'Amount:',
-    expenseTypeLabel: 'Type:',
-    expenseType: { fixed: 'Fixed', variable: 'Variable', subscription: 'Subscription', insurance: 'Insurance' },
-    debt: {
-      title: 'Debt', add: 'Add debt', none: 'No debt recorded.',
-      name: 'Name:', balance: 'Balance:', rate: 'Rate (% p.a.):', minPayment: 'Monthly payment:', typeLabel: 'Type:',
-      sum: 'Total debt', payoffIn: 'Paid off in', interestLabel: 'interest', never: "Doesn't cover interest",
-      planner: 'Payoff plan', strategy: 'Strategy', avalanche: 'Highest rate first', snowball: 'Smallest balance first',
-      extra: 'Extra per month', debtFree: 'Debt-free in', totalInterest: 'Total interest',
-      interestSaved: 'Interest saved', vsMinimum: 'vs. minimums only',
-      types: { student: 'Student loan', consumer: 'Consumer loan', credit_card: 'Credit card', other: 'Other' },
-    },
-    editName: 'New name:',
-    editAmount: 'New amount:',
-    editDescription: 'New description:',
-    days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-    cancel: 'Cancel',
-    save: 'Save',
-    delete: 'Delete',
-    add: 'Add',
-    edit: 'Edit',
-    txKind: 'Type',
-    txIncome: 'Income',
-    txExpense: 'Expense',
-    charts: {
-      income: 'Income', expenses: 'Expenses', net: 'Net',
-      cash: 'Cash', stocks: 'Stocks', house: 'House', crypto: 'Crypto', pension: 'Pension',
-      netTakeHome: 'Take-home', incomeTax: 'Income tax', bracketTax: 'Bracket tax', socialSecurity: 'Social security', tax: 'Tax', effectiveRate: 'eff. rate',
-      covered: 'covered', target: 'Target', savingsRate: 'Savings rate', less: 'less', more: 'more',
-      ltv: 'LTV', ltvCap: 'Cap 85%',
-      gross: 'Gross', savings: 'Savings', discretionary: 'Discretionary', fixedExpenses: 'Fixed expenses',
-      buildsOverTime: 'Builds up as you add data over time.',
-      cashflowTitle: 'Cashflow', cashflowSub: 'Money in vs out, last 12 months',
-      compositionTitle: 'Net-worth composition', compositionSub: 'Mix over time',
-      taxBreakdownTitle: 'Tax breakdown', taxBreakdownSub: 'Where your gross salary goes',
-      emergencyFundTitle: 'Emergency fund', emergencyFundSub: 'Months covered',
-      savingsRateTitle: 'Savings rate', savingsRateSub: 'Share of income left after expenses',
-      heatmapTitle: 'Spending pattern', heatmapSub: 'Daily spend this month',
-      ltvTitle: 'Loan-to-value over time', ltvSub: 'Falls as the loan amortizes and the home appreciates',
-      moneyFlowTitle: 'Money flow', moneyFlowSub: 'Where your monthly salary goes',
-      allocationTitle: 'Asset allocation', allocationSub: 'Your mix right now', allocationCenter: 'Total',
-      liquid: 'Liquid', locked: 'Locked',
-      liquidSub: 'Stocks, cash, crypto', lockedSub: 'Property equity + pension',
-      liquidLockedTitle: 'Liquid vs locked', liquidLockedSub: 'How much you can actually reach',
-      debtPayoffTitle: 'Debt payoff', debtPayoffSub: 'Mortgage balance down toward zero',
-      debtFree: 'Debt-free on your home — no mortgage to pay down.',
-      mortgageToday: 'Mortgage today', debtFreeYear: 'Debt-free',
-      plusOtherDebt: '+ {amount} other debt (student/consumer) — see the section above.',
-    },
-    onboarding: {
-      title: 'Setup guide',
-      hubIntro: 'Pick anything below to set it up or learn what it does — in any order. Your changes save as you go.',
-      progress: '{done} of {total} covered',
-      sampleData: 'Explore with sample data',
-      replay: 'Replay setup guide',
-      guide: 'Setup guide',
-      finish: 'Finish',
-      backToGuide: 'Guide',
-      done: 'Done',
-      next: 'Next',
-      back: 'Back',
-      stepOf: 'Step {n} of {total}',
-      add: 'Add',
-      itemName: 'Name',
-      monthlyAmount: 'Amount per month',
-      remove: 'Remove',
-      expensePlaceholder: 'e.g. Power',
-      debtPlaceholder: 'e.g. Student loan',
-      close: 'Close',
-      skip: 'Skip for now',
-      resetGuide: 'Reset guide',
-      welcomeTitle: 'Welcome to Headroom',
-      welcomeBody: 'Let’s get the essentials in place — it takes a couple of minutes. You can explore everything else afterward.',
-      setupEssentials: 'Set up the essentials',
-      essentialsChoice: 'Just the essentials',
-      essentialsChoiceSub: 'Get set up in a minute',
-      fullGuideChoice: 'Full guide',
-      fullGuideChoiceSub: 'Walk through the whole app',
-      essentialsIntro: 'Just the basics to get going. You can explore the rest afterward.',
-      seeTheRest: 'See the rest of the app',
-      seeTheRestSub: '{count} more topics — wealth, forecast, tax, and how it all fits together',
-      essentialsDone: 'Nice — the essentials are in place. Want to explore the rest?',
-      groups: {
-        essentials: 'Essentials',
-        wealth: 'Wealth',
-        learn: 'Understand the app',
-      },
-      topics: {
-        prefs: { title: 'Language & region', hint: 'How the app speaks & taxes', body: 'Pick your language and region. Region sets the tax model Headroom uses — Norway applies full Norwegian income tax, bracket tax and national insurance, while Generic uses a single flat rate you choose. Everything else — currency, salary and pension math — follows from this, so it’s worth getting right first.' },
-        income: { title: 'Monthly income', hint: 'What lands in your account', body: 'Your monthly take-home — what actually lands in your account after tax. Headroom uses it to build your budget: fixed costs come off first, then your savings target, and what’s left is your day-to-day spending. You can set it per month, or let it come automatically from your Salary page.' },
-        savingsTarget: { title: 'Savings target', hint: 'How much to set aside', body: 'The share of income you aim to put aside each month. Headroom subtracts it from your budget before working out your daily allowance, so saving happens first rather than with whatever’s left. A common starting point is 20% — set it to something you can actually stick to.' },
-        fixedExpenses: { title: 'Fixed expenses', hint: 'Recurring monthly bills', body: 'Bills that recur every month — rent or mortgage, power, insurance, subscriptions. These come straight off your income before anything else, so keeping them accurate makes the rest of your budget honest. We seeded a few examples; add, edit, tag or delete them right on this card.' },
-        cash: { title: 'Cash & savings', hint: 'Money you can reach now', body: 'The money you can reach right now — everyday savings, a rainy-day buffer, and any BSU. Together this is your liquidity: how much you could cover an emergency or an opportunity with, without selling investments or taking on debt.' },
-        home: { title: 'Home & mortgage', hint: 'Property value and debt', body: 'Your home’s current market value and the balance left on your mortgage. The difference is your property equity — usually the biggest single piece of net worth. Headroom tracks how that equity grows as you pay down the loan and the home appreciates.' },
-        stocks: { title: 'Investments', hint: 'Stocks & funds', body: 'Your stock and fund portfolio at market value, plus how much of that is unrealized gain. The gain matters because Headroom sets aside the tax you’d owe if you sold, so your net worth reflects what you’d actually keep — not just the sticker value.' },
-        crypto: { title: 'Crypto', hint: 'Digital assets', body: 'The market value of any crypto you hold, with its own unrealized gain and tax rate. It’s treated as a separate, higher-risk bucket in your allocation and forecast. Leave it at 0 if it doesn’t apply to you.' },
-        pension: { title: 'Pension', hint: 'OTP & IPS balances', body: 'Balances in your occupational pension (OTP, from your employer) and any private pension savings (IPS). This is real wealth, but it’s locked until retirement age — so Headroom keeps it out of your liquid net worth and shows it separately, so today’s spendable picture stays honest.' },
-        debt: { title: 'Debt', hint: 'Loans beyond the mortgage', body: 'Loans beyond your mortgage — student loans, consumer debt, credit cards. Add them here so your true net worth nets them out, and so the debt-payoff view can show when you’ll be free of them. Each debt tracks its own balance, rate and payment.' },
-        growth: { title: 'Growth assumptions', hint: 'How the forecast grows', body: 'The annual return assumptions behind every projection — separate rates for stocks, property, cash and crypto, since they don’t grow alike. Conservative defaults are set for you; tap any rate to tune it. These drive the forecast, so small changes here move the long-term numbers a lot.' },
-        dashboard: { title: 'Dashboard', hint: 'Your money at a glance', body: 'Your money at a glance — net worth, cashflow, and how this month is tracking against your plan, pulled together from everything else you enter. It’s the page to open first each time: a quick read on whether you’re on track before you dig into the details.' },
-        salary: { title: 'Salary & tax', hint: 'Jobs, raises, tax', body: 'Where you record jobs, salary history, raises and bonuses. Headroom turns this into an accurate gross-to-net picture using your region’s tax rules, and feeds your monthly income and take-home. Over time it also charts how your pay has grown against inflation.' },
-        forecast: { title: 'Forecast', hint: 'Where you’re heading', body: 'Projects your net worth years into the future from today’s balances, your monthly savings and the growth rates. It’s the long game — see roughly where you land in 5, 10 or 15 years, and how changing your savings or assumptions shifts the curve.' },
-        loan: { title: 'Loan calculator', hint: 'What you can borrow & afford', body: 'A calculator for borrowing — model a mortgage’s monthly payment, total interest, and how much home fits your income and equity. It has three modes: first-time buyer (what you can afford to buy), homeowner (paying down an existing mortgage), and moving (buying and selling at once, with bridge financing). Pick the one that matches your situation.' },
-        settings: { title: 'Settings & backup', hint: 'Export, import, preferences', body: 'Your data lives on your own device — nothing is sent to a server. Export a full JSON backup anytime, re-import it on another device, switch language or currency, or replay this guide. This is also where demo mode and ‘reset all data’ live.' },
-      },
-      fields: {
-        income: 'Monthly net income',
-        savingsTarget: 'Savings target (%)',
-        savings: 'Savings account',
-        bufferAccount: 'Buffer account',
-        bsu: 'BSU',
-        houseValue: 'Home value',
-        houseDebt: 'Mortgage',
-        portfolio: 'Portfolio',
-        unrealizedGain: 'Unrealized gain',
-        crypto: 'Crypto',
-        otpBalance: 'OTP balance',
-        ipsBalance: 'IPS balance',
-        language: 'Language',
-        region: 'Region',
-      },
-      options: {
-        norwegian: 'Norwegian',
-        english: 'English',
-        regionNo: 'Norway',
-        regionGeneric: 'Other / generic',
-      },
-    },
-    confirmDelete: 'Confirm Delete',
-    confirmDeleteExpenseMsg: 'Are you sure you want to delete this expense?',
-    confirmDeleteTransactionMsg: 'Are you sure you want to delete this transaction?',
-    templates: 'Templates',
-    addTemplate: 'New Template',
-    exportCSV: 'Export CSV',
-    category: 'Category',
-    uncategorized: 'Uncategorized',
-    categoryLabels: {
-      groceries: 'Groceries',
-      dining: 'Dining',
-      transport: 'Transport',
-      health: 'Health',
-      entertainment: 'Entertainment',
-      shopping: 'Shopping',
-      utilities: 'Utilities',
-      subscriptions: 'Subscriptions',
-      housing: 'Housing',
-      transfers: 'Transfers',
-      income: 'Income',
-      other: 'Other',
-    },
-    spendingByCategory: 'Spending by category',
-    newThisMonth: 'new',
-    noSpendingThisMonth: 'No recorded spending this month.',
-    spendingTrend: 'Spending trend',
-    trendMonths: 'Last 6 months',
-    categoryBudgets: 'Category budgets',
-    budgetLabel: 'Budget',
-    remainingLabel: 'Left',
-    overBudgetBy: 'Over by',
-    setBudgets: 'Set budgets',
-    noBudgetsSet: 'No budgets set yet. Set a monthly cap per category.',
-    done: 'Done',
-    growthProjection: 'Growth Projection',
-    annualReturn: 'Expected Return (% p.a.)',
-    bucketStocks: 'Stocks',
-    bucketCrypto: 'Crypto',
-    bucketCash: 'Cash/BSU',
-    bucketHouse: 'House equity',
-    pension: 'Pension',
-    pensionWealth: 'Pension wealth',
-    otpBalance: 'OTP balance',
-    otpEmployerPct: 'OTP employer %',
-    otpEmployeePct: 'OTP self %',
-    ipsBalance: 'IPS balance',
-    ipsAnnualContribution: 'IPS annual contribution',
-    ipsHint: 'Max 15 000 NOK/yr is tax-deductible (~22%).',
-    retirementAge: 'Retirement age',
-    birthYear: 'Birth year',
-    yearsToRetirement: 'years to retirement',
-    pensionAtRetirement: 'Pension wealth at retirement',
-    otpGrowthRate: 'OTP return',
-    ipsGrowthRate: 'IPS return',
-    setBirthYearHint: 'Set birth year in Settings',
-    projectedNetWorth: 'Projected Net Worth',
-    amortizationSchedule: 'Amortization Schedule',
-    year: 'Year',
-    annualPayment: 'Annual Payment',
-    principalPayment: 'Principal',
-    interestPayment: 'Interest',
-    remainingBalance: 'Remaining Balance',
-    showSchedule: 'Show schedule',
-    hideSchedule: 'Hide schedule',
-    monthSpent: 'Spent This Month',
-    remainingBudget: 'Remaining Budget',
-    loanCapacity: 'Loan Capacity',
-    overviewTitle: 'Overview',
-    budgetHealth: 'Budget Breakdown',
-    assetAllocation: 'Asset Allocation',
-    recentTransactions: 'Recent Transactions',
-    noTransactions: 'No transactions this month',
-    investmentNet: 'Investment (net)',
-    propertyEquityShort: 'Property Equity',
-    cashTotal: 'Cash',
-    importExportTitle: 'Import / Export',
-    exportSection: 'Export',
-    exportDesc: 'Download all your data as a JSON file for backup or migration.',
-    importSection: 'Import',
-    importDesc: 'Restore data from a previously exported JSON file.',
-    importWarning: 'This will replace all current data.',
-    downloadJSON: 'Download JSON',
-    chooseFile: 'Drop JSON file here or click to browse',
-    replaceData: 'Replace All Data',
-    importReadyTitle: 'Ready to import',
-    invalidFile: 'Invalid file — expected a budget export JSON.',
-    crypto: 'Crypto Assets',
-    cryptoPortfolio: 'Crypto Portfolio',
-    cryptoGain: 'Unrealized Gain (crypto)',
-    cryptoTaxRate: 'Tax Rate (crypto)',
-    cryptoTaxLabel: 'Deferred Tax (crypto)',
-    netCrypto: 'Net Crypto',
-    bufferAccount: 'Buffer Account',
-    smartRecommendations: 'Smart Recommendations',
-    canSpend: 'Can Spend',
-    shouldInvest: 'Investment',
-    avgIncome: 'Avg Income',
-    conservativeWarning: 'Income below average — consider saving 10% more',
-    volatileIncomeWarning: 'Irregular income — consider saving 10% more',
-    spentOfRecommended: 'of recommended',
-    savingsTarget: 'Savings Target',
-    funBudget: 'Fun Budget',
-    funBudgetAllocated: 'Budget',
-    funBudgetSpent: 'Spent',
-    funBudgetRemaining: 'Remaining',
-    funBudgetOverspent: 'Over budget by',
-    residual: 'Budget Balance',
-    housingModeFirstBuyer: 'First-time Buyer',
-    housingModeHomeowner: 'Homeowner',
-    housingModeTransitioning: 'Buy & Sell',
-    currentMortgageBalance: 'Current Mortgage Balance',
-    originalLoanAmount: 'Original Loan Amount',
-    yearsRemaining: 'Years Remaining',
-    monthlyPaymentCalc: 'Monthly Payment',
-    equityPercent: 'Equity Percentage',
-    editInAssets: '→ Edit in Assets',
-    annualTaxBenefit: 'Annual Tax Benefit',
-    currentHouseValue: 'Estimated Sale Price',
-    agentFeePercent: 'Agent Fee (%)',
-    documentFee: 'Document Fee',
-    otherSaleCosts: 'Other Sale Costs',
-    agentCost: 'Agent Cost',
-    netSaleProceeds: 'Net Sale Proceeds',
-    bridgeMonths: 'Bridge Loan Duration (months)',
-    bridgeLoanRate: 'Bridge Loan Rate (%)',
-    bridgeCost: 'Bridge Loan Cost',
-    equityFromSale: 'Equity from Sale',
-    additionalEquity: 'Additional Equity',
-    totalEquityNew: 'Total Equity',
-    newLoanNeeded: 'New Loan Required',
-    newMonthlyPayment: 'New Monthly Payment',
-    totalTransactionCosts: 'Total Transaction Costs',
-    saleCard: 'Selling Current Property',
-    bridgeCard: 'Bridge Financing Period',
-    newHouseCard: 'New Property – Calculator',
-    summaryCard: 'Transaction Summary',
-    netWorthHistory: 'Net Worth History',
-    vsLastMonth: 'vs. last month',
-    buildingHistory: 'Building history...',
-    nav: {
-      budget: 'Budget',
-      assets: 'Assets',
-      loan: 'Loan',
-      dashboard: 'Overview',
-      settings: 'Settings',
-      salary: 'Salary',
-      forecast: 'Forecast',
-      pension: 'Pension',
-      employerCost: 'Cost & rate',
-      more: 'More',
-    },
-    employerCost: {
-      heroLabel: 'Cost & rate',
-      subtitle: 'See what you actually cost your employer — and the hourly rate a company must charge to cover you.',
-      grossSalary: 'Gross annual salary',
-      totalCost: 'Total employer cost',
-      loading: 'Loading over salary',
-      targetRate: 'Target hourly rate',
-      salaryInput: 'Annual salary',
-      salaryHint: 'Pulled from the Salary page. Override to model a hypothetical salary.',
-      costBreakdown: 'Cost breakdown',
-      gross: 'Gross salary',
-      feriepenger: 'Holiday pay',
-      benefitsLeave: 'Benefits / leave',
-      employerPension: 'Employer pension (OTP)',
-      employerPensionGeneric: 'Employer pension',
-      employerPensionHint: 'Set on the Pension page (employer OTP %).',
-      payrollTax: 'Employer national insurance',
-      payrollTaxGeneric: 'Payroll tax',
-      payrollTaxBase: 'Payroll tax base',
-      overheadFlat: 'Overhead (kr/yr)',
-      overheadPct: 'Overhead (% of salary)',
-      overheadHint: 'Default estimate: office, equipment, software and insurance. Adjust to your situation.',
-      total: 'Total cost',
-      billingTitle: 'Consultant billing rate',
-      billingSubtitle: 'For consultants / freelancers',
-      workHoursPerYear: 'Work hours per year',
-      utilization: 'Billable share',
-      billableHours: 'Billable hours/yr',
-      billableOverride: 'Override billable hours',
-      breakEven: 'Break-even (hourly)',
-      targetMargin: 'Target margin (of revenue)',
-      markupOnCost: 'markup on cost',
-      targetHourly: 'Target hourly',
-      dailyRate: 'Day rate',
-      hoursPerDay: 'Hours per day',
-      annualRevenue: 'Annual revenue',
-      annualProfit: 'Annual profit',
-      caveat: 'Estimate: holiday pay is accrued this year and paid next, and employer national insurance varies by zone. A solid guide, not a payroll run.',
-    },
-    dataLoadError: 'Could not load your data. Check your connection.',
-    retry: 'Reload',
-    saveError: 'Your changes weren’t saved. Retrying …',
-    saveRetry: 'Try again',
-    today: 'Today',
-    viewingPast: 'Past month',
-    viewingFuture: 'Future month',
-    viewingCurrent: 'Current month',
-    asOfToday: 'As of today',
-    asOfTodayHint: 'This page shows values as of today — not affected by the month picker.',
-    provenance: {
-      default: 'Default',
-      custom: 'Yours',
-      estimate: 'Estimate',
-      defaultHint: "Default value — you haven't changed this yet.",
-      customHint: 'You set this value.',
-      estimateHint: 'Calculated from your data.',
-    },
-    netWorthEditor: {
-      edit: 'Edit history',
-      title: 'Net worth history',
-      desc: 'Enter your actual net worth for past months. Months you fill in become real data points; the rest stay estimated until you do.',
-      live: 'Live',
-      liveHint: 'This month updates automatically from your current equity.',
-      placeholderEstimate: 'estimate',
-      reset: 'Reset',
-      done: 'Done',
-      snapshotSaved: 'Full state saved — available for the time machine later',
-    },
-    timeMachine: {
-      viewing: 'Viewing',
-      liveLabel: 'Today (live)',
-      readOnly: 'Read-only history — go to today to edit',
-      backToToday: 'Back to today',
-    },
-    salary: {
-      importPayslip: {
-        button: 'Import payslip',
-        title: 'Import from payslip',
-        intro: 'Choose a PDF payslip. The file is read locally in your browser and never stored — only the figures below are extracted and saved for the month.',
-        chooseFile: 'Choose PDF',
-        parsing: 'Reading payslip…',
-        parseError: 'Couldn’t find a recognisable payslip in this PDF.',
-        readError: 'Could not read the PDF file.',
-        period: 'Period',
-        payDate: 'Paid',
-        month: 'Month',
-        setsIncome: 'Net pay becomes this month’s income',
-        storedLabel: 'Saved for the month',
-        extraBase: 'Monthly salary',
-        extraGross: 'Gross',
-        extraNet: 'Net',
-        extraTax: 'Tax withheld',
-        extraHolidayPay: 'Holiday pay (this year)',
-        overwriteNote: 'Replaces the payslip already saved for this month.',
-        importAction: 'Import',
-        noNetFound: 'No net pay found in the payslip.',
-        savedTitle: 'Payslip for the month',
-        remove: 'Remove',
-        preview: 'Preview',
-        clickToEnlarge: 'Click to enlarge',
-        closePreview: 'Close',
-        supports: 'Supports Visma payslips — one month or all at once.',
-        payslipsFound: 'payslips found',
-        view: 'View',
-        selectAll: 'Select all',
-        deselectAll: 'Clear all',
-        loadingPreview: 'Rendering page…',
-        providerLabel: 'Payroll system',
-        moreProviders: 'More providers coming',
-      },
-      title: 'Salary',
-      heroLabel: 'Salary',
-      heroTitlePre: 'Pay over',
-      heroTitleEm: 'time',
-      subtitle: 'Track salary changes, bonuses and the hours you actually work. Compared against Norwegian CPI (SSB) so you see what raises really buy you.',
-      currentSalary: 'Total annual gross',
-      cumulativeGrowth: 'Cumulative growth',
-      yoyVsInflation: 'YoY vs CPI',
-      effectiveHourly: 'Effective hourly',
-      nextReviewTitle: 'Next salary review',
-      nextReviewDesc: 'What "just inflation" looks like, and what a real raise takes.',
-      lastRaiseLabel: 'Salary baseline',
-      timeSinceLabel: 'Time since',
-      cpiSinceLabel: 'CPI since then',
-      cpiRolling12Label: 'Rolling 12-mo CPI',
-      inflationOnlyTarget: 'Inflation-only salary',
-      inflationOnlyTargetDesc: 'The amount that just matches CPI since your last raise.',
-      proposedSalaryLabel: 'Proposed new salary',
-      proposedSalaryHint: 'Type the offer to see the real raise.',
-      proposedIncreaseLabel: 'Increase',
-      realRaiseSinceLabel: 'Real raise (vs CPI since last)',
-      realRaiseRollingLabel: 'Real raise (vs rolling 12-mo CPI)',
-      monthsAgo: 'mo ago',
-      vsCpi: 'vs CPI',
-      noPriorRaise: 'No prior raise on record.',
-      realHourlyRate: 'Real hourly rate',
-      realHourlyRateDesc: 'Nominal vs inflation-adjusted hourly rate over time.',
-      nominal: 'Nominal',
-      real: 'Inflation-adjusted',
-      salaryTimeline: 'Salary timeline',
-      salaryTimelineDesc: 'Each change (raise, promotion or job switch) is a marker.',
-      yoyChart: 'YoY: salary vs inflation',
-      yoyChartDesc: 'One bar per year. Green means you beat CPI.',
-      totalCompChart: 'Total comp by year',
-      totalCompChartDesc: 'Base salary, on-call, bonus and overtime stacked.',
-      hoursVsComp: 'Hours vs hourly rate',
-      hoursVsCompDesc: 'When hours rise faster than pay, your effective rate falls.',
-      jobs: 'Jobs',
-      addJob: 'Add job',
-      employer: 'Employer',
-      role: 'Role',
-      startDate: 'Start date (YYYY-MM)',
-      endDate: 'End date (YYYY-MM, blank = current)',
-      contractedHours: 'Contracted hours/week',
-      initialSalary: 'Starting salary (gross/year, optional)',
-      initialSalaryHint: 'Auto-creates an initial salary entry.',
-      onCallAnnual: 'On-call pay (annual)',
-      onCallHint: 'Leave blank if you have no on-call rotation.',
-      onCallLabel: 'On-call',
-      onCallShort: 'on-call',
-      salaries: 'Salary changes',
-      addSalary: 'Add salary change',
-      effectiveDate: 'Effective date (YYYY-MM)',
-      grossAnnual: 'Gross annual',
-      changeType: 'Change type',
-      changeTypeInitial: 'Initial salary',
-      changeTypeRaise: 'Raise',
-      changeTypePromotion: 'Promotion',
-      changeTypeJobChange: 'Job change',
-      changeTypeAdjustment: 'Adjustment',
-      job: 'Job',
-      bonuses: 'Bonuses',
-      addBonus: 'Add bonus',
-      bonusAmount: 'Amount (gross)',
-      bonusType: 'Type',
-      bonusDate: 'Date (YYYY-MM-DD)',
-      bonusTypeAnnual: 'Annual bonus',
-      bonusTypePerformance: 'Performance',
-      bonusTypeSigning: 'Signing',
-      bonusTypeHolidayPay: 'Holiday pay',
-      bonusTypeProfitShare: 'Profit share',
-      bonusTypeOther: 'Other',
-      overtime: 'Overtime',
-      addOvertime: 'Add overtime',
-      overtimeHours: 'Hours',
-      overtimeAmount: 'Amount (gross)',
-      overtimeDate: 'Date (YYYY-MM-DD)',
-      hoursSnapshots: 'Actual hours',
-      addHoursSnapshot: 'Add hours snapshot',
-      actualHours: 'Actual hours/week',
-      periodMonth: 'Month (YYYY-MM)',
-      notes: 'Notes',
-      noEntries: 'No entries yet.',
-      noJobsHint: 'Add a job first, then you can record salary changes.',
-      allJobs: 'All jobs',
-      unassigned: 'Unassigned',
-      updateBudgetTitle: 'Update budget income?',
-      updateBudgetMsg: 'Update the monthly budget income based on this new salary? Applies from the effective month onwards.',
-      updateBudgetConfirm: 'Update income',
-      updateBudgetKeep: 'Keep as-is',
-      incomeAuto: 'auto from salary',
-      incomeOverride: 'manual override',
-      incomeResetAuto: 'Use auto',
-      growthSinceFirst: 'since start',
-      beatsCpi: 'beats CPI',
-      losesCpi: 'below CPI',
-      inflationSource: 'Inflation data: SSB table 03013 (CPI). Refreshed monthly.',
-      inflationOffline: 'Inflation data unavailable — could not reach SSB.',
-      nationalMedian: 'National median',
-      vsNationalMedian: 'vs national median',
-    },
-    forecast: {
-      title: 'Forecast',
-      heroLabel: 'Forecast',
-      heroTitlePre: 'What if',
-      heroTitleEm: '...',
-      subtitle: 'Tune the assumptions — see how net worth, take-home and debt evolve over time.',
-      raiseAssumption: 'Annual raise',
-      savingsRateAssumption: 'Saved from net',
-      returnAssumption: 'Expected real return',
-      years: 'Years',
-      inflationAssumption: 'Expected inflation',
-      summaryNow: 'Now',
-      summaryEnd: 'After',
-      grossSalary: 'Gross salary',
-      netTakeHome: 'Net take-home',
-      netWorthProjected: 'Projected net worth',
-      mortgageRemaining: 'Mortgage balance',
-      realGrowth: 'Real growth',
-      forecastChart: 'Net worth projection',
-      forecastChartDesc: 'Projected net worth per year given chosen assumptions.',
-      salaryChart: 'Salary over time',
-      salaryChartDesc: 'Gross salary and net take-home year by year.',
-      year: 'Year',
-    },
-    goals: {
-      title: 'Goals',
-      subtitle: 'Save toward concrete targets with visible progress.',
-      empty: 'No goals yet. Add your first savings goal to track progress.',
-      addGoal: 'Add goal',
-      name: 'Name',
-      target: 'Target amount',
-      source: 'Source',
-      manualCurrent: 'Current amount',
-      deadline: 'Deadline (YYYY-MM, optional)',
-      notes: 'Notes',
-      sourceManual: 'Manual entry',
-      sourceBsu: 'BSU account',
-      sourceSavings: 'Savings account',
-      sourceTotalEquity: 'Total net equity',
-      sourcePortfolio: 'Investment portfolio',
-      sourceBufferAccount: 'Buffer account',
-      progress: 'Progress',
-      remaining: 'Remaining',
-      completed: 'Completed',
-      monthsLeft: 'months left',
-      overdue: 'Overdue',
-    },
-    settings: {
-      title: 'Settings',
-      subtitle: 'Customize Headroom and manage your data.',
-      currency: 'Currency',
-      currencyDesc: 'Choose which currency is shown across the app.',
-      language: 'Language',
-      languageDesc: 'Pick the interface language.',
-      display: 'Display preferences',
-      displayDesc: 'Tune your savings target and expected growth rate.',
-      savingsTargetPct: 'Savings target',
-      growthReturnRate: 'Stocks return',
-      houseGrowthRate: 'House appreciation',
-      cashGrowthRate: 'Cash/BSU rate',
-      cryptoGrowthRate: 'Crypto return',
-      growthRatesDesc: 'Each asset class grows at its own rate. The stocks rate applies only to your investment portfolio — house, cash, and crypto grow at their own rates.',
-      restoreDefaults: 'Restore defaults',
-      demoTitle: 'Demo mode',
-      demoDesc: 'Replace your numbers with sample data so you can show the app without revealing your own finances. Your real data is kept safe and restored when you turn it off.',
-      demoActivate: 'Enable demo mode',
-      demoDeactivate: 'Exit demo mode — restore my data',
-      demoActive: 'Demo mode is on',
-      demoBanner: 'Demo mode — showing sample data, not your real finances.',
-      demoExit: 'Exit',
-      dataManagement: 'Data management',
-      dataDesc: 'Export or import all your data as JSON.',
-      about: 'About Headroom',
-      aboutDesc: 'Self-hosted personal finance. All data lives in a SQLite file on your own server.',
-      version: 'Version',
-      storage: 'Storage',
-      rateNokToUsd: 'NOK → USD rate',
-      customCurrencyLabel: 'Custom currency',
-      customCurrencyHint: '3-letter code (e.g. EUR). Rate is units per 1 NOK.',
-      currencyCode: 'Code',
-      currencyRate: 'Rate',
-      english: 'English',
-      norwegian: 'Norwegian',
-      region: 'Region',
-      regionDesc: 'Norway uses SSB data and Norwegian tax model. "Generic" hides Norway-specific features.',
-      navVisibility: 'Navigation',
-      navVisibilityDesc: 'Choose which pages appear in the menu. Settings is always shown.',
-      regionNorway: 'Norway',
-      regionGeneric: 'Generic',
-      customTaxRate: 'Effective tax rate',
-      customTaxRateDesc: 'Used in Generic mode instead of bracket tax + national insurance.',
-      exportData: 'Export all data',
-      importData: 'Import data',
-      replaceWarning: 'This will replace all existing data.',
-      replaceConfirm: 'Replace all data',
-      dropZone: 'Drop your JSON file here',
-      browseFile: 'or click to browse',
-      importReady: 'Ready to import',
-      importDone: 'Data imported.',
-      resetTitle: 'Reset all data',
-      resetDesc: 'Wipe all financial data. Settings like language, currency, and region are preserved.',
-      resetButton: 'Reset all data',
-      resetWarning: 'This cannot be undone. All incomes, expenses, transactions, assets, loans, jobs, and goals will be deleted.',
-      resetConfirm: 'Yes, delete everything',
-      resetCancel: 'Cancel',
-      resetDone: 'All data has been reset.',
-      bank: {
-        title: 'Bank sync',
-        desc: 'Automatically import transactions from Bank Norwegian via Enable Banking.',
-        notConfigured: 'Not configured. Set EB_REDIRECT and place the key file in the server data directory.',
-        notLinked: 'No bank connected.',
-        connect: 'Connect Bank Norwegian',
-        relink: 'Re-link',
-        syncNow: 'Sync now',
-        linkedTo: 'Connected',
-        lastSync: 'Last synced',
-        never: 'never',
-        expiresIn: 'Consent expires in {n} days',
-        needsRelink: 'Consent expired — re-link with BankID.',
-        syncing: 'Syncing…',
-        connecting: 'Connecting…',
-        synced: 'Added {n} new transactions.',
-        syncError: 'Sync failed.',
-        linkedOk: 'Bank connected.',
-        linkError: 'Connection failed.',
-        uploadKey: 'Upload key (.pem)',
-        keyInstalled: 'Key installed',
-        keyMissing: 'Missing private key — upload the .pem file from Enable Banking.',
-        keyInvalid: 'Invalid key file.',
-        keyOkVerified: 'Key installed and verified.',
-        keyOkUnverified: 'Key saved (could not verify against Enable Banking).',
-        redirectLabel: 'Callback URL',
-        redirectHint: 'Register this exact URL on your Enable Banking app.',
-        save: 'Save',
-        saved: 'Saved.',
-        keyEncManaged: 'encrypted (app-managed key)',
-        keyEncEnv: 'encrypted (EB_KEY_SECRET)',
-        keyPlaintextLabel: 'plaintext',
-        uploading: 'Uploading…',
-      },
-    }
-  }
-};
 
 const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   { id: '1', name: 'Huslån',          amount: 12000, type: 'fixed'        },
@@ -1700,10 +359,16 @@ export const DEFAULT_PENSION: Pension = {
 
 // --- Context ---
 
-interface FinanceContextType {
+// The context is split into three slices (§4.1) so a change to one doesn't
+// re-render consumers of the others: `Settings` (prefs, display, view-month,
+// formatters, onboarding, app status), `Data` (persisted domain state + its
+// mutations + demo/persist), and `Derived` (computed values). `useFinance()`
+// merges all three for backward compatibility; new code can subscribe to a
+// single slice via useFinanceSettings/useFinanceData/useFinanceDerived.
+interface FinanceSettingsContextType {
   lang: Language;
   setLang: (lang: Language) => void;
-  t: typeof translations.nb;
+  t: Translations;
   displayCurrency: 'NOK' | 'USD' | 'custom';
   setDisplayCurrency: (c: 'NOK' | 'USD' | 'custom') => void;
   nokToUsd: number;
@@ -1714,6 +379,53 @@ interface FinanceContextType {
   setCustomCurrencyRate: (rate: number) => void;
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
+  savingsTargetPercent: number;
+  setSavingsTargetPercent: (val: number) => void;
+  growthReturnRate: number;
+  setGrowthReturnRate: (val: number) => void;
+  houseGrowthRate: number;
+  setHouseGrowthRate: (val: number) => void;
+  cashGrowthRate: number;
+  setCashGrowthRate: (val: number) => void;
+  cryptoGrowthRate: number;
+  setCryptoGrowthRate: (val: number) => void;
+  region: Region;
+  setRegion: (r: Region) => void;
+  customTaxRatePct: number;
+  setCustomTaxRatePct: (v: number) => void;
+  hiddenNavItems: string[];
+  toggleNavItem: (path: string) => void;
+  formatCurrency: (val: number) => string;
+  formatCurrencyShort: (val: number) => string;
+  restoreGrowthRateDefaults: () => void;
+  restoreCustomTaxRateDefault: () => void;
+  demoMode: boolean;
+  toggleDemoMode: () => void;
+  /** First-run guided setup. `onboardingCompleted` persists; `onboardingActive`
+   *  drives the tour overlay. `startOnboarding` opens it (Settings "replay"),
+   *  `completeOnboarding` marks it done and closes it. */
+  onboardingCompleted: boolean;
+  onboardingActive: boolean;
+  /** 'welcome' opens the essentials-first intro; 'hub' opens the full topic hub. */
+  onboardingEntry: 'welcome' | 'hub';
+  /** Bumped on every open/reset so the guide remounts fresh. */
+  onboardingNonce: number;
+  startOnboarding: (entry?: 'welcome' | 'hub') => void;
+  /** Full reset: reopen from the welcome and mark the guide not-done. */
+  resetGuide: () => void;
+  completeOnboarding: () => void;
+  dataLoadFailed: boolean;
+  /** True when the most recent save failed and changes are pending a retry. */
+  saveFailed: boolean;
+  /** Manually re-attempt a failed save (used by the "not saved" banner). */
+  retrySave: () => void;
+  /** True after a newer server version was adopted (concurrent write elsewhere). */
+  dataReloaded: boolean;
+  /** Dismiss the "data reloaded" banner. */
+  dismissDataReloaded: () => void;
+}
+
+interface FinanceDataContextType {
   income: number;
   setIncome: (val: number) => void;
   monthlyIncomes: Record<string, number>;
@@ -1722,30 +434,14 @@ interface FinanceContextType {
   payslips: Record<string, MonthlyPayslip>;
   setPayslip: (monthKey: string, data: MonthlyPayslip) => void;
   removePayslip: (monthKey: string) => void;
-  derivedMonthlyIncome: number;
-  grossAnnualIncome: number;
-  isMonthlyIncomeOverridden: boolean;
   netWorthHistory: Record<string, number>;
   setNetWorthForMonth: (monthKey: string, value: number) => void;
   clearNetWorthForMonth: (monthKey: string) => void;
   balanceSnapshots: Record<string, BalanceSnapshot>;
-  prevMonthIncome: number;
-  prevMonthSpending: number;
-  effectiveIncome: number;
-  averageIncome: number;
-  savingsTargetPercent: number;
-  setSavingsTargetPercent: (val: number) => void;
-  recommendedSpending: number;
-  recommendedInvestment: number;
-  suggestedInvestment: number;
-  conservativeMode: boolean;
-  conservativeReason: ConservativeReason;
   fixedExpenses: FixedExpense[];
   setFixedExpenses: (val: FixedExpense[]) => void;
   debts: Debt[];
   setDebts: (val: Debt[]) => void;
-  totalDebt: number;
-  netWorth: number;
   dailyTransactions: DailyTransaction[];
   setDailyTransactions: (val: DailyTransaction[]) => void;
   categoryBudgets: Partial<Record<CategoryKey, number>>;
@@ -1764,16 +460,6 @@ interface FinanceContextType {
   updateHomeowner: (key: keyof HomeownerData, value: number) => void;
   transition: TransitionData;
   updateTransition: (key: keyof TransitionData, value: number) => void;
-  mortgageRate: number;
-  mortgageTermYears: number;
-  growthReturnRate: number;
-  setGrowthReturnRate: (val: number) => void;
-  houseGrowthRate: number;
-  setHouseGrowthRate: (val: number) => void;
-  cashGrowthRate: number;
-  setCashGrowthRate: (val: number) => void;
-  cryptoGrowthRate: number;
-  setCryptoGrowthRate: (val: number) => void;
   jobs: JobEntry[];
   addJob: (job: Omit<JobEntry, 'id'>) => string;
   updateJob: (id: string, patch: Partial<Omit<JobEntry, 'id'>>) => void;
@@ -1798,19 +484,38 @@ interface FinanceContextType {
   addGoal: (g: Omit<Goal, 'id'>) => void;
   updateGoal: (id: string, patch: Partial<Omit<Goal, 'id'>>) => void;
   removeGoal: (id: string) => void;
-  inflation: InflationPoint[];
-  inflationStale: boolean;
-  wageStats: WageStatPoint[];
-  region: Region;
-  setRegion: (r: Region) => void;
-  customTaxRatePct: number;
-  setCustomTaxRatePct: (v: number) => void;
   employerCostConfig: EmployerCostConfig;
   updateEmployerCostConfig: (key: keyof EmployerCostConfig, value: number) => void;
   billingConfig: BillingRateConfig;
   updateBillingConfig: (key: keyof BillingRateConfig, value: number | null) => void;
-  hiddenNavItems: string[];
-  toggleNavItem: (path: string) => void;
+  inflation: InflationPoint[];
+  inflationStale: boolean;
+  wageStats: WageStatPoint[];
+  importAll: (data: Partial<ExportPayload>) => void;
+  buildPayload: () => ExportPayload;
+  resetAll: () => void;
+  restoreAssetTaxDefaults: () => void;
+  restorePensionAssumptionDefaults: () => void;
+  restoreEmployerCostDefaults: () => void;
+}
+
+interface FinanceDerivedContextType {
+  derivedMonthlyIncome: number;
+  grossAnnualIncome: number;
+  isMonthlyIncomeOverridden: boolean;
+  prevMonthIncome: number;
+  prevMonthSpending: number;
+  effectiveIncome: number;
+  averageIncome: number;
+  recommendedSpending: number;
+  recommendedInvestment: number;
+  suggestedInvestment: number;
+  conservativeMode: boolean;
+  conservativeReason: ConservativeReason;
+  totalDebt: number;
+  netWorth: number;
+  mortgageRate: number;
+  mortgageTermYears: number;
   totalResidual: number;
   totalFixedExpenses: number;
   monthlyBudget: number;
@@ -1822,37 +527,9 @@ interface FinanceContextType {
   houseEquity: number;
   cryptoTaxOnGain: number;
   netCrypto: number;
-  formatCurrency: (val: number) => string;
-  formatCurrencyShort: (val: number) => string;
-  importAll: (data: Partial<ExportPayload>) => void;
-  buildPayload: () => ExportPayload;
-  resetAll: () => void;
-  restoreGrowthRateDefaults: () => void;
-  restoreAssetTaxDefaults: () => void;
-  restoreCustomTaxRateDefault: () => void;
-  restorePensionAssumptionDefaults: () => void;
-  restoreEmployerCostDefaults: () => void;
-  demoMode: boolean;
-  toggleDemoMode: () => void;
-  /** First-run guided setup. `onboardingCompleted` persists; `onboardingActive`
-   *  drives the tour overlay. `startOnboarding` opens it (Settings "replay"),
-   *  `completeOnboarding` marks it done and closes it. */
-  onboardingCompleted: boolean;
-  onboardingActive: boolean;
-  /** 'welcome' opens the essentials-first intro; 'hub' opens the full topic hub. */
-  onboardingEntry: 'welcome' | 'hub';
-  /** Bumped on every open/reset so the guide remounts fresh. */
-  onboardingNonce: number;
-  startOnboarding: (entry?: 'welcome' | 'hub') => void;
-  /** Full reset: reopen from the welcome and mark the guide not-done. */
-  resetGuide: () => void;
-  completeOnboarding: () => void;
-  dataLoadFailed: boolean;
-  /** True when the most recent save failed and changes are pending a retry. */
-  saveFailed: boolean;
-  /** Manually re-attempt a failed save (used by the "not saved" banner). */
-  retrySave: () => void;
 }
+
+type FinanceContextType = FinanceSettingsContextType & FinanceDataContextType & FinanceDerivedContextType;
 
 // A full capture of the balance-relevant state as of a given month, so the
 // balance pages can be viewed historically once snapshots accumulate. Keyed by
@@ -1870,6 +547,7 @@ export interface ExportPayload {
   income: number;
   fixedExpenses: FixedExpense[];
   dailyTransactions: DailyTransaction[];
+  deletedBankIds?: string[];
   categoryBudgets?: Partial<Record<CategoryKey, number>>;
   debts?: Debt[];
   assets: Assets;
@@ -1916,7 +594,14 @@ export interface DailyDataEntry {
   transactions: DailyTransaction[];
 }
 
-const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
+// Module-level so id-minting actions can stay referentially stable (no closure
+// over component state → useCallback with empty deps).
+const makeId = (prefix: string) =>
+  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+const FinanceSettingsContext = createContext<FinanceSettingsContextType | undefined>(undefined);
+const FinanceDataContext = createContext<FinanceDataContextType | undefined>(undefined);
+const FinanceDerivedContext = createContext<FinanceDerivedContextType | undefined>(undefined);
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<Language>('nb');
@@ -1943,6 +628,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(DEFAULT_FIXED_EXPENSES);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
+  // Ids of bank-imported (eb-) rows the user deleted. Persisted so the server's
+  // sync/reconcile can't resurrect them (see server/bank.js mergeTransactions).
+  const [deletedBankIds, setDeletedBankIds] = useState<string[]>([]);
   const [categoryBudgets, setCategoryBudgets] = useState<Partial<Record<CategoryKey, number>>>({});
   const [recurringTemplates, setRecurringTemplates] = useState<TransactionTemplate[]>([]);
   const [assets, setAssets] = useState<Assets>(DEFAULT_ASSETS);
@@ -1988,6 +676,26 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const demoSnapshot = useRef<Partial<ExportPayload> | null>(null);
   const [dataLoadFailed, setDataLoadFailed] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // Optimistic-concurrency revision last seen from the server; echoed on every
+  // save so a stale write is rejected instead of clobbering a newer one.
+  const revRef = useRef(0);
+  // True after we adopted a newer server version (another tab/device or the bank
+  // cron wrote in between) — surfaced as a dismissable banner.
+  const [dataReloaded, setDataReloaded] = useState(false);
+
+  // Exposed setter that records soft-deletes: when a bank-imported (eb-) row is
+  // removed, remember its id in `deletedBankIds` so the server won't re-add it on
+  // the next sync/reconcile. Edits (row still present) are unaffected.
+  const setDailyTransactionsTracked = useCallback((val: DailyTransaction[]) => {
+    const nextIds = new Set(val.map((t) => t.id));
+    const removedEb = dailyTransactions
+      .filter((t) => typeof t.id === 'string' && t.id.startsWith('eb-') && !nextIds.has(t.id))
+      .map((t) => t.id);
+    if (removedEb.length) {
+      setDeletedBankIds((ids) => Array.from(new Set([...ids, ...removedEb])));
+    }
+    setDailyTransactions(val);
+  }, [dailyTransactions]);
 
   // ── Persist payload: single source of shape (§4.2) ──────────────────────────
   // The one place that projects app state → the persisted/exported blob. Used by
@@ -1995,14 +703,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // state and is added by the callers that need it, not here.
   const buildPayload = useCallback((): ExportPayload => ({
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
-    dailyTransactions, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang,
     savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
-    dailyTransactions, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
@@ -2030,6 +738,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses); else if (resetMissing) setFixedExpenses(DEFAULT_FIXED_EXPENSES);
     if (data.debts) setDebts(data.debts); else if (resetMissing) setDebts([]);
     if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions); else if (resetMissing) setDailyTransactions([]);
+    if (data.deletedBankIds !== undefined) setDeletedBankIds(data.deletedBankIds); else if (resetMissing) setDeletedBankIds([]);
     if (data.categoryBudgets !== undefined) setCategoryBudgets(data.categoryBudgets); else if (resetMissing) setCategoryBudgets({});
     if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
     if (data.loan) setLoan(data.loan); else if (resetMissing) setLoan(DEFAULT_LOAN);
@@ -2085,6 +794,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           const data = await r.json();
           if (cancelled) return;
+          revRef.current = Number(r.headers.get('X-Data-Rev') ?? 0);
           applyPayload(data, true);
           loaded.current = true;
           // Launch the first-run guided setup for a brand-new user (empty DB →
@@ -2174,11 +884,26 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch('/api/data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Data-Rev': String(revRef.current) },
         body: JSON.stringify(payload),
         signal: ctrl.signal,
       });
+      if (res.status === 409) {
+        // A newer write landed (another tab/device or the bank cron). Adopt the
+        // server's version rather than clobber it, and warn the user.
+        const body = await res.json().catch(() => null);
+        if (body && body.current) {
+          revRef.current = Number(body.currentRev ?? revRef.current);
+          applyPayload(body.current, true);
+          saveDirty.current = false;
+          saveRetries.current = 0;
+          setSaveFailed(false);
+          setDataReloaded(true);
+        }
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      revRef.current = Number(res.headers.get('X-Data-Rev') ?? revRef.current + 1);
       saveDirty.current = false;
       saveRetries.current = 0;
       setSaveFailed(false);
@@ -2191,8 +916,32 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => { doSaveRef.current(); }, delay);
     }
-  }, []);
+  }, [applyPayload]);
   useEffect(() => { doSaveRef.current = doSave; }, [doSave]);
+
+  // When a backgrounded tab regains focus, pull the latest before it can autosave
+  // stale data over a newer write. Skipped if there are unsaved local edits
+  // (saveDirty) so we never silently discard the user's work — that case is left
+  // to the save-time 409 handler.
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!loaded.current || demoMode || saveDirty.current) return;
+      try {
+        const r = await fetch('/api/data');
+        if (!r.ok) return;
+        const serverRev = Number(r.headers.get('X-Data-Rev') ?? 0);
+        if (serverRev > revRef.current) {
+          const data = await r.json();
+          revRef.current = serverRev;
+          applyPayload(data, true);
+          setDataReloaded(true);
+        }
+      } catch { /* offline — ignore */ }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [applyPayload, demoMode]);
 
   // Manual retry from the banner.
   const retrySave = useCallback(() => { saveRetries.current = 0; void doSave(); }, [doSave]);
@@ -2281,8 +1030,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (salaries.length === 0) return income;
     const totalAnnual = calcActiveGrossAnnual(salaries, jobs, mKey);
     if (totalAnnual === 0) return income;
-    return Math.round(calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly);
-  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution]);
+    const baseNetAnnual = calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netAnnual;
+    // Bonus/overtime entries opted into the budget: fold this month's opted-in
+    // gross into the annual gross (so it's taxed at the marginal rate) and deliver
+    // the after-tax value in the month it lands, not smeared across the year.
+    const extraGross =
+      bonuses.reduce((s, b) => (b.includeInBudget && b.date.startsWith(mKey) ? s + b.amount : s), 0) +
+      overtime.reduce((s, o) => (o.includeInBudget && o.date.startsWith(mKey) ? s + o.amount : s), 0);
+    if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
+    const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution).netAnnual;
+    return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));
+  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime]);
 
   const derivedMonthlyIncome = useMemo(
     () => derivedNetMonthlyFor(monthKey),
@@ -2333,47 +1091,47 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent),
   [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent]);
 
-  const setMonthlyIncomeForMonth = (key: string, amount: number) => {
+  const setMonthlyIncomeForMonth = useCallback((key: string, amount: number) => {
     setMonthlyIncomes(prev => ({ ...prev, [key]: amount }));
-  };
+  }, []);
 
-  const clearMonthlyIncomeForMonth = (key: string) => {
+  const clearMonthlyIncomeForMonth = useCallback((key: string) => {
     setMonthlyIncomes(prev => {
       if (!(key in prev)) return prev;
       const next = { ...prev };
       delete next[key];
       return next;
     });
-  };
+  }, []);
 
-  const setPayslip = (key: string, data: MonthlyPayslip) => {
+  const setPayslip = useCallback((key: string, data: MonthlyPayslip) => {
     setPayslips(prev => ({ ...prev, [key]: data }));
-  };
+  }, []);
 
-  const removePayslip = (key: string) => {
+  const removePayslip = useCallback((key: string) => {
     setPayslips(prev => {
       if (!(key in prev)) return prev;
       const next = { ...prev };
       delete next[key];
       return next;
     });
-  };
+  }, []);
 
   // Manually record (or correct) the net worth for a past month, so the history
   // chart reflects the user's real numbers instead of interpolated estimates.
   // The current real month is not edited here — it auto-snapshots from live equity.
-  const setNetWorthForMonth = (key: string, value: number) => {
+  const setNetWorthForMonth = useCallback((key: string, value: number) => {
     setNetWorthHistory(prev => ({ ...prev, [key]: Math.round(value) }));
-  };
+  }, []);
 
-  const clearNetWorthForMonth = (key: string) => {
+  const clearNetWorthForMonth = useCallback((key: string) => {
     setNetWorthHistory(prev => {
       if (!(key in prev)) return prev;
       const next = { ...prev };
       delete next[key];
       return next;
     });
-  };
+  }, []);
 
   const totalResidual = effectiveIncome - totalFixedExpenses;
   const monthlyBudget = recommendedSpending;
@@ -2455,7 +1213,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }));
   }, [assets, loan, pension, homeowner, transition, housingMode]);
 
-  const updateAsset = (key: keyof Assets, value: number) => {
+  const updateAsset = useCallback((key: keyof Assets, value: number) => {
     setAssets(prev => ({ ...prev, [key]: value }));
     // In homeowner mode the mortgage is one real debt edited in two places
     // (assets.houseDebt drives net worth; homeowner.currentMortgageBalance drives
@@ -2463,159 +1221,167 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (key === 'houseDebt' && housingMode === 'homeowner') {
       setHomeowner(prev => ({ ...prev, currentMortgageBalance: value }));
     }
-  };
+  }, [housingMode]);
 
-  const updateLoan = (key: keyof LoanData, value: number | string) => {
+  const updateLoan = useCallback((key: keyof LoanData, value: number | string) => {
     setLoan(prev => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
-  const updatePension = (key: keyof Pension, value: number) => {
+  const updatePension = useCallback((key: keyof Pension, value: number) => {
     setPension(prev => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
-  const updateEmployerCostConfig = (key: keyof EmployerCostConfig, value: number) => {
+  const updateEmployerCostConfig = useCallback((key: keyof EmployerCostConfig, value: number) => {
     setEmployerCostConfig(prev => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
-  const updateBillingConfig = (key: keyof BillingRateConfig, value: number | null) => {
+  const updateBillingConfig = useCallback((key: keyof BillingRateConfig, value: number | null) => {
     setBillingConfig(prev => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
-  const toggleNavItem = (path: string) => {
+  const toggleNavItem = useCallback((path: string) => {
     setHiddenNavItems(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
-  };
+  }, []);
 
-  const updateHomeowner = (key: keyof HomeownerData, value: number) => {
+  const updateHomeowner = useCallback((key: keyof HomeownerData, value: number) => {
     setHomeowner(prev => ({ ...prev, [key]: value }));
     // Mirror the mortgage balance into assets.houseDebt (see updateAsset) so net
     // worth and the loan page never show contradictory debt in homeowner mode.
     if (key === 'currentMortgageBalance' && housingMode === 'homeowner') {
       setAssets(prev => ({ ...prev, houseDebt: value }));
     }
-  };
+  }, [housingMode]);
 
-  const updateTransition = (key: keyof TransitionData, value: number) => {
+  const updateTransition = useCallback((key: keyof TransitionData, value: number) => {
     setTransition(prev => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
   // User-facing housing-mode switch. Entering homeowner mode reconciles any
   // pre-existing drift by treating currentMortgageBalance (the actively-
   // maintained real mortgage) as canonical for net worth. Internal load paths
   // use the raw setHousingMode so they don't trigger this side effect.
-  const changeHousingMode = (mode: HousingMode) => {
+  const changeHousingMode = useCallback((mode: HousingMode) => {
     setHousingMode(mode);
     if (mode === 'homeowner') {
       setAssets(prev => ({ ...prev, houseDebt: homeowner.currentMortgageBalance }));
     }
-  };
+  }, [homeowner]);
 
-  const makeId = (prefix: string) =>
-    `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-
-  const addJob = (job: Omit<JobEntry, 'id'>): string => {
+  const addJob = useCallback((job: Omit<JobEntry, 'id'>): string => {
     const id = makeId('job');
     setJobs(prev => [...prev, { ...job, id }]);
     return id;
-  };
-  const updateJob = (id: string, patch: Partial<Omit<JobEntry, 'id'>>) => {
+  }, []);
+  const updateJob = useCallback((id: string, patch: Partial<Omit<JobEntry, 'id'>>) => {
     setJobs(prev => prev.map(j => j.id === id ? { ...j, ...patch } : j));
-  };
-  const removeJob = (id: string) => {
+  }, []);
+  const removeJob = useCallback((id: string) => {
     setJobs(prev => prev.filter(j => j.id !== id));
     // Cascade: remove orphaned salaries
     setSalaries(prev => prev.filter(s => s.jobId !== id));
-  };
+  }, []);
 
-  const addSalary = (entry: Omit<SalaryEntry, 'id'>): string => {
+  const addSalary = useCallback((entry: Omit<SalaryEntry, 'id'>): string => {
     const id = makeId('sal');
     setSalaries(prev => [...prev, { ...entry, id }]);
     return id;
-  };
-  const updateSalary = (id: string, patch: Partial<Omit<SalaryEntry, 'id'>>) => {
+  }, []);
+  const updateSalary = useCallback((id: string, patch: Partial<Omit<SalaryEntry, 'id'>>) => {
     setSalaries(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
-  };
-  const removeSalary = (id: string) => {
+  }, []);
+  const removeSalary = useCallback((id: string) => {
     setSalaries(prev => prev.filter(s => s.id !== id));
-  };
+  }, []);
 
-  const addBonus = (entry: Omit<BonusEntry, 'id'>) => {
+  const addBonus = useCallback((entry: Omit<BonusEntry, 'id'>) => {
     setBonuses(prev => [...prev, { ...entry, id: makeId('bon') }]);
-  };
-  const updateBonus = (id: string, patch: Partial<Omit<BonusEntry, 'id'>>) => {
+  }, []);
+  const updateBonus = useCallback((id: string, patch: Partial<Omit<BonusEntry, 'id'>>) => {
     setBonuses(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
-  };
-  const removeBonus = (id: string) => {
+  }, []);
+  const removeBonus = useCallback((id: string) => {
     setBonuses(prev => prev.filter(b => b.id !== id));
-  };
+  }, []);
 
-  const addOvertime = (entry: Omit<OvertimeEntry, 'id'>) => {
+  const addOvertime = useCallback((entry: Omit<OvertimeEntry, 'id'>) => {
     setOvertime(prev => [...prev, { ...entry, id: makeId('ot') }]);
-  };
-  const updateOvertime = (id: string, patch: Partial<Omit<OvertimeEntry, 'id'>>) => {
+  }, []);
+  const updateOvertime = useCallback((id: string, patch: Partial<Omit<OvertimeEntry, 'id'>>) => {
     setOvertime(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o));
-  };
-  const removeOvertime = (id: string) => {
+  }, []);
+  const removeOvertime = useCallback((id: string) => {
     setOvertime(prev => prev.filter(o => o.id !== id));
-  };
+  }, []);
 
-  const addHoursSnapshot = (entry: Omit<HoursSnapshot, 'id'>) => {
+  const addHoursSnapshot = useCallback((entry: Omit<HoursSnapshot, 'id'>) => {
     setHoursSnapshots(prev => [...prev, { ...entry, id: makeId('hrs') }]);
-  };
-  const updateHoursSnapshot = (id: string, patch: Partial<Omit<HoursSnapshot, 'id'>>) => {
+  }, []);
+  const updateHoursSnapshot = useCallback((id: string, patch: Partial<Omit<HoursSnapshot, 'id'>>) => {
     setHoursSnapshots(prev => prev.map(h => h.id === id ? { ...h, ...patch } : h));
-  };
-  const removeHoursSnapshot = (id: string) => {
+  }, []);
+  const removeHoursSnapshot = useCallback((id: string) => {
     setHoursSnapshots(prev => prev.filter(h => h.id !== id));
-  };
+  }, []);
 
-  const addGoal = (g: Omit<Goal, 'id'>) => {
+  const addGoal = useCallback((g: Omit<Goal, 'id'>) => {
     setGoals(prev => [...prev, { ...g, id: makeId('goal') }]);
-  };
-  const updateGoal = (id: string, patch: Partial<Omit<Goal, 'id'>>) => {
+  }, []);
+  const updateGoal = useCallback((id: string, patch: Partial<Omit<Goal, 'id'>>) => {
     setGoals(prev => prev.map(g => g.id === id ? { ...g, ...patch } : g));
-  };
-  const removeGoal = (id: string) => {
+  }, []);
+  const removeGoal = useCallback((id: string) => {
     setGoals(prev => prev.filter(g => g.id !== id));
-  };
+  }, []);
 
   // Set (or clear, with null / ≤0) a category's monthly budget cap.
-  const setCategoryBudget = (category: CategoryKey, amount: number | null) => {
+  const setCategoryBudget = useCallback((category: CategoryKey, amount: number | null) => {
     setCategoryBudgets(prev => {
       const next = { ...prev };
       if (amount == null || amount <= 0) delete next[category];
       else next[category] = amount;
       return next;
     });
-  };
+  }, []);
 
   // Import / demo-restore: overlay the present fields, leaving absent ones as the
   // current value (resetMissing=false). Shares the single apply path with load.
-  const importAll = (data: Partial<ExportPayload>) => applyPayload(data, false);
+  const importAll = useCallback((data: Partial<ExportPayload>) => applyPayload(data, false), [applyPayload]);
 
   // --- Demo mode: swap real data for a fictional dataset, then restore it ---
   // The real data is held in `demoSnapshot` (memory) and the auto-save effect is
   // suspended while demoMode is true, so the backend keeps the real data intact.
-  const enableDemoMode = () => {
+  // Refs so demo enter/exit stay referentially stable — they'd otherwise depend
+  // on buildPayload/currentMonth (which change with state), which would churn the
+  // Settings slice on every edit. Reading the latest via refs lets demoMode live
+  // in Settings so Layout (settings-only) doesn't re-render on data changes.
+  const buildPayloadRef = useRef(buildPayload);
+  const currentMonthRef = useRef(currentMonth);
+  useEffect(() => {
+    buildPayloadRef.current = buildPayload;
+    currentMonthRef.current = currentMonth;
+  });
+
+  const enableDemoMode = useCallback(() => {
     if (demoMode) return;
-    demoSnapshot.current = { ...buildPayload(), currentMonth: format(currentMonth, 'yyyy-MM') };
+    demoSnapshot.current = { ...buildPayloadRef.current(), currentMonth: format(currentMonthRef.current, 'yyyy-MM') };
     setDemoMode(true);
     importAll(getDemoData());
-  };
+  }, [demoMode, importAll]);
 
-  const disableDemoMode = () => {
+  const disableDemoMode = useCallback(() => {
     if (!demoMode) return;
     const snapshot = demoSnapshot.current;
     setDemoMode(false);
     if (snapshot) importAll(snapshot);
     demoSnapshot.current = null;
-  };
+  }, [demoMode, importAll]);
 
-  const toggleDemoMode = () => {
+  const toggleDemoMode = useCallback(() => {
     if (demoMode) disableDemoMode();
     else enableDemoMode();
-  };
+  }, [demoMode, disableDemoMode, enableDemoMode]);
 
-  const resetAll = () => {
+  const resetAll = useCallback(() => {
     setIncome(0);
     setMonthlyIncomes({});
     setNetWorthHistory({});
@@ -2623,6 +1389,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setFixedExpenses([]);
     setDebts([]);
     setDailyTransactions([]);
+    setDeletedBankIds([]);
     setCategoryBudgets({});
     setRecurringTemplates([]);
     setAssets({
@@ -2664,7 +1431,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setOnboardingEntry('welcome');
     setOnboardingNonce(n => n + 1);
     setOnboardingActive(true);
-  };
+  }, []);
 
   // --- First-run guided setup controls ---
   // Manual open (header ?, Settings replay) jumps to the full hub by default;
@@ -2688,36 +1455,36 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // --- Restore data-based defaults (assumptions only — never touches balances/data) ---
-  const restoreGrowthRateDefaults = () => {
+  const restoreGrowthRateDefaults = useCallback(() => {
     setGrowthReturnRate(DEFAULT_GROWTH_RATES.growthReturnRate);
     setHouseGrowthRate(DEFAULT_GROWTH_RATES.houseGrowthRate);
     setCashGrowthRate(DEFAULT_GROWTH_RATES.cashGrowthRate);
     setCryptoGrowthRate(DEFAULT_GROWTH_RATES.cryptoGrowthRate);
-  };
+  }, []);
 
-  const restoreAssetTaxDefaults = () => {
+  const restoreAssetTaxDefaults = useCallback(() => {
     updateAsset('taxRate', DEFAULT_TAX_RATES.stockTaxRate);
     updateAsset('cryptoTaxRate', DEFAULT_TAX_RATES.cryptoTaxRate);
-  };
+  }, [updateAsset]);
 
-  const restoreCustomTaxRateDefault = () => {
+  const restoreCustomTaxRateDefault = useCallback(() => {
     setCustomTaxRatePct(DEFAULT_TAX_RATES.customTaxRatePct);
-  };
+  }, []);
 
-  const restorePensionAssumptionDefaults = () => {
+  const restorePensionAssumptionDefaults = useCallback(() => {
     updatePension('otpEmployerPct', DEFAULT_PENSION.otpEmployerPct);
     updatePension('otpEmployeePct', DEFAULT_PENSION.otpEmployeePct);
     updatePension('otpGrowthRate', DEFAULT_PENSION.otpGrowthRate);
     updatePension('ipsGrowthRate', DEFAULT_PENSION.ipsGrowthRate);
     updatePension('retirementAge', DEFAULT_PENSION.retirementAge);
-  };
+  }, [updatePension]);
 
-  const restoreEmployerCostDefaults = () => {
+  const restoreEmployerCostDefaults = useCallback(() => {
     setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
     setBillingConfig(DEFAULT_BILLING_CONFIG);
-  };
+  }, []);
 
-  const formatCurrency = (val: number) => {
+  const formatCurrency = useCallback((val: number) => {
     if (displayCurrency === 'USD') {
       return new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -2739,12 +1506,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       style: 'currency',
       currency: 'NOK',
     }).format(val);
-  };
+  }, [displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, lang]);
 
   // Like formatCurrency but without decimals — for chart labels/legends where
   // 2-decimal precision is noise. Respects the user's display currency so
   // converted values (USD/custom) stay correct.
-  const formatCurrencyShort = (val: number) => {
+  const formatCurrencyShort = useCallback((val: number) => {
     if (displayCurrency === 'USD') {
       return new Intl.NumberFormat('en-US', {
         style: 'currency', currency: 'USD', maximumFractionDigits: 0,
@@ -2763,62 +1530,123 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return new Intl.NumberFormat(lang === 'nb' ? 'nb-NO' : 'en-US', {
       style: 'currency', currency: 'NOK', maximumFractionDigits: 0,
     }).format(val);
-  };
+  }, [displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, lang]);
+
+  const dismissDataReloaded = useCallback(() => setDataReloaded(false), []);
+
+  const settingsValue = useMemo<FinanceSettingsContextType>(() => ({
+    lang, setLang, t, displayCurrency, setDisplayCurrency, nokToUsd, setNokToUsd,
+    customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
+    currentMonth, setCurrentMonth,
+    savingsTargetPercent, setSavingsTargetPercent,
+    growthReturnRate, setGrowthReturnRate, houseGrowthRate, setHouseGrowthRate,
+    cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
+    region, setRegion, customTaxRatePct, setCustomTaxRatePct,
+    hiddenNavItems, toggleNavItem,
+    formatCurrency, formatCurrencyShort,
+    restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
+    demoMode, toggleDemoMode,
+    onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,
+    startOnboarding, resetGuide, completeOnboarding,
+    dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded,
+  }), [
+    lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
+    currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
+    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
+    formatCurrency, formatCurrencyShort, restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
+    demoMode, toggleDemoMode,
+    onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,
+    startOnboarding, resetGuide, completeOnboarding,
+    dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded,
+  ]);
+
+  const dataValue = useMemo<FinanceDataContextType>(() => ({
+    income, setIncome,
+    monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
+    payslips, setPayslip, removePayslip,
+    netWorthHistory, setNetWorthForMonth, clearNetWorthForMonth, balanceSnapshots,
+    fixedExpenses, setFixedExpenses,
+    debts, setDebts,
+    dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
+    categoryBudgets, setCategoryBudget,
+    recurringTemplates, setRecurringTemplates,
+    assets, updateAsset, loan, updateLoan, pension, updatePension,
+    housingMode, setHousingMode: changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
+    jobs, addJob, updateJob, removeJob,
+    salaries, addSalary, updateSalary, removeSalary,
+    bonuses, addBonus, updateBonus, removeBonus,
+    overtime, addOvertime, updateOvertime, removeOvertime,
+    hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
+    goals, addGoal, updateGoal, removeGoal,
+    employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
+    inflation, inflationStale, wageStats,
+    importAll, buildPayload, resetAll,
+    restoreAssetTaxDefaults, restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
+  }), [
+    income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
+    payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
+    clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
+    setDailyTransactionsTracked, categoryBudgets, setCategoryBudget, recurringTemplates,
+    assets, updateAsset, loan, updateLoan, pension, updatePension, housingMode,
+    changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
+    jobs, addJob, updateJob, removeJob, salaries, addSalary, updateSalary, removeSalary,
+    bonuses, addBonus, updateBonus, removeBonus, overtime, addOvertime, updateOvertime,
+    removeOvertime, hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
+    goals, addGoal, updateGoal, removeGoal, employerCostConfig, updateEmployerCostConfig,
+    billingConfig, updateBillingConfig, inflation, inflationStale, wageStats,
+    importAll, buildPayload, resetAll, restoreAssetTaxDefaults,
+    restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
+  ]);
+
+  const derivedValue = useMemo<FinanceDerivedContextType>(() => ({
+    derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
+    prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome,
+    recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
+    totalDebt, netWorth, mortgageRate, mortgageTermYears,
+    totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData,
+    totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
+  }), [
+    derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
+    prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome,
+    recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
+    totalDebt, netWorth, mortgageRate, mortgageTermYears,
+    totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData,
+    totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
+  ]);
 
   return (
-    <FinanceContext.Provider value={{
-      lang, setLang, t, displayCurrency, setDisplayCurrency, nokToUsd, setNokToUsd,
-      customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
-      currentMonth, setCurrentMonth, income, setIncome,
-      monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
-      payslips, setPayslip, removePayslip,
-      derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
-      netWorthHistory, setNetWorthForMonth, clearNetWorthForMonth, balanceSnapshots, prevMonthIncome, prevMonthSpending,
-      effectiveIncome, averageIncome,
-      savingsTargetPercent, setSavingsTargetPercent,
-      recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
-      fixedExpenses, setFixedExpenses, dailyTransactions, setDailyTransactions,
-      categoryBudgets, setCategoryBudget,
-      debts, setDebts, totalDebt, netWorth,
-      recurringTemplates, setRecurringTemplates,
-      assets, updateAsset, loan, updateLoan, pension, updatePension,
-      housingMode, setHousingMode: changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
-      mortgageRate, mortgageTermYears,
-      growthReturnRate, setGrowthReturnRate,
-      houseGrowthRate, setHouseGrowthRate,
-      cashGrowthRate, setCashGrowthRate,
-      cryptoGrowthRate, setCryptoGrowthRate,
-      jobs, addJob, updateJob, removeJob,
-      salaries, addSalary, updateSalary, removeSalary,
-      bonuses, addBonus, updateBonus, removeBonus,
-      overtime, addOvertime, updateOvertime, removeOvertime,
-      hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
-      goals, addGoal, updateGoal, removeGoal,
-      inflation, inflationStale, wageStats,
-      region, setRegion, customTaxRatePct, setCustomTaxRatePct,
-      employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
-      hiddenNavItems, toggleNavItem,
-      totalResidual,
-      totalFixedExpenses, monthlyBudget, dailyBudget,
-      dailyData, totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
-      formatCurrency, formatCurrencyShort, importAll, buildPayload, resetAll,
-      restoreGrowthRateDefaults, restoreAssetTaxDefaults, restoreCustomTaxRateDefault,
-      restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
-      demoMode, toggleDemoMode,
-      onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce, startOnboarding, resetGuide, completeOnboarding,
-      dataLoadFailed,
-      saveFailed, retrySave,
-    }}>
-      {children}
-    </FinanceContext.Provider>
+    <FinanceSettingsContext.Provider value={settingsValue}>
+      <FinanceDataContext.Provider value={dataValue}>
+        <FinanceDerivedContext.Provider value={derivedValue}>
+          {children}
+        </FinanceDerivedContext.Provider>
+      </FinanceDataContext.Provider>
+    </FinanceSettingsContext.Provider>
   );
 }
 
+function useSlice<T>(ctx: React.Context<T | undefined>, hook: string): T {
+  const value = useContext(ctx);
+  if (value === undefined) throw new Error(`${hook} must be used within a FinanceProvider`);
+  return value;
+}
+
+// Granular subscriptions — a component that reads only one slice re-renders only
+// when that slice changes. Prefer these in hot components; useFinance() below
+// stays as the backward-compatible union for everything else.
 // eslint-disable-next-line react-refresh/only-export-components
-export function useFinance() {
-  const context = useContext(FinanceContext);
-  if (context === undefined) {
-    throw new Error('useFinance must be used within a FinanceProvider');
-  }
-  return context;
+export const useFinanceSettings = () => useSlice(FinanceSettingsContext, 'useFinanceSettings');
+// eslint-disable-next-line react-refresh/only-export-components
+export const useFinanceData = () => useSlice(FinanceDataContext, 'useFinanceData');
+// eslint-disable-next-line react-refresh/only-export-components
+export const useFinanceDerived = () => useSlice(FinanceDerivedContext, 'useFinanceDerived');
+
+// Backward-compatible combined view. The merged object is memoized on the three
+// slice identities, so it only changes when a slice actually changes.
+// eslint-disable-next-line react-refresh/only-export-components
+export function useFinance(): FinanceContextType {
+  const settings = useFinanceSettings();
+  const data = useFinanceData();
+  const derived = useFinanceDerived();
+  return useMemo(() => ({ ...settings, ...data, ...derived }), [settings, data, derived]);
 }

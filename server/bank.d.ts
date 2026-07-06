@@ -25,7 +25,7 @@ export const EB_ID_PREFIX: string;
 export function mapEBTransaction(tx: any, opts?: MapOptions): MappedTransaction;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapEBTransactions(txs: any[], opts?: MapOptions): MappedTransaction[];
-export function mergeTransactions(a: MappedTransaction[], b: MappedTransaction[]): MappedTransaction[];
+export function mergeTransactions(a: MappedTransaction[], b: MappedTransaction[], deletedIds?: string[]): MappedTransaction[];
 
 export function startLink(): Promise<{ url: string }>;
 export function finishLink(code: string, state: string): Promise<{ accounts: number }>;

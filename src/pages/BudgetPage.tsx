@@ -16,6 +16,7 @@ import { useFinance, type TransactionTemplate, type ExpenseType } from '../conte
 import EditModal, { type ModalField } from '../components/EditModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES } from '../lib/categories';
+import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
@@ -28,23 +29,23 @@ const BudgetDistributionChart = lazy(() => import('../components/BudgetDistribut
 const SavingsRateChart = lazy(() => import('../components/charts/SavingsRateChart'));
 const SpendingHeatmap = lazy(() => import('../components/charts/SpendingHeatmap'));
 
-// Old-money category roles (concrete hex — recharts sets these as SVG attributes,
-// which do not resolve CSS var()). Restricted to the 4 category hues + neutrals;
-// no brass (reserved) and no decorative rainbow.
+// Old-money category roles, sourced from the shared CHART token mirror (recharts
+// sets these as SVG attributes, which do not resolve CSS var()). Restricted to
+// the 4 category hues + neutrals; no brass (reserved) and no decorative rainbow.
 const CHART_COLORS = [
-  '#3F7373', // teal
-  '#5B7280', // slate
-  '#1F5A42', // forest
-  '#B5533A', // rust
-  '#7FCBA0', // forest-light
-  '#5F6555', // text-dim (→ "Annet")
+  CHART.teal,
+  CHART.slate,
+  CHART.forest,
+  CHART.rust,
+  CHART.forestLight,
+  CHART.textDim, // → "Annet"
 ];
 // Fixed-expense type → role colour (matches the reference legend).
 const EXPENSE_TYPE_COLOR: Record<ExpenseType, string> = {
-  fixed: '#3F7373',        // teal — recurring/structural
-  variable: '#1F5A42',     // forest — variable spend
-  subscription: '#5B7280', // slate — subscriptions
-  insurance: '#B5533A',    // rust — insurance
+  fixed: CHART.teal,        // recurring/structural
+  variable: CHART.forest,   // variable spend
+  subscription: CHART.slate, // subscriptions
+  insurance: CHART.rust,    // insurance
 };
 const expenseColor = (type?: ExpenseType) => EXPENSE_TYPE_COLOR[type ?? 'fixed'];
 
@@ -98,6 +99,7 @@ const BudgetPage: React.FC = () => {
     dailyBudget,
     fixedExpenses,
     setFixedExpenses,
+    debts,
     dailyData,
     dailyTransactions,
     setDailyTransactions,
@@ -114,6 +116,9 @@ const BudgetPage: React.FC = () => {
   const closeModal = () => setModal(null);
 
   const totalFixedExpenses = fixedExpenses.reduce((sum, item) => sum + item.amount, 0);
+  // Informational only — not folded into totalFixedExpenses (which drives budget
+  // math); surfaces the monthly minimum debt service alongside fixed costs.
+  const totalMonthlyDebtService = debts.reduce((sum, d) => sum + d.minPayment, 0);
   // Sort biggest-first so the distribution reads as a clean ranking.
   const sortedExpenses = [...fixedExpenses].sort((a, b) => b.amount - a.amount);
 
@@ -412,7 +417,7 @@ const BudgetPage: React.FC = () => {
             </div>
             <button
               onClick={() => removePayslip(monthKey)}
-              className="text-[11px] font-medium text-[var(--text-2)] hover:text-[#B5533A] transition-colors"
+              className="text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--negative)] transition-colors"
             >
               {t.salary.importPayslip.remove}
             </button>
@@ -494,6 +499,12 @@ const BudgetPage: React.FC = () => {
               <span className={sectionLabel}>{t.aggregate}</span>
               <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(totalFixedExpenses)}</span>
             </div>
+            {totalMonthlyDebtService > 0 && (
+              <div className="flex justify-between items-baseline text-[12px]" style={{ color: 'var(--text-3)' }}>
+                <span>{t.debtServiceMonthly}</span>
+                <span className="font-mono">{formatCurrency(totalMonthlyDebtService)}</span>
+              </div>
+            )}
           </div>
         </div>
 

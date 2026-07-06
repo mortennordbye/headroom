@@ -27,7 +27,6 @@ import {
 } from 'recharts';
 import {
   useFinance,
-  translations,
   type SalaryEntry,
   type JobEntry,
   type BonusEntry,
@@ -36,6 +35,7 @@ import {
   type SalaryChangeType,
   type BonusType,
 } from '../context/FinanceContext';
+import type { Translations } from '../i18n/translations';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
@@ -588,6 +588,10 @@ const SalaryPage: React.FC = () => {
   const defaultJobIdForNewEntry = (): string =>
     activeJobFilter !== 'all' ? activeJobFilter : (jobs[jobs.length - 1]?.id ?? '');
   const jobSelectOptions = () => jobs.map(j => ({ value: j.id, label: `${j.employer} — ${j.role}` }));
+  const budgetToggleOptions = () => [
+    { value: 'no', label: t.salary.includeInBudgetNo },
+    { value: 'yes', label: t.salary.includeInBudgetYes },
+  ];
 
   const openBonusModal = (existing?: BonusEntry) => {
     if (jobs.length === 0) {
@@ -613,6 +617,7 @@ const SalaryPage: React.FC = () => {
         { key: 'date', label: t.salary.bonusDate, type: 'text', value: existing?.date ?? '', placeholder: '2024-06-15' },
         { key: 'amount', label: t.salary.bonusAmount, type: 'number', value: (existing?.amount ?? 0).toString() },
         { key: 'type', label: t.salary.bonusType, type: 'select', value: existing?.type ?? 'annual', options: bonusTypes },
+        { key: 'includeInBudget', label: t.salary.includeInBudget, type: 'select', value: existing?.includeInBudget ? 'yes' : 'no', options: budgetToggleOptions() },
         { key: 'notes', label: t.salary.notes, type: 'text', value: existing?.notes ?? '' },
       ],
       onSave: (vals) => {
@@ -629,6 +634,7 @@ const SalaryPage: React.FC = () => {
           date: vals.date,
           amount: parseLocaleNumber(vals.amount),
           type: vals.type as BonusType,
+          includeInBudget: vals.includeInBudget === 'yes' || undefined,
           notes: vals.notes.trim() || undefined,
         };
         if (existing) updateBonus(existing.id, payload);
@@ -654,6 +660,7 @@ const SalaryPage: React.FC = () => {
         { key: 'date', label: t.salary.overtimeDate, type: 'text', value: existing?.date ?? '', placeholder: '2024-06-15' },
         { key: 'hours', label: t.salary.overtimeHours, type: 'number', value: (existing?.hours ?? 0).toString() },
         { key: 'amount', label: t.salary.overtimeAmount, type: 'number', value: (existing?.amount ?? 0).toString() },
+        { key: 'includeInBudget', label: t.salary.includeInBudget, type: 'select', value: existing?.includeInBudget ? 'yes' : 'no', options: budgetToggleOptions() },
         { key: 'notes', label: t.salary.notes, type: 'text', value: existing?.notes ?? '' },
       ],
       onSave: (vals) => {
@@ -670,6 +677,7 @@ const SalaryPage: React.FC = () => {
           date: vals.date,
           hours: parseLocaleNumber(vals.hours),
           amount: parseLocaleNumber(vals.amount),
+          includeInBudget: vals.includeInBudget === 'yes' || undefined,
           notes: vals.notes.trim() || undefined,
         };
         if (existing) updateOvertime(existing.id, payload);
@@ -1541,7 +1549,7 @@ interface NextReviewCtx {
 
 interface NextReviewCardProps {
   ctx: NextReviewCtx;
-  t: typeof translations.nb;
+  t: Translations;
   lang: string;
   formatCurrency: (v: number) => string;
 }

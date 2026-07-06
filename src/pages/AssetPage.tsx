@@ -27,6 +27,7 @@ import { provenanceOf } from '../lib/provenance';
 import EditModal, { type ModalField } from '../components/EditModal';
 import DebtSection from '../components/DebtSection';
 import ChartTooltip from '../components/ChartTooltip';
+import { CHART } from '../lib/chartColors';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown } from '../lib/equity';
@@ -217,13 +218,13 @@ const AssetPage: React.FC = () => {
                 icon={<Percent size={12} className="text-[var(--text-2)]" />}
                 badge={<ProvenanceBadge kind={provenanceOf(assets.taxRate, DEFAULT_TAX_RATES.stockTaxRate)} />}
               />
-              <div className="flex justify-between py-3.5 text-[12px] text-[#B5533A] font-medium border-t border-[var(--border)] mt-1">
+              <div className="flex justify-between py-3.5 text-[12px] text-[var(--negative)] font-medium border-t border-[var(--border)] mt-1">
                 <span>{t.liabilityReserve}</span>
                 <span className="font-mono">−{formatCurrency(taxOnGain)}</span>
               </div>
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
                 <span>{t.netLiquidity}</span>
-                <span className="font-mono text-[#7FCBA0]">{formatCurrency(netInvestment)}</span>
+                <span className="font-mono text-[var(--positive)]">{formatCurrency(netInvestment)}</span>
               </div>
             </div>
           </div>
@@ -250,7 +251,7 @@ const AssetPage: React.FC = () => {
               />
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)] border-t border-[var(--border)] mt-1">
                 <span>{t.propertyEquity}</span>
-                <span className="font-mono text-[#7FCBA0]">{formatCurrency(houseEquity)}</span>
+                <span className="font-mono text-[var(--positive)]">{formatCurrency(houseEquity)}</span>
               </div>
             </div>
           </div>
@@ -276,7 +277,7 @@ const AssetPage: React.FC = () => {
               />
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)] border-t border-[var(--border)] mt-1">
                 <span>{t.pensionWealth}</span>
-                <span className="font-mono text-[#7FCBA0]">{formatCurrency(pension.otpBalance + pension.ipsBalance)}</span>
+                <span className="font-mono text-[var(--positive)]">{formatCurrency(pension.otpBalance + pension.ipsBalance)}</span>
               </div>
               <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
                 {lang === 'nb'
@@ -345,13 +346,13 @@ const AssetPage: React.FC = () => {
                 formatCurrency={(v) => v.toFixed(2)}
                 icon={<Percent size={12} className="text-[var(--text-2)]" />}
               />
-              <div className="flex justify-between py-3.5 text-[12px] text-[#B5533A] font-medium border-t border-[var(--border)] mt-1">
+              <div className="flex justify-between py-3.5 text-[12px] text-[var(--negative)] font-medium border-t border-[var(--border)] mt-1">
                 <span>{t.cryptoTaxLabel}</span>
                 <span className="font-mono">−{formatCurrency(cryptoTaxOnGain)}</span>
               </div>
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
                 <span>{t.netCrypto}</span>
-                <span className="font-mono text-[#7FCBA0]">{formatCurrency(netCrypto)}</span>
+                <span className="font-mono text-[var(--positive)]">{formatCurrency(netCrypto)}</span>
               </div>
             </div>
           </div>
@@ -475,7 +476,7 @@ const AssetPage: React.FC = () => {
           </div>
           <div>
             <div className={sectionLabel + ' mb-1'}>{lang === 'nb' ? 'Om 5 år' : 'In 5 years'}</div>
-            <div className="font-mono font-semibold text-[#7FCBA0]">
+            <div className="font-mono font-semibold text-[var(--positive)]">
               {formatCurrency(projectionData[5]?.total ?? 0)}
             </div>
           </div>
@@ -494,39 +495,39 @@ const AssetPage: React.FC = () => {
                   stocks=forest, house=teal, cash=slate, crypto=rust. */}
               <defs>
                 <linearGradient id="stocksGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#1F5A42" stopOpacity={0.92} />
-                  <stop offset="100%" stopColor="#1F5A42" stopOpacity={0.92} />
+                  <stop offset="0%" stopColor={CHART.forest} stopOpacity={0.92} />
+                  <stop offset="100%" stopColor={CHART.forest} stopOpacity={0.92} />
                 </linearGradient>
                 <linearGradient id="cryptoGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#B5533A" stopOpacity={0.85} />
-                  <stop offset="100%" stopColor="#B5533A" stopOpacity={0.85} />
+                  <stop offset="0%" stopColor={CHART.rust} stopOpacity={0.85} />
+                  <stop offset="100%" stopColor={CHART.rust} stopOpacity={0.85} />
                 </linearGradient>
                 <linearGradient id="cashGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#5B7280" stopOpacity={0.8} />
-                  <stop offset="100%" stopColor="#5B7280" stopOpacity={0.8} />
+                  <stop offset="0%" stopColor={CHART.slate} stopOpacity={0.8} />
+                  <stop offset="100%" stopColor={CHART.slate} stopOpacity={0.8} />
                 </linearGradient>
                 <linearGradient id="houseGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3F7373" stopOpacity={0.85} />
-                  <stop offset="100%" stopColor="#3F7373" stopOpacity={0.85} />
+                  <stop offset="0%" stopColor={CHART.teal} stopOpacity={0.85} />
+                  <stop offset="100%" stopColor={CHART.teal} stopOpacity={0.85} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={'#262A20'} />
-              <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatAxisValue} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.rule} />
+              <XAxis dataKey="year" tick={{ fontSize: 11, fill: CHART.textDim }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={formatAxisValue} tick={{ fontSize: 11, fill: CHART.textDim }} axisLine={false} tickLine={false} width={52} />
               <Tooltip content={<ChartTooltip />} />
-              <Area type="monotone" dataKey="house" stackId="1" name={t.bucketHouse} stroke="#3F7373" fill="url(#houseGrad)" />
-              <Area type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke="#5B7280" fill="url(#cashGrad)" />
-              <Area type="monotone" dataKey="crypto" stackId="1" name={t.bucketCrypto} stroke="#B5533A" fill="url(#cryptoGrad)" />
-              <Area type="monotone" dataKey="stocks" stackId="1" name={t.bucketStocks} stroke="#7FCBA0" fill="url(#stocksGrad)" />
+              <Area type="monotone" dataKey="house" stackId="1" name={t.bucketHouse} stroke={CHART.teal} fill="url(#houseGrad)" />
+              <Area type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke={CHART.slate} fill="url(#cashGrad)" />
+              <Area type="monotone" dataKey="crypto" stackId="1" name={t.bucketCrypto} stroke={CHART.rust} fill="url(#cryptoGrad)" />
+              <Area type="monotone" dataKey="stocks" stackId="1" name={t.bucketStocks} stroke={CHART.forestLight} fill="url(#stocksGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#1F5A42' }} />{t.bucketStocks}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#B5533A' }} />{t.bucketCrypto}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#5B7280' }} />{t.bucketCash}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#3F7373' }} />{t.bucketHouse}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--forest)' }} />{t.bucketStocks}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--negative)' }} />{t.bucketCrypto}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--slate)' }} />{t.bucketCash}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--teal)' }} />{t.bucketHouse}</div>
         </div>
 
         <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
@@ -559,13 +560,13 @@ function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, ic
       className={`flex justify-between items-center group py-3.5 border-b border-[var(--border)] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
       onClick={onEdit}
     >
-      <span className={`text-[13px] font-medium flex items-center gap-1.5 transition-colors ${onEdit ? 'text-[var(--text-1)] group-hover:text-[#7FCBA0]' : 'text-[var(--text-2)]'}`}>
+      <span className={`text-[13px] font-medium flex items-center gap-1.5 transition-colors ${onEdit ? 'text-[var(--text-1)] group-hover:text-[var(--positive)]' : 'text-[var(--text-2)]'}`}>
         {icon}
         {label}
         {badge}
       </span>
       <div className="flex items-center gap-2">
-        <span className={`text-[13px] font-mono font-medium transition-colors ${isNegative ? 'text-[#B5533A]' : onEdit ? 'text-[var(--text-1)] group-hover:opacity-70' : 'text-[var(--text-2)]'}`}>
+        <span className={`text-[13px] font-mono font-medium transition-colors ${isNegative ? 'text-[var(--negative)]' : onEdit ? 'text-[var(--text-1)] group-hover:opacity-70' : 'text-[var(--text-2)]'}`}>
           {isNegative ? '−' : ''}{formatCurrency(value)}{suffix}
         </span>
         {onEdit ? (
