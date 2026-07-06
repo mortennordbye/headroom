@@ -7,6 +7,7 @@ import { useFinance } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { currentMonthKey } from '../lib/date';
+import { salaryAt } from '../lib/salary';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -22,20 +23,15 @@ const ForecastPage: React.FC = () => {
 
   // Find current salary (most recent effectiveDate <= today).
   const currentGross = useMemo(() => {
-    const today = currentMonthKey();
-    const eligible = salaries.filter(s => s.effectiveDate <= today);
     // Fall back to the legacy monthly `income` annualized (matching
     // grossAnnualIncome elsewhere) rather than a fabricated magic number.
-    if (eligible.length === 0) return income * 12;
-    return eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b)).grossAnnual;
+    return salaryAt(currentMonthKey(), salaries)?.grossAnnual ?? income * 12;
   }, [salaries, income]);
 
   // Current job's on-call annual (for OTP base).
   const currentOnCall = useMemo(() => {
-    const today = currentMonthKey();
-    const eligible = salaries.filter(s => s.effectiveDate <= today);
-    if (eligible.length === 0) return 0;
-    const latest = eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b));
+    const latest = salaryAt(currentMonthKey(), salaries);
+    if (!latest) return 0;
     const job = jobs.find(j => j.id === latest.jobId);
     return job?.onCallAnnual ?? 0;
   }, [salaries, jobs]);

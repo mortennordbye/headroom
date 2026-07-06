@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
+import { buildNetWorthSeries } from '../lib/netWorth';
 
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
@@ -104,35 +105,7 @@ const DashboardPage: React.FC = () => {
   const { netWorthSeries, isEstimated } = useMemo(() => {
     const monthKeys = Array.from({ length: 12 }, (_, i) =>
       format(subMonths(new Date(), 11 - i), 'yyyy-MM'));
-
-    // Known anchor values per grid index (current month = live equity).
-    const values: (number | null)[] = monthKeys.map((k, i) => {
-      if (i === 11) return netWorthHistory[k] ?? Math.round(totalEquity);
-      return netWorthHistory[k] ?? null;
-    });
-    const anchorIdx = values.flatMap((v, i) => (v !== null ? [i] : []));
-
-    const monthlyGrowth = 1.005; // ~6% annual, for back-projecting leading gaps
-    const series = monthKeys.map((monthKey, i) => {
-      if (values[i] !== null) return { monthKey, value: values[i] as number, estimated: false };
-
-      const prev = anchorIdx.filter(a => a < i).pop();
-      const next = anchorIdx.find(a => a > i);
-      let value: number;
-      if (prev !== undefined && next !== undefined) {
-        // Linear interpolation between the surrounding anchors.
-        const t = (i - prev) / (next - prev);
-        value = (values[prev] as number) + ((values[next] as number) - (values[prev] as number)) * t;
-      } else if (next !== undefined) {
-        // Leading gap → gentle back-projection from the first anchor.
-        value = (values[next] as number) / Math.pow(monthlyGrowth, next - i);
-      } else {
-        // Trailing gap (only if no later anchor) → carry the previous value.
-        value = values[prev as number] as number;
-      }
-      return { monthKey, value: Math.round(value), estimated: true };
-    });
-
+    const series = buildNetWorthSeries(monthKeys, netWorthHistory, totalEquity);
     return { netWorthSeries: series, isEstimated: series.some(p => p.estimated) };
   }, [netWorthHistory, totalEquity]);
 

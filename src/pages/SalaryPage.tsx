@@ -40,6 +40,8 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { calcTaxByRegion } from '../lib/norwegianTax';
+import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
+import { salaryAt, hoursAt } from '../lib/salary';
 import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
@@ -57,59 +59,6 @@ const CHANGE_TYPE_COLOR: Record<SalaryChangeType, string> = {
   job_change: 'var(--accent)',
   adjustment: 'var(--warning)',
 };
-
-// ── Helpers ────────────────────────────────────────────────────────
-
-function monthKeyFromDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function addMonthsKey(month: string, delta: number): string {
-  const [y, m] = month.split('-').map(Number);
-  const total = y * 12 + (m - 1) + delta;
-  const ny = Math.floor(total / 12);
-  const nm = (total % 12) + 1;
-  return `${ny}-${String(nm).padStart(2, '0')}`;
-}
-
-function monthsBetween(from: string, to: string): string[] {
-  const out: string[] = [];
-  let cur = from;
-  while (cur <= to) {
-    out.push(cur);
-    cur = addMonthsKey(cur, 1);
-  }
-  return out;
-}
-
-function yearOf(monthOrDate: string): number {
-  return parseInt(monthOrDate.slice(0, 4), 10);
-}
-
-/** Most recent salary in effect at the given month (inclusive). */
-function salaryAt(month: string, salaries: SalaryEntry[]): SalaryEntry | null {
-  const eligible = salaries.filter(s => s.effectiveDate <= month);
-  if (eligible.length === 0) return null;
-  return eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b));
-}
-
-/** Most recent hours snapshot at the given month; falls back to contracted hours of the active job. */
-function hoursAt(
-  month: string,
-  hoursSnapshots: HoursSnapshot[],
-  jobs: JobEntry[],
-  salary: SalaryEntry | null,
-): number {
-  const snap = hoursSnapshots
-    .filter(h => h.periodMonth <= month)
-    .reduce<HoursSnapshot | null>((a, b) => (a && a.periodMonth > b.periodMonth ? a : b), null);
-  if (snap) return snap.actualHoursPerWeek;
-  if (salary) {
-    const job = jobs.find(j => j.id === salary.jobId);
-    if (job) return job.contractedHoursPerWeek;
-  }
-  return 37.5;
-}
 
 // ── Page ───────────────────────────────────────────────────────────
 
