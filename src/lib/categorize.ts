@@ -35,7 +35,9 @@ const RULES: [CategoryKey, string[]][] = [
     'uber', 'bolt', 'bompeng', 'autopass', 'fjellinjen', 'ferje',
     'parkering', 'easypark', 'apcoa', 'taxi', 'drivstoff',
     // Airport bus + international rail/air (a trip abroad still means transport).
-    'flybuss', 'trenitalia', 'italo ', 'aeroport', 'aeroporto', 'airport', 'ryanair',
+    // Bare 'airport' is intentionally omitted — it would mislabel airport retail;
+    // flights are covered by MCC (3000–3299, 4511) and the terms below.
+    'flybuss', 'trenitalia', 'italo ', 'aeroporto', 'ryanair',
   ]],
   ['health', [
     'apotek', 'vitus', 'boots', 'ditt apotek', 'lege', 'legevakt', 'tannlege',
