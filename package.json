@@ -12,6 +12,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.2.11",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/inter": "^5.2.8",
     "@tailwindcss/vite": "^4.2.2",
     "date-fns": "^4.1.0",
     "lucide-react": "^1.8.0",
