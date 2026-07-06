@@ -135,17 +135,25 @@ export function getDemoData(): Partial<ExportPayload> {
     ],
 
     dailyTransactions: [
-      { id: 'demo-tx-1', date: dayThisMonth(3), description: 'Rema 1000', amount: 742, category: 'Mat' },
-      { id: 'demo-tx-2', date: dayThisMonth(6), description: 'Vinmonopolet', amount: 389, category: 'Annet' },
-      { id: 'demo-tx-3', date: dayThisMonth(9), description: 'Ruter månedskort', amount: 850, category: 'Transport' },
-      { id: 'demo-tx-4', date: dayThisMonth(12), description: 'Restaurant', amount: 640, category: 'Mat' },
-      { id: 'demo-tx-5', date: dayThisMonth(15), description: 'Kino', amount: 220, category: 'Underholdning' },
-      { id: 'demo-tx-6', date: dayThisMonth(18), description: 'Apotek', amount: 310, category: 'Helse' },
+      { id: 'demo-tx-1', date: dayThisMonth(3), description: 'Rema 1000', amount: 742, category: 'groceries', categorySource: 'auto' },
+      { id: 'demo-tx-2', date: dayThisMonth(6), description: 'Vinmonopolet', amount: 389, category: 'entertainment', categorySource: 'auto' },
+      { id: 'demo-tx-3', date: dayThisMonth(9), description: 'Ruter månedskort', amount: 850, category: 'transport', categorySource: 'auto' },
+      { id: 'demo-tx-4', date: dayThisMonth(12), description: 'Restaurant', amount: 640, category: 'dining', categorySource: 'auto' },
+      { id: 'demo-tx-5', date: dayThisMonth(15), description: 'Kino', amount: 220, category: 'entertainment', categorySource: 'auto' },
+      { id: 'demo-tx-6', date: dayThisMonth(18), description: 'Apotek', amount: 310, category: 'health', categorySource: 'auto' },
     ],
 
+    categoryBudgets: {
+      groceries: 4000,   // 742 spent — comfortably under
+      transport: 800,    // 850 spent — just over
+      dining: 700,       // 640 spent — under
+      entertainment: 500, // 609 spent — over
+      health: 500,       // 310 spent — under
+    },
+
     recurringTemplates: [
-      { id: 'demo-rt-1', description: 'Kaffe', amount: 49, category: 'Mat' },
-      { id: 'demo-rt-2', description: 'Lunsj', amount: 129, category: 'Mat' },
+      { id: 'demo-rt-1', description: 'Kaffe', amount: 49, category: 'dining' },
+      { id: 'demo-rt-2', description: 'Lunsj', amount: 129, category: 'dining' },
     ],
 
     assets: demoAssets,

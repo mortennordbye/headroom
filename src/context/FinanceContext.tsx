@@ -13,6 +13,9 @@ import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { getDemoData } from '../lib/demoData';
+import { categorize } from '../lib/categorize';
+import type { CategoryKey } from '../lib/categories';
+import { sanitizePayload } from '../lib/sanitizePayload';
 import {
   type EmployerCostConfig,
   type BillingRateConfig,
@@ -57,6 +60,16 @@ export interface DailyTransaction {
    * running balance. Missing on legacy rows — treat undefined as 'expense'.
    */
   kind?: 'income' | 'expense';
+  /** Cleaned counterparty name from the bank feed (richer than `description`). */
+  merchant?: string;
+  /** ISO 18245 merchant category code from the bank feed, when provided. */
+  mcc?: string;
+  /**
+   * How `category` was set. 'auto' = the rule engine; 'manual' = a user edit.
+   * Manual labels are never overwritten by re-sync or re-categorization.
+   * Missing on legacy rows — treat as 'auto'.
+   */
+  categorySource?: 'auto' | 'manual';
 }
 
 export interface TransactionTemplate {
@@ -429,6 +442,32 @@ export const translations = {
     exportCSV: 'Eksporter CSV',
     category: 'Kategori',
     uncategorized: 'Ukategorisert',
+    categoryLabels: {
+      groceries: 'Dagligvarer',
+      dining: 'Servering',
+      transport: 'Transport',
+      health: 'Helse',
+      entertainment: 'Underholdning',
+      shopping: 'Shopping',
+      utilities: 'Strøm & tele',
+      subscriptions: 'Abonnement',
+      housing: 'Bolig',
+      transfers: 'Overføringer',
+      income: 'Inntekt',
+      other: 'Annet',
+    },
+    spendingByCategory: 'Forbruk per kategori',
+    newThisMonth: 'ny',
+    noSpendingThisMonth: 'Ingen registrert forbruk denne måneden.',
+    spendingTrend: 'Forbrukstrend',
+    trendMonths: 'Siste 6 måneder',
+    categoryBudgets: 'Kategoribudsjett',
+    budgetLabel: 'Budsjett',
+    remainingLabel: 'Igjen',
+    overBudgetBy: 'Over med',
+    setBudgets: 'Sett budsjett',
+    noBudgetsSet: 'Ingen budsjett satt ennå. Sett et månedlig tak per kategori.',
+    done: 'Ferdig',
     growthProjection: 'Vekstprognose',
     annualReturn: 'Forventet avkastning (% p.a.)',
     projectedNetWorth: 'Beregnet formue',
@@ -1072,6 +1111,32 @@ export const translations = {
     exportCSV: 'Export CSV',
     category: 'Category',
     uncategorized: 'Uncategorized',
+    categoryLabels: {
+      groceries: 'Groceries',
+      dining: 'Dining',
+      transport: 'Transport',
+      health: 'Health',
+      entertainment: 'Entertainment',
+      shopping: 'Shopping',
+      utilities: 'Utilities',
+      subscriptions: 'Subscriptions',
+      housing: 'Housing',
+      transfers: 'Transfers',
+      income: 'Income',
+      other: 'Other',
+    },
+    spendingByCategory: 'Spending by category',
+    newThisMonth: 'new',
+    noSpendingThisMonth: 'No recorded spending this month.',
+    spendingTrend: 'Spending trend',
+    trendMonths: 'Last 6 months',
+    categoryBudgets: 'Category budgets',
+    budgetLabel: 'Budget',
+    remainingLabel: 'Left',
+    overBudgetBy: 'Over by',
+    setBudgets: 'Set budgets',
+    noBudgetsSet: 'No budgets set yet. Set a monthly cap per category.',
+    done: 'Done',
     growthProjection: 'Growth Projection',
     annualReturn: 'Expected Return (% p.a.)',
     bucketStocks: 'Stocks',
@@ -1683,6 +1748,8 @@ interface FinanceContextType {
   netWorth: number;
   dailyTransactions: DailyTransaction[];
   setDailyTransactions: (val: DailyTransaction[]) => void;
+  categoryBudgets: Partial<Record<CategoryKey, number>>;
+  setCategoryBudget: (category: CategoryKey, amount: number | null) => void;
   recurringTemplates: TransactionTemplate[];
   setRecurringTemplates: (val: TransactionTemplate[]) => void;
   assets: Assets;
@@ -1758,6 +1825,7 @@ interface FinanceContextType {
   formatCurrency: (val: number) => string;
   formatCurrencyShort: (val: number) => string;
   importAll: (data: Partial<ExportPayload>) => void;
+  buildPayload: () => ExportPayload;
   resetAll: () => void;
   restoreGrowthRateDefaults: () => void;
   restoreAssetTaxDefaults: () => void;
@@ -1802,6 +1870,7 @@ export interface ExportPayload {
   income: number;
   fixedExpenses: FixedExpense[];
   dailyTransactions: DailyTransaction[];
+  categoryBudgets?: Partial<Record<CategoryKey, number>>;
   debts?: Debt[];
   assets: Assets;
   loan: LoanData;
@@ -1874,6 +1943,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(DEFAULT_FIXED_EXPENSES);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
+  const [categoryBudgets, setCategoryBudgets] = useState<Partial<Record<CategoryKey, number>>>({});
   const [recurringTemplates, setRecurringTemplates] = useState<TransactionTemplate[]>([]);
   const [assets, setAssets] = useState<Assets>(DEFAULT_ASSETS);
   const [loan, setLoan] = useState<LoanData>(DEFAULT_LOAN);
@@ -1919,57 +1989,87 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [dataLoadFailed, setDataLoadFailed] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
+  // ── Persist payload: single source of shape (§4.2) ──────────────────────────
+  // The one place that projects app state → the persisted/exported blob. Used by
+  // autosave, the demo snapshot, and Settings export. `currentMonth` is view
+  // state and is added by the callers that need it, not here.
+  const buildPayload = useCallback((): ExportPayload => ({
+    income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
+    dailyTransactions, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    housingMode, homeowner, transition, lang,
+    savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
+    displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
+    jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
+    region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+  }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
+    dailyTransactions, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate,
+    houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
+    customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
+    goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted]);
+
+  // The one place that applies a loaded/imported blob → app state (§4.2), with
+  // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
+  // between the two callers: on load (resetMissing=true) an absent Group-A field
+  // resets to its default (state is fresh); on import/demo (false) it's left as
+  // the current value. Group-B fields apply only when present in both paths.
+  const applyPayload = useCallback((raw: Partial<ExportPayload> | null, resetMissing: boolean) => {
+    if (raw == null) return; // first-run (null DB) / no snapshot → keep current state
+    const data = sanitizePayload(raw, {
+      assets: DEFAULT_ASSETS, loan: DEFAULT_LOAN, pension: DEFAULT_PENSION,
+      homeowner: DEFAULT_HOMEOWNER, transition: DEFAULT_TRANSITION,
+      employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG, billingConfig: DEFAULT_BILLING_CONFIG,
+    });
+
+    // ── Group A: default-on-absent (load) / leave-on-absent (import) ──
+    if (data.income !== undefined) setIncome(data.income); else if (resetMissing) setIncome(55000);
+    if (data.monthlyIncomes !== undefined) setMonthlyIncomes(data.monthlyIncomes); else if (resetMissing) setMonthlyIncomes({});
+    if (data.payslips !== undefined) setPayslips(data.payslips); else if (resetMissing) setPayslips({});
+    if (data.netWorthHistory !== undefined) setNetWorthHistory(data.netWorthHistory); else if (resetMissing) setNetWorthHistory({});
+    if (data.balanceSnapshots !== undefined) setBalanceSnapshots(data.balanceSnapshots); else if (resetMissing) setBalanceSnapshots({});
+    if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses); else if (resetMissing) setFixedExpenses(DEFAULT_FIXED_EXPENSES);
+    if (data.debts) setDebts(data.debts); else if (resetMissing) setDebts([]);
+    if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions); else if (resetMissing) setDailyTransactions([]);
+    if (data.categoryBudgets !== undefined) setCategoryBudgets(data.categoryBudgets); else if (resetMissing) setCategoryBudgets({});
+    if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
+    if (data.loan) setLoan(data.loan); else if (resetMissing) setLoan(DEFAULT_LOAN);
+    if (data.pension) setPension({ ...DEFAULT_PENSION, ...data.pension }); else if (resetMissing) setPension(DEFAULT_PENSION);
+    if (data.recurringTemplates !== undefined) setRecurringTemplates(data.recurringTemplates); else if (resetMissing) setRecurringTemplates([]);
+    if (data.housingMode !== undefined) setHousingMode(data.housingMode); else if (resetMissing) setHousingMode('first_buyer');
+    if (data.homeowner) setHomeowner({ ...DEFAULT_HOMEOWNER, ...data.homeowner }); else if (resetMissing) setHomeowner(DEFAULT_HOMEOWNER);
+    if (data.transition) setTransition({ ...DEFAULT_TRANSITION, ...data.transition }); else if (resetMissing) setTransition(DEFAULT_TRANSITION);
+    if (data.employerCostConfig) setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...data.employerCostConfig }); else if (resetMissing) setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
+    if (data.billingConfig) setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...data.billingConfig }); else if (resetMissing) setBillingConfig(DEFAULT_BILLING_CONFIG);
+    // Legacy blobs pre-date this flag — absent → treated as onboarded (true) on
+    // load so existing users never re-trigger the first-run tour.
+    if (typeof data.onboardingCompleted === 'boolean') setOnboardingCompleted(data.onboardingCompleted); else if (resetMissing) setOnboardingCompleted(true);
+
+    // ── Group B: apply only when present (identical on load + import) ──
+    // `currentMonth` is view state, never persisted — ignored on both paths.
+    if (data.lang) setLang(data.lang);
+    if (data.savingsTargetPercent !== undefined) setSavingsTargetPercent(data.savingsTargetPercent);
+    if (data.growthReturnRate !== undefined) setGrowthReturnRate(data.growthReturnRate);
+    if (data.houseGrowthRate !== undefined) setHouseGrowthRate(data.houseGrowthRate);
+    if (data.cashGrowthRate !== undefined) setCashGrowthRate(data.cashGrowthRate);
+    if (data.cryptoGrowthRate !== undefined) setCryptoGrowthRate(data.cryptoGrowthRate);
+    if (data.displayCurrency) setDisplayCurrency(data.displayCurrency);
+    if (data.nokToUsd !== undefined) setNokToUsdState(data.nokToUsd);
+    if (data.customCurrencyCode !== undefined) setCustomCurrencyCode(data.customCurrencyCode);
+    if (data.customCurrencyRate !== undefined) setCustomCurrencyRate(data.customCurrencyRate);
+    if (Array.isArray(data.jobs)) setJobs(data.jobs);
+    if (Array.isArray(data.salaries)) setSalaries(data.salaries);
+    if (Array.isArray(data.bonuses)) setBonuses(data.bonuses);
+    if (Array.isArray(data.overtime)) setOvertime(data.overtime);
+    if (Array.isArray(data.hoursSnapshots)) setHoursSnapshots(data.hoursSnapshots);
+    if (Array.isArray(data.goals)) setGoals(data.goals);
+    if (data.region === 'no' || data.region === 'generic') setRegion(data.region);
+    if (typeof data.customTaxRatePct === 'number') setCustomTaxRatePct(data.customTaxRatePct);
+    if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const ATTEMPTS = 3;
-
-    const applyData = (data: Partial<ExportPayload> | null) => {
-        if (data) {
-          setIncome(data.income ?? 55000);
-          setMonthlyIncomes(data.monthlyIncomes ?? {});
-          setPayslips(data.payslips ?? {});
-          setNetWorthHistory(data.netWorthHistory ?? {});
-          setBalanceSnapshots(data.balanceSnapshots ?? {});
-          setFixedExpenses(data.fixedExpenses ?? DEFAULT_FIXED_EXPENSES);
-          setDebts(data.debts ?? []);
-          setDailyTransactions(data.dailyTransactions ?? []);
-          setAssets({ ...DEFAULT_ASSETS, ...(data.assets ?? {}) });
-          setLoan(data.loan ?? DEFAULT_LOAN);
-          setPension({ ...DEFAULT_PENSION, ...(data.pension ?? {}) });
-          setRecurringTemplates(data.recurringTemplates ?? []);
-          setHousingMode(data.housingMode ?? 'first_buyer');
-          setHomeowner({ ...DEFAULT_HOMEOWNER, ...(data.homeowner ?? {}) });
-          setTransition({ ...DEFAULT_TRANSITION, ...(data.transition ?? {}) });
-          if (data.lang) setLang(data.lang);
-          // `currentMonth` is view state, no longer persisted — ignore any value
-          // in legacy blobs so each device opens on its own current month.
-          if (data.savingsTargetPercent !== undefined) setSavingsTargetPercent(data.savingsTargetPercent);
-          if (data.growthReturnRate !== undefined) setGrowthReturnRate(data.growthReturnRate);
-          if (data.houseGrowthRate !== undefined) setHouseGrowthRate(data.houseGrowthRate);
-          if (data.cashGrowthRate !== undefined) setCashGrowthRate(data.cashGrowthRate);
-          if (data.cryptoGrowthRate !== undefined) setCryptoGrowthRate(data.cryptoGrowthRate);
-          if (data.displayCurrency) setDisplayCurrency(data.displayCurrency);
-          if (data.nokToUsd !== undefined) setNokToUsdState(data.nokToUsd);
-          if (data.customCurrencyCode !== undefined) setCustomCurrencyCode(data.customCurrencyCode);
-          if (data.customCurrencyRate !== undefined) setCustomCurrencyRate(data.customCurrencyRate);
-          if (Array.isArray(data.jobs)) setJobs(data.jobs);
-          if (Array.isArray(data.salaries)) setSalaries(data.salaries);
-          if (Array.isArray(data.bonuses)) setBonuses(data.bonuses);
-          if (Array.isArray(data.overtime)) setOvertime(data.overtime);
-          if (Array.isArray(data.hoursSnapshots)) setHoursSnapshots(data.hoursSnapshots);
-          if (Array.isArray(data.goals)) setGoals(data.goals);
-          if (data.region === 'no' || data.region === 'generic') setRegion(data.region);
-          if (typeof data.customTaxRatePct === 'number') setCustomTaxRatePct(data.customTaxRatePct);
-          setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...(data.employerCostConfig ?? {}) });
-          setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...(data.billingConfig ?? {}) });
-          if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
-          // Legacy blobs pre-date this flag — a user who already has data is
-          // treated as onboarded (?? true) so they never get the first-run tour.
-          // Brand-new users hit `data === null`, skip this branch, and keep the
-          // initial `false`, which is what triggers the auto-launch below.
-          setOnboardingCompleted(data.onboardingCompleted ?? true);
-        }
-    };
 
     // Retry the initial load a few times: a transient miss (e.g. a network
     // hiccup around service-worker activation) otherwise leaves the app showing
@@ -1985,7 +2085,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           const data = await r.json();
           if (cancelled) return;
-          applyData(data);
+          applyPayload(data, true);
           loaded.current = true;
           // Launch the first-run guided setup for a brand-new user (empty DB →
           // data === null) or one who reloaded mid-tour (flag explicitly false).
@@ -2007,7 +2107,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [applyPayload]);
 
   // Fetch SSB wage statistics when region is Norway. Hidden in generic mode.
   useEffect(() => {
@@ -2054,7 +2154,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // are aborted so a slow save can't land after a newer one (last-write-wins with
   // a stale payload), failures surface a banner + retry with backoff, and pending
   // changes are flushed on tab hide/close so nothing is silently lost.
-  const payloadRef = useRef<Record<string, unknown> | null>(null);
+  const payloadRef = useRef<ExportPayload | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveAbort = useRef<AbortController | null>(null);
   const saveDirty = useRef(false);
@@ -2102,16 +2202,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // Never persist while showing demo data — that would clobber the user's real
     // data on the backend. The real data stays safe in `demoSnapshot` until exit.
     if (demoMode) return;
-    payloadRef.current = {
-      income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
-      assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
-      lang,
-      savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
-      customCurrencyCode, customCurrencyRate,
-      jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
-      region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems,
-      onboardingCompleted,
-    };
+    payloadRef.current = buildPayload();
     saveDirty.current = true;
     // Debounce: reschedule on every change; the trailing call flushes once quiet.
     saveRetries.current = 0;
@@ -2120,7 +2211,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // NB: `currentMonth` is deliberately NOT persisted or in these deps — it's
     // view state, so paging the month picker must not fire saves, and two devices
     // shouldn't fight over which month is "current".
-  }, [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts, assets, loan, pension, recurringTemplates, housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots, goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted, demoMode, doSave]);
+    // buildPayload changes whenever any persisted field changes, so it's the
+    // single trigger for a save — no need to re-list every field here.
+  }, [buildPayload, demoMode, doSave]);
 
   // Flush pending changes when the tab is hidden or closed. sendBeacon survives
   // page teardown where a normal fetch would be cancelled; the server accepts the
@@ -2149,6 +2242,21 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
   }, [demoMode, saveFailed]);
+
+  // Auto-categorize any transaction that lacks a label — the single ingest
+  // chokepoint for bank-synced rows, imports, and legacy backfill. The rule
+  // engine is deterministic and never touches rows that already have a
+  // category (so manual labels are preserved), which also makes this loop-safe:
+  // once every row is labelled it stops firing.
+  useEffect(() => {
+    if (!dailyTransactions.some((t) => !t.category)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDailyTransactions(dailyTransactions.map((t) => {
+      if (t.category) return t;
+      const { category, source } = categorize({ merchant: t.merchant, description: t.description, mcc: t.mcc, kind: t.kind });
+      return { ...t, category, categorySource: source };
+    }));
+  }, [dailyTransactions]);
 
   // --- Calculations ---
 
@@ -2470,62 +2578,26 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setGoals(prev => prev.filter(g => g.id !== id));
   };
 
-  const importAll = (data: Partial<ExportPayload>) => {
-    if (data.income !== undefined) setIncome(data.income);
-    if (data.monthlyIncomes !== undefined) setMonthlyIncomes(data.monthlyIncomes);
-    if (data.payslips !== undefined) setPayslips(data.payslips);
-    if (data.netWorthHistory !== undefined) setNetWorthHistory(data.netWorthHistory);
-    if (data.balanceSnapshots !== undefined) setBalanceSnapshots(data.balanceSnapshots);
-    if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses);
-    if (data.debts) setDebts(data.debts);
-    if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions);
-    if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets });
-    if (data.pension) setPension({ ...DEFAULT_PENSION, ...data.pension });
-    if (data.loan) setLoan(data.loan);
-    if (data.recurringTemplates !== undefined) setRecurringTemplates(data.recurringTemplates);
-    if (data.housingMode !== undefined) setHousingMode(data.housingMode);
-    if (data.homeowner) setHomeowner({ ...DEFAULT_HOMEOWNER, ...data.homeowner });
-    if (data.transition) setTransition({ ...DEFAULT_TRANSITION, ...data.transition });
-    if (data.lang) setLang(data.lang);
-    // `currentMonth` is view state, not persisted — ignore it on import too.
-    if (data.savingsTargetPercent !== undefined) setSavingsTargetPercent(data.savingsTargetPercent);
-    if (data.growthReturnRate !== undefined) setGrowthReturnRate(data.growthReturnRate);
-    if (data.houseGrowthRate !== undefined) setHouseGrowthRate(data.houseGrowthRate);
-    if (data.cashGrowthRate !== undefined) setCashGrowthRate(data.cashGrowthRate);
-    if (data.cryptoGrowthRate !== undefined) setCryptoGrowthRate(data.cryptoGrowthRate);
-    if (data.displayCurrency) setDisplayCurrency(data.displayCurrency);
-    if (data.nokToUsd !== undefined) setNokToUsdState(data.nokToUsd);
-    if (data.customCurrencyCode !== undefined) setCustomCurrencyCode(data.customCurrencyCode);
-    if (data.customCurrencyRate !== undefined) setCustomCurrencyRate(data.customCurrencyRate);
-    if (Array.isArray(data.jobs)) setJobs(data.jobs);
-    if (Array.isArray(data.salaries)) setSalaries(data.salaries);
-    if (Array.isArray(data.bonuses)) setBonuses(data.bonuses);
-    if (Array.isArray(data.overtime)) setOvertime(data.overtime);
-    if (Array.isArray(data.hoursSnapshots)) setHoursSnapshots(data.hoursSnapshots);
-    if (Array.isArray(data.goals)) setGoals(data.goals);
-    if (data.region === 'no' || data.region === 'generic') setRegion(data.region);
-    if (typeof data.customTaxRatePct === 'number') setCustomTaxRatePct(data.customTaxRatePct);
-    if (data.employerCostConfig) setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...data.employerCostConfig });
-    if (data.billingConfig) setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...data.billingConfig });
-    if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
-    if (typeof data.onboardingCompleted === 'boolean') setOnboardingCompleted(data.onboardingCompleted);
+  // Set (or clear, with null / ≤0) a category's monthly budget cap.
+  const setCategoryBudget = (category: CategoryKey, amount: number | null) => {
+    setCategoryBudgets(prev => {
+      const next = { ...prev };
+      if (amount == null || amount <= 0) delete next[category];
+      else next[category] = amount;
+      return next;
+    });
   };
+
+  // Import / demo-restore: overlay the present fields, leaving absent ones as the
+  // current value (resetMissing=false). Shares the single apply path with load.
+  const importAll = (data: Partial<ExportPayload>) => applyPayload(data, false);
 
   // --- Demo mode: swap real data for a fictional dataset, then restore it ---
   // The real data is held in `demoSnapshot` (memory) and the auto-save effect is
   // suspended while demoMode is true, so the backend keeps the real data intact.
   const enableDemoMode = () => {
     if (demoMode) return;
-    demoSnapshot.current = {
-      income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, dailyTransactions, debts,
-      assets, loan, pension, recurringTemplates, housingMode, homeowner, transition,
-      lang, currentMonth: format(currentMonth, 'yyyy-MM'),
-      savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
-      displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
-      jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
-      region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems,
-      onboardingCompleted,
-    };
+    demoSnapshot.current = { ...buildPayload(), currentMonth: format(currentMonth, 'yyyy-MM') };
     setDemoMode(true);
     importAll(getDemoData());
   };
@@ -2551,6 +2623,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setFixedExpenses([]);
     setDebts([]);
     setDailyTransactions([]);
+    setCategoryBudgets({});
     setRecurringTemplates([]);
     setAssets({
       portfolio: 0, unrealizedGain: 0, taxRate: 37.84,
@@ -2705,6 +2778,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       savingsTargetPercent, setSavingsTargetPercent,
       recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
       fixedExpenses, setFixedExpenses, dailyTransactions, setDailyTransactions,
+      categoryBudgets, setCategoryBudget,
       debts, setDebts, totalDebt, netWorth,
       recurringTemplates, setRecurringTemplates,
       assets, updateAsset, loan, updateLoan, pension, updatePension,
@@ -2727,7 +2801,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       totalResidual,
       totalFixedExpenses, monthlyBudget, dailyBudget,
       dailyData, totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
-      formatCurrency, formatCurrencyShort, importAll, resetAll,
+      formatCurrency, formatCurrencyShort, importAll, buildPayload, resetAll,
       restoreGrowthRateDefaults, restoreAssetTaxDefaults, restoreCustomTaxRateDefault,
       restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
       demoMode, toggleDemoMode,

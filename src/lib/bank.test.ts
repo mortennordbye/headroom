@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 // The Enable Banking mapping lives in the CommonJS server engine (server/bank.js)
 // so it ships in the production image; it's tested here via Vitest.
 import { mapEBTransaction, mapEBTransactions, mergeTransactions } from '../../server/bank.js';
+import type { MappedTransaction } from '../../server/bank';
 
 interface EBTransaction {
   entry_reference?: string;
@@ -15,6 +16,7 @@ interface EBTransaction {
   debtor?: { name?: string } | null;
   remittance_information?: string[] | null;
   bank_transaction_code?: { description?: string } | null;
+  merchant_category_code?: string | number | null;
 }
 
 const tx = (over: Partial<EBTransaction> = {}): EBTransaction => ({
@@ -65,6 +67,18 @@ describe('mapEBTransaction', () => {
     expect(mapEBTransaction(base).id).toContain('2026-04-06');
   });
 
+  it('keeps the merchant name and MCC from the feed for the categorizer', () => {
+    const r = mapEBTransaction(tx({ merchant_category_code: 5411 }));
+    expect(r.merchant).toBe('REMA 1000');
+    expect(r.mcc).toBe('5411');
+  });
+
+  it('omits merchant/mcc when the feed does not carry them', () => {
+    const r = mapEBTransaction(tx({ creditor: null, remittance_information: ['Invoice 42'] }));
+    expect(r.merchant).toBeUndefined();
+    expect(r.mcc).toBeUndefined();
+  });
+
   it('picks value_date then transaction_date when booking_date is absent', () => {
     expect(mapEBTransaction(tx({ booking_date: undefined, value_date: '2026-05-01' })).date).toBe('2026-05-01');
     expect(mapEBTransaction(tx({ booking_date: undefined, value_date: undefined, transaction_date: '2026-05-02' })).date).toBe('2026-05-02');
@@ -103,5 +117,15 @@ describe('mergeTransactions', () => {
     const merged = mergeTransactions(first, second);
     expect(merged).toHaveLength(1);
     expect(merged[0].amount).toBe(300);
+  });
+
+  it('preserves an existing category (manual or auto) across a re-sync', () => {
+    const labelled = mapEBTransactions([tx()]).map((t: MappedTransaction) => ({ ...t, category: 'groceries', categorySource: 'manual' as const }));
+    const resynced = mapEBTransactions([tx({ transaction_amount: { currency: 'NOK', amount: '260.00' } })]);
+    const merged = mergeTransactions(labelled, resynced);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].amount).toBe(260); // fresh bank amount wins
+    expect(merged[0].category).toBe('groceries'); // but the label survives
+    expect(merged[0].categorySource).toBe('manual');
   });
 });

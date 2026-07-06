@@ -121,7 +121,11 @@ export function BankSyncCard() {
     try {
       const res = await fetch('/api/bank/link', { method: 'POST' });
       const data = await res.json();
-      if (!res.ok || !data.url) throw new Error(data.error || 'link failed');
+      if (!res.ok || !data.url) {
+        setBusy('idle');
+        setMessage(data.error ? `${b.linkError} (${data.error})` : b.linkError);
+        return;
+      }
       window.location.href = data.url;
     } catch {
       setBusy('idle');

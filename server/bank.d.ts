@@ -6,6 +6,12 @@ export interface MappedTransaction {
   description: string;
   amount: number;
   kind: 'income' | 'expense';
+  merchant?: string;
+  mcc?: string;
+  // Categories are assigned client-side; the server only carries them forward
+  // across a re-sync (see mergeTransactions).
+  category?: string;
+  categorySource?: 'auto' | 'manual';
 }
 
 export interface MapOptions {

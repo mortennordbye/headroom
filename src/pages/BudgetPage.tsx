@@ -15,6 +15,10 @@ import { nb, enUS } from 'date-fns/locale';
 import { useFinance, type TransactionTemplate, type ExpenseType } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import { parseLocaleNumber } from '../lib/validators';
+import { categoryMeta, isCategoryKey, CATEGORIES } from '../lib/categories';
+import { CategoryBreakdown } from '../components/CategoryBreakdown';
+import CategoryTrendChart from '../components/charts/CategoryTrendChart';
+import { CategoryBudgets } from '../components/CategoryBudgets';
 import ConfirmModal from '../components/ConfirmModal';
 import { StatCard } from '../components/ui/StatCard';
 
@@ -54,6 +58,12 @@ function getCategoryColor(category: string): string {
     hash |= 0;
   }
   return CHART_COLORS[Math.abs(hash) % CHART_COLORS.length];
+}
+
+// Colour for a category value: the canonical taxonomy colour for known keys,
+// else the hash-derived fallback for legacy/custom free-text labels.
+function catColor(category: string): string {
+  return categoryMeta(category)?.color ?? getCategoryColor(category);
 }
 
 interface ModalConfig {
@@ -178,6 +188,13 @@ const BudgetPage: React.FC = () => {
     setPendingDelete(null);
   };
 
+  // Canonical categories for the transaction dropdown (income is set by `kind`,
+  // not chosen here). Blank = uncategorized → the auto-categorizer fills it.
+  const categoryOptions = [
+    { value: '', label: t.uncategorized },
+    ...CATEGORIES.filter(c => c.key !== 'income').map(c => ({ value: c.key, label: t.categoryLabels[c.key] })),
+  ];
+
   // --- Daily Transactions ---
   const addDailyTransaction = (dateStr: string, prefill?: Partial<TransactionTemplate>) => {
     openModal({
@@ -185,7 +202,7 @@ const BudgetPage: React.FC = () => {
       fields: [
         { key: 'description', label: t.transactionDetails, type: 'text', value: prefill?.description ?? '', placeholder: 'Dagligvare, Kaffe...' },
         { key: 'amount', label: t.impact, type: 'number', value: prefill?.amount?.toString() ?? '', placeholder: '0' },
-        { key: 'category', label: t.category, type: 'text', value: prefill?.category ?? '', placeholder: t.uncategorized },
+        { key: 'category', label: t.category, type: 'select', value: prefill?.category ?? '', options: categoryOptions },
         kindField('expense'),
       ],
       onSave: (vals) => {
@@ -197,6 +214,7 @@ const BudgetPage: React.FC = () => {
             description: vals.description.trim(),
             amount,
             category: vals.category.trim() || undefined,
+            categorySource: vals.category.trim() ? 'manual' : undefined,
             kind: vals.kind === 'income' ? 'income' : 'expense',
           }]);
           closeModal();
@@ -213,14 +231,14 @@ const BudgetPage: React.FC = () => {
       fields: [
         { key: 'description', label: t.editDescription, type: 'text', value: description },
         { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
-        { key: 'category', label: t.category, type: 'text', value: category ?? '', placeholder: t.uncategorized },
+        { key: 'category', label: t.category, type: 'select', value: category ?? '', options: categoryOptions },
         kindField(kind === 'income' ? 'income' : 'expense'),
       ],
       onSave: (vals) => {
         const newAmount = parsePositiveNumber(vals.amount);
         if (vals.description.trim() && newAmount !== null) {
           setDailyTransactions(dailyTransactions.map(tx => tx.id === id
-            ? { ...tx, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, kind: vals.kind === 'income' ? 'income' : 'expense' }
+            ? { ...tx, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, categorySource: vals.category.trim() ? 'manual' : undefined, kind: vals.kind === 'income' ? 'income' : 'expense' }
             : tx
           ));
           closeModal();
@@ -248,7 +266,7 @@ const BudgetPage: React.FC = () => {
         tx.date,
         t.days[date.getDay()],
         `"${tx.description.replace(/"/g, '""')}"`,
-        tx.category ? `"${tx.category}"` : '',
+        tx.category ? `"${isCategoryKey(tx.category) ? t.categoryLabels[tx.category] : tx.category}"` : '',
         tx.amount.toString(),
       ];
     });
@@ -262,16 +280,6 @@ const BudgetPage: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   };
-
-  // --- Category breakdown for pie chart ---
-  const categoryData = (() => {
-    const all = dailyData.flatMap(d => d.transactions).filter(tx => tx.category);
-    const map: Record<string, number> = {};
-    for (const tx of all) {
-      map[tx.category!] = (map[tx.category!] ?? 0) + tx.amount;
-    }
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
-  })();
 
   const totalSpentThisMonth = dailyData.reduce((sum, d) => sum + d.spent, 0);
 
@@ -507,44 +515,22 @@ const BudgetPage: React.FC = () => {
             </Suspense>
           </div>
 
-          {/* Category breakdown — direct-labeled bar list (top 4 + "Annet"), no pie */}
-          {categoryData.length > 0 && (() => {
-            const sorted = [...categoryData].sort((a, b) => b.value - a.value);
-            const head = sorted.slice(0, 4);
-            const rest = sorted.slice(4);
-            const rows = rest.length
-              ? [...head, { name: lang === 'nb' ? 'Annet' : 'Other', value: rest.reduce((s, r) => s + r.value, 0) }]
-              : head;
-            const catTotal = rows.reduce((s, r) => s + r.value, 0);
-            const isAnnet = (name: string) => name === 'Annet' || name === 'Other';
-            return (
-              <>
-                <div className={`${sectionLabel} pt-2 pb-3 border-t border-[var(--border)]`}>
-                  {t.category} — {t.operationalLog}
-                </div>
-                <div className="flex flex-col gap-3">
-                  {rows.map((r, i) => {
-                    const pct = catTotal > 0 ? (r.value / catTotal) * 100 : 0;
-                    const color = isAnnet(r.name) ? '#5F6555' : getCategoryColor(r.name);
-                    return (
-                      <div key={i} className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between text-[12.5px]">
-                          <span className="flex items-center gap-2 text-[var(--text-1)] min-w-0">
-                            <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ backgroundColor: color }} />
-                            <span className="truncate">{r.name}</span>
-                          </span>
-                          <span className="font-mono text-[var(--text-2)] tabular-nums shrink-0">{formatCurrency(r.value)}</span>
-                        </div>
-                        <div className="h-1.5 rounded-[3px] bg-[var(--bg-raised)] overflow-hidden">
-                          <div className="h-full rounded-[3px]" style={{ width: `${pct}%`, background: color }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
+          {/* Category dashboard — spend per category with MoM + drill-in */}
+          <div className={`${sectionLabel} pt-2 pb-3 border-t border-[var(--border)]`}>
+            {t.spendingByCategory}
+          </div>
+          <CategoryBreakdown />
+
+          {/* Multi-month spending trend by category */}
+          <div className={`${sectionLabel} pt-5 pb-3 border-t border-[var(--border)]`}>
+            {t.spendingTrend} · {t.trendMonths}
+          </div>
+          <CategoryTrendChart />
+
+          {/* Per-category monthly budgets */}
+          <div className="pt-5 border-t border-[var(--border)]">
+            <CategoryBudgets />
+          </div>
         </div>
       </div>
 
@@ -629,7 +615,7 @@ const BudgetPage: React.FC = () => {
                   {day.transactions.map((tx) => (
                     <span key={tx.id} className="inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
                       {tx.category && (
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getCategoryColor(tx.category) }} />
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                       )}
                       <span>{tx.description}</span>
                       <span className="font-mono text-[var(--text-2)]">{formatCurrency(tx.amount)}</span>
@@ -685,12 +671,12 @@ const BudgetPage: React.FC = () => {
                       {day.transactions.map((tx) => (
                         <span key={tx.id} className="inline-flex items-center gap-2 bg-[var(--bg-raised)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
                           {tx.category && (
-                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: getCategoryColor(tx.category) }} />
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                           )}
                           <span>{tx.description}</span>
                           <span className="font-mono text-[var(--text-2)]">{formatCurrency(tx.amount)}</span>
                           {tx.category && (
-                            <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{tx.category}</span>
+                            <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{isCategoryKey(tx.category) ? t.categoryLabels[tx.category] : tx.category}</span>
                           )}
                           <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
                             <Edit2 size={12} />

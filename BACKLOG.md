@@ -44,14 +44,12 @@ Known limitations:
 The POC C restyle and Settings page are shipped; the additional insight features the user asked for are not yet wired to real data. Sparklines on metric tiles currently use synthetic series where real history is sparse.
 
 - **Real sparkline data on metric tiles** — `DashboardPage.tsx` hero uses `netWorthHistory` (real) but the small tiles (Residual / Can Spend / Investment) fall back to synthetic series. Need: monthly residual derived from `monthlyIncomes - totalFixedExpenses` over the last 12 months; daily-burn series from `dailyData`; monthly investment contributions from `monthlyIncomes * (savingsTargetPercent/100)`.
-- **Spending-by-category bars** — `BudgetPage` "Fordelingsanalyse" already has a Recharts horizontal bar chart; add MoM delta chips per category by computing the previous month's totals from `dailyTransactions`.
 - **Net-worth composition timeline** — `AssetPage` currently has a single net-worth projection chart; add a stacked-area chart of Investment / Property Equity / Crypto / Cash over time. Per-asset history now EXISTS via `balanceSnapshots` (`src/context/FinanceContext.tsx`) — derive each month's composition with `computeEquityBreakdown(balanceSnapshots[m].assets)` (`src/lib/equity.ts`). Snapshots only accrue going forward, so the series is sparse until data builds — fall back to estimates/current ratios for months without a snapshot.
-- **Loan affordability chip** — `LoanPage` should show `loan.laanebelop / totalEquity` as a chip near the top. Trivial.
 - **Headline insight banner on Dashboard** — auto-generated single-sentence insights like "You spent 14% less on food this month than the 6-month average." Computation belongs in a new `src/lib/insights.ts`. Needs category data on transactions to be useful.
 
 **Unblock**: Phase 3 can start any time. All inputs live in `FinanceContext`; no new server endpoints needed. The `Sparkline` primitive at `src/components/ui/Sparkline.tsx` is ready.
 
-**Where**: `src/pages/DashboardPage.tsx`, `src/pages/BudgetPage.tsx`, `src/pages/AssetPage.tsx`, `src/pages/LoanPage.tsx`, plus a new `src/lib/insights.ts`.
+**Where**: `src/pages/DashboardPage.tsx`, `src/pages/BudgetPage.tsx`, `src/pages/AssetPage.tsx`, plus a new `src/lib/insights.ts`.
 
 ## Polish items noticed during the restyle
 
@@ -116,9 +114,39 @@ data volume. Remaining:
   `deletedBankIds: string[]` in the blob the reconcile + `mergeTransactions` honour).
   **Where**: `server/index.js` (`reconcileBankTransactions`), `server/bank.js`
   (`mergeTransactions`), `src/context/FinanceContext.tsx`.
-- **No auto-categorisation.** `mapEBTransaction` leaves `category` undefined; the bank's
-  `bank_transaction_code` / `merchant_category_code` are dropped. Map them (or the merchant
-  name) to Headroom budget categories. **Where**: `server/bank.js` (`mapEBTransaction`).
+- **Auto-categorisation — shipped (2026-07), viewing follow-ups remain.** A canonical
+  category taxonomy (`src/lib/categories.ts`, 12 keys with i18n labels + palette colours +
+  icons) and a local rule-based categorizer (`src/lib/categorize.ts`, Norwegian-merchant
+  keyword table + ISO-18245 MCC fallback, unit-tested) now label every transaction on
+  ingest. `mapEBTransaction` keeps `merchant` + `mcc`; categorization runs **client-side** at
+  a single chokepoint (a backfill effect in `FinanceContext.tsx`) so it also covers manual
+  and legacy rows; `mergeTransactions` carries an existing label forward across re-sync so a
+  manual correction is never clobbered. `DailyTransaction` gained `merchant`/`mcc`/
+  `categorySource`. `BudgetPage` renders localized labels + canonical colours.
+
+  The category *viewing* layer also shipped (2026-07, agreed "Everything" scope), all reading
+  from a tested pure lib `src/lib/categoryStats.ts` (spendByCategory / categoryMoM /
+  monthlyCategoryTotals / budgetProgress — income always excluded from spend):
+  - **Category dashboard** — `src/components/CategoryBreakdown.tsx`: per-category spend with
+    icon + colour + share bar, a month-over-month chip, click-to-drill into the category's
+    transactions. Replaced the old ad-hoc bar list in `BudgetPage`.
+  - **Multi-month trend** — `src/components/charts/CategoryTrendChart.tsx`: stacked bar of
+    spend by category over the last 6 months (only categories with spend get a series).
+  - **Per-category budgets** — persisted `categoryBudgets: Partial<Record<CategoryKey, number>>`
+    (wired through every persist site + demo data), UI in `src/components/CategoryBudgets.tsx`
+    (inline editor + actual-vs-budget progress bars with over-budget warnings).
+
+  Verified: `tsc`/`lint`/132 unit tests (incl. a headless react-dom/server render smoke for the
+  three components), plus a throwaway-server integration test confirming the persist +
+  bank-reconcile round-trip preserves `categoryBudgets`, `merchant`/`mcc`, and manual labels.
+  A live in-browser visual pass was NOT possible (no browser available in the dev sandbox) —
+  worth an eyeball on the Budget page in demo mode after next pull.
+
+  Remaining:
+  - **Rule-table tuning + optional LLM fallback** — the keyword table (`src/lib/categorize.ts`)
+    is deliberately small; add merchants as gaps surface. An LLM fallback for unmatched
+    merchants was declined for now (keeps the app local-only) — revisit behind a toggle if
+    `other` grows large.
 - **Cron isn't installed by anything.** The daily `curl` schedule is documented in
   `scripts/enable-banking/README.md` but must be added to the homelab crontab (or a Docker
   sidecar) by hand. Consider shipping a compose service / entrypoint hook.
@@ -142,8 +170,6 @@ data volume. Remaining:
 
 Most of `AUDIT.md` is done (see its "Progress log"). These remaining entries are larger refactors, several touching the persistence backbone — deferred because they can't be safely exercised against the user's real data volume without a throwaway `DATA_DIR` and careful diffing.
 
-- **§4.2 Consolidate the persist/export payload shape.** It's hand-maintained in ~5 places (`FinanceContext.tsx`: autosave payload + its dep array, demo snapshot, `applyData`, `importAll`; `SettingsPage.tsx` export). Adding a persisted field means touching them all; `applyData`/`importAll` are drifting near-duplicates and `resetAll` re-inlines defaults instead of `DEFAULT_*`. **Fix**: one `buildPayload()` (`useCallback` over all state → used by autosave/demo/export) + one `applyPayload(data)` (`useCallback` over stable setters → used by load/import/demo-restore); `resetAll` reuses `DEFAULT_*`. **Unblock**: extract carefully, diff `applyData` vs `importAll` for the correct union (esp. `{...DEFAULT_x, ...data.x}` merges), and test round-trip against a throwaway server. **Where**: `src/context/FinanceContext.tsx`, `src/pages/SettingsPage.tsx`.
-- **§1.5 Sanitize imported/loaded payloads.** JSON import is shallow-validated then cast; a hand-edited file (e.g. `assets.portfolio: "5000"`) produces NaN across charts and is auto-saved over good data. Best done together with §4.2 (the `applyPayload` boundary is where a `sanitizePayload` in `src/lib/` should coerce numerics per section). **Where**: `src/pages/SettingsPage.tsx:~174`, `src/context/FinanceContext.tsx` load + `importAll`.
 - **§4.1 Memoize the context value + stabilize actions.** The provider passes a fresh ~110-field object literal every render and none of the ~40 callbacks are memoized, so any state change re-renders every consumer (which then recompute derived series — `BudgetPage` has no `useMemo`). **Fix**: `useMemo` the value, `useCallback` the actions (or one stable actions object), ideally split into settings/data/derived contexts. Highest-leverage frontend perf change but broad and regression-prone. **Where**: `src/context/FinanceContext.tsx` (provider value ~2200+, action defs).
 - **§4.3 Unify i18n.** The typed translations table coexists with 145+ ad-hoc `lang === 'nb' ? … : …` ternaries (visible gaps: hardcoded `'estimert'`, always-Norwegian validation errors, Norwegian placeholders). **Fix**: move component copy into the table; rule "`lang` never appears in JSX except locale selection"; consider extracting the ~930-line table to `src/i18n/` (also re-enables Fast Refresh in FinanceContext). **Where**: `FinanceContext.tsx` table, all pages.
 - **§4.4 Move page-embedded domain logic to `src/lib/`.** `SalaryPage` inline month math + `salaryAt` (duplicates `calcActiveGrossAnnual`), `DashboardPage` 12-month interpolation. Unlocks unit tests. **Where**: `src/pages/SalaryPage.tsx`, `src/pages/DashboardPage.tsx` → new `src/lib/salary.ts` etc.

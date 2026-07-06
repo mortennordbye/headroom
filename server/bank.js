@@ -211,8 +211,16 @@ function sessionValid(session, now = Date.now()) {
 
 // --- pure mapping (unit-tested) ---------------------------------------------
 
-function pickDescription(tx) {
+// The counterparty (merchant) name, when the feed carries one. Kept separate
+// from the description fallback chain so the client categorizer has a clean
+// merchant signal to match on.
+function pickMerchant(tx) {
   const party = tx.credit_debit_indicator === 'DBIT' ? tx.creditor && tx.creditor.name : tx.debtor && tx.debtor.name;
+  return party || undefined;
+}
+
+function pickDescription(tx) {
+  const party = pickMerchant(tx);
   if (party) return party;
   const remittance = (tx.remittance_information || []).filter(Boolean).join(' ').trim();
   if (remittance) return remittance;
@@ -239,12 +247,18 @@ function mapEBTransaction(tx, opts = {}) {
   if (raw == null || String(raw).trim() === '' || !Number.isFinite(parsed)) {
     throw new Error(`unparseable amount: ${raw}`);
   }
+  const merchant = pickMerchant(tx);
+  const mcc = tx.merchant_category_code != null ? String(tx.merchant_category_code) : undefined;
   return {
     id: stableId(tx, prefix),
     date: pickDate(tx),
     description: pickDescription(tx),
     amount: Math.abs(parsed),
     kind: tx.credit_debit_indicator === 'CRDT' ? 'income' : 'expense',
+    // Richer bank-feed fields the client categorizer consumes. Categorization
+    // itself is client-side; the server never assigns a category.
+    ...(merchant ? { merchant } : {}),
+    ...(mcc ? { mcc } : {}),
   };
 }
 
@@ -263,7 +277,17 @@ function mapEBTransactions(txs, opts = {}) {
 
 function mergeTransactions(existing, incoming) {
   const byId = new Map(existing.map((t) => [t.id, t]));
-  for (const t of incoming) byId.set(t.id, t);
+  for (const t of incoming) {
+    const prior = byId.get(t.id);
+    // Re-synced rows come back category-less from the bank. Carry forward any
+    // label the client already assigned (auto or manual) so a re-sync never
+    // wipes categorization; the fresh bank fields (amount, etc.) still win.
+    if (prior && prior.category != null) {
+      byId.set(t.id, { ...t, category: prior.category, categorySource: prior.categorySource });
+    } else {
+      byId.set(t.id, t);
+    }
+  }
   return [...byId.values()];
 }
 
