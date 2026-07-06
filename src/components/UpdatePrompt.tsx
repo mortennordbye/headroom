@@ -26,6 +26,20 @@ export default function UpdatePrompt() {
     },
   });
 
+  // Robust update: vite-plugin-pwa reloads on the SW `controlling` event, but
+  // that only fires once the new worker takes control (needs clientsClaim, set in
+  // vite.config). Belt-and-suspenders on top of it: reload on our own
+  // controllerchange, and a timed fallback for the stale-prompt case — the
+  // waiting worker already activated in the background, so no event will ever
+  // fire and the built-in reload would hang. Either way the user gets a reload.
+  const handleUpdate = () => {
+    let done = false;
+    const reload = () => { if (!done) { done = true; window.location.reload(); } };
+    navigator.serviceWorker?.addEventListener('controllerchange', reload, { once: true });
+    void updateServiceWorker(true);
+    window.setTimeout(reload, 2500);
+  };
+
   if (!needRefresh) return null;
 
   return (
@@ -37,7 +51,7 @@ export default function UpdatePrompt() {
       <span className="text-[13px]">Ny versjon tilgjengelig / New version available</span>
       <button
         type="button"
-        onClick={() => updateServiceWorker(true)}
+        onClick={handleUpdate}
         className="px-3 py-1.5 rounded-[8px] text-[12px] font-medium"
         style={{ background: 'var(--accent)', color: 'var(--bg)' }}
       >

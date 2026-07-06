@@ -24,6 +24,13 @@ export default defineConfig({
         // instant after first load (no per-tab network fetch).
         globPatterns: ['**/*.{js,css,html,svg,woff2,webmanifest}'],
         cleanupOutdatedCaches: true,
+        // Claim the open tab once the new worker activates. In 'prompt' mode
+        // activation only happens after the user clicks Update (which posts
+        // SKIP_WAITING), so this is safe — and it's REQUIRED: without it the new
+        // worker never controls the already-open page, so the `controllerchange`
+        // event that vite-plugin-pwa reloads on never fires and the Update button
+        // silently does nothing. skipWaiting stays off (prompt semantics).
+        clientsClaim: true,
         // SPA fallback, but never hijack the API — those stay network-only so
         // financial data is always fresh.
         navigateFallback: '/index.html',

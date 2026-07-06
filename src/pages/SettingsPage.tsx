@@ -19,13 +19,21 @@ import {
   MonitorPlay,
   Sparkles,
   RotateCcw,
+  Briefcase,
+  Receipt,
+  PiggyBank,
+  Check,
+  Minus,
+  ArrowRight,
 } from 'lucide-react';
 import {
   useFinance,
+  useFinanceSettings,
   type ExportPayload,
   DEFAULT_GROWTH_RATES,
   DEFAULT_TAX_RATES,
 } from '../context/FinanceContext';
+import { summarizeExport, totalRecords, type SummaryItem } from '../lib/exportSummary';
 import { NAV_ITEMS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
@@ -63,9 +71,6 @@ export default function SettingsPage() {
     setCashGrowthRate,
     cryptoGrowthRate,
     setCryptoGrowthRate,
-    monthlyIncomes,
-    fixedExpenses,
-    dailyTransactions,
     currentMonth,
     region,
     setRegion,
@@ -83,6 +88,10 @@ export default function SettingsPage() {
     buildPayload,
     resetAll,
   } = useFinance();
+
+  // Snapshot of the app's current persisted state — drives the export breakdown
+  // and the "current → incoming" comparison shown in the import preview.
+  const currentPayload = buildPayload();
 
   // Currency editor local state (uncommitted text inputs)
   const [usdRateInput, setUsdRateInput] = useState(String(nokToUsd));
@@ -598,11 +607,15 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <DataStat label="expenses" value={fixedExpenses.length} />
-                <DataStat label="tx" value={dailyTransactions.length} />
-                <DataStat label="months" value={Object.keys(monthlyIncomes).length} />
+              <div className="mt-4 flex items-baseline justify-between gap-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
+                  {t.settings.summary.exportScope}
+                </div>
+                <div className="text-[12px] tabular-nums" style={{ color: 'var(--text-2)' }}>
+                  {totalRecords(currentPayload)} {t.settings.summary.records}
+                </div>
               </div>
+              <PayloadSummary payload={currentPayload} />
 
               <Button
                 variant="primary"
@@ -690,24 +703,16 @@ export default function SettingsPage() {
                 </>
               ) : importState === 'ready' && importPreview ? (
                 <div className="mt-4 flex flex-col gap-3">
-                  <div className="flex items-center gap-2 text-[12px] font-medium" style={{ color: 'var(--accent)' }}>
-                    <CheckCircle2 size={14} />
-                    {t.settings.importReady}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-[12px] font-medium" style={{ color: 'var(--accent)' }}>
+                      <CheckCircle2 size={14} />
+                      {t.settings.summary.importScope}
+                    </div>
+                    <div className="text-[12px] tabular-nums" style={{ color: 'var(--text-2)' }}>
+                      {totalRecords(importPreview)} {t.settings.summary.records}
+                    </div>
                   </div>
-                  <div
-                    className="rounded-[8px] p-3 grid grid-cols-3 gap-2 text-center"
-                    style={{ background: 'rgba(255,255,255,0.04)' }}
-                  >
-                    <DataStat label="expenses" value={importPreview.fixedExpenses.length} />
-                    <DataStat label="tx" value={importPreview.dailyTransactions.length} />
-                    <DataStat label="inc." value={Object.keys(importPreview.monthlyIncomes ?? {}).length} />
-                    <DataStat label="jobs" value={importPreview.jobs?.length ?? 0} />
-                    <DataStat label="salaries" value={importPreview.salaries?.length ?? 0} />
-                    <DataStat label="bonuses" value={importPreview.bonuses?.length ?? 0} />
-                    <DataStat label="overtime" value={importPreview.overtime?.length ?? 0} />
-                    <DataStat label="hours" value={importPreview.hoursSnapshots?.length ?? 0} />
-                    <DataStat label="goals" value={importPreview.goals?.length ?? 0} />
-                  </div>
+                  <PayloadSummary payload={importPreview} compareTo={currentPayload} />
                   <div
                     className="flex items-start gap-2 text-[12px] rounded-[8px] p-3"
                     style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
@@ -953,13 +958,108 @@ function RangeRow({
   );
 }
 
-function DataStat({ label, value }: { label: string; value: number }) {
+const SECTION_ICONS: Record<string, ReactNode> = {
+  incomeWork: <Briefcase size={13} />,
+  budget: <Receipt size={13} />,
+  assetsDebt: <PiggyBank size={13} />,
+  included: <Check size={13} />,
+};
+
+// Categorised breakdown of an export payload. Drives both the export card
+// (incoming only) and the import preview (`compareTo` = current data → shows a
+// "current → incoming" delta on every collection).
+function PayloadSummary({
+  payload,
+  compareTo,
+}: {
+  payload: Partial<ExportPayload>;
+  compareTo?: Partial<ExportPayload>;
+}) {
+  const { t } = useFinanceSettings();
+  const sum = t.settings.summary;
+  const itemLabels = sum.items as Record<string, string>;
+  const sectionLabels = sum.sections as Record<string, string>;
+
+  const currentCounts: Record<string, number> = {};
+  if (compareTo) {
+    for (const sec of summarizeExport(compareTo)) {
+      for (const it of sec.items) if (it.kind === 'count') currentCounts[it.key] = it.count ?? 0;
+    }
+  }
+
   return (
-    <div>
-      <div className="text-[18px] font-semibold tabular-nums">{value}</div>
-      <div className="text-[10px] uppercase tracking-[0.1em] mt-0.5" style={{ color: 'var(--text-3)' }}>
-        {label}
-      </div>
+    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+      {summarizeExport(payload).map(sec => (
+        <div key={sec.key}>
+          <div
+            className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] mb-2"
+            style={{ color: 'var(--text-3)' }}
+          >
+            {SECTION_ICONS[sec.key]}
+            {sectionLabels[sec.key]}
+          </div>
+          <div className="space-y-1">
+            {sec.items.map(it => (
+              <SummaryRow
+                key={it.key}
+                item={it}
+                label={itemLabels[it.key]}
+                current={currentCounts[it.key]}
+                compare={!!compareTo}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SummaryRow({
+  item,
+  label,
+  current,
+  compare,
+}: {
+  item: SummaryItem;
+  label: string;
+  current?: number;
+  compare: boolean;
+}) {
+  const count = item.count ?? 0;
+  const isEmpty = item.kind === 'count' && count === 0 && !(compare && (current ?? 0) > 0);
+  return (
+    <div
+      className="flex items-center justify-between gap-2 text-[12px]"
+      style={{ color: isEmpty ? 'var(--text-3)' : 'var(--text-1)' }}
+    >
+      <span className="truncate">{label}</span>
+      {item.kind === 'flag' ? (
+        item.present ? (
+          <Check size={13} style={{ color: 'var(--positive)' }} />
+        ) : (
+          <Minus size={13} style={{ color: 'var(--text-3)' }} />
+        )
+      ) : compare ? (
+        <span className="flex items-center gap-1 tabular-nums shrink-0">
+          {(current ?? 0) !== count && (
+            <>
+              <span style={{ color: 'var(--text-3)' }}>{current ?? 0}</span>
+              <ArrowRight size={11} style={{ color: 'var(--text-3)' }} />
+            </>
+          )}
+          <span className="font-semibold" style={{ color: count > 0 ? 'var(--accent)' : 'var(--text-3)' }}>
+            {count}
+          </span>
+        </span>
+      ) : (
+        <span
+          className="font-semibold tabular-nums shrink-0"
+          style={{ color: count > 0 ? 'var(--text-1)' : 'var(--text-3)' }}
+        >
+          {count}
+        </span>
+      )}
     </div>
   );
 }

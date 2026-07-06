@@ -1,7 +1,7 @@
 import React, { useMemo, useState, lazy, Suspense } from 'react';
 import {
   TrendingUp, Wallet, Home, Zap, PiggyBank, BarChart2, Bitcoin, Shield, Receipt,
-  ArrowUpRight, BarChart3, LifeBuoy, Scale, Pencil, AlertTriangle,
+  ArrowUpRight, BarChart3, LifeBuoy, Scale, Pencil, AlertTriangle, X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format, parse, format as fmtDate, subMonths } from 'date-fns';
@@ -63,6 +63,8 @@ const DashboardPage: React.FC = () => {
     mortgageRate,
     mortgageTermYears,
     grossAnnualIncome,
+    assumptionsNudgeDismissed,
+    dismissAssumptionsNudge,
   } = useFinance();
 
   // ─── Derived numbers ───
@@ -272,11 +274,10 @@ const DashboardPage: React.FC = () => {
         </p>
       </header>
 
-      {/* Defaults nudge — market assumptions still untuned */}
-      {defaultAssumptions > 0 && (
-        <Link
-          to="/settings"
-          className="flex items-center justify-between gap-3 px-4 py-3 rounded-[var(--radius-md)] border text-[13px] transition-opacity hover:opacity-90"
+      {/* Defaults nudge — market assumptions still untuned. Dismissable for good. */}
+      {defaultAssumptions > 0 && !assumptionsNudgeDismissed && (
+        <div
+          className="flex items-center justify-between gap-3 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"
           style={{ background: 'var(--warning-bg)', borderColor: 'color-mix(in srgb, var(--warning) 30%, transparent)', color: 'var(--warning)' }}
         >
           <span className="flex items-center gap-2 min-w-0">
@@ -285,11 +286,25 @@ const DashboardPage: React.FC = () => {
               {defaultAssumptions} {t.dashboardPage.assumptionsNudge}
             </span>
           </span>
-          <span className="shrink-0 font-semibold inline-flex items-center gap-1">
-            {t.dashboardPage.reviewSettings}
-            <ArrowUpRight size={14} />
+          <span className="shrink-0 flex items-center gap-1">
+            <Link
+              to="/settings"
+              className="font-semibold inline-flex items-center gap-1 transition-opacity hover:opacity-90"
+            >
+              {t.dashboardPage.reviewSettings}
+              <ArrowUpRight size={14} />
+            </Link>
+            <button
+              type="button"
+              onClick={dismissAssumptionsNudge}
+              aria-label={t.dashboardPage.dismissNudge}
+              title={t.dashboardPage.dismissNudge}
+              className="ml-1 p-1 rounded-[6px] transition-opacity hover:opacity-70"
+            >
+              <X size={15} />
+            </button>
           </span>
-        </Link>
+        </div>
       )}
 
       {/* Bento grid */}

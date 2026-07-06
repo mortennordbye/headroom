@@ -6,6 +6,8 @@ import {
   Download,
   FileUp,
   ChevronDown,
+  Info,
+  X,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import FunBudget from '../components/FunBudget';
@@ -95,6 +97,8 @@ const BudgetPage: React.FC = () => {
     isMonthlyIncomeOverridden,
     effectiveIncome,
     averageIncome,
+    incomeReminderDismissedMonth,
+    dismissIncomeReminder,
     monthlyBudget,
     dailyBudget,
     fixedExpenses,
@@ -134,6 +138,22 @@ const BudgetPage: React.FC = () => {
       { value: 'expense', label: t.txExpense },
       { value: 'income', label: t.txIncome },
     ],
+  });
+
+  // Set (override) the selected month's income. Shared by the income stat card
+  // and the "set this month's income" reminder banner.
+  const editMonthlyIncome = () => openModal({
+    title: t.monthlyIncome,
+    fields: [{ key: 'income', label: t.editIncome, type: 'number', value: effectiveIncome.toString() }],
+    onSave: (vals) => {
+      const n = parsePositiveNumber(vals.income);
+      if (n !== null) {
+        setMonthlyIncomeForMonth(format(currentMonth, 'yyyy-MM'), n);
+        closeModal();
+      } else {
+        setModal(prev => prev ? { ...prev, error: t.editAmount + ' må være et positivt tall' } : null);
+      }
+    },
   });
 
   // --- Fixed Expenses ---
@@ -296,6 +316,11 @@ const BudgetPage: React.FC = () => {
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
   const incomeDiffPct = averageIncome > 0 ? ((effectiveIncome - averageIncome) / averageIncome) * 100 : 0;
+  // Remind the user to set THIS month's income while it's still auto-calculated.
+  // Only for the live month; dismissible, but the dismiss is keyed to the month
+  // so it returns once a new month begins.
+  const showIncomeReminder =
+    isCurrentMonth && !isMonthlyIncomeOverridden && incomeReminderDismissedMonth !== monthKey;
 
   return (
     <div className="space-y-6 md:space-y-7">
@@ -343,6 +368,38 @@ const BudgetPage: React.FC = () => {
         </p>
       </header>
 
+      {/* Reminder: set this month's income while it's still auto-calculated */}
+      {showIncomeReminder && (
+        <div
+          className="flex items-center justify-between gap-3 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"
+          style={{ background: 'var(--accent-bg)', borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)', color: 'var(--accent)' }}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <Info size={15} className="shrink-0" />
+            <span className="[overflow-wrap:anywhere]">{t.budgetPage.incomeReminder}</span>
+          </span>
+          <span className="shrink-0 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={editMonthlyIncome}
+              className="font-semibold inline-flex items-center gap-1 transition-opacity hover:opacity-90"
+            >
+              {t.budgetPage.incomeReminderAction}
+              <Edit2 size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => dismissIncomeReminder(monthKey)}
+              aria-label={t.budgetPage.incomeReminderDismiss}
+              title={t.budgetPage.incomeReminderDismiss}
+              className="ml-1 p-1 rounded-[6px] transition-opacity hover:opacity-70"
+            >
+              <X size={15} />
+            </button>
+          </span>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
@@ -381,20 +438,7 @@ const BudgetPage: React.FC = () => {
             </div>
           )}
           editable
-          onEdit={() => openModal({
-            title: t.monthlyIncome,
-            fields: [{ key: 'income', label: t.editIncome, type: 'number', value: effectiveIncome.toString() }],
-            onSave: (vals) => {
-              const n = parsePositiveNumber(vals.income);
-              if (n !== null) {
-                const key = format(currentMonth, 'yyyy-MM');
-                setMonthlyIncomeForMonth(key, n);
-                closeModal();
-              } else {
-                setModal(prev => prev ? { ...prev, error: t.editAmount + ' må være et positivt tall' } : null);
-              }
-            },
-          })}
+          onEdit={editMonthlyIncome}
         />
         <StatCard title={t.monthlyBudget} value={formatCurrency(monthlyBudget)} accent />
         <StatCard title={t.dailyBudget} value={formatCurrency(dailyBudget)} />

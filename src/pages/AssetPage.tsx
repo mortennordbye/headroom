@@ -82,18 +82,24 @@ const AssetPage: React.FC = () => {
   );
   // True net worth also nets out non-mortgage debts (studielån, forbrukslån, …).
   const netWorth = totalEquity - totalDebt;
+  // Summary "liabilities" figure: mortgage + other debt + net latent tax. Latent
+  // tax can be negative (an unrealized-loss tax shield), so this can flip sign.
+  const liabilitiesTotal = assets.houseDebt + taxOnGain + cryptoTaxOnGain + totalDebt;
 
     const [modal, setModal] = useState<ModalConfig | null>(null);
     const openModal = (config: ModalConfig) => setModal(config);
     const closeModal = () => setModal(null);
 
-    const openAssetEdit = (label: string, currentVal: number, key: keyof Assets) => {
+    // `allowNegative` is for unrealized gain/loss fields: a loss is a legitimate
+    // negative value (it carries a deductible latent tax benefit). All other
+    // asset amounts stay non-negative.
+    const openAssetEdit = (label: string, currentVal: number, key: keyof Assets, allowNegative = false) => {
     openModal({
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: currentVal.toString() }],
       onSave: (vals) => {
         const n = parseLocaleNumber(vals.value);
-        if (!isNaN(n) && n >= 0) updateAsset(key, n);
+        if (!isNaN(n) && (allowNegative || n >= 0)) updateAsset(key, n);
         closeModal();
       },
     });
@@ -199,7 +205,7 @@ const AssetPage: React.FC = () => {
               <AssetRow
                 label={t.unrealizedGain}
                 value={assets.unrealizedGain}
-                onEdit={() => openAssetEdit(t.unrealizedGain, assets.unrealizedGain, 'unrealizedGain')}
+                onEdit={() => openAssetEdit(t.unrealizedGain, assets.unrealizedGain, 'unrealizedGain', true)}
                 formatCurrency={formatCurrency}
               />
               <AssetRow
@@ -211,10 +217,12 @@ const AssetPage: React.FC = () => {
                 icon={<Percent size={12} className="text-[var(--text-2)]" />}
                 badge={<ProvenanceBadge kind={provenanceOf(assets.taxRate, DEFAULT_TAX_RATES.stockTaxRate)} />}
               />
-              <div className="flex justify-between py-3.5 text-[12px] text-[var(--negative)] font-medium border-t border-[var(--border)] mt-1">
-                <span>{t.liabilityReserve}</span>
-                <span className="font-mono">−{formatCurrency(taxOnGain)}</span>
-              </div>
+              <LatentTaxLine
+                amount={taxOnGain}
+                liabilityLabel={t.liabilityReserve}
+                benefitLabel={t.taxShieldReserve}
+                formatCurrency={formatCurrency}
+              />
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
                 <span>{t.netLiquidity}</span>
                 <span className="font-mono text-[var(--positive)]">{formatCurrency(netInvestment)}</span>
@@ -326,7 +334,7 @@ const AssetPage: React.FC = () => {
               <AssetRow
                 label={t.cryptoGain}
                 value={assets.cryptoUnrealizedGain}
-                onEdit={() => openAssetEdit(t.cryptoGain, assets.cryptoUnrealizedGain, 'cryptoUnrealizedGain')}
+                onEdit={() => openAssetEdit(t.cryptoGain, assets.cryptoUnrealizedGain, 'cryptoUnrealizedGain', true)}
                 formatCurrency={formatCurrency}
               />
               <AssetRow
@@ -337,10 +345,12 @@ const AssetPage: React.FC = () => {
                 formatCurrency={(v) => v.toFixed(2)}
                 icon={<Percent size={12} className="text-[var(--text-2)]" />}
               />
-              <div className="flex justify-between py-3.5 text-[12px] text-[var(--negative)] font-medium border-t border-[var(--border)] mt-1">
-                <span>{t.cryptoTaxLabel}</span>
-                <span className="font-mono">−{formatCurrency(cryptoTaxOnGain)}</span>
-              </div>
+              <LatentTaxLine
+                amount={cryptoTaxOnGain}
+                liabilityLabel={t.cryptoTaxLabel}
+                benefitLabel={t.cryptoTaxShieldLabel}
+                formatCurrency={formatCurrency}
+              />
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
                 <span>{t.netCrypto}</span>
                 <span className="font-mono text-[var(--positive)]">{formatCurrency(netCrypto)}</span>
@@ -380,8 +390,11 @@ const AssetPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-2)' }}>{t.liabilities}</span>
-                  <span className="font-semibold tabular-nums" style={{ color: 'var(--negative)' }}>
-                    −{formatCurrency(assets.houseDebt + taxOnGain + cryptoTaxOnGain + totalDebt)}
+                  <span
+                    className="font-semibold tabular-nums"
+                    style={{ color: liabilitiesTotal >= 0 ? 'var(--negative)' : 'var(--positive)' }}
+                  >
+                    {liabilitiesTotal >= 0 ? '−' : '+'}{formatCurrency(Math.abs(liabilitiesTotal))}
                   </span>
                 </div>
               </div>
@@ -582,6 +595,31 @@ function RateChip({ label, value, onClick }: { label: string; value: number; onC
       <span className="font-semibold tabular-nums">{value}%</span>
       <Edit2 size={9} strokeWidth={2.5} />
     </button>
+  );
+}
+
+// Latent tax line that flips between a liability (gain → money owed on sale, red,
+// "−") and a benefit (unrealized loss → deductible tax shield, green, "+").
+function LatentTaxLine({
+  amount,
+  liabilityLabel,
+  benefitLabel,
+  formatCurrency,
+}: {
+  amount: number;
+  liabilityLabel: string;
+  benefitLabel: string;
+  formatCurrency: (v: number) => string;
+}) {
+  const benefit = amount < 0;
+  return (
+    <div
+      className="flex justify-between py-3.5 text-[12px] font-medium border-t border-[var(--border)] mt-1"
+      style={{ color: benefit ? 'var(--positive)' : 'var(--negative)' }}
+    >
+      <span>{benefit ? benefitLabel : liabilityLabel}</span>
+      <span className="font-mono">{benefit ? '+' : '−'}{formatCurrency(Math.abs(amount))}</span>
+    </div>
   );
 }
 

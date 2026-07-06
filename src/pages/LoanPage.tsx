@@ -15,6 +15,7 @@ import {
   ArrowRight,
   TrendingDown,
   ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 import {
   BarChart,
@@ -67,6 +68,7 @@ const LoanPage: React.FC = () => {
     homeowner: liveHomeowner, updateHomeowner,
     transition: liveTransition, updateTransition,
     assets: liveAssets,
+    grossAnnualIncome, totalDebt,
     formatCurrency,
   } = useFinance();
 
@@ -78,7 +80,24 @@ const LoanPage: React.FC = () => {
   const transition = snap?.transition ?? liveTransition;
   const assets = snap?.assets ?? liveAssets;
   const housingMode = snap?.housingMode ?? liveHousingMode;
-  const houseEquity = computeEquityBreakdown(assets).houseEquity;
+  const equityBreakdown = computeEquityBreakdown(assets);
+  const houseEquity = equityBreakdown.houseEquity;
+
+  // ── Låneevne inputs auto-filled from the app's real data, with a per-field
+  // manual override (the Employer-cost pattern). Default to the live derived
+  // value; an explicit edit overrides it until reset. When viewing a past month
+  // (read-only), fall back to that month's stored loan snapshot instead of the
+  // live derived figures.
+  const liquidEquity = useMemo(
+    () => Math.round(assets.bsu + assets.savings + assets.bufferAccount + equityBreakdown.netInvestment),
+    [assets.bsu, assets.savings, assets.bufferAccount, equityBreakdown.netInvestment],
+  );
+  const [arslonnOverride, setArslonnOverride] = useState<number | null>(null);
+  const [gjeldOverride, setGjeldOverride] = useState<number | null>(null);
+  const [egenkapitalOverride, setEgenkapitalOverride] = useState<number | null>(null);
+  const effArslonn = arslonnOverride ?? (hist.isLive ? grossAnnualIncome : loan.arslonn);
+  const effGjeld = gjeldOverride ?? (hist.isLive ? totalDebt : loan.eksisterendeGjeld);
+  const effEgenkapital = egenkapitalOverride ?? (hist.isLive ? liquidEquity : loan.egenkapital);
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [showAmortization, setShowAmortization] = useState(false);
@@ -136,6 +155,32 @@ const LoanPage: React.FC = () => {
     });
   };
 
+  // Edit an auto-filled Låneevne input → sets that field's manual override.
+  const editOverride = (label: string, current: number, setOverride: (n: number) => void) => {
+    openModal({
+      title: label,
+      fields: [{ key: 'value', label, type: 'number', value: Math.round(current).toString() }],
+      onSave: (vals) => {
+        const n = parseLocaleNumber(vals.value);
+        if (!isNaN(n) && n >= 0) setOverride(n);
+        closeModal();
+      },
+    });
+  };
+
+  // Small "auto / manual" chip — the row's note names the actual source.
+  const sourceBadge = (auto: boolean) => (
+    <span
+      className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide"
+      style={{
+        background: auto ? 'var(--accent-bg)' : 'rgba(255,255,255,0.06)',
+        color: auto ? 'var(--accent)' : 'var(--text-3)',
+      }}
+    >
+      {auto ? t.loanPage.autoBadge : t.loanPage.manualBadge}
+    </span>
+  );
+
   // First-buyer calculations
   const calc = useMemo(() => {
     const monthlyRate = loan.rente / 100 / 12;
@@ -157,11 +202,11 @@ const LoanPage: React.FC = () => {
     // Real Norwegian lending limits: the affordable price is the lower of the
     // 5× income cap and the 15%-equity (85% LTV) cap, plus a +3pp stress test.
     const capacity = calcBorrowingCapacity(
-      loan.arslonn, loan.egenkapital, loan.eksisterendeGjeld, loan.rente, loan.nedbetalingstid,
+      effArslonn, effEgenkapital, effGjeld, loan.rente, loan.nedbetalingstid,
     );
-    const totalpris = loan.betingetLaan + loan.egenkapital;
+    const totalpris = loan.betingetLaan + effEgenkapital;
     return { monthlyPaymentBase, monthlyPaymentWithFee, totalInterest, totalCost, yearOneInterest, taxDeduction, capacity, totalpris };
-  }, [loan]);
+  }, [loan, effArslonn, effEgenkapital, effGjeld]);
 
   const amortizationSchedule = useMemo(
     () => calcAmortizationSchedule(loan.laanebelop, loan.rente, loan.nedbetalingstid),
@@ -289,18 +334,27 @@ const LoanPage: React.FC = () => {
                 <h2 className={sectionLabel}>Låneevne</h2>
               </div>
               <div className="space-y-1">
-                <LoanRow label="Årslønn" notes="Bruttoinntekt per år før skatt"
-                  value={fmtNum(loan.arslonn)}
-                  onEdit={() => editNum('Årslønn', 'arslonn', loan.arslonn)} />
-                <LoanRow label="Gjeld" notes="Total eksisterende gjeld"
-                  value={fmtNum(loan.eksisterendeGjeld)}
-                  onEdit={() => editNum('Gjeld', 'eksisterendeGjeld', loan.eksisterendeGjeld)} />
+                <LoanRow label="Årslønn" notes="Bruttoinntekt per år før skatt — fra Lønn"
+                  value={fmtNum(effArslonn)}
+                  onEdit={() => editOverride('Årslønn', effArslonn, setArslonnOverride)}
+                  badge={sourceBadge(arslonnOverride === null)}
+                  onReset={arslonnOverride === null ? undefined : () => setArslonnOverride(null)}
+                  resetLabel={t.loanPage.resetAuto} />
+                <LoanRow label="Gjeld" notes="Total eksisterende gjeld — fra Gjeld"
+                  value={fmtNum(effGjeld)}
+                  onEdit={() => editOverride('Gjeld', effGjeld, setGjeldOverride)}
+                  badge={sourceBadge(gjeldOverride === null)}
+                  onReset={gjeldOverride === null ? undefined : () => setGjeldOverride(null)}
+                  resetLabel={t.loanPage.resetAuto} />
                 <LoanRow label="Lånesum" notes="Beløpet du planlegger å låne"
                   value={fmtNum(loan.laanebelop)}
                   onEdit={() => editNum('Lånesum', 'laanebelop', loan.laanebelop)} />
-                <LoanRow label="Egenkapital" notes="Oppspart kapital (BSU, fond, kontoer)"
-                  value={fmtNum(loan.egenkapital)}
-                  onEdit={() => editNum('Egenkapital', 'egenkapital', loan.egenkapital)} />
+                <LoanRow label="Egenkapital" notes="Oppspart kapital (BSU, fond, kontoer) — fra Formue"
+                  value={fmtNum(effEgenkapital)}
+                  onEdit={() => editOverride('Egenkapital', effEgenkapital, setEgenkapitalOverride)}
+                  badge={sourceBadge(egenkapitalOverride === null)}
+                  onReset={egenkapitalOverride === null ? undefined : () => setEgenkapitalOverride(null)}
+                  resetLabel={t.loanPage.resetAuto} />
                 <LoanRow label="Maks kjøpesum" notes={calc.capacity.ltvBound ? 'Begrenset av 15 % egenkapital (85 % belåning)' : 'Begrenset av 5x inntekt – gjeld'}
                   value={fmtNum(Math.round(calc.capacity.maxPrice))}
                   highlight />
@@ -367,7 +421,7 @@ const LoanPage: React.FC = () => {
               <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
                   <Building2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                  <h2 className={sectionLabel}>Finansieringsbevis – Handelsbanken</h2>
+                  <h2 className={sectionLabel}>Finansieringsbevis</h2>
                 </div>
                 <button
                   onClick={() => editText('Gyldig til', 'gyldigTil', loan.gyldigTil)}
@@ -806,9 +860,15 @@ interface LoanRowProps {
   onEdit?: () => void;
   highlight?: boolean;
   highlightColor?: 'blue' | 'green' | 'red';
+  /** Small chip after the label (e.g. Auto / Overstyrt). */
+  badge?: React.ReactNode;
+  /** When set, shows a reset-to-auto control that clears a manual override. */
+  onReset?: () => void;
+  /** Accessible label for the reset-to-auto control. */
+  resetLabel?: string;
 }
 
-function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blue' }: LoanRowProps) {
+function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blue', badge, onReset, resetLabel }: LoanRowProps) {
   const isCalculated = !onEdit;
   const valueColor = highlight
     ? highlightColor === 'green'
@@ -828,10 +888,23 @@ function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blu
       onClick={onEdit}
     >
       <div className="flex-1 min-w-0 mr-4">
-        <div className={`text-[13px] font-medium ${labelColor}`}>{label}</div>
+        <div className={`text-[13px] font-medium ${labelColor} flex items-center gap-2`}>
+          <span className="truncate">{label}</span>
+          {badge}
+        </div>
         {notes && <div className="text-[11px] text-[var(--text-2)]/70 hidden lg:block mt-0.5">{notes}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">
+        {onReset && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onReset(); }}
+            className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors shrink-0"
+            aria-label={resetLabel}
+          >
+            <RotateCcw size={12} />
+          </button>
+        )}
         <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${valueColor} ${onEdit ? 'group-hover:opacity-70 transition-opacity' : ''}`}>
           {value}
         </span>

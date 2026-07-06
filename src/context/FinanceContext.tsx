@@ -395,6 +395,13 @@ interface FinanceSettingsContextType {
   setCustomTaxRatePct: (v: number) => void;
   hiddenNavItems: string[];
   toggleNavItem: (path: string) => void;
+  /** Dashboard "market assumptions still on defaults" nudge — dismissed for good. */
+  assumptionsNudgeDismissed: boolean;
+  dismissAssumptionsNudge: () => void;
+  /** Budget "set this month's income" reminder — holds the 'yyyy-MM' the user
+   *  last dismissed it for, so it reappears once a new month begins. */
+  incomeReminderDismissedMonth: string;
+  dismissIncomeReminder: (monthKey: string) => void;
   formatCurrency: (val: number) => string;
   formatCurrencyShort: (val: number) => string;
   restoreGrowthRateDefaults: () => void;
@@ -584,6 +591,8 @@ export interface ExportPayload {
   billingConfig?: BillingRateConfig;
   hiddenNavItems?: string[];
   onboardingCompleted?: boolean;
+  assumptionsNudgeDismissed?: boolean;
+  incomeReminderDismissedMonth?: string;
 }
 
 export interface DailyDataEntry {
@@ -657,6 +666,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
+  const [assumptionsNudgeDismissed, setAssumptionsNudgeDismissed] = useState(false);
+  const [incomeReminderDismissedMonth, setIncomeReminderDismissedMonth] = useState('');
   const [demoMode, setDemoMode] = useState(false);
   // First-run guided setup. `onboardingCompleted` is the persisted flag;
   // `onboardingActive` (not persisted) is whether the tour overlay is showing.
@@ -709,12 +720,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
-    goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted]);
+    goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth]);
 
   // The one place that applies a loaded/imported blob → app state (§4.2), with
   // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
@@ -752,6 +765,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // Legacy blobs pre-date this flag — absent → treated as onboarded (true) on
     // load so existing users never re-trigger the first-run tour.
     if (typeof data.onboardingCompleted === 'boolean') setOnboardingCompleted(data.onboardingCompleted); else if (resetMissing) setOnboardingCompleted(true);
+    if (typeof data.assumptionsNudgeDismissed === 'boolean') setAssumptionsNudgeDismissed(data.assumptionsNudgeDismissed); else if (resetMissing) setAssumptionsNudgeDismissed(false);
+    if (typeof data.incomeReminderDismissedMonth === 'string') setIncomeReminderDismissedMonth(data.incomeReminderDismissedMonth); else if (resetMissing) setIncomeReminderDismissedMonth('');
 
     // ── Group B: apply only when present (identical on load + import) ──
     // `currentMonth` is view state, never persisted — ignored on both paths.
@@ -1213,15 +1228,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }));
   }, [assets, loan, pension, homeowner, transition, housingMode]);
 
+  // The current home's value and mortgage are one real quantity stored in three
+  // slices (assets drives net worth; homeowner drives LTV/payment; transition
+  // drives the sale math). Keep them in lockstep no matter which page edits, so
+  // the pages can never show contradictory numbers. (Previously only
+  // assets↔homeowner were mirrored, and only in homeowner mode — the transition
+  // slice drifted, and demo data seeded all three independently.)
   const updateAsset = useCallback((key: keyof Assets, value: number) => {
     setAssets(prev => ({ ...prev, [key]: value }));
-    // In homeowner mode the mortgage is one real debt edited in two places
-    // (assets.houseDebt drives net worth; homeowner.currentMortgageBalance drives
-    // LTV/payment). Keep them in lockstep so the two views can't contradict.
-    if (key === 'houseDebt' && housingMode === 'homeowner') {
+    if (key === 'houseDebt') {
       setHomeowner(prev => ({ ...prev, currentMortgageBalance: value }));
+      setTransition(prev => ({ ...prev, currentMortgageBalance: value }));
     }
-  }, [housingMode]);
+    if (key === 'houseValue') {
+      setTransition(prev => ({ ...prev, currentHouseValue: value }));
+    }
+  }, []);
 
   const updateLoan = useCallback((key: keyof LoanData, value: number | string) => {
     setLoan(prev => ({ ...prev, [key]: value }));
@@ -1243,17 +1265,30 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setHiddenNavItems(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
   }, []);
 
+  const dismissAssumptionsNudge = useCallback(() => setAssumptionsNudgeDismissed(true), []);
+
+  const dismissIncomeReminder = useCallback((monthKey: string) => setIncomeReminderDismissedMonth(monthKey), []);
+
   const updateHomeowner = useCallback((key: keyof HomeownerData, value: number) => {
     setHomeowner(prev => ({ ...prev, [key]: value }));
-    // Mirror the mortgage balance into assets.houseDebt (see updateAsset) so net
-    // worth and the loan page never show contradictory debt in homeowner mode.
-    if (key === 'currentMortgageBalance' && housingMode === 'homeowner') {
+    // Mirror the mortgage balance across the slices that hold the same real debt.
+    if (key === 'currentMortgageBalance') {
       setAssets(prev => ({ ...prev, houseDebt: value }));
+      setTransition(prev => ({ ...prev, currentMortgageBalance: value }));
     }
-  }, [housingMode]);
+  }, []);
 
   const updateTransition = useCallback((key: keyof TransitionData, value: number) => {
     setTransition(prev => ({ ...prev, [key]: value }));
+    // The transition slice describes the same current home as assets/homeowner —
+    // mirror its value and mortgage so all three stay in lockstep.
+    if (key === 'currentMortgageBalance') {
+      setAssets(prev => ({ ...prev, houseDebt: value }));
+      setHomeowner(prev => ({ ...prev, currentMortgageBalance: value }));
+    }
+    if (key === 'currentHouseValue') {
+      setAssets(prev => ({ ...prev, houseValue: value }));
+    }
   }, []);
 
   // User-facing housing-mode switch. Entering homeowner mode reconciles any
@@ -1428,6 +1463,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setBillingConfig(DEFAULT_BILLING_CONFIG);
     // A full wipe is effectively a fresh start — re-run the guided setup from the top.
     setOnboardingCompleted(false);
+    setAssumptionsNudgeDismissed(false);
+    setIncomeReminderDismissedMonth('');
     setOnboardingEntry('welcome');
     setOnboardingNonce(n => n + 1);
     setOnboardingActive(true);
@@ -1543,6 +1580,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
     region, setRegion, customTaxRatePct, setCustomTaxRatePct,
     hiddenNavItems, toggleNavItem,
+    assumptionsNudgeDismissed, dismissAssumptionsNudge,
+    incomeReminderDismissedMonth, dismissIncomeReminder,
     formatCurrency, formatCurrencyShort,
     restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
     demoMode, toggleDemoMode,
@@ -1553,6 +1592,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
     cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
+    assumptionsNudgeDismissed, dismissAssumptionsNudge,
+    incomeReminderDismissedMonth, dismissIncomeReminder,
     formatCurrency, formatCurrencyShort, restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
     demoMode, toggleDemoMode,
     onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,

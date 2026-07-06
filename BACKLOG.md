@@ -30,6 +30,30 @@ Known limitations:
 - **`recommendedInvestment` on Assets is silently month-coupled** — it derives from `effectiveIncome` (month-scoped), so with the picker hidden on `/assets` the value still reflects whatever month was last selected on Budget/Dashboard. **Where**: `calcRecommendations(effectiveIncome, …)` at `src/context/FinanceContext.tsx:1654`, consumed in `src/pages/AssetPage.tsx`.
 - **Net-worth history editor covers a rolling 12-month window** matching the Dashboard chart. Editing months older than 12 back isn't exposed.
 
+## Cross-page value syncing — follow-ups
+
+Shipped (2026-07): the Loan page's first-buyer Låneevne inputs now auto-fill from the app's
+real data with a per-field manual override (the Employer-cost pattern) — `arslonn` ←
+`grossAnnualIncome` (Salary), `eksisterendeGjeld` ← `totalDebt` (Debts), `egenkapital` ←
+liquid assets (`bsu + savings + bufferAccount + netInvestment`). Each shows an Auto/Overstyrt
+chip and a reset-to-auto control; overrides are page-local (reset on reload, like
+EmployerCost), and history (read-only) views fall back to the month's stored `loan` snapshot.
+The current home's value/mortgage are now hard-mirrored across `assets` ↔ `homeowner` ↔
+`transition` in `updateAsset`/`updateHomeowner`/`updateTransition` (previously only
+assets↔homeowner, only in homeowner mode). Code: `src/pages/LoanPage.tsx`,
+`src/context/FinanceContext.tsx`. Remaining:
+
+- **`skattefradragssats` (interest tax-deduction %) is still duplicated** — an editable copy
+  lives in both `loan` and `homeowner` (both default 22%), but it's a policy constant, not a
+  per-loan choice. Promote to one shared source (a Settings value or a `TAX_PARAMS` constant)
+  so the two can't diverge. Deferred because it's a persisted-shape change (touches
+  `LoanData`/`HomeownerData`, defaults, sanitize, export/import, demo). **Where**:
+  `src/context/FinanceContext.tsx` (`DEFAULT_LOAN`/`DEFAULT_HOMEOWNER`), `src/pages/LoanPage.tsx`.
+- **Loan-input overrides don't persist across reloads** — matches EmployerCost, and is fine
+  for a what-if calculator, but if we later want a "sticky" manual salary/debt on the Loan
+  page it needs a persisted `number | null` override model (or a `touched` set) rather than
+  the page-local `useState`.
+
 ## Live SSB wage statistics
 
 `/api/wage-stats` currently returns a curated static series (server/index.js, `WAGE_STATS_STATIC`). Should query SSB table 11418 (or 13606) for live national median annual wage instead.
