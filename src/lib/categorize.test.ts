@@ -31,8 +31,33 @@ describe('categorize', () => {
     ['IKEA Furuset', 'shopping'],
     ['Husleie mars', 'housing'],
     ['Vipps til Ola', 'transfers'],
+    // International merchants (a Norwegian on a Rome trip) matched by generic words.
+    ["ESQUILINO CAFFE' SRL", 'dining'],
+    ['GELATERIA', 'dining'],
+    ['SUPERMERCATO STELAC SRL', 'groceries'],
+    ['TRENITALIA - PT WL', 'transport'],
+    ['FLYBUSSEN CONNECT', 'transport'],
+    ['DUTY FREE 7108 AVGANG NOR', 'shopping'],
+    ['Google Workspace_nordbye', 'subscriptions'],
   ])('labels "%s" as %s', (merchant, expected) => {
     expect(categorize({ merchant }).category).toBe(expected);
+  });
+
+  it.each([
+    ['5651', 'shopping'],   // family clothing (apparel range)
+    ['5812', 'dining'],     // restaurants
+    ['4121', 'transport'],  // taxis
+    ['3010', 'transport'],  // an airline (3000–3299 range)
+    ['3366', 'transport'],  // a car-rental agency (3351–3500 range)
+    ['5947', 'shopping'],   // gift/souvenir shop
+    ['4814', 'utilities'],  // telecom
+    ['5815', 'subscriptions'], // digital goods
+  ])('maps MCC %s → %s for an unknown foreign merchant', (mcc, expected) => {
+    expect(categorize({ merchant: 'Sconosciuto SRL', mcc }).category).toBe(expected);
+  });
+
+  it('leaves lodging MCC (3501–3999) unmapped → other', () => {
+    expect(categorize({ merchant: 'Hotel Roma', mcc: '3700' }).category).toBe('other');
   });
 
   it('is case-insensitive and matches inside the description too', () => {

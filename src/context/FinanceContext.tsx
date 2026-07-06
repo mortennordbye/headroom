@@ -1068,19 +1068,25 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     };
   }, [demoMode, saveFailed]);
 
-  // Auto-categorize any transaction that lacks a label — the single ingest
-  // chokepoint for bank-synced rows, imports, and legacy backfill. The rule
-  // engine is deterministic and never touches rows that already have a
-  // category (so manual labels are preserved), which also makes this loop-safe:
-  // once every row is labelled it stops firing.
+  // Auto-categorize the single ingest chokepoint for bank-synced rows, imports,
+  // and legacy backfill. Two cases are (re)labelled by the deterministic rule
+  // engine: rows with no category, and auto-labelled 'other' rows (so when the
+  // ruleset improves — e.g. new MCC/keyword coverage — the existing "Annet" pile
+  // upgrades itself on next load without a manual re-sync). Manual labels and
+  // already-confident auto labels are never touched. Loop-safe: it only writes
+  // when a row actually changes, so once nothing more can be matched it stops.
   useEffect(() => {
-    if (!dailyTransactions.some((t) => !t.category)) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDailyTransactions(dailyTransactions.map((t) => {
-      if (t.category) return t;
+    let changed = false;
+    const next = dailyTransactions.map((t) => {
+      if (t.categorySource === 'manual') return t;         // respect user edits
+      if (t.category && t.category !== 'other') return t;  // keep confident auto labels
       const { category, source } = categorize({ merchant: t.merchant, description: t.description, mcc: t.mcc, kind: t.kind });
+      if (category === t.category) return t;                // genuinely unmatched → leave as-is
+      changed = true;
       return { ...t, category, categorySource: source };
-    }));
+    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (changed) setDailyTransactions(next);
   }, [dailyTransactions]);
 
   // --- Calculations ---
