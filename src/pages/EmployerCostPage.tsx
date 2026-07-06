@@ -50,11 +50,7 @@ const EmployerCostPage: React.FC = () => {
           {ec.heroLabel}
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
-          {lang === 'nb' ? (
-            <>Hva koster du <em className="font-serif italic" style={{ color: 'var(--brass)' }}>egentlig</em>?</>
-          ) : (
-            <>What do you <em className="font-serif italic" style={{ color: 'var(--brass)' }}>really</em> cost?</>
-          )}
+          {t.employerCostPage.heroBefore}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.employerCostPage.heroEmphasis}</em>{t.employerCostPage.heroAfter}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
           {ec.subtitle}
@@ -68,13 +64,13 @@ const EmployerCostPage: React.FC = () => {
         <SummaryTile
           label={ec.loading}
           value={`+${cost.loadingPct.toFixed(1)}%`}
-          sub={`${formatCurrency(cost.totalEmployerCost - cost.gross)} ${lang === 'nb' ? 'over lønn' : 'over salary'}`}
+          sub={`${formatCurrency(cost.totalEmployerCost - cost.gross)} ${t.employerCostPage.overSalary}`}
           color="var(--warning)"
         />
         <SummaryTile
           label={ec.targetRate}
           value={`${formatCurrency(billing.targetHourly)}/t`}
-          sub={`${formatCurrency(billing.dailyRate)}/${lang === 'nb' ? 'dag' : 'day'}`}
+          sub={`${formatCurrency(billing.dailyRate)}/${t.employerCostPage.dayAbbr}`}
           color="var(--positive)"
         />
       </div>
@@ -206,7 +202,7 @@ const EmployerCostPage: React.FC = () => {
             sub={`+${billing.markupOnCostPct.toFixed(0)}% ${ec.markupOnCost}`}
             color="var(--positive)"
           />
-          <StatBlock label={ec.dailyRate} value={`${formatCurrency(billing.dailyRate)}/${lang === 'nb' ? 'dag' : 'day'}`} />
+          <StatBlock label={ec.dailyRate} value={`${formatCurrency(billing.dailyRate)}/${t.employerCostPage.dayAbbr}`} />
           <StatBlock label={ec.annualRevenue} value={formatCurrency(billing.annualRevenueAtTarget)} />
           <StatBlock label={ec.annualProfit} value={formatCurrency(billing.profitAnnual)} color="var(--positive)" />
           <div className="col-span-2 lg:col-span-2 flex items-end">

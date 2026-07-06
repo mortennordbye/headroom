@@ -80,7 +80,6 @@ function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: E
 export default function SmartRecommendations() {
   const {
     t,
-    lang,
     averageIncome,
     totalFixedExpenses,
     recommendedSpending,
@@ -166,7 +165,7 @@ export default function SmartRecommendations() {
           </div>
           {recordedMonthCount > 0 && (
             <p className="text-[11px] text-[var(--text-2)] mt-1 ml-5">
-              {t.avgIncome} ({recordedMonthCount} {lang === 'nb' ? 'mnd' : 'mo'}): {formatCurrency(averageIncome)}
+              {t.avgIncome} ({recordedMonthCount} {t.common.moAbbr}): {formatCurrency(averageIncome)}
             </p>
           )}
         </div>
@@ -217,7 +216,7 @@ export default function SmartRecommendations() {
               formatCurrency={formatCurrency}
               onCommit={handleInvestmentEdit}
               hint={conservativeMode && suggestedInvestment > recommendedInvestment
-                ? `${lang === 'nb' ? 'Anbefalt' : 'Recommended'}: ${formatCurrency(suggestedInvestment)}`
+                ? `${t.common.recommended}: ${formatCurrency(suggestedInvestment)}`
                 : undefined}
             />
             <div className="flex flex-col gap-1.5 rounded-[8px] border p-3 md:p-4 bg-[var(--bg-raised)] border-[var(--border)]">
@@ -228,7 +227,7 @@ export default function SmartRecommendations() {
 
           <div className="space-y-2">
             <div className="flex justify-between text-[11px] text-[var(--text-2)]">
-              <span>{lang === 'nb' ? 'Brukt' : 'Spent'}: {formatCurrency(totalSpentThisMonth)}</span>
+              <span>{t.common.spent}: {formatCurrency(totalSpentThisMonth)}</span>
               <span>{Math.round(spendingPct)}% {t.spentOfRecommended}</span>
             </div>
             <div className="h-2 bg-[var(--bg-elev)] rounded-[3px] overflow-hidden">
@@ -246,7 +245,7 @@ export default function SmartRecommendations() {
         {/* Right: allocation strip + legend (replaces the donut) */}
         <div className="w-full md:w-[240px] shrink-0">
           <div className="flex items-baseline justify-between text-[10px] uppercase tracking-[0.1em] text-[var(--text-3)] mb-2">
-            <span>{lang === 'nb' ? 'Fordeling' : 'Allocation'}</span>
+            <span>{t.common.allocation}</span>
             <span className="font-mono">{formatCurrencyShort(pieTotal)}</span>
           </div>
           <div className="flex h-[30px] rounded-[4px] overflow-hidden border border-[var(--rule)]">

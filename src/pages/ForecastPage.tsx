@@ -18,7 +18,7 @@ function formatAxisInt(val: number): string {
 }
 
 const ForecastPage: React.FC = () => {
-  const { t, lang, totalEquity, salaries, jobs, loan, income, housingMode, homeowner, formatCurrency, region, customTaxRatePct, pension } = useFinance();
+  const { t, totalEquity, salaries, jobs, loan, income, housingMode, homeowner, formatCurrency, region, customTaxRatePct, pension } = useFinance();
 
   // Find current salary (most recent effectiveDate <= today).
   const currentGross = useMemo(() => {
@@ -164,14 +164,14 @@ const ForecastPage: React.FC = () => {
       <div className={`${card} p-5 md:p-7 space-y-5`}>
         <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
           <Activity size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{lang === 'nb' ? 'Forutsetninger' : 'Assumptions'}</h3>
+          <h3 className={sectionLabel}>{t.forecastPage.assumptions}</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <SliderInput label={t.forecast.raiseAssumption} value={raisePct} onChange={setRaisePct} min={0} max={15} step={0.5} suffix="%" />
           <SliderInput label={t.forecast.savingsRateAssumption} value={savingsPct} onChange={setSavingsPct} min={0} max={70} step={5} suffix="%" />
           <SliderInput label={t.forecast.returnAssumption} value={returnPct} onChange={setReturnPct} min={-2} max={12} step={0.5} suffix="%" />
           <SliderInput label={t.forecast.inflationAssumption} value={inflationPct} onChange={setInflationPct} min={0} max={10} step={0.5} suffix="%" />
-          <SliderInput label={t.forecast.years} value={years} onChange={setYears} min={1} max={40} step={1} suffix={lang === 'nb' ? 'år' : 'yr'} />
+          <SliderInput label={t.forecast.years} value={years} onChange={setYears} min={1} max={40} step={1} suffix={t.forecastPage.yearSuffix} />
         </div>
       </div>
 
@@ -181,19 +181,19 @@ const ForecastPage: React.FC = () => {
           label={t.forecast.grossSalary}
           now={formatCurrency(first.gross)}
           then={formatCurrency(last.gross)}
-          thenLabel={`${t.forecast.summaryEnd} ${years} ${lang === 'nb' ? 'år' : 'yr'}`}
+          thenLabel={`${t.forecast.summaryEnd} ${years} ${t.forecastPage.yearSuffix}`}
         />
         <SummaryTile
           label={t.forecast.netTakeHome}
           now={formatCurrency(first.net)}
           then={formatCurrency(last.net)}
-          thenLabel={`${t.forecast.summaryEnd} ${years} ${lang === 'nb' ? 'år' : 'yr'}`}
+          thenLabel={`${t.forecast.summaryEnd} ${years} ${t.forecastPage.yearSuffix}`}
         />
         <SummaryTile
           label={t.forecast.netWorthProjected}
           now={formatCurrency(first.netWorth)}
           then={formatCurrency(last.netWorth)}
-          thenLabel={`${t.forecast.summaryEnd} ${years} ${lang === 'nb' ? 'år' : 'yr'}`}
+          thenLabel={`${t.forecast.summaryEnd} ${years} ${t.forecastPage.yearSuffix}`}
           subThen={`${t.forecast.realGrowth} ${formatCurrency(last.netWorthReal)}`}
           color="var(--accent)"
         />
@@ -201,7 +201,7 @@ const ForecastPage: React.FC = () => {
           label={t.forecast.mortgageRemaining}
           now={formatCurrency(first.mortgage)}
           then={formatCurrency(last.mortgage)}
-          thenLabel={`${t.forecast.summaryEnd} ${years} ${lang === 'nb' ? 'år' : 'yr'}`}
+          thenLabel={`${t.forecast.summaryEnd} ${years} ${t.forecastPage.yearSuffix}`}
           color={last.mortgage === 0 ? 'var(--positive)' : 'var(--text-1)'}
         />
         <SummaryTile
@@ -212,7 +212,7 @@ const ForecastPage: React.FC = () => {
             ? `${retirement.yearsToRetire} ${t.yearsToRetirement}`
             : t.setBirthYearHint}
           subThen={retirement.hasBirthYear
-            ? `${formatCurrency(retirement.otpAnnual + retirement.ipsAnnual)}/${lang === 'nb' ? 'år' : 'yr'} ${lang === 'nb' ? 'inn' : 'in'}`
+            ? `${formatCurrency(retirement.otpAnnual + retirement.ipsAnnual)}/${t.forecastPage.yearSuffix} ${t.forecastPage.in}`
             : undefined}
           color="var(--violet)"
         />
@@ -246,14 +246,14 @@ const ForecastPage: React.FC = () => {
                 cursor={{ stroke: 'var(--text-3)', strokeWidth: 1, strokeDasharray: '3 3' }}
               />
               <ReferenceLine y={first.netWorth} stroke="var(--text-3)" strokeDasharray="2 4" />
-              <Area type="monotone" dataKey="netWorth" name={lang === 'nb' ? 'Nominell' : 'Nominal'} stroke="var(--accent)" strokeWidth={2.5} fill="url(#forecastGradient)" />
-              <Area type="monotone" dataKey="netWorthReal" name={lang === 'nb' ? 'I dagens kroner' : "In today's kroner"} stroke="var(--violet)" strokeWidth={2} strokeDasharray="5 3" fill="url(#forecastRealGradient)" />
+              <Area type="monotone" dataKey="netWorth" name={t.forecastPage.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#forecastGradient)" />
+              <Area type="monotone" dataKey="netWorthReal" name={t.forecastPage.todaysKroner} stroke="var(--violet)" strokeWidth={2} strokeDasharray="5 3" fill="url(#forecastRealGradient)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{lang === 'nb' ? 'Nominell' : 'Nominal'}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />{lang === 'nb' ? 'I dagens kroner' : "In today's kroner"}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{t.forecastPage.nominal}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />{t.forecastPage.todaysKroner}</div>
         </div>
       </div>
 

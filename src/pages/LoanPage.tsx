@@ -62,7 +62,7 @@ const LtvChart = lazy(() => import('../components/charts/LtvChart'));
 
 const LoanPage: React.FC = () => {
   const {
-    t, lang, loan: liveLoan, updateLoan,
+    t, loan: liveLoan, updateLoan,
     housingMode: liveHousingMode, setHousingMode,
     homeowner: liveHomeowner, updateHomeowner,
     transition: liveTransition, updateTransition,
@@ -223,10 +223,10 @@ const LoanPage: React.FC = () => {
   ];
 
   const heroSubtitle = housingMode === 'first_buyer'
-    ? (lang === 'nb' ? 'Planlegg ditt første boligkjøp. Beregn låneevne, månedlig kostnad og total tilbakebetaling.' : 'Plan your first home purchase. Calculate borrowing capacity, monthly cost, and total payback.')
+    ? t.loanPage.firstBuyerSubtitle
     : housingMode === 'homeowner'
-      ? (lang === 'nb' ? 'Følg med på nåværende boliglån, renter, egenkapital og nedbetaling.' : "Track your current mortgage, rates, equity, and payoff schedule.")
-      : (lang === 'nb' ? 'Modellér overgang fra dagens bolig til en ny — netto salgsprovenu, mellomfinansiering og nytt lån.' : 'Model the move from your current home to a new one — net sale proceeds, bridge loan, and new mortgage.');
+      ? t.loanPage.homeownerSubtitle
+      : t.loanPage.transitioningSubtitle;
 
   return (
     <>
@@ -239,14 +239,10 @@ const LoanPage: React.FC = () => {
       {/* Hero header */}
       <header data-tour="loan-hero" className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
-          {lang === 'nb' ? 'Boliglån' : 'Mortgage'}
+          {t.loanPage.mortgage}
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
-          {lang === 'nb' ? (
-            <>Et hjem, et <em className="font-serif italic" style={{ color: 'var(--brass)' }}>lån</em>.</>
-          ) : (
-            <>A home, a <em className="font-serif italic" style={{ color: 'var(--brass)' }}>loan</em>.</>
-          )}
+          {t.loanPage.heroTitlePre}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.loanPage.heroTitleEm}</em>{t.loanPage.heroTitlePost}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
           {heroSubtitle}
@@ -405,7 +401,6 @@ const LoanPage: React.FC = () => {
             schedule={amortizationSchedule}
             chartData={chartData}
             t={t}
-            lang={lang}
             formatCurrency={formatCurrency}
           />
         </>
@@ -557,7 +552,6 @@ const LoanPage: React.FC = () => {
             schedule={homeownerAmortization}
             chartData={homeownerChartData}
             t={t}
-            lang={lang}
             formatCurrency={formatCurrency}
           />
 
@@ -713,11 +707,10 @@ interface AmortizationAccordionProps {
   schedule: ReturnType<typeof calcAmortizationSchedule>;
   chartData: ReturnType<typeof calcAmortizationSchedule>;
   t: ReturnType<typeof import('../context/FinanceContext').useFinance>['t'];
-  lang: string;
   formatCurrency: (n: number) => string;
 }
 
-function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, formatCurrency }: AmortizationAccordionProps) {
+function AmortizationAccordion({ show, onToggle, schedule, chartData, t, formatCurrency }: AmortizationAccordionProps) {
   return (
     <div className={`${card} overflow-hidden`}>
       <button
@@ -745,7 +738,7 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
                     tick={{ fontSize: 11, fill: CHART.textDim }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v) => `${lang === 'nb' ? 'År' : 'Yr'} ${v}`}
+                    tickFormatter={(v) => `${t.loanPage.yearAxisPrefix} ${v}`}
                   />
                   <YAxis
                     tickFormatter={(v) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : `${Math.round(v / 1_000)}k`}

@@ -132,7 +132,6 @@ interface ConfirmConfig {
 const SalaryPage: React.FC = () => {
   const {
     t,
-    lang,
     formatCurrency,
     jobs, addJob, updateJob, removeJob,
     salaries, addSalary, updateSalary, removeSalary,
@@ -465,25 +464,25 @@ const SalaryPage: React.FC = () => {
       fields,
       onSave: (vals) => {
         if (!isNonEmpty(vals.employer)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Arbeidsgiver er påkrevd' : 'Employer required' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errEmployerRequired });
           return;
         }
         if (!isValidYearMonth(vals.startDate)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Ugyldig startdato (YYYY-MM)' : 'Invalid start date (YYYY-MM)' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidStartDate });
           return;
         }
         if (!isOptionalYearMonth(vals.endDate)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Ugyldig sluttdato (YYYY-MM eller tom)' : 'Invalid end date (YYYY-MM or empty)' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidEndDate });
           return;
         }
         if (!isPositiveNumber(vals.contractedHoursPerWeek)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Timer må være et positivt tall' : 'Hours must be a positive number' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errHoursPositive });
           return;
         }
         const onCallRaw = vals.onCallAnnual?.trim() ?? '';
         const onCallNum = onCallRaw === '' ? null : parseLocaleNumber(onCallRaw);
         if (onCallNum !== null && (isNaN(onCallNum) || onCallNum < 0)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Vakttillegg må være et positivt tall' : 'On-call pay must be a positive number' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errOnCallPositive });
           return;
         }
         const initialSalaryRaw = vals.initialSalary?.trim() ?? '';
@@ -491,7 +490,7 @@ const SalaryPage: React.FC = () => {
         if (!existing && initialSalaryRaw !== '') {
           const parsed = parseLocaleNumber(initialSalaryRaw);
           if (isNaN(parsed) || parsed <= 0) {
-            setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Startlønn må være et positivt tall' : 'Initial salary must be a positive number' });
+            setModal(prev => prev && { ...prev, error: t.salaryPage.errInitialSalaryPositive });
             return;
           }
           initialSalaryNum = parsed;
@@ -561,11 +560,11 @@ const SalaryPage: React.FC = () => {
       ],
       onSave: (vals) => {
         if (!isValidYearMonth(vals.effectiveDate)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Ugyldig dato (YYYY-MM)' : 'Invalid date (YYYY-MM)' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateMonth });
           return;
         }
         if (!isPositiveNumber(vals.grossAnnual)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Lønn må være et positivt tall' : 'Salary must be a positive number' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errSalaryPositive });
           return;
         }
         const payload = {
@@ -622,11 +621,11 @@ const SalaryPage: React.FC = () => {
       ],
       onSave: (vals) => {
         if (!isValidYearMonthDay(vals.date)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Ugyldig dato (YYYY-MM-DD)' : 'Invalid date (YYYY-MM-DD)' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateDay });
           return;
         }
         if (!isPositiveNumber(vals.amount)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Beløp må være positivt' : 'Amount must be positive' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errAmountPositive });
           return;
         }
         const payload = {
@@ -665,11 +664,11 @@ const SalaryPage: React.FC = () => {
       ],
       onSave: (vals) => {
         if (!isValidYearMonthDay(vals.date)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Ugyldig dato (YYYY-MM-DD)' : 'Invalid date (YYYY-MM-DD)' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateDay });
           return;
         }
         if (!isPositiveNumber(vals.hours) || !isPositiveNumber(vals.amount)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Timer og beløp må være positive' : 'Hours and amount must be positive' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errHoursAmountPositive });
           return;
         }
         const payload = {
@@ -706,11 +705,11 @@ const SalaryPage: React.FC = () => {
       ],
       onSave: (vals) => {
         if (!isValidYearMonth(vals.periodMonth)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Ugyldig måned (YYYY-MM)' : 'Invalid month (YYYY-MM)' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidMonth });
           return;
         }
         if (!isPositiveNumber(vals.actualHoursPerWeek)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Timer må være positivt' : 'Hours must be positive' });
+          setModal(prev => prev && { ...prev, error: t.salaryPage.errHoursPositiveShort });
           return;
         }
         const payload = {
@@ -767,9 +766,7 @@ const SalaryPage: React.FC = () => {
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
           {isGeneric
-            ? (lang === 'nb'
-              ? 'Spor lønnsutvikling, bonus og faktiske arbeidstimer.'
-              : 'Track salary changes, bonuses and the hours you actually work.')
+            ? t.salaryPage.genericSubtitle
             : t.salary.subtitle}
         </p>
         {inflationStale && (
@@ -786,8 +783,8 @@ const SalaryPage: React.FC = () => {
           value={current ? formatCurrency(current.totalAnnual) : '—'}
           sub={current ? (
             currentOnCallAnnual > 0
-              ? `${formatCurrency(current.grossAnnual)} ${lang === 'nb' ? 'grunn' : 'base'} + ${formatCurrency(currentOnCallAnnual)} ${t.salary.onCallShort} · ${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly)} ${lang === 'nb' ? 'netto/mnd' : 'net/mo'}`
-              : `${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly)} ${lang === 'nb' ? 'netto/mnd' : 'net/mo'}`
+              ? `${formatCurrency(current.grossAnnual)} ${t.salaryPage.baseSuffix} + ${formatCurrency(currentOnCallAnnual)} ${t.salary.onCallShort} · ${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly)} ${t.salaryPage.netPerMonth}`
+              : `${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly)} ${t.salaryPage.netPerMonth}`
           ) : ''}
           chip={(() => {
             if (!current) return undefined;
@@ -819,7 +816,7 @@ const SalaryPage: React.FC = () => {
         />
         {isGeneric ? (
           <SummaryTile
-            label={lang === 'nb' ? 'År-over-år lønn' : 'YoY salary'}
+            label={t.salaryPage.yoySalary}
             value={`${yoy.salary >= 0 ? '+' : ''}${yoy.salary.toFixed(1)}%`}
             sub={first ? `${t.salary.growthSinceFirst} ${first.month}` : ''}
             color={yoy.salary >= 0 ? 'var(--positive)' : 'var(--negative)'}
@@ -873,7 +870,6 @@ const SalaryPage: React.FC = () => {
         <NextReviewCard
           ctx={reviewContext}
           t={t}
-          lang={lang}
           formatCurrency={formatCurrency}
         />
       )}
@@ -1002,13 +998,13 @@ const SalaryPage: React.FC = () => {
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
               />
               <ReferenceLine y={0} stroke="var(--text-3)" strokeWidth={1} />
-              <Bar dataKey="salaryPct" name={lang === 'nb' ? 'Lønnsøkning' : 'Salary'} fill="var(--accent)" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="salaryPct" name={t.salaryPage.salaryIncrease} fill="var(--accent)" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="salaryPct" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--accent)' }} />
               </Bar>
               <Bar dataKey="cpiPct" name="KPI" fill="var(--violet)" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="cpiPct" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--violet)' }} />
               </Bar>
-              <Bar dataKey="gap" name={lang === 'nb' ? 'Differanse' : 'Gap'} radius={[4, 4, 0, 0]}>
+              <Bar dataKey="gap" name={t.salaryPage.gap} radius={[4, 4, 0, 0]}>
                 {yoyByYear.map((row) => (
                   <Cell key={row.year} fill={row.gap >= 0 ? 'var(--positive)' : 'var(--negative)'} />
                 ))}
@@ -1019,10 +1015,10 @@ const SalaryPage: React.FC = () => {
         </div>
         {/* Inline series legend */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{lang === 'nb' ? 'Lønnsøkning' : 'Salary'}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{t.salaryPage.salaryIncrease}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />KPI</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--positive)' }} />{lang === 'nb' ? 'Slår KPI' : 'Beats CPI'}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--negative)' }} />{lang === 'nb' ? 'Under KPI' : 'Below CPI'}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--positive)' }} />{t.salaryPage.beatsCpiLegend}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--negative)' }} />{t.salaryPage.belowCpi}</div>
         </div>
 
         {/* Numeric summary row */}
@@ -1031,10 +1027,10 @@ const SalaryPage: React.FC = () => {
             <table className="w-full text-[12px] border-t border-[var(--border)]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--text-2)' }}>
-                  <th className="py-2 pr-3 font-medium uppercase tracking-wider text-[10px]">{lang === 'nb' ? 'År' : 'Year'}</th>
-                  <th className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">{lang === 'nb' ? 'Lønn' : 'Salary'}</th>
+                  <th className="py-2 pr-3 font-medium uppercase tracking-wider text-[10px]">{t.salaryPage.year}</th>
+                  <th className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.salaryCol}</th>
                   <th className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">KPI</th>
-                  <th className="py-2 pl-2 font-medium uppercase tracking-wider text-[10px] text-right">{lang === 'nb' ? 'Differanse' : 'Gap'}</th>
+                  <th className="py-2 pl-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.gap}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1097,7 +1093,7 @@ const SalaryPage: React.FC = () => {
                 content={<ChartTooltip />}
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
               />
-              <Bar dataKey="base" stackId="a" name={lang === 'nb' ? 'Grunnlønn' : 'Base'} fill="url(#compBaseGradient)" />
+              <Bar dataKey="base" stackId="a" name={t.salaryPage.baseSalary} fill="url(#compBaseGradient)" />
               <Bar dataKey="onCall" stackId="a" name={t.salary.onCallLabel} fill="url(#compOnCallGradient)" />
               <Bar dataKey="bonus" stackId="a" name={t.salary.bonuses} fill="url(#compBonusGradient)" />
               <Bar dataKey="overtime" stackId="a" name={t.salary.overtime} fill="url(#compOtGradient)" radius={[6, 6, 0, 0]}>
@@ -1108,7 +1104,7 @@ const SalaryPage: React.FC = () => {
         </div>
         {/* Inline legend */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#1F5A42' }} />{lang === 'nb' ? 'Grunnlønn' : 'Base'}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#1F5A42' }} />{t.salaryPage.baseSalary}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#7FCBA0' }} />{t.salary.onCallLabel}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#3F7373' }} />{t.salary.bonuses}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#5B7280' }} />{t.salary.overtime}</div>
@@ -1138,7 +1134,7 @@ const SalaryPage: React.FC = () => {
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
                 content={<ChartTooltip valueFormatter={(v, e) => e?.dataKey === 'hoursPerWeek' ? `${v.toFixed(1)} t/uke` : formatCurrency(v)} />}
               />
-              <Bar yAxisId="left" dataKey="hoursPerWeek" name={lang === 'nb' ? 'Timer/uke' : 'Hours/wk'} fill="url(#hoursGradient)" radius={[6, 6, 0, 0]}>
+              <Bar yAxisId="left" dataKey="hoursPerWeek" name={t.salaryPage.hoursPerWk} fill="url(#hoursGradient)" radius={[6, 6, 0, 0]}>
                 <LabelList dataKey="hoursPerWeek" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}t`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--warning)' }} />
               </Bar>
               <Line
@@ -1157,7 +1153,7 @@ const SalaryPage: React.FC = () => {
           </ResponsiveContainer>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--warning)' }} />{lang === 'nb' ? 'Timer/uke' : 'Hours/wk'}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--warning)' }} />{t.salaryPage.hoursPerWk}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent)' }} />{t.salary.effectiveHourly}</div>
         </div>
       </div>
@@ -1173,14 +1169,14 @@ const SalaryPage: React.FC = () => {
         items={jobs.map(j => ({
           id: j.id,
           primary: `${j.employer} — ${j.role}`,
-          secondary: `${j.startDate} → ${j.endDate ?? (lang === 'nb' ? 'nå' : 'now')} · ${j.contractedHoursPerWeek}t/uke`,
+          secondary: `${j.startDate} → ${j.endDate ?? t.salaryPage.now} · ${j.contractedHoursPerWeek}t/uke`,
           chip: j.onCallAnnual && j.onCallAnnual > 0 ? (
             <span
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold font-mono tabular-nums shrink-0"
               style={{ color: 'var(--positive)', background: 'var(--positive-bg)' }}
               title={t.salary.onCallAnnual}
             >
-              {t.salary.onCallLabel} {formatCurrency(j.onCallAnnual)}/{lang === 'nb' ? 'år' : 'yr'}
+              {t.salary.onCallLabel} {formatCurrency(j.onCallAnnual)}/{t.salaryPage.yearAbbr}
             </span>
           ) : undefined,
           onEdit: () => openJobModal(j),
@@ -1550,11 +1546,10 @@ interface NextReviewCtx {
 interface NextReviewCardProps {
   ctx: NextReviewCtx;
   t: Translations;
-  lang: string;
   formatCurrency: (v: number) => string;
 }
 
-const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, lang, formatCurrency }) => {
+const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency }) => {
   const [proposed, setProposed] = useState<string>('');
   const proposedNum = (() => {
     const n = parseFloat(proposed.replace(/\s/g, '').replace(',', '.'));
@@ -1605,7 +1600,7 @@ const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, lang, formatCur
         <SummaryTile
           label={t.salary.cpiSinceLabel}
           value={fmtPct(ctx.cpiSincePct)}
-          sub={ctx.cpiAsOf ? `${lang === 'nb' ? 'pr.' : 'as of'} ${ctx.cpiAsOf}` : ''}
+          sub={ctx.cpiAsOf ? `${t.salaryPage.asOf} ${ctx.cpiAsOf}` : ''}
           color={ctx.cpiSincePct != null ? 'var(--accent)' : undefined}
         />
         <SummaryTile

@@ -336,16 +336,10 @@ const BudgetPage: React.FC = () => {
           </button>
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
-          {lang === 'nb' ? (
-            <>Månedsbudsjettet <em className="font-serif italic" style={{ color: 'var(--brass)' }}>ditt</em>.</>
-          ) : (
-            <>Your monthly <em className="font-serif italic" style={{ color: 'var(--brass)' }}>budget</em>.</>
-          )}
+          {t.budgetPage.heroTitlePre}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.budgetPage.heroTitleEm}</em>{t.budgetPage.heroTitlePost}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
-          {lang === 'nb'
-            ? `Inntekt på ${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${incomeDiffPct >= 0 ? '+' : ''}${incomeDiffPct.toFixed(1)}% vs snitt)` : ''}. Følg med på faste utgifter, daglige transaksjoner og hvor mye du kan bruke.`
-            : `Income ${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${incomeDiffPct >= 0 ? '+' : ''}${incomeDiffPct.toFixed(1)}% vs avg)` : ''}. Track fixed costs, daily spending, and what's left in your budget.`}
+          {`${t.budgetPage.incomeIntro}${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${incomeDiffPct >= 0 ? '+' : ''}${incomeDiffPct.toFixed(1)}${t.budgetPage.vsAvgSuffix}` : ''}${t.budgetPage.incomeOutro}`}
         </p>
       </header>
 
@@ -365,7 +359,7 @@ const BudgetPage: React.FC = () => {
                 <>
                   <span style={{ color: 'var(--text-3)' }}>·</span>
                   <span style={{ color: 'var(--text-3)' }}>
-                    {lang === 'nb' ? 'auto' : 'auto'}: {formatCurrency(derivedMonthlyIncome)}
+                    {t.budgetPage.autoLabel}: {formatCurrency(derivedMonthlyIncome)}
                   </span>
                   <button
                     onClick={() => clearMonthlyIncomeForMonth(format(currentMonth, 'yyyy-MM'))}
@@ -380,7 +374,7 @@ const BudgetPage: React.FC = () => {
                 <>
                   <span style={{ color: 'var(--text-3)' }}>·</span>
                   <span style={{ color: 'var(--text-3)' }}>
-                    {lang === 'nb' ? 'snitt' : 'avg'}: {formatCurrency(averageIncome)}
+                    {t.budgetPage.avgLabel}: {formatCurrency(averageIncome)}
                   </span>
                 </>
               )}
@@ -521,7 +515,7 @@ const BudgetPage: React.FC = () => {
                 expenseColor={expenseColor}
                 formatCurrency={formatCurrency}
                 formatCurrencyShort={formatCurrencyShort}
-                lang={lang}
+                ofFixedCostsLabel={t.common.ofFixedCosts}
               />
             </Suspense>
           </div>
@@ -646,7 +640,7 @@ const BudgetPage: React.FC = () => {
                 className="flex items-center gap-1 text-[var(--accent)] text-[12px] font-medium"
               >
                 <PlusCircle size={13} strokeWidth={2} />
-                <span>{lang === 'nb' ? 'Legg til' : 'Add'}</span>
+                <span>{t.budgetPage.addShort}</span>
               </button>
             </div>
           ))}

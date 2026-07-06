@@ -11,7 +11,7 @@ const STATUS_COLOR = { low: CHART.rust, adequate: CHART.brass, strong: CHART.for
  * the buffer account covers, against the conventional 3–6 month band.
  */
 export default function EmergencyFundGauge() {
-  const { t, lang, assets, totalFixedExpenses } = useFinance();
+  const { t, assets, totalFixedExpenses } = useFinance();
 
   const ef = useMemo(
     () => calcEmergencyFundStatus(assets.bufferAccount, totalFixedExpenses),
@@ -22,7 +22,7 @@ export default function EmergencyFundGauge() {
   const color = STATUS_COLOR[ef.status];
   const shown = finite ? Math.min(ef.monthsCovered, ef.targetMonths) : ef.targetMonths;
   const data = [{ name: 'covered', value: shown, fill: color }];
-  const mo = lang === 'nb' ? 'mnd' : 'mo';
+  const mo = t.common.moAbbr;
 
   return (
     <div className="relative h-full w-full">

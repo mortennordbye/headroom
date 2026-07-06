@@ -22,7 +22,7 @@ function formatAxisInt(val: number): string {
 }
 
 const PensionPage: React.FC = () => {
-  const { t, lang, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct } = useFinance();
+  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct } = useFinance();
 
   // Time machine: when viewing a past month, render that month's pension snapshot (read-only).
   const hist = useBalanceHistory();
@@ -88,16 +88,10 @@ const PensionPage: React.FC = () => {
           {t.pension}
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
-          {lang === 'nb' ? (
-            <>Når kan du <em className="font-serif italic" style={{ color: 'var(--brass)' }}>slutte</em>?</>
-          ) : (
-            <>When can you <em className="font-serif italic" style={{ color: 'var(--brass)' }}>retire</em>?</>
-          )}
+          <>{t.pensionPage.heroBefore}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.pensionPage.heroEm}</em>?</>
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
-          {lang === 'nb'
-            ? 'Spor OTP, IPS og når pensjonsformuen din rekker for å leve livet etter jobb.'
-            : 'Track OTP, IPS, and whether your pension wealth will carry you through post-work life.'}
+          {t.pensionPage.heroSub}
         </p>
       </header>
 
@@ -117,15 +111,15 @@ const PensionPage: React.FC = () => {
           color="var(--violet)"
         />
         <SummaryTile
-          label={lang === 'nb' ? 'Innskudd/år' : 'Contribution/yr'}
+          label={t.pensionPage.contributionPerYear}
           value={formatCurrency(otpAnnualContribution + ipsAnnualContribution)}
           sub={`OTP ${formatCurrency(otpAnnualContribution)} · IPS ${formatCurrency(ipsAnnualContribution)}`}
         />
         <SummaryTile
-          label={lang === 'nb' ? 'Estimert pensjon/mnd' : 'Est. monthly pension'}
+          label={t.pensionPage.estMonthlyPension}
           value={hasBirthYear ? formatCurrency(monthlyPensionGross) : '—'}
           sub={hasBirthYear
-            ? `${lang === 'nb' ? 'over' : 'over'} ${drawdownYears} ${lang === 'nb' ? 'år' : 'yr'} (brutto)`
+            ? `${t.pensionPage.over} ${drawdownYears} ${t.pensionPage.yrUnit} (brutto)`
             : ''}
           color={hasBirthYear ? 'var(--positive)' : undefined}
         />
@@ -135,12 +129,12 @@ const PensionPage: React.FC = () => {
       <Card padding="lg">
         <div className="flex items-center gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <TrendingUp size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
-          <SectionLabel>{lang === 'nb' ? 'Pensjonsformue over tid' : 'Pension wealth over time'}</SectionLabel>
+          <SectionLabel>{t.pensionPage.pensionWealthOverTime}</SectionLabel>
         </div>
         {projection.length < 2 ? (
           <div className="h-[300px] grid place-items-center text-[13px]" style={{ color: 'var(--text-3)' }}>
             {hasBirthYear
-              ? (lang === 'nb' ? 'Allerede ved pensjonsalder — fyll inn fødselsår på nytt om dette er feil.' : 'Already at retirement age — check birth year.')
+              ? t.pensionPage.alreadyAtRetirementAge
               : t.setBirthYearHint}
           </div>
         ) : (
@@ -181,7 +175,7 @@ const PensionPage: React.FC = () => {
           <div className="flex items-center justify-between gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-2">
               <Briefcase size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
-              <SectionLabel>OTP — {lang === 'nb' ? 'arbeidsgiverpensjon' : 'employer pension'}</SectionLabel>
+              <SectionLabel>OTP — {t.pensionPage.employerPension}</SectionLabel>
             </div>
             <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restorePensionAssumptionDefaults} />
           </div>
@@ -192,9 +186,7 @@ const PensionPage: React.FC = () => {
             <SliderRow label={t.otpGrowthRate} value={pension.otpGrowthRate} onChange={(v) => updatePension('otpGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.otpGrowthRate, DEFAULT_PENSION.otpGrowthRate)} />} />
           </div>
           <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {lang === 'nb'
-              ? `Arbeidsgiver betaler ${pension.otpEmployerPct}% av brutto (inkl. vakt). Innskudd per år: ${formatCurrency(otpAnnualContribution)}.`
-              : `Employer contributes ${pension.otpEmployerPct}% of gross (incl. on-call). Annual contribution: ${formatCurrency(otpAnnualContribution)}.`}
+            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
           </p>
         </Card>
 
@@ -202,7 +194,7 @@ const PensionPage: React.FC = () => {
         <Card padding="lg">
           <div className="flex items-center gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
             <Calculator size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
-            <SectionLabel>IPS — {lang === 'nb' ? 'individuell pensjonssparing' : 'individual pension savings'}</SectionLabel>
+            <SectionLabel>IPS — {t.pensionPage.individualPensionSavings}</SectionLabel>
           </div>
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
             <NumberRow label={t.ipsBalance} value={pension.ipsBalance} onCommit={(v) => updatePension('ipsBalance', v)} suffix="kr" />
@@ -217,9 +209,7 @@ const PensionPage: React.FC = () => {
           <div className="mt-4 flex items-start gap-2 rounded-[8px] p-3" style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}>
             <Calculator size={14} className="mt-0.5 shrink-0" />
             <span className="text-[12px]">
-              {lang === 'nb'
-                ? `${t.ipsHint} Du sparer ~${formatCurrency(ipsTaxSaving)}/år i skatt.`
-                : `${t.ipsHint} You save ~${formatCurrency(ipsTaxSaving)}/yr in tax.`}
+              {`${t.ipsHint}${t.pensionPage.ipsSavePre}${formatCurrency(ipsTaxSaving)}${t.pensionPage.ipsSaveSuf}`}
             </span>
           </div>
         </Card>
@@ -229,7 +219,7 @@ const PensionPage: React.FC = () => {
       <Card padding="lg">
         <div className="flex items-center gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <Lock size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
-          <SectionLabel>{lang === 'nb' ? 'Mål' : 'Target'}</SectionLabel>
+          <SectionLabel>{t.pensionPage.target}</SectionLabel>
         </div>
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
           <NumberRow
@@ -250,9 +240,7 @@ const PensionPage: React.FC = () => {
           />
         </div>
         <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
-          {lang === 'nb'
-            ? 'Pensjon er låst til pensjonsalder og holdes utenfor «Faktisk egenkapital» på Formue-siden. Uttak beskattes som alminnelig inntekt (22%) — beløpene over er brutto.'
-            : 'Pension is locked until retirement age and is excluded from the liquid net-equity headline on the Assets page. Withdrawals are taxed as ordinary income (22%) — figures above are pre-tax.'}
+          {t.pensionPage.lockedNote}
         </p>
       </Card>
     </div>

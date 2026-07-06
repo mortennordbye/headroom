@@ -50,7 +50,7 @@ export default function DebtSection() {
     if (!v.name.trim() || balance === null || rate === null || minPayment === null) return null;
     return { name: v.name.trim(), type: v.type as DebtType, balance, rate, minPayment };
   };
-  const err = () => setModal(p => p && { ...p, error: lang === 'nb' ? 'Fyll ut alle felt' : 'Fill in all fields' });
+  const err = () => setModal(p => p && { ...p, error: t.validation.fillAllFields });
 
   const openAdd = () => setModal({
     title: d.add, fields: debtFields({}),
@@ -96,7 +96,7 @@ export default function DebtSection() {
                       <span className="text-[10px] uppercase tracking-wider shrink-0" style={{ color: 'var(--text-3)' }}>{d.types[debt.type]}</span>
                     </div>
                     <div className="text-[11px] mt-0.5 ml-[15px]" style={{ color: 'var(--text-3)' }}>
-                      {debt.rate.toFixed(1)}% · {formatCurrency(debt.minPayment)}/{lang === 'nb' ? 'mnd' : 'mo'}
+                      {debt.rate.toFixed(1)}% · {formatCurrency(debt.minPayment)}/{t.common.moAbbr}
                       {' · '}
                       {a.feasible
                         ? `${d.payoffIn} ${formatMonths(a.months, lang)} · ${formatCurrency(Math.round(a.totalInterest))} ${d.interestLabel}`
@@ -141,7 +141,7 @@ export default function DebtSection() {
                 <div className="flex items-center gap-1.5">
                   <input type="number" min={0} step={500} value={extra || ''} onChange={e => setExtra(Math.max(0, Number(e.target.value) || 0))}
                     className="w-28 h-9 px-3 rounded-[6px] text-[14px] font-mono outline-none border bg-[var(--bg-raised)] border-[var(--border)] text-[var(--text-1)]" placeholder="0" />
-                  <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>kr/{lang === 'nb' ? 'mnd' : 'mo'}</span>
+                  <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>kr/{t.common.moAbbr}</span>
                 </div>
               </label>
               <Stat label={d.debtFree} value={formatMonths(plan.months, lang)} accent={plan.feasible ? 'var(--forest-light)' : 'var(--negative)'} />
@@ -162,7 +162,7 @@ export default function DebtSection() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
-                    <XAxis dataKey="month" tickFormatter={(m: number) => `${Math.round(m / 12)}${lang === 'nb' ? 'å' : 'y'}`} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="month" tickFormatter={(m: number) => `${Math.round(m / 12)}${t.common.yrAbbr}`} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
                     <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={44} />
                     <Tooltip content={<ChartTooltip />} />
                     <Area type="monotone" dataKey="total" name={d.sum} stroke="#B5533A" fill="url(#debtGrad)" strokeWidth={1.8} />

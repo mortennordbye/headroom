@@ -27,7 +27,7 @@ function FunStat({ label, value, negative, highlight }: FunStatProps) {
 }
 
 export default function FunBudget() {
-  const { t, lang, fixedExpenses, dailyData, formatCurrency } = useFinance();
+  const { t, fixedExpenses, dailyData, formatCurrency } = useFinance();
 
   const funExpense = fixedExpenses.find(e =>
     ['fun', 'moro'].includes(e.name.toLowerCase())
@@ -82,7 +82,7 @@ export default function FunBudget() {
         </div>
         <div className="flex justify-between text-[10px] text-[var(--text-2)]">
           <span>0</span>
-          <span>{Math.round(pct)}% {lang === 'nb' ? 'brukt' : 'used'}</span>
+          <span>{Math.round(pct)}% {t.common.used}</span>
           <span>{formatCurrency(funBudget)}</span>
         </div>
       </div>
@@ -95,9 +95,7 @@ export default function FunBudget() {
 
       {funSpent === 0 && (
         <p className="mt-3 text-[11px] text-[var(--text-2)]">
-          {lang === 'nb'
-            ? 'Ingen morsomme utgifter enda. Legg til transaksjoner med kategori "Fun" for å spore dem her.'
-            : 'No fun spending yet. Add transactions with category "Fun" to track them here.'}
+          {t.common.noFunSpending}
         </p>
       )}
     </div>

@@ -388,7 +388,7 @@ export default function SettingsPage() {
               >
                 <div className="text-[12px] font-mono uppercase tracking-wider" style={{ color: region === 'generic' ? 'var(--accent)' : 'var(--text-3)' }}>—</div>
                 <div className="text-[14px] font-semibold mt-1">{t.settings.regionGeneric}</div>
-                <div className="text-[11px] mt-1" style={{ color: 'var(--text-2)' }}>{lang === 'nb' ? 'Flat skattesats' : 'Flat tax rate'}</div>
+                <div className="text-[11px] mt-1" style={{ color: 'var(--text-2)' }}>{t.common.flatTaxRate}</div>
               </button>
             </div>
 

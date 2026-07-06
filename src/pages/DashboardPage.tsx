@@ -16,6 +16,12 @@ import {
 } from '../lib/calculations';
 import GoalsSection from '../components/GoalsSection';
 import InsightBanner from '../components/InsightBanner';
+import {
+  AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
+} from 'recharts';
+import ChartTooltip from '../components/ChartTooltip';
+import { CHART } from '../lib/chartColors';
 
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
@@ -23,7 +29,6 @@ const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFund
 const DashboardPage: React.FC = () => {
   const {
     t,
-    lang,
     effectiveIncome,
     averageIncome,
     prevMonthIncome,
@@ -151,11 +156,11 @@ const DashboardPage: React.FC = () => {
   const assetRows = useMemo(() => [
     { label: t.investmentNet, value: Math.max(0, netInvestment), icon: <BarChart2 size={14} />, color: 'var(--chart-1)' },
     { label: t.propertyEquity, value: Math.max(0, houseEquity), icon: <Home size={14} />, color: 'var(--chart-2)' },
-    { label: lang === 'nb' ? 'Krypto (netto)' : 'Crypto (net)', value: Math.max(0, netCrypto), icon: <Bitcoin size={14} />, color: 'var(--chart-4)' },
+    { label: t.dashboardPage.cryptoNet, value: Math.max(0, netCrypto), icon: <Bitcoin size={14} />, color: 'var(--chart-4)' },
     { label: t.bsu, value: assets.bsu, icon: <Shield size={14} />, color: 'var(--chart-3)' },
     { label: t.savings, value: assets.savings, icon: <PiggyBank size={14} />, color: 'var(--chart-5)' },
     { label: t.bufferAccount, value: assets.bufferAccount, icon: <Wallet size={14} />, color: 'var(--chart-6)' },
-  ].filter(r => r.value > 0), [netInvestment, houseEquity, netCrypto, assets, lang, t]);
+  ].filter(r => r.value > 0), [netInvestment, houseEquity, netCrypto, assets, t]);
 
   // ─── Recent transactions ───
   type FilterMode = 'all' | 'income' | 'expense';
@@ -209,7 +214,7 @@ const DashboardPage: React.FC = () => {
         // Only expenses belong in a spending-by-category breakdown.
         .filter(tx => predicate(tx.date) && tx.kind !== 'income')
         .forEach(tx => {
-          const cat = tx.category || (lang === 'nb' ? 'Annet' : 'Other');
+          const cat = tx.category || t.dashboardPage.other;
           map.set(cat, (map.get(cat) ?? 0) + tx.amount);
         });
       return map;
@@ -226,7 +231,7 @@ const DashboardPage: React.FC = () => {
       .slice(0, 5);
     const max = rows[0]?.value ?? 1;
     return rows.map(r => ({ ...r, pctOfMax: (r.value / max) * 100 }));
-  }, [dailyTransactions, currentMonth, lang]);
+  }, [dailyTransactions, currentMonth, t]);
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
@@ -267,27 +272,16 @@ const DashboardPage: React.FC = () => {
 
   // ─── Narrative subtitle (auto-generated insight) ───
   const subtitle = useMemo(() => {
-    if (lang === 'nb') {
-      const parts: string[] = [];
-      if (netEquityDelta !== null) {
-        parts.push(`Netto egenkapital ${netEquityDelta >= 0 ? 'opp' : 'ned'} ${Math.abs(netEquityDelta).toFixed(1)}% denne måneden`);
-      }
-      if (monthlyBudget > 0 && totalSpent > 0) {
-        const usagePct = (totalSpent / monthlyBudget) * 100;
-        parts.push(`du har brukt ${usagePct.toFixed(0)}% av månedens forbruksbudsjett`);
-      }
-      return parts.length ? parts.join('. ') + '.' : 'Du er i gang. Legg til transaksjoner for å se trender.';
-    }
     const parts: string[] = [];
     if (netEquityDelta !== null) {
-      parts.push(`Net equity ${netEquityDelta >= 0 ? 'up' : 'down'} ${Math.abs(netEquityDelta).toFixed(1)}% this month`);
+      parts.push(`${t.dashboardPage.netEquity} ${netEquityDelta >= 0 ? t.dashboardPage.up : t.dashboardPage.down} ${Math.abs(netEquityDelta).toFixed(1)}% ${t.dashboardPage.thisMonth}`);
     }
     if (monthlyBudget > 0 && totalSpent > 0) {
       const usagePct = (totalSpent / monthlyBudget) * 100;
-      parts.push(`you've used ${usagePct.toFixed(0)}% of this month's spending budget`);
+      parts.push(`${t.dashboardPage.youveUsed} ${usagePct.toFixed(0)}% ${t.dashboardPage.ofSpendingBudget}`);
     }
-    return parts.length ? parts.join('. ') + '.' : "You're set up. Log some transactions to see trends.";
-  }, [netEquityDelta, monthlyBudget, totalSpent, lang]);
+    return parts.length ? parts.join('. ') + '.' : t.dashboardPage.setupPrompt;
+  }, [netEquityDelta, monthlyBudget, totalSpent, t]);
 
   // ── Render ──
   return (
@@ -295,14 +289,10 @@ const DashboardPage: React.FC = () => {
       {/* Hero header */}
       <header data-tour="dashboard-hero" className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
-          {lang === 'nb' ? 'God dag' : 'Good afternoon'}
+          {t.dashboardPage.goodAfternoon}
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
-          {lang === 'nb' ? (
-            <>Pengene dine har <em className="italic" style={{ color: 'var(--brass)' }}>headroom</em>.<br className="hidden md:inline" /> Her er status.</>
-          ) : (
-            <>Your money has <em className="italic" style={{ color: 'var(--brass)' }}>headroom</em>.<br className="hidden md:inline" /> Here's the state of things.</>
-          )}
+          <>{t.dashboardPage.heroA} <em className="italic" style={{ color: 'var(--brass)' }}>headroom</em>.<br className="hidden md:inline" /> {t.dashboardPage.heroB}</>
         </h1>
         <p className="mt-4 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
           {subtitle}
@@ -319,13 +309,11 @@ const DashboardPage: React.FC = () => {
           <span className="flex items-center gap-2 min-w-0">
             <AlertTriangle size={15} className="shrink-0" />
             <span className="[overflow-wrap:anywhere]">
-              {lang === 'nb'
-                ? `${defaultAssumptions} av 6 markedsforutsetninger bruker fortsatt standardverdier — juster dem for mer presise prognoser.`
-                : `${defaultAssumptions} of 6 market assumptions still use default values — tune them for sharper projections.`}
+              {defaultAssumptions} {t.dashboardPage.assumptionsNudge}
             </span>
           </span>
           <span className="shrink-0 font-semibold inline-flex items-center gap-1">
-            {lang === 'nb' ? 'Innstillinger' : 'Review'}
+            {t.dashboardPage.reviewSettings}
             <ArrowUpRight size={14} />
           </span>
         </Link>
@@ -358,7 +346,7 @@ const DashboardPage: React.FC = () => {
             {formatCurrency(netWorth)}
           </div>
           <div className="text-[13px] mt-2" style={{ color: 'var(--text-2)' }}>
-            {lang === 'nb' ? 'Etter skatt og all gjeld' : 'Post-tax, net of all debt'}
+            {t.dashboardPage.postTax}
           </div>
 
           {/* Stat row */}
@@ -370,7 +358,7 @@ const DashboardPage: React.FC = () => {
                   : '—'}
               </div>
               <div className="text-[10px] uppercase tracking-[0.1em] mt-1" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb' ? '12-mnd endring' : '12-month change'}
+                {t.dashboardPage.change12mo}
               </div>
             </div>
             <div className="pl-3 border-l-2" style={{ borderColor: 'color-mix(in srgb, var(--accent) 60%, transparent)' }}>
@@ -378,7 +366,7 @@ const DashboardPage: React.FC = () => {
                 +{growthReturnRate.toFixed(1)}%
               </div>
               <div className="text-[10px] uppercase tracking-[0.1em] mt-1" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb' ? 'Forventet avkastning' : 'Expected return'}
+                {t.dashboardPage.expectedReturn}
               </div>
             </div>
             <div className="pl-3 border-l-2" style={{ borderColor: 'color-mix(in srgb, var(--accent) 60%, transparent)' }}>
@@ -386,7 +374,7 @@ const DashboardPage: React.FC = () => {
                 {projectionEndYear ?? '—'}
               </div>
               <div className="text-[10px] uppercase tracking-[0.1em] mt-1" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb' ? 'Målår' : 'Target year'}
+                {t.dashboardPage.targetYear}
               </div>
             </div>
           </div>
@@ -395,13 +383,13 @@ const DashboardPage: React.FC = () => {
           <div className="mt-6 rounded-[8px] border p-4" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] mb-2" style={{ color: 'var(--text-3)' }}>
               <div className="flex items-center gap-2">
-                <span>{lang === 'nb' ? 'Netto egenkapital · siste 12 mnd' : 'Net equity · last 12 months'}</span>
+                <span>{t.dashboardPage.netEquityLast12}</span>
                 {isEstimated && (
                   <span
                     className="px-2 py-0.5 rounded-[4px] normal-case tracking-normal text-[10px]"
                     style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
                   >
-                    {lang === 'nb' ? 'estimert' : 'estimated'}
+                    {t.dashboardPage.estimated}
                   </span>
                 )}
               </div>
@@ -416,7 +404,7 @@ const DashboardPage: React.FC = () => {
                   <Pencil size={11} strokeWidth={2} />
                   {t.netWorthEditor.edit}
                 </button>
-                <span style={{ color: 'var(--accent)' }}>{lang === 'nb' ? 'I dag' : 'Today'}</span>
+                <span style={{ color: 'var(--accent)' }}>{t.today}</span>
               </div>
             </div>
             <HeroChart
@@ -429,7 +417,7 @@ const DashboardPage: React.FC = () => {
         {/* ─── Monthly Residual ─── */}
         <Card padding="md" className="md:col-span-5 flex flex-col" glow="positive">
           <div className="flex items-start justify-between gap-3">
-            <SectionLabel icon={<Receipt />}>{lang === 'nb' ? 'Restbeløp / mnd' : 'Monthly Residual'}</SectionLabel>
+            <SectionLabel icon={<Receipt />}>{t.dashboardPage.monthlyResidual}</SectionLabel>
             {incomeDelta !== null && (
               <DeltaChip tone={incomeDelta >= 0 ? 'positive' : 'negative'} size="sm">
                 {(incomeDelta >= 0 ? '+' : '') + incomeDelta.toFixed(1)}%
@@ -440,7 +428,7 @@ const DashboardPage: React.FC = () => {
             {formatCurrency(totalResidual)}
           </div>
           <div className="text-[12px] mt-2" style={{ color: 'var(--text-3)' }}>
-            {lang === 'nb' ? 'Etter faste utgifter' : 'After fixed expenses'}
+            {t.dashboardPage.afterFixedExpenses}
           </div>
         </Card>
 
@@ -454,7 +442,7 @@ const DashboardPage: React.FC = () => {
             {formatCurrency(recommendedSpending)}
           </div>
           <div className="text-[12px] mt-2" style={{ color: 'var(--text-3)' }}>
-            {lang === 'nb' ? 'Anbefalt forbruk' : 'Recommended spending'}
+            {t.dashboardPage.recommendedSpendingLabel}
             {spendingDelta !== null && (
               <span className="ml-2">
                 · {(spendingDelta >= 0 ? '+' : '') + spendingDelta.toFixed(1)}% {t.vsLastMonth}
@@ -464,8 +452,8 @@ const DashboardPage: React.FC = () => {
           <div className="mt-4 rounded-[8px] border p-3" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex gap-3 text-[10px] uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>
-                <span><span className="inline-block w-2 h-0.5 mr-1.5 align-middle" style={{ background: 'var(--accent)' }} /> {lang === 'nb' ? 'Faktisk' : 'Actual'}</span>
-                <span><span className="inline-block w-2 h-px mr-1.5 align-middle border-t border-dashed" style={{ borderColor: 'var(--text-3)' }} /> {lang === 'nb' ? 'Ideell takt' : 'Ideal pace'}</span>
+                <span><span className="inline-block w-2 h-0.5 mr-1.5 align-middle" style={{ background: 'var(--accent)' }} /> {t.dashboardPage.actual}</span>
+                <span><span className="inline-block w-2 h-px mr-1.5 align-middle border-t border-dashed" style={{ borderColor: 'var(--text-3)' }} /> {t.dashboardPage.idealPace}</span>
               </div>
               {overshoot > 0 && (
                 <DeltaChip tone="warning" size="sm">+{formatCurrency(overshoot)}</DeltaChip>
@@ -477,13 +465,12 @@ const DashboardPage: React.FC = () => {
               targetTotal={burnRate.target}
               todayIdx={burnRate.todayIdx}
               overshootValue={overshoot}
-              formatCurrency={formatCurrency}
-              lang={lang}
+              dayWord={t.dashboardPage.day}
             />
             <div className="mt-1 flex justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
-              <span>{lang === 'nb' ? 'Dag 1' : 'Day 1'}</span>
-              <span style={{ color: 'var(--accent)' }}>{lang === 'nb' ? `I dag · ${burnRate.todayIdx + 1}` : `Today · ${burnRate.todayIdx + 1}`}</span>
-              <span style={{ color: overshoot > 0 ? 'var(--warning)' : 'var(--text-3)' }}>{lang === 'nb' ? `Dag ${burnRate.total}` : `Day ${burnRate.total}`}</span>
+              <span>{t.dashboardPage.dayOne}</span>
+              <span style={{ color: 'var(--accent)' }}>{t.today} · {burnRate.todayIdx + 1}</span>
+              <span style={{ color: overshoot > 0 ? 'var(--warning)' : 'var(--text-3)' }}>{t.dashboardPage.day} {burnRate.total}</span>
             </div>
           </div>
         </Card>
@@ -492,13 +479,13 @@ const DashboardPage: React.FC = () => {
         <Card padding="lg" className="md:col-span-7">
           <div className="flex items-center justify-between gap-3 mb-5">
             <SectionLabel icon={<Wallet />}>{t.budgetHealth}</SectionLabel>
-            {conservativeMode && <DeltaChip tone="warning" size="sm">{lang === 'nb' ? 'Sparemodus' : 'Conservative'}</DeltaChip>}
+            {conservativeMode && <DeltaChip tone="warning" size="sm">{t.dashboardPage.conservative}</DeltaChip>}
           </div>
 
           <div className="flex items-baseline justify-between pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
             <div>
               <div className="text-[13px]" style={{ color: 'var(--text-2)' }}>
-                {lang === 'nb' ? 'Inntekt denne måneden' : "This month's income"}
+                {t.dashboardPage.thisMonthsIncome}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
                 {t.avgIncome}: {formatCurrency(averageIncome)}
@@ -539,7 +526,7 @@ const DashboardPage: React.FC = () => {
           <div className="mt-5 pt-4 border-t flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
               <Zap size={12} />
-              {lang === 'nb' ? 'Daglig balanse i dag' : "Today's running balance"}
+              {t.dashboardPage.todaysRunningBalance}
             </div>
             <DeltaChip tone={todayBalance >= 0 ? 'positive' : 'negative'}>
               {todayBalance >= 0 ? '+' : ''}{formatCurrency(todayBalance)}
@@ -551,12 +538,12 @@ const DashboardPage: React.FC = () => {
         <Card padding="lg" className="md:col-span-5">
           <div className="flex items-center justify-between gap-3 mb-5">
             <SectionLabel icon={<Home />}>{t.assetAllocation}</SectionLabel>
-            <DeltaChip tone="muted" size="sm">{assetRows.length} {lang === 'nb' ? 'eiendeler' : 'holdings'}</DeltaChip>
+            <DeltaChip tone="muted" size="sm">{assetRows.length} {t.dashboardPage.holdings}</DeltaChip>
           </div>
 
           {assetRows.length === 0 ? (
             <p className="text-[13px]" style={{ color: 'var(--text-3)' }}>
-              {lang === 'nb' ? 'Ingen formuesverdier registrert enda.' : 'No assets recorded yet.'}
+              {t.dashboardPage.noAssets}
             </p>
           ) : (
             <div className="mb-4">
@@ -566,7 +553,7 @@ const DashboardPage: React.FC = () => {
                 const head = nonZero.slice(0, 4);
                 const rest = nonZero.slice(4);
                 const strip = rest.length
-                  ? [...head, { label: lang === 'nb' ? 'Annet' : 'Other', value: rest.reduce((s, r) => s + r.value, 0), color: 'var(--text-dim)' }]
+                  ? [...head, { label: t.dashboardPage.other, value: rest.reduce((s, r) => s + r.value, 0), color: 'var(--text-dim)' }]
                   : head;
                 const stripTotal = strip.reduce((s, r) => s + r.value, 0);
                 return (
@@ -628,19 +615,17 @@ const DashboardPage: React.FC = () => {
               >
                 <ArrowUpRight size={18} />
               </div>
-              <SectionLabel>{lang === 'nb' ? 'Månedlig investering' : 'Monthly investment'}</SectionLabel>
+              <SectionLabel>{t.dashboardPage.monthlyInvestment}</SectionLabel>
               <div className="text-[24px] font-bold tracking-[-0.02em] leading-none mt-2">
                 {formatCurrency(recommendedInvestment)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb'
-                  ? `${format(currentMonth, 'MMM')} · ${Math.round(savingsTargetPercent)}% spareandel`
-                  : `${format(currentMonth, 'MMM')} · ${Math.round(savingsTargetPercent)}% savings rate`}
+                {format(currentMonth, 'MMM')} · {Math.round(savingsTargetPercent)}% {t.dashboardPage.savingsRate}
               </div>
             </div>
           </div>
 
-          <MonthlyInvestmentBars bars={investmentBars} formatCurrency={formatCurrency} />
+          <MonthlyInvestmentBars bars={investmentBars} />
           <div className="mt-1 flex justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
             <span>{investmentBars[0]?.label ?? ''}</span>
             <span>{investmentBars[Math.floor(investmentBars.length / 2)]?.label ?? ''}</span>
@@ -658,17 +643,17 @@ const DashboardPage: React.FC = () => {
               >
                 <BarChart3 size={18} />
               </div>
-              <SectionLabel>{lang === 'nb' ? 'Toppkategorier' : 'Top categories'}</SectionLabel>
+              <SectionLabel>{t.dashboardPage.topCategories}</SectionLabel>
               <div className="text-[13px] mt-2" style={{ color: 'var(--text-2)' }}>
-                {lang === 'nb' ? 'vs forrige måned' : 'vs last month'}
+                {t.dashboardPage.vsLastMonth}
               </div>
             </div>
-            <DeltaChip tone="warning" size="sm">{lang === 'nb' ? 'Blandet' : 'Mixed'}</DeltaChip>
+            <DeltaChip tone="warning" size="sm">{t.dashboardPage.mixed}</DeltaChip>
           </div>
 
           {categoryDeltas.length === 0 ? (
             <div className="mt-5 text-[12px] py-6 text-center" style={{ color: 'var(--text-3)' }}>
-              {lang === 'nb' ? 'Ingen transaksjoner enda' : 'No transactions yet'}
+              {t.dashboardPage.noTransactionsYet}
             </div>
           ) : (
             <div className="mt-4 space-y-2.5 text-[12px]">
@@ -705,18 +690,18 @@ const DashboardPage: React.FC = () => {
               >
                 <TrendingUp size={18} />
               </div>
-              <SectionLabel>{lang === 'nb' ? '15-års projeksjon' : '15-year projection'}</SectionLabel>
+              <SectionLabel>{t.dashboardPage.projection15y}</SectionLabel>
               <div className="text-[24px] font-bold tracking-[-0.02em] leading-none mt-2">
                 {formatCurrency(projectionEndValue)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb' ? `i ${projectionEndYear} · blandet vekstrate per aktivaklasse` : `by ${projectionEndYear} · blended per-bucket rates`}
+                {t.dashboardPage.projByPrefix} {projectionEndYear} {t.dashboardPage.projBySuffix}
               </div>
             </div>
             <DeltaChip tone="violet" size="sm">+{projectionGrowthPct}%</DeltaChip>
           </div>
 
-          <ProjectionChart points={projection15y.map(p => ({ year: p.year, netWorth: p.total }))} formatCurrency={formatCurrency} />
+          <ProjectionChart points={projection15y.map(p => ({ year: p.year, netWorth: p.total }))} />
           <div className="mt-1 flex justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
             <span>{projection15y[0]?.year ?? ''}</span>
             <span>{projection15y[Math.floor(projection15y.length / 2)]?.year ?? ''}</span>
@@ -747,16 +732,14 @@ const DashboardPage: React.FC = () => {
               >
                 <LifeBuoy size={18} />
               </div>
-              <SectionLabel>{lang === 'nb' ? 'Bufferkonto' : 'Emergency fund'}</SectionLabel>
+              <SectionLabel>{t.dashboardPage.emergencyFund}</SectionLabel>
               {totalFixedExpenses <= 0 ? (
                 <div className="text-[13px] mt-2" style={{ color: 'var(--text-3)' }}>
-                  {lang === 'nb'
-                    ? 'Legg inn faste utgifter for å se dekning.'
-                    : 'Add fixed expenses to see coverage.'}
+                  {t.dashboardPage.addFixedExpenses}
                 </div>
               ) : (
                 <div className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
-                  {formatCurrency(assets.bufferAccount)} · {lang === 'nb' ? 'mål' : 'target'} {emergencyFund.minMonths}–{emergencyFund.targetMonths} {lang === 'nb' ? 'mnd' : 'mo'}
+                  {formatCurrency(assets.bufferAccount)} · {t.dashboardPage.target} {emergencyFund.minMonths}–{emergencyFund.targetMonths} {t.common.moAbbr}
                 </div>
               )}
             </div>
@@ -766,10 +749,10 @@ const DashboardPage: React.FC = () => {
                 size="sm"
               >
                 {emergencyFund.status === 'low'
-                  ? (lang === 'nb' ? 'Lav' : 'Low')
+                  ? t.dashboardPage.low
                   : emergencyFund.status === 'adequate'
-                    ? (lang === 'nb' ? 'OK' : 'OK')
-                    : (lang === 'nb' ? 'Solid' : 'Strong')}
+                    ? t.dashboardPage.ok
+                    : t.dashboardPage.strong}
               </DeltaChip>
             )}
           </div>
@@ -781,10 +764,8 @@ const DashboardPage: React.FC = () => {
               </div>
               <div className="text-[11px] text-center" style={{ color: 'var(--text-3)' }}>
                 {emergencyFund.shortfallToMin > 0
-                  ? (lang === 'nb'
-                      ? `${formatCurrency(emergencyFund.shortfallToMin)} unna ${emergencyFund.minMonths} mnd`
-                      : `${formatCurrency(emergencyFund.shortfallToMin)} short of ${emergencyFund.minMonths} mo`)
-                  : (lang === 'nb' ? 'Innenfor anbefalt nivå' : 'Within recommended range')}
+                  ? `${formatCurrency(emergencyFund.shortfallToMin)} ${t.dashboardPage.shortOf} ${emergencyFund.minMonths} ${t.common.moAbbr}`
+                  : t.dashboardPage.withinRange}
               </div>
             </>
           )}
@@ -804,12 +785,10 @@ const DashboardPage: React.FC = () => {
               >
                 <Scale size={18} />
               </div>
-              <SectionLabel>{lang === 'nb' ? 'Gjeldsgrad' : 'Debt-to-income'}</SectionLabel>
+              <SectionLabel>{t.dashboardPage.debtToIncome}</SectionLabel>
               {grossAnnualIncome <= 0 ? (
                 <div className="text-[13px] mt-2" style={{ color: 'var(--text-3)' }}>
-                  {lang === 'nb'
-                    ? 'Legg inn lønn for å se gjeldsgrad.'
-                    : 'Add salary to see your ratio.'}
+                  {t.dashboardPage.addSalary}
                 </div>
               ) : (
                 <>
@@ -817,7 +796,7 @@ const DashboardPage: React.FC = () => {
                     {debtToIncome.ratio.toFixed(1)}× / {debtToIncome.cap}×
                   </div>
                   <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                    {formatCurrency(assets.houseDebt)} {lang === 'nb' ? 'gjeld' : 'debt'} · {lang === 'nb' ? 'brutto' : 'gross'} {formatCurrency(grossAnnualIncome)}
+                    {formatCurrency(assets.houseDebt)} {t.dashboardPage.debtWord} · {t.dashboardPage.gross} {formatCurrency(grossAnnualIncome)}
                   </div>
                 </>
               )}
@@ -828,10 +807,10 @@ const DashboardPage: React.FC = () => {
                 size="sm"
               >
                 {debtToIncome.status === 'high'
-                  ? (lang === 'nb' ? 'Over grense' : 'Over cap')
+                  ? t.dashboardPage.overCap
                   : debtToIncome.status === 'moderate'
-                    ? (lang === 'nb' ? 'Moderat' : 'Moderate')
-                    : (lang === 'nb' ? 'Sunn' : 'Healthy')}
+                    ? t.dashboardPage.moderate
+                    : t.dashboardPage.healthy}
               </DeltaChip>
             )}
           </div>
@@ -851,12 +830,8 @@ const DashboardPage: React.FC = () => {
               </div>
               <div className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
                 {debtToIncome.status === 'high'
-                  ? (lang === 'nb'
-                      ? 'Over utlånsforskriftens grense på 5×'
-                      : 'Above the 5× lending-rule cap')
-                  : (lang === 'nb'
-                      ? `${formatCurrency(debtToIncome.borrowingHeadroom)} igjen til ${debtToIncome.cap}×-grensen`
-                      : `${formatCurrency(debtToIncome.borrowingHeadroom)} headroom to the ${debtToIncome.cap}× cap`)}
+                  ? t.dashboardPage.aboveCapText
+                  : `${formatCurrency(debtToIncome.borrowingHeadroom)} ${t.dashboardPage.headroomPrefix} ${debtToIncome.cap}${t.dashboardPage.capSuffix}`}
               </div>
             </>
           )}
@@ -873,13 +848,13 @@ const DashboardPage: React.FC = () => {
             <SectionLabel icon={<Receipt />}>{t.recentTransactions}</SectionLabel>
             <div className="flex gap-1.5">
               <FilterPill active={filter === 'all'} onClick={() => setFilter('all')}>
-                {lang === 'nb' ? 'Alle' : 'All'}
+                {t.dashboardPage.all}
               </FilterPill>
               <FilterPill active={filter === 'income'} onClick={() => setFilter('income')}>
-                {lang === 'nb' ? 'Inntekt' : 'Income'}
+                {t.dashboardPage.income}
               </FilterPill>
               <FilterPill active={filter === 'expense'} onClick={() => setFilter('expense')}>
-                {lang === 'nb' ? 'Utgift' : 'Expense'}
+                {t.dashboardPage.expense}
               </FilterPill>
             </div>
           </div>
@@ -945,24 +920,6 @@ const DashboardPage: React.FC = () => {
 // ─── Inline chart components ───────────────────────────────────
 // ─────────────────────────────────────────────────────────────────
 
-// Catmull-Rom → cubic-Bézier smoothing for a soft, polished line.
-function smoothPath(pts: { x: number; y: number }[]): string {
-  if (pts.length < 2) return pts.length ? `M${pts[0].x},${pts[0].y}` : '';
-  let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] ?? p2;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C${c1x.toFixed(2)},${c1y.toFixed(2)} ${c2x.toFixed(2)},${c2y.toFixed(2)} ${p2.x.toFixed(2)},${p2.y.toFixed(2)}`;
-  }
-  return d;
-}
-
 function HeroChart({
   history,
   formatCurrency,
@@ -970,215 +927,81 @@ function HeroChart({
   history: { label: string; value: number; estimated: boolean }[];
   formatCurrency: (n: number) => string;
 }) {
-  const [hovered, setHovered] = useState<number | null>(null);
   if (history.length < 2) {
     return <div className="h-[160px] grid place-items-center text-[12px]" style={{ color: 'var(--text-3)' }}>—</div>;
   }
-  const points = [...history];
-  const W = 600;
-  const H = 160;
-  const padX = 4;
-  const padY = 10;
-  const usableW = W - padX * 2;
-  const usableH = H - padY * 2;
-
-  // Vertical breathing room so the line never glues to the top/bottom edge.
-  const yPad = usableH * 0.14;
-  const plotH = usableH - yPad * 2;
-
-  const max = Math.max(...points.map(p => p.value));
-  const min = Math.min(...points.map(p => p.value));
-  const range = (max - min) || 1;
-  const yOf = (v: number) => padY + yPad + (1 - (v - min) / range) * plotH;
-
-  const xs = points.map((_, i) => padX + (i / (points.length - 1)) * usableW);
-  const ys = points.map(p => yOf(p.value));
-
-  const historyPath = smoothPath(xs.map((x, i) => ({ x, y: ys[i] })));
-  const areaPath = `${historyPath} L${xs[xs.length - 1].toFixed(2)},${H} L${xs[0].toFixed(2)},${H} Z`;
-
-  const lastHistX = xs[xs.length - 1];
-  const lastHistY = ys[ys.length - 1];
-  const lastHistValue = points[points.length - 1].value;
-  const lastI = points.length - 1;
-
-  // Clean, rounded value for marker labels (drops a trailing ,00 / .00).
+  const values = history.map(p => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const pad = (max - min || 1) * 0.14;
+  const lastI = history.length - 1;
+  const last = history[lastI];
+  // Clean, rounded value for the NOW marker (drops a trailing ,00 / .00).
   const fmtNice = (v: number) => formatCurrency(Math.round(v)).replace(/[.,]00(?=\D*$)/, '');
-  const niceValue = fmtNice(lastHistValue);
-
-  // Percentage positions for the HTML overlay — round dots and crisp text that
-  // the SVG's non-uniform (preserveAspectRatio="none") scaling would distort.
-  const leftPct = (x: number) => `${(x / W) * 100}%`;
-  const topPct = (y: number) => `${(y / H) * 100}%`;
 
   return (
-    <div className="relative w-full h-[160px]">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
-        <defs>
-          <linearGradient id="heroAreaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#7FCBA0" stopOpacity="0.1" />
-            <stop offset="100%" stopColor="#7FCBA0" stopOpacity="0.1" />
-          </linearGradient>
-        </defs>
-
-        {/* gridlines */}
-        <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4">
-          <line x1="0" y1={H * 0.25} x2={W} y2={H * 0.25} />
-          <line x1="0" y1={H * 0.5} x2={W} y2={H * 0.5} />
-          <line x1="0" y1={H * 0.75} x2={W} y2={H * 0.75} />
-        </g>
-
-        {/* area */}
-        <path d={areaPath} fill="url(#heroAreaGrad)" />
-        {/* line — always solid; estimated context is shown by the dots, not the line */}
-        <path
-          d={historyPath}
-          fill="none"
-          stroke="#7FCBA0"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-
-      {/* vertical guide for the hovered month */}
-      {hovered !== null && hovered !== lastI && (
-        <span
-          className="absolute pointer-events-none"
-          style={{
-            left: leftPct(xs[hovered]),
-            top: 0,
-            bottom: 0,
-            width: 1,
-            background: 'rgba(127,203,160,0.25)',
-          }}
-        />
-      )}
-
-      {/* one dot per month — HTML so they stay perfectly round, each hoverable */}
-      {points.map((_, i) => i !== lastI && (
-        <span
-          key={i}
-          className="absolute grid place-items-center cursor-pointer"
-          style={{
-            left: leftPct(xs[i]),
-            top: topPct(ys[i]),
-            transform: 'translate(-50%, -50%)',
-            width: 22,
-            height: 22,
-          }}
-          onMouseEnter={() => setHovered(i)}
-          onMouseLeave={() => setHovered(h => (h === i ? null : h))}
-        >
-          <span
-            className="rounded-full transition-all"
-            style={{
-              width: hovered === i ? 11 : 7,
-              height: hovered === i ? 11 : 7,
-              // real months: bright filled · estimated months: hollow + dimmed
-              background: hovered === i || !points[i].estimated ? '#7FCBA0' : '#0E100D',
-              border: '1.5px solid #7FCBA0',
-              opacity: hovered === i ? 1 : (points[i].estimated ? 0.4 : 0.95),
-              boxShadow: undefined,
+    <div className="w-full h-[160px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={history} margin={{ top: 12, right: 64, left: 8, bottom: 8 }}>
+          <defs>
+            <linearGradient id="heroAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART.forestLight} stopOpacity={0.1} />
+              <stop offset="100%" stopColor={CHART.forestLight} stopOpacity={0.1} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="2 4" vertical={false} stroke={CHART.track} />
+          <XAxis dataKey="label" hide />
+          <YAxis hide domain={[min - pad, max + pad]} />
+          <Tooltip
+            cursor={{ stroke: CHART.forestLight, strokeOpacity: 0.25, strokeWidth: 1 }}
+            content={<ChartTooltip />}
+          />
+          <Area
+            name=""
+            type="monotone"
+            dataKey="value"
+            stroke={CHART.forestLight}
+            strokeWidth={2}
+            fill="url(#heroAreaGrad)"
+            isAnimationActive={false}
+            dot={(props) => {
+              const { cx, cy, index, payload } = props as {
+                cx: number; cy: number; index: number; payload: { estimated: boolean };
+              };
+              // The final (NOW) point is drawn by the ReferenceDot below.
+              if (index === lastI) return <g key={`d-${index}`} />;
+              const est = payload.estimated;
+              return (
+                <circle
+                  key={`d-${index}`}
+                  cx={cx} cy={cy} r={3.5}
+                  fill={est ? CHART.bgCard : CHART.forestLight}
+                  stroke={CHART.forestLight}
+                  strokeWidth={1.5}
+                  opacity={est ? 0.5 : 0.95}
+                />
+              );
+            }}
+            activeDot={{ r: 5, fill: CHART.forestLight, stroke: CHART.bgCard, strokeWidth: 2 }}
+          />
+          {/* NOW marker — filled dot with a ring + persistent value label */}
+          <ReferenceDot
+            x={last.label}
+            y={last.value}
+            r={6}
+            fill={CHART.forestLight}
+            stroke={CHART.bgCard}
+            strokeWidth={4}
+            label={{
+              value: fmtNice(last.value),
+              position: 'right',
+              fill: CHART.text1,
+              fontSize: 12,
+              fontWeight: 600,
             }}
           />
-        </span>
-      ))}
-
-      {/* hovered month tooltip — label + total */}
-      {hovered !== null && hovered !== lastI && (
-        <div
-          className="absolute pointer-events-none z-10"
-          style={{
-            left: leftPct(xs[hovered]),
-            top: topPct(ys[hovered]),
-            transform: `translate(-50%, ${ys[hovered] < 56 ? '18px' : 'calc(-100% - 14px)'})`,
-          }}
-        >
-          <div
-            className="px-2.5 py-1.5 rounded-lg whitespace-nowrap text-center"
-            style={{ background: '#191D16', border: '1px solid rgba(127,203,160,0.35)' }}
-          >
-            <div className="text-[9px] uppercase tracking-wider" style={{ color: '#5F6555' }}>
-              {points[hovered].label}
-            </div>
-            <div className="text-[12px] font-semibold tabular-nums" style={{ color: '#ECE7D8' }}>
-              {fmtNice(points[hovered].value)}
-            </div>
-            {points[hovered].estimated && (
-              <div className="text-[9px] mt-0.5" style={{ color: 'var(--warning)' }}>estimert</div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* NOW dot */}
-      <span
-        className="absolute rounded-full"
-        style={{
-          left: leftPct(lastHistX),
-          top: topPct(lastHistY),
-          transform: 'translate(-50%, -50%)',
-          width: 13,
-          height: 13,
-          background: '#7FCBA0',
-          boxShadow: '0 0 0 4px #0E100D',
-        }}
-      />
-
-      {/* NOW value label — crisp HTML, sits just left of the dot */}
-      <div
-        className="absolute"
-        style={{
-          left: `calc(${leftPct(lastHistX)} - 12px)`,
-          top: topPct(lastHistY),
-          transform: 'translate(-100%, -50%)',
-        }}
-      >
-        <div
-          className="px-2.5 py-1 rounded-lg text-[12px] font-semibold tabular-nums whitespace-nowrap"
-          style={{ background: '#191D16', border: '1px solid rgba(127,203,160,0.35)', color: '#ECE7D8' }}
-        >
-          {niceValue}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Shared hover tooltip for the small overlay charts — crisp HTML so it isn't
-// distorted by the SVGs' preserveAspectRatio="none" scaling.
-function ChartTip({
-  left,
-  top,
-  below,
-  title,
-  value,
-  sub,
-  accent = '#7FCBA0',
-}: {
-  left: string;
-  top: string;
-  below: boolean;
-  title: string;
-  value: string;
-  sub?: string;
-  accent?: string;
-}) {
-  return (
-    <div
-      className="absolute pointer-events-none z-10"
-      style={{ left, top, transform: `translate(-50%, ${below ? '12px' : 'calc(-100% - 12px)'})` }}
-    >
-      <div
-        className="px-2.5 py-1.5 rounded-lg whitespace-nowrap text-center"
-        style={{ background: '#191D16', border: `1px solid ${accent}59` }}
-      >
-        <div className="text-[9px] uppercase tracking-wider" style={{ color: '#5F6555' }}>{title}</div>
-        <div className="text-[12px] font-semibold tabular-nums" style={{ color: '#ECE7D8' }}>{value}</div>
-        {sub && <div className="text-[9px] mt-0.5" style={{ color: 'var(--warning)' }}>{sub}</div>}
-      </div>
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -1189,134 +1012,86 @@ function BurnRateChart({
   targetTotal,
   todayIdx,
   overshootValue,
-  formatCurrency,
-  lang,
+  dayWord,
 }: {
   actual: number[];
   total: number;
   targetTotal: number;
   todayIdx: number;
   overshootValue: number;
-  formatCurrency: (n: number) => string;
-  lang: string;
+  dayWord: string;
 }) {
-  const [hovered, setHovered] = useState<number | null>(null);
-  const W = 280;
-  const H = 80;
   const safeTotal = Math.max(total, 2);
   const lastActual = actual[actual.length - 1] ?? 0;
-  // Ensure a non-zero Y-domain even with empty data so axes don't collapse.
+  // Ensure a non-zero Y-domain even with empty data so the axis doesn't collapse.
   const maxCum = Math.max(targetTotal, lastActual, 100);
-  const yFor = (v: number) => H - 4 - (v / maxCum) * (H - 8);
-  const xFor = (i: number) => (i / (safeTotal - 1)) * W;
 
-  // Always include a starting point at (0, baseline) so a line is visible even when actual=[]
-  const drawPoints = actual.length === 0 ? [0] : actual;
-  const ptStr = drawPoints.map((v, i) => `${i === 0 ? 'M' : 'L'}${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`).join(' ');
-  const areaStr = `${ptStr} L${xFor(Math.max(0, drawPoints.length - 1)).toFixed(1)},${H} L0,${H} Z`;
+  // One row per day of the month; cumulative actual only up to today, null after
+  // so the line stops at the current day.
+  const data = Array.from({ length: safeTotal }, (_, i) => ({
+    day: i + 1,
+    actual: i < actual.length ? actual[i] : null,
+  }));
 
-  const todayX = xFor(todayIdx);
-  const todayY = yFor(lastActual);
-
+  const todayDay = todayIdx + 1;
   const dailyAvg = todayIdx > 0 ? lastActual / (todayIdx + 1) : 0;
-  const projectedFinal = dailyAvg * safeTotal;
-  const projectedFinalY = yFor(Math.min(projectedFinal, maxCum));
+  const projectedFinal = Math.min(dailyAvg * safeTotal, maxCum);
   const projWillOvershoot = overshootValue > 0 && lastActual > 0;
 
-  const leftPct = (x: number) => `${(x / W) * 100}%`;
-  const topPct = (y: number) => `${(y / H) * 100}%`;
-  const dayWord = lang === 'nb' ? 'Dag' : 'Day';
-
   return (
-    <div className="relative w-full h-[80px]">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
-        <defs>
-          <linearGradient id="spendAreaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#7FCBA0" stopOpacity="0.1" />
-            <stop offset="100%" stopColor="#7FCBA0" stopOpacity="0.1" />
-          </linearGradient>
-        </defs>
-        {/* grid */}
-        <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 3">
-          <line x1="0" y1={H * 0.25} x2={W} y2={H * 0.25} />
-          <line x1="0" y1={H * 0.5} x2={W} y2={H * 0.5} />
-          <line x1="0" y1={H * 0.75} x2={W} y2={H * 0.75} />
-        </g>
-        {/* ideal pace (always drawn) */}
-        <line x1="0" y1={H - 4} x2={W} y2={yFor(targetTotal)} stroke="#5F6555" strokeWidth="1" strokeDasharray="3 3" />
-        {/* actual area + line — only visible when there's spending */}
-        {lastActual > 0 && <path d={areaStr} fill="url(#spendAreaGrad)" />}
-        {lastActual > 0 && (
-          <path d={ptStr} fill="none" stroke="#7FCBA0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        )}
-        {/* projection */}
-        {projWillOvershoot && (
-          <line x1={todayX} y1={todayY} x2={W} y2={projectedFinalY} stroke="#C9A24A" strokeWidth="1.5" strokeDasharray="3 3" />
-        )}
-        {/* hovered day guide */}
-        {hovered !== null && (
-          <line x1={xFor(hovered)} y1="0" x2={xFor(hovered)} y2={H} stroke="#7FCBA0" strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
-        )}
-        {/* today vertical guide */}
-        <line x1={todayX} y1="0" x2={todayX} y2={H} stroke="#7FCBA0" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
-      </svg>
-
-      {/* per-day hover zones */}
-      {drawPoints.map((_, i) => (
-        <span
-          key={i}
-          className="absolute top-0 bottom-0 cursor-pointer"
-          style={{ left: leftPct(xFor(i)), width: `${100 / safeTotal}%`, transform: 'translateX(-50%)' }}
-          onMouseEnter={() => setHovered(i)}
-          onMouseLeave={() => setHovered(h => (h === i ? null : h))}
-        />
-      ))}
-
-      {/* hovered dot */}
-      {hovered !== null && (
-        <span
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            left: leftPct(xFor(hovered)),
-            top: topPct(yFor(drawPoints[hovered])),
-            transform: 'translate(-50%, -50%)',
-            width: 9,
-            height: 9,
-            background: '#7FCBA0',
-            boxShadow: undefined,
-          }}
-        />
-      )}
-
-      {/* today dot — HTML so it stays round */}
-      <span
-        className="absolute rounded-full pointer-events-none"
-        style={{
-          left: leftPct(todayX),
-          top: topPct(todayY),
-          transform: 'translate(-50%, -50%)',
-          width: 9,
-          height: 9,
-          background: '#0E100D',
-          border: '2px solid #7FCBA0',
-        }}
-      />
-
-      {hovered !== null && (
-        <ChartTip
-          left={leftPct(xFor(hovered))}
-          top={topPct(yFor(drawPoints[hovered]))}
-          below={yFor(drawPoints[hovered]) < 24}
-          title={`${dayWord} ${hovered + 1}`}
-          value={formatCurrency(drawPoints[hovered])}
-        />
-      )}
+    <div className="w-full h-[80px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 2 }}>
+          <defs>
+            <linearGradient id="spendAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART.forestLight} stopOpacity={0.1} />
+              <stop offset="100%" stopColor={CHART.forestLight} stopOpacity={0.1} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="2 3" vertical={false} stroke={CHART.track} />
+          <XAxis dataKey="day" type="category" hide />
+          <YAxis hide domain={[0, maxCum]} />
+          <Tooltip
+            cursor={{ stroke: CHART.forestLight, strokeDasharray: '2 3', strokeOpacity: 0.6 }}
+            content={<ChartTooltip labelFormatter={(d) => `${dayWord} ${d}`} />}
+          />
+          {/* ideal pace — straight line from day 1 (nothing spent) to the budget */}
+          <ReferenceLine
+            segment={[{ x: 1, y: 0 }, { x: safeTotal, y: targetTotal }]}
+            stroke={CHART.slate}
+            strokeWidth={1}
+            strokeDasharray="3 3"
+          />
+          {/* projected finish if the current pace overshoots */}
+          {projWillOvershoot && (
+            <ReferenceLine
+              segment={[{ x: todayDay, y: lastActual }, { x: safeTotal, y: projectedFinal }]}
+              stroke={CHART.brass}
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+            />
+          )}
+          {/* today marker */}
+          <ReferenceLine x={todayDay} stroke={CHART.forestLight} strokeWidth={1} strokeDasharray="2 3" strokeOpacity={0.5} />
+          <Area
+            name=""
+            type="monotone"
+            dataKey="actual"
+            connectNulls={false}
+            stroke={CHART.forestLight}
+            strokeWidth={2}
+            fill="url(#spendAreaGrad)"
+            isAnimationActive={false}
+            dot={false}
+            activeDot={{ r: 4, fill: CHART.forestLight, stroke: CHART.bgCard, strokeWidth: 1.5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
 
-function MonthlyInvestmentBars({ bars, formatCurrency }: { bars: { key: string; label: string; value: number; projected?: boolean }[]; formatCurrency: (n: number) => string }) {
-  const [hovered, setHovered] = useState<number | null>(null);
+function MonthlyInvestmentBars({ bars }: { bars: { key: string; label: string; value: number; projected?: boolean }[] }) {
   if (bars.length === 0) return <div className="h-[80px]" />;
   // If there are fewer than 4 real months, project forward to fill out to ~6 bars
   // so the chart doesn't look anemic.
@@ -1335,157 +1110,94 @@ function MonthlyInvestmentBars({ bars, formatCurrency }: { bars: { key: string; 
     }
   }
 
-  const W = 240;
-  const H = 80;
-  const padding = 4;
   const max = Math.max(...display.map(b => b.value)) || 1;
   const target = max * 0.85;
-  const barWidth = (W - padding * (display.length + 1)) / display.length;
   const todayIdx = realBars.length - 1;
-  const barX = (i: number) => padding + i * (barWidth + padding);
 
   return (
-    <div className="relative w-full h-[80px] mt-3">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
-        {/* target gridline */}
-        <line x1="0" y1={H - (target / max) * (H - 8)} x2={W} y2={H - (target / max) * (H - 8)}
-          stroke="rgba(255,255,255,0.08)" strokeDasharray="2 3" />
-        {display.map((b, i) => {
-          const h = Math.max(2, (b.value / max) * (H - 8));
-          const x = barX(i);
-          const y = H - h;
-          const isActive = i === todayIdx || hovered === i;
-          const opacity = b.projected ? 0.35 : Math.min(1, 0.55 + (i / display.length) * 0.45);
-          return b.projected ? (
-            <rect key={b.key} x={x} y={y} width={barWidth} height={h} rx="2"
-              fill="none" stroke="#7FCBA0" strokeWidth="1" strokeDasharray="2 2" opacity={hovered === i ? 0.8 : opacity} />
-          ) : (
-            <rect key={b.key} x={x} y={y} width={barWidth} height={h} rx="2"
-              fill="#7FCBA0" opacity={isActive ? 1 : opacity}
-              />
-          );
-        })}
-      </svg>
-
-      {/* per-bar hover zones */}
-      {display.map((b, i) => (
-        <span
-          key={b.key}
-          className="absolute top-0 bottom-0 cursor-pointer"
-          style={{ left: `${(barX(i) / W) * 100}%`, width: `${(barWidth / W) * 100}%` }}
-          onMouseEnter={() => setHovered(i)}
-          onMouseLeave={() => setHovered(h => (h === i ? null : h))}
-        />
-      ))}
-
-      {hovered !== null && (() => {
-        const b = display[hovered];
-        const h = Math.max(2, (b.value / max) * (H - 8));
-        const topY = H - h;
-        return (
-          <ChartTip
-            left={`${((barX(hovered) + barWidth / 2) / W) * 100}%`}
-            top={`${(topY / H) * 100}%`}
-            below={topY < 24}
-            title={b.label || 'Estimert'}
-            value={formatCurrency(b.value)}
-            sub={b.projected ? 'estimert' : undefined}
-            accent="#7FCBA0"
-          />
-        );
-      })()}
+    <div className="w-full h-[80px] mt-3">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={display} margin={{ top: 4, right: 2, left: 2, bottom: 2 }} barCategoryGap="20%">
+          <XAxis dataKey="label" type="category" hide />
+          <YAxis hide domain={[0, max]} />
+          <Tooltip cursor={{ fill: CHART.track }} content={<ChartTooltip />} />
+          {/* target gridline */}
+          <ReferenceLine y={target} stroke={CHART.grid} strokeDasharray="2 3" />
+          <Bar dataKey="value" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+            {display.map((b, i) => {
+              const active = i === todayIdx;
+              const opacity = Math.min(1, 0.55 + (i / display.length) * 0.45);
+              return (
+                <Cell
+                  key={b.key}
+                  fill={b.projected ? 'none' : CHART.forestLight}
+                  fillOpacity={b.projected ? 0 : (active ? 1 : opacity)}
+                  stroke={b.projected ? CHART.forestLight : undefined}
+                  strokeWidth={b.projected ? 1 : 0}
+                  strokeDasharray={b.projected ? '2 2' : undefined}
+                  strokeOpacity={b.projected ? 0.6 : undefined}
+                />
+              );
+            })}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
 
-function ProjectionChart({
-  points,
-  formatCurrency,
-}: {
-  points: { year: number; netWorth: number }[];
-  formatCurrency: (n: number) => string;
-}) {
-  const [hovered, setHovered] = useState<number | null>(null);
+function ProjectionChart({ points }: { points: { year: number; netWorth: number }[] }) {
   if (points.length < 2) return <div className="h-[80px]" />;
-  const W = 240;
-  const H = 80;
-  const padX = 4;
-  const padY = 6;
-  const max = Math.max(...points.map(p => p.netWorth));
-  const min = Math.min(...points.map(p => p.netWorth));
-  const range = (max - min) || 1;
-  const xs = points.map((_, i) => padX + (i / (points.length - 1)) * (W - padX * 2));
-  const ys = points.map(p => padY + (1 - (p.netWorth - min) / range) * (H - padY * 2));
-  const line = points.map((_, i) => `${i === 0 ? 'M' : 'L'}${xs[i].toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
-  const area = `${line} L${xs[xs.length - 1].toFixed(1)},${H} L${xs[0].toFixed(1)},${H} Z`;
+  const values = points.map(p => p.netWorth);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const pad = (max - min || 1) * 0.08;
   const lastI = points.length - 1;
-  const leftPct = (x: number) => `${(x / W) * 100}%`;
-  const topPct = (y: number) => `${(y / H) * 100}%`;
 
   return (
-    <div className="relative w-full h-[80px] mt-3">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
-        <defs>
-          <linearGradient id="projAreaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3F7373" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="#3F7373" stopOpacity="0.12" />
-          </linearGradient>
-        </defs>
-        <g stroke="rgba(255,255,255,0.05)" strokeDasharray="2 3">
-          <line x1="0" y1={H * 0.33} x2={W} y2={H * 0.33} />
-          <line x1="0" y1={H * 0.66} x2={W} y2={H * 0.66} />
-        </g>
-        <path d={area} fill="url(#projAreaGrad)" />
-        <path d={line} fill="none" stroke="#3F7373" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        {/* hovered year guide */}
-        {hovered !== null && (
-          <line x1={xs[hovered]} y1="0" x2={xs[hovered]} y2={H} stroke="#3F7373" strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
-        )}
-      </svg>
-
-      {/* dots per year — HTML so they stay round */}
-      {points.map((_, i) => {
-        const endpoint = i === 0 || i === lastI;
-        return (
-          <span
-            key={i}
-            className="absolute rounded-full pointer-events-none transition-all"
-            style={{
-              left: leftPct(xs[i]),
-              top: topPct(ys[i]),
-              transform: 'translate(-50%, -50%)',
-              width: hovered === i ? 9 : endpoint ? 6 : 4,
-              height: hovered === i ? 9 : endpoint ? 6 : 4,
-              background: hovered === i ? '#3F7373' : '#0E100D',
-              border: `1.5px solid ${i === lastI ? '#3F7373' : '#7FCBA0'}`,
-              opacity: hovered === i ? 1 : endpoint ? 1 : 0.5,
-              boxShadow: undefined,
-            }}
+    <div className="w-full h-[80px] mt-3">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={points} margin={{ top: 6, right: 4, left: 4, bottom: 2 }}>
+          <defs>
+            <linearGradient id="projAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART.teal} stopOpacity={0.12} />
+              <stop offset="100%" stopColor={CHART.teal} stopOpacity={0.12} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="2 3" vertical={false} stroke={CHART.track} />
+          <XAxis dataKey="year" type="category" hide />
+          <YAxis hide domain={[min - pad, max + pad]} />
+          <Tooltip
+            cursor={{ stroke: CHART.teal, strokeDasharray: '2 3', strokeOpacity: 0.6 }}
+            content={<ChartTooltip labelFormatter={(y) => String(y)} />}
           />
-        );
-      })}
-
-      {/* per-year hover zones */}
-      {points.map((_, i) => (
-        <span
-          key={i}
-          className="absolute top-0 bottom-0 cursor-pointer"
-          style={{ left: leftPct(xs[i]), width: `${100 / points.length}%`, transform: 'translateX(-50%)' }}
-          onMouseEnter={() => setHovered(i)}
-          onMouseLeave={() => setHovered(h => (h === i ? null : h))}
-        />
-      ))}
-
-      {hovered !== null && (
-        <ChartTip
-          left={leftPct(xs[hovered])}
-          top={topPct(ys[hovered])}
-          below={ys[hovered] < 24}
-          title={String(points[hovered].year)}
-          value={formatCurrency(points[hovered].netWorth)}
-          accent="#3F7373"
-        />
-      )}
+          <Area
+            name=""
+            type="monotone"
+            dataKey="netWorth"
+            stroke={CHART.teal}
+            strokeWidth={1.8}
+            fill="url(#projAreaGrad)"
+            isAnimationActive={false}
+            dot={(props) => {
+              const { cx, cy, index } = props as { cx: number; cy: number; index: number };
+              const endpoint = index === 0 || index === lastI;
+              return (
+                <circle
+                  key={`d-${index}`}
+                  cx={cx} cy={cy}
+                  r={endpoint ? 3 : 2}
+                  fill={CHART.bgCard}
+                  stroke={index === lastI ? CHART.teal : CHART.forestLight}
+                  strokeWidth={1.5}
+                  opacity={endpoint ? 1 : 0.5}
+                />
+              );
+            }}
+            activeDot={{ r: 5, fill: CHART.teal, stroke: CHART.bgCard, strokeWidth: 1.5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }

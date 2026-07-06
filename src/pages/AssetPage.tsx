@@ -51,7 +51,6 @@ const DebtPayoffChart = lazy(() => import('../components/charts/DebtPayoffChart'
 const AssetPage: React.FC = () => {
   const {
     t,
-    lang,
     assets: liveAssets,
     updateAsset,
     formatCurrency,
@@ -168,19 +167,13 @@ const AssetPage: React.FC = () => {
       {/* Hero header */}
       <header className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
-          {lang === 'nb' ? 'Formue' : 'Net worth'}
+          {t.assetPage.heroKicker}
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
-          {lang === 'nb' ? (
-            <>Hva er du verdt — <em className="font-serif italic" style={{ color: 'var(--brass)' }}>egentlig</em>.</>
-          ) : (
-            <>What you're worth — <em className="font-serif italic" style={{ color: 'var(--brass)' }}>truly</em>.</>
-          )}
+          {t.assetPage.heroTitlePre}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.assetPage.heroTitleEm}</em>{t.assetPage.heroTitlePost}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
-          {lang === 'nb'
-            ? `Netto egenkapital ${formatCurrency(netWorth)}. Investering ${formatCurrency(netInvestment)}, boligegenkapital ${formatCurrency(houseEquity)}, kontanter ${formatCurrency(cashTotal)}.`
-            : `Net equity ${formatCurrency(netWorth)}. Investment ${formatCurrency(netInvestment)}, property equity ${formatCurrency(houseEquity)}, cash ${formatCurrency(cashTotal)}.`}
+          {t.assetPage.heroSummaryEquity}{formatCurrency(netWorth)}{t.assetPage.heroSummaryInvestment}{formatCurrency(netInvestment)}{t.assetPage.heroSummaryProperty}{formatCurrency(houseEquity)}{t.assetPage.heroSummaryCash}{formatCurrency(cashTotal)}.
         </p>
       </header>
 
@@ -280,9 +273,7 @@ const AssetPage: React.FC = () => {
                 <span className="font-mono text-[var(--positive)]">{formatCurrency(pension.otpBalance + pension.ipsBalance)}</span>
               </div>
               <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
-                {lang === 'nb'
-                  ? 'Låst til pensjonsalder. Holdes utenfor faktisk egenkapital.'
-                  : 'Locked until retirement age. Excluded from liquid net equity.'}
+                {t.assetPage.pensionLockedNote}
               </p>
             </div>
           </div>
@@ -471,17 +462,17 @@ const AssetPage: React.FC = () => {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-[13px]">
           <div>
-            <div className={sectionLabel + ' mb-1'}>{lang === 'nb' ? 'Nå' : 'Now'}</div>
+            <div className={sectionLabel + ' mb-1'}>{t.assetPage.now}</div>
             <div className="font-mono font-semibold text-[var(--text-1)]">{formatCurrency(projectionData[0]?.total ?? totalEquity)}</div>
           </div>
           <div>
-            <div className={sectionLabel + ' mb-1'}>{lang === 'nb' ? 'Om 5 år' : 'In 5 years'}</div>
+            <div className={sectionLabel + ' mb-1'}>{t.assetPage.inFiveYears}</div>
             <div className="font-mono font-semibold text-[var(--positive)]">
               {formatCurrency(projectionData[5]?.total ?? 0)}
             </div>
           </div>
           <div>
-            <div className={sectionLabel + ' mb-1'}>{lang === 'nb' ? 'Om 15 år' : 'In 15 years'}</div>
+            <div className={sectionLabel + ' mb-1'}>{t.assetPage.inFifteenYears}</div>
             <div className="font-mono font-semibold text-[var(--positive)]">
               {formatCurrency(projectionData[15]?.total ?? 0)}
             </div>
@@ -531,9 +522,7 @@ const AssetPage: React.FC = () => {
         </div>
 
         <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
-          {lang === 'nb'
-            ? `Hver aktivaklasse vokser med egen rate. Sparing (${formatCurrency(annualSavings)}/år fra budsjettet) går til aksjer. Endre ratene i Innstillinger.`
-            : `Each asset class grows at its own rate. Savings (${formatCurrency(annualSavings)}/yr from your budget) flow into stocks. Adjust the rates in Settings.`}
+          {t.assetPage.projectionNotePre}{formatCurrency(annualSavings)}{t.assetPage.projectionNotePost}
         </p>
       </div>
 

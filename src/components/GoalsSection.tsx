@@ -48,7 +48,7 @@ interface ConfirmConfig {
 }
 
 const GoalsSection: React.FC = () => {
-  const { t, lang, goals, addGoal, updateGoal, removeGoal, assets, netWorth, formatCurrency } = useFinance();
+  const { t, goals, addGoal, updateGoal, removeGoal, assets, netWorth, formatCurrency } = useFinance();
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [confirm, setConfirm] = useState<ConfirmConfig | null>(null);
 
@@ -80,15 +80,15 @@ const GoalsSection: React.FC = () => {
       ],
       onSave: (vals) => {
         if (!isNonEmpty(vals.name)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Navn er påkrevd' : 'Name required' });
+          setModal(prev => prev && { ...prev, error: t.validation.nameRequired });
           return;
         }
         if (!isPositiveNumber(vals.target)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Målbeløp må være positivt' : 'Target must be positive' });
+          setModal(prev => prev && { ...prev, error: t.validation.targetPositive });
           return;
         }
         if (!isOptionalYearMonth(vals.deadline)) {
-          setModal(prev => prev && { ...prev, error: lang === 'nb' ? 'Ugyldig frist (YYYY-MM eller tom)' : 'Invalid deadline (YYYY-MM or empty)' });
+          setModal(prev => prev && { ...prev, error: t.validation.invalidDeadline });
           return;
         }
         const payload: Omit<Goal, 'id'> = {

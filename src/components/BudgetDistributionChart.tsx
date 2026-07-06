@@ -14,7 +14,7 @@ interface Props {
   expenseColor: (type?: FixedExpense['type']) => string;
   formatCurrency: (n: number) => string;
   formatCurrencyShort: (n: number) => string;
-  lang: 'nb' | 'en';
+  ofFixedCostsLabel: string;
 }
 
 /**
@@ -23,7 +23,7 @@ interface Props {
  * with d3) stays off the first-paint critical path.
  */
 export default function BudgetDistributionChart({
-  data, totalFixedExpenses, expenseColor, formatCurrency, formatCurrencyShort, lang,
+  data, totalFixedExpenses, expenseColor, formatCurrency, formatCurrencyShort, ofFixedCostsLabel,
 }: Props) {
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -52,7 +52,7 @@ export default function BudgetDistributionChart({
                 <div className="text-[13px] font-semibold text-[var(--text-1)]">{d.name}</div>
                 <div className="text-[13px] font-mono text-[var(--text-2)] mt-0.5">{formatCurrency(d.amount)}</div>
                 <div className="text-[11px] text-[var(--text-3)] mt-1">
-                  {pct.toFixed(1)}% {lang === 'nb' ? 'av faste utgifter' : 'of fixed costs'}
+                  {pct.toFixed(1)}% {ofFixedCostsLabel}
                 </div>
               </div>
             );
