@@ -1,26 +1,38 @@
 import React, { useState } from 'react';
 import { Target, Plus, Edit2, Trash2 } from 'lucide-react';
-import { useFinance, type Goal, type GoalSource } from '../context/FinanceContext';
+import { useFinance, type Goal, type GoalSource, type Assets } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
+import { sumSavings } from '../lib/equity';
 import { isValidYearMonth, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
-function currentValueFor(goal: Goal, ctx: {
-  assets: { bsu: number; savings: number; bufferAccount: number; portfolio: number };
-  totalEquity: number;
-}): number {
+function currentValueFor(goal: Goal, ctx: { assets: Assets; totalEquity: number }): number {
   switch (goal.source) {
     case 'bsu': return ctx.assets.bsu;
-    case 'savings': return ctx.assets.savings;
+    case 'savings': return sumSavings(ctx.assets);
+    case 'savingsAccount':
+      return ctx.assets.savingsAccounts?.find(s => s.id === goal.savingsAccountId)?.balance ?? 0;
     case 'bufferAccount': return ctx.assets.bufferAccount;
     case 'portfolio': return ctx.assets.portfolio;
     case 'totalEquity': return ctx.totalEquity;
     case 'manual':
     default: return goal.manualCurrent ?? 0;
   }
+}
+
+// The account-picker options are encoded as `sa:<id>` in the source <select> so
+// EditModal's flat field list can offer per-account linkage without a dependent
+// field. `encodeSource`/`decodeSource` bridge that back to {source, accountId}.
+const SA_PREFIX = 'sa:';
+function encodeSource(g: Pick<Goal, 'source' | 'savingsAccountId'>): string {
+  return g.source === 'savingsAccount' && g.savingsAccountId ? `${SA_PREFIX}${g.savingsAccountId}` : g.source;
+}
+function decodeSource(value: string): { source: GoalSource; savingsAccountId?: string } {
+  if (value.startsWith(SA_PREFIX)) return { source: 'savingsAccount', savingsAccountId: value.slice(SA_PREFIX.length) };
+  return { source: value as GoalSource };
 }
 
 function monthsUntil(deadline: string): number | null {
@@ -52,14 +64,28 @@ const GoalsSection: React.FC = () => {
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [confirm, setConfirm] = useState<ConfirmConfig | null>(null);
 
-  const sources: { value: GoalSource; label: string }[] = [
+  // Encoded <select> options: fixed sources plus one `sa:<id>` per savings
+  // account, so a goal can track a specific account (e.g. a vacation fund) or the
+  // combined savings total.
+  const savingsAccounts = assets.savingsAccounts ?? [];
+  const sourceOptions: { value: string; label: string }[] = [
     { value: 'manual', label: t.goals.sourceManual },
     { value: 'bsu', label: t.goals.sourceBsu },
     { value: 'savings', label: t.goals.sourceSavings },
+    ...savingsAccounts.map(s => ({ value: `${SA_PREFIX}${s.id}`, label: `${t.goals.sourceSavingsAccount}: ${s.name}` })),
     { value: 'bufferAccount', label: t.goals.sourceBufferAccount },
     { value: 'portfolio', label: t.goals.sourcePortfolio },
     { value: 'totalEquity', label: t.goals.sourceTotalEquity },
   ];
+
+  // Display label for a goal's source (resolves an account goal to its name).
+  const labelForGoal = (g: Goal): string => {
+    if (g.source === 'savingsAccount') {
+      const acc = savingsAccounts.find(s => s.id === g.savingsAccountId);
+      return acc ? `${t.goals.sourceSavingsAccount}: ${acc.name}` : t.goals.sourceSavingsAccount;
+    }
+    return sourceOptions.find(s => s.value === g.source)?.label ?? '';
+  };
 
   const openModal = (existing?: Goal) => {
     setModal({
@@ -71,8 +97,8 @@ const GoalsSection: React.FC = () => {
           key: 'source',
           label: t.goals.source,
           type: 'select',
-          value: existing?.source ?? 'manual',
-          options: sources,
+          value: existing ? encodeSource(existing) : 'manual',
+          options: sourceOptions,
         },
         { key: 'manualCurrent', label: t.goals.manualCurrent, type: 'number', value: (existing?.manualCurrent ?? 0).toString() },
         { key: 'deadline', label: t.goals.deadline, type: 'text', value: existing?.deadline ?? '', placeholder: '2027-12' },
@@ -91,11 +117,13 @@ const GoalsSection: React.FC = () => {
           setModal(prev => prev && { ...prev, error: t.validation.invalidDeadline });
           return;
         }
+        const { source, savingsAccountId } = decodeSource(vals.source);
         const payload: Omit<Goal, 'id'> = {
           name: vals.name.trim(),
           target: parseLocaleNumber(vals.target),
-          source: vals.source as GoalSource,
-          manualCurrent: vals.source === 'manual' ? parseLocaleNumber(vals.manualCurrent) || 0 : undefined,
+          source,
+          savingsAccountId,
+          manualCurrent: source === 'manual' ? parseLocaleNumber(vals.manualCurrent) || 0 : undefined,
           deadline: isValidYearMonth(vals.deadline) ? vals.deadline : undefined,
           notes: vals.notes.trim() || undefined,
         };
@@ -153,7 +181,7 @@ const GoalsSection: React.FC = () => {
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-semibold text-[var(--text-1)] truncate">{g.name}</div>
                     <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-                      {sources.find(s => s.value === g.source)?.label}
+                      {labelForGoal(g)}
                       {monthsLabel && <span> · {monthsLabel}</span>}
                     </div>
                   </div>

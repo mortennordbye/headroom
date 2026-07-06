@@ -26,7 +26,7 @@ export default function NetWorthCompositionChart() {
         stocks: Math.round(eq.netInvestment),
         house: Math.round(eq.houseEquity),
         crypto: Math.round(eq.netCrypto),
-        cash: Math.round(a.savings + a.bsu + a.bufferAccount),
+        cash: Math.round(eq.savingsTotal + a.bsu + a.bufferAccount),
       };
     });
   }, [balanceSnapshots, assets, currentMonth]);

@@ -71,6 +71,19 @@ describe('planPayoff', () => {
     expect(plan.months).toBe(0);
     expect(plan.feasible).toBe(true);
   });
+
+  it('excludes revolving debts (credit cards paid in full) from the payoff plan', () => {
+    const amortizing = debt({ id: 'loan', balance: 60_000, rate: 10, minPayment: 3_000 });
+    const revolving = debt({ id: 'card', balance: 25_000, rate: 0, minPayment: 0, revolving: true });
+    const withCard = planPayoff([amortizing, revolving], 0, 'avalanche');
+    const withoutCard = planPayoff([amortizing], 0, 'avalanche');
+    // The revolving card is ignored: same payoff months and interest as if absent,
+    // and its balance never appears in the amortizing series.
+    expect(withCard.months).toBe(withoutCard.months);
+    expect(withCard.totalInterest).toBeCloseTo(withoutCard.totalInterest, 5);
+    expect(withCard.balanceSeries[0].total).toBe(60_000);
+    expect(withCard.perDebt.some(p => p.id === 'card')).toBe(false);
+  });
 });
 
 describe('formatMonths', () => {

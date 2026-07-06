@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeEquityBreakdown } from './equity';
+import { computeEquityBreakdown, sumSavings } from './equity';
 import type { Assets } from '../context/FinanceContext';
 
 const assets = (over: Partial<Assets> = {}): Assets => ({
@@ -40,6 +40,23 @@ describe('computeEquityBreakdown', () => {
     const loss = computeEquityBreakdown(assets({ crypto: 50_000, cryptoUnrealizedGain: -10_000, cryptoTaxRate: 22 }));
     expect(loss.cryptoTaxOnGain).toBeCloseTo(-2_200, 0);
     expect(loss.netCrypto).toBeCloseTo(52_200, 0);
+  });
+
+  it('sums multiple savings accounts into net worth (and falls back to the legacy scalar)', () => {
+    // Legacy: no accounts array → use the scalar.
+    expect(sumSavings(assets({ savings: 40_000 }))).toBe(40_000);
+    // Accounts present → they win, scalar ignored (no double count).
+    const withAccounts = assets({
+      savings: 40_000,
+      savingsAccounts: [
+        { id: 'a', name: 'Sparekonto', balance: 60_000 },
+        { id: 'b', name: 'Feriekonto', balance: 25_000 },
+      ],
+    });
+    expect(sumSavings(withAccounts)).toBe(85_000);
+    const b = computeEquityBreakdown(withAccounts);
+    expect(b.savingsTotal).toBe(85_000);
+    expect(b.totalEquity).toBe(85_000); // only savings set here
   });
 
   it('rolls the loss benefit into total equity', () => {

@@ -23,6 +23,7 @@ import {
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
 import { buildNetWorthSeries } from '../lib/netWorth';
+import { sumSavings } from '../lib/equity';
 
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
@@ -122,7 +123,7 @@ const DashboardPage: React.FC = () => {
   }, [netWorthSeries]);
 
   const annualSavings = Math.max(0, recommendedInvestment * 12);
-  const cashStart = assets.savings + assets.bsu + assets.bufferAccount;
+  const cashStart = sumSavings(assets) + assets.bsu + assets.bufferAccount;
   const projectionRates = { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate };
   const projectionStart = { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity };
   const houseByYear = calcHouseEquityByYear(assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15);
@@ -133,7 +134,7 @@ const DashboardPage: React.FC = () => {
     { label: t.propertyEquity, value: Math.max(0, houseEquity), icon: <Home size={14} />, color: 'var(--chart-2)' },
     { label: t.dashboardPage.cryptoNet, value: Math.max(0, netCrypto), icon: <Bitcoin size={14} />, color: 'var(--chart-4)' },
     { label: t.bsu, value: assets.bsu, icon: <Shield size={14} />, color: 'var(--chart-3)' },
-    { label: t.savings, value: assets.savings, icon: <PiggyBank size={14} />, color: 'var(--chart-5)' },
+    { label: t.savings, value: sumSavings(assets), icon: <PiggyBank size={14} />, color: 'var(--chart-5)' },
     { label: t.bufferAccount, value: assets.bufferAccount, icon: <Wallet size={14} />, color: 'var(--chart-6)' },
   ].filter(r => r.value > 0), [netInvestment, houseEquity, netCrypto, assets, t]);
 

@@ -135,9 +135,11 @@ export default function SmartRecommendations() {
 
   const recordedMonthCount = Object.keys(monthlyIncomes).length;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayEntry = dailyData.find(d => d.dateStr === todayStr) ?? dailyData[dailyData.length - 1];
-  const currentBalance = todayEntry?.balance ?? 0;
+  // Money still left this month after fixed costs and what's actually been spent
+  // (income − fixed − spent). A true monthly balance that falls as you spend —
+  // not a daily-accrual tracker, and not the plan's unallocated remainder (which
+  // is ~0, since recommended spend + invest already split the whole residual).
+  const budgetBalance = Math.round(totalResidual - totalSpentThisMonth);
 
   const pieData = [
     { name: t.fixedCosts, value: totalFixedExpenses, color: ROLE_FIXED },
@@ -221,7 +223,12 @@ export default function SmartRecommendations() {
             />
             <div className="flex flex-col gap-1.5 rounded-[8px] border p-3 md:p-4 bg-[var(--bg-raised)] border-[var(--border)]">
               <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{t.residual}</span>
-              <span className="text-[13px] md:text-[15px] font-bold font-mono tracking-tight text-[var(--text-1)]">{formatCurrency(currentBalance)}</span>
+              <span
+                className="text-[13px] md:text-[15px] font-bold font-mono tracking-tight"
+                style={{ color: budgetBalance < 0 ? 'var(--negative)' : 'var(--text-1)' }}
+              >
+                {formatCurrency(budgetBalance)}
+              </span>
             </div>
           </div>
 

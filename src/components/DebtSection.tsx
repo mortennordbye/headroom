@@ -37,18 +37,35 @@ export default function DebtSection() {
   const typeOptions = DEBT_TYPES.map(v => ({ value: v, label: d.types[v] }));
   const parseNum = (s: string) => { const n = parseLocaleNumber(s); return isNaN(n) || n < 0 ? null : n; };
 
+  const revolvingOptions = [
+    { value: 'no', label: d.revolvingNo },
+    { value: 'yes', label: d.revolvingYes },
+  ];
   const debtFields = (val: Partial<Debt>): ModalField[] => [
     { key: 'name', label: d.name, type: 'text', value: val.name ?? '' },
     { key: 'type', label: d.typeLabel, type: 'select', value: val.type ?? 'student', options: typeOptions },
     { key: 'balance', label: d.balance, type: 'number', value: val.balance != null ? String(val.balance) : '' },
+    { key: 'revolving', label: d.revolvingLabel, type: 'select', value: val.revolving ? 'yes' : 'no', options: revolvingOptions },
     { key: 'rate', label: d.rate, type: 'number', value: val.rate != null ? String(val.rate) : '' },
     { key: 'minPayment', label: d.minPayment, type: 'number', value: val.minPayment != null ? String(val.minPayment) : '' },
   ];
 
   const validate = (v: Record<string, string>) => {
-    const balance = parseNum(v.balance), rate = parseNum(v.rate), minPayment = parseNum(v.minPayment);
-    if (!v.name.trim() || balance === null || rate === null || minPayment === null) return null;
-    return { name: v.name.trim(), type: v.type as DebtType, balance, rate, minPayment };
+    const revolving = v.revolving === 'yes';
+    const balance = parseNum(v.balance);
+    if (!v.name.trim() || balance === null) return null;
+    // A revolving card is paid in full → rate/minPayment are irrelevant (default 0
+    // and never used in the payoff plan). Otherwise both are required.
+    const rate = parseNum(v.rate), minPayment = parseNum(v.minPayment);
+    if (!revolving && (rate === null || minPayment === null)) return null;
+    return {
+      name: v.name.trim(),
+      type: v.type as DebtType,
+      balance,
+      rate: revolving ? 0 : rate!,
+      minPayment: revolving ? 0 : minPayment!,
+      revolving,
+    };
   };
   const err = () => setModal(p => p && { ...p, error: t.validation.fillAllFields });
 
@@ -86,7 +103,7 @@ export default function DebtSection() {
           {/* Ledger */}
           <div className="space-y-0">
             {debts.map(debt => {
-              const a = amortize(debt.balance, debt.rate, debt.minPayment);
+              const a = debt.revolving ? null : amortize(debt.balance, debt.rate, debt.minPayment);
               return (
                 <div key={debt.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0 gap-3">
                   <button type="button" aria-label={`${t.edit} — ${debt.name}`} className="min-w-0 cursor-pointer text-left" onClick={() => openEdit(debt)}>
@@ -96,11 +113,17 @@ export default function DebtSection() {
                       <span className="text-[10px] uppercase tracking-wider shrink-0" style={{ color: 'var(--text-3)' }}>{d.types[debt.type]}</span>
                     </div>
                     <div className="text-[11px] mt-0.5 ml-[15px]" style={{ color: 'var(--text-3)' }}>
-                      {debt.rate.toFixed(1)}% · {formatCurrency(debt.minPayment)}/{t.common.moAbbr}
-                      {' · '}
-                      {a.feasible
-                        ? `${d.payoffIn} ${formatMonths(a.months, lang)} · ${formatCurrency(Math.round(a.totalInterest))} ${d.interestLabel}`
-                        : d.never}
+                      {debt.revolving || !a ? (
+                        d.revolvingBadge
+                      ) : (
+                        <>
+                          {debt.rate.toFixed(1)}% · {formatCurrency(debt.minPayment)}/{t.common.moAbbr}
+                          {' · '}
+                          {a.feasible
+                            ? `${d.payoffIn} ${formatMonths(a.months, lang)} · ${formatCurrency(Math.round(a.totalInterest))} ${d.interestLabel}`
+                            : d.never}
+                        </>
+                      )}
                     </div>
                   </button>
                   <div className="flex items-center gap-3 shrink-0">

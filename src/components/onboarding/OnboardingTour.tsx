@@ -394,13 +394,18 @@ function DebtAdder() {
   const [balance, setBalance] = useState('');
   const [rate, setRate] = useState('');
   const [minPayment, setMinPayment] = useState('');
+  const [revolving, setRevolving] = useState(false);
   const pn = (s: string) => { const x = parseLocaleNumber(s); return isNaN(x) || x < 0 ? null : x; };
   const b = pn(balance), r = pn(rate), mp = pn(minPayment);
-  const canAdd = name.trim() !== '' && b !== null && r !== null && mp !== null;
+  // A revolving card is paid in full → only a name + balance are needed.
+  const canAdd = name.trim() !== '' && b !== null && (revolving || (r !== null && mp !== null));
   const add = () => {
-    if (name.trim() === '' || b === null || r === null || mp === null) return;
-    setDebts([...debts, { id: crypto.randomUUID(), name: name.trim(), type, balance: b, rate: r, minPayment: mp }]);
-    setName(''); setBalance(''); setRate(''); setMinPayment('');
+    if (name.trim() === '' || b === null || (!revolving && (r === null || mp === null))) return;
+    setDebts([...debts, {
+      id: crypto.randomUUID(), name: name.trim(), type, balance: b,
+      rate: revolving ? 0 : r!, minPayment: revolving ? 0 : mp!, revolving: revolving || undefined,
+    }]);
+    setName(''); setBalance(''); setRate(''); setMinPayment(''); setRevolving(false);
   };
   return (
     <div className="mb-5 space-y-3">
@@ -420,16 +425,25 @@ function DebtAdder() {
           </select>
         </div>
       </div>
-      <div className="flex gap-2">
-        <div className="flex-1 space-y-1.5">
-          <label className={microLabel} style={{ color: 'var(--text-2)' }}>{d.rate}</label>
-          <input value={rate} onChange={e => setRate(e.target.value)} inputMode="decimal" placeholder="0" className={`${inputCls} font-mono`} style={inputStyle} />
-        </div>
-        <div className="flex-1 space-y-1.5">
-          <label className={microLabel} style={{ color: 'var(--text-2)' }}>{d.minPayment}</label>
-          <input value={minPayment} onChange={e => setMinPayment(e.target.value)} inputMode="decimal" placeholder="0" className={`${inputCls} font-mono`} style={inputStyle} />
-        </div>
+      <div className="space-y-1.5">
+        <label className={microLabel} style={{ color: 'var(--text-2)' }}>{d.revolvingLabel}</label>
+        <select value={revolving ? 'yes' : 'no'} onChange={e => setRevolving(e.target.value === 'yes')} className={inputCls} style={inputStyle}>
+          <option value="no">{d.revolvingNo}</option>
+          <option value="yes">{d.revolvingYes}</option>
+        </select>
       </div>
+      {!revolving && (
+        <div className="flex gap-2">
+          <div className="flex-1 space-y-1.5">
+            <label className={microLabel} style={{ color: 'var(--text-2)' }}>{d.rate}</label>
+            <input value={rate} onChange={e => setRate(e.target.value)} inputMode="decimal" placeholder="0" className={`${inputCls} font-mono`} style={inputStyle} />
+          </div>
+          <div className="flex-1 space-y-1.5">
+            <label className={microLabel} style={{ color: 'var(--text-2)' }}>{d.minPayment}</label>
+            <input value={minPayment} onChange={e => setMinPayment(e.target.value)} inputMode="decimal" placeholder="0" className={`${inputCls} font-mono`} style={inputStyle} />
+          </div>
+        </div>
+      )}
       <button onClick={add} disabled={!canAdd} className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[6px] text-[13px] font-semibold disabled:opacity-40" style={{ background: 'var(--forest)', color: 'var(--text)' }}>
         <Plus size={15} /> {t.onboarding.add}
       </button>

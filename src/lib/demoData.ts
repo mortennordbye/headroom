@@ -26,7 +26,11 @@ export function getDemoData(): Partial<ExportPayload> {
     unrealizedGain: 62000,
     taxRate: 37.84,
     bsu: 33000,
-    savings: 95000,
+    savings: 0, // legacy scalar — superseded by savingsAccounts
+    savingsAccounts: [
+      { id: 'demo-sav-1', name: 'Sparekonto', balance: 60000 },
+      { id: 'demo-sav-2', name: 'Feriekonto', balance: 35000 },
+    ],
     houseValue: 4200000,
     houseDebt: 2950000,
     crypto: 48000,
@@ -92,7 +96,7 @@ export function getDemoData(): Partial<ExportPayload> {
       houseValue: Math.round(demoAssets.houseValue * (1 - 0.004 * k)),
       houseDebt: demoAssets.houseDebt + 8000 * k,
       crypto: Math.round(demoAssets.crypto * (1 - 0.02 * k)),
-      savings: Math.round(demoAssets.savings * (1 - 0.015 * k)),
+      savingsAccounts: demoAssets.savingsAccounts?.map(s => ({ ...s, balance: Math.round(s.balance * (1 - 0.015 * k)) })),
       bufferAccount: Math.round(demoAssets.bufferAccount * (1 - 0.01 * k)),
     },
     pension: {
@@ -132,6 +136,7 @@ export function getDemoData(): Partial<ExportPayload> {
       { id: 'demo-debt-1', name: 'Studielån (Lånekassen)', type: 'student', balance: 284000, rate: 4.9, minPayment: 3200 },
       { id: 'demo-debt-2', name: 'Kredittkort', type: 'credit_card', balance: 24500, rate: 22.9, minPayment: 1500 },
       { id: 'demo-debt-3', name: 'Forbrukslån', type: 'consumer', balance: 55000, rate: 12.5, minPayment: 2500 },
+      { id: 'demo-debt-4', name: 'Kredittkort (betales månedlig)', type: 'credit_card', balance: 18000, rate: 0, minPayment: 0, revolving: true },
     ],
 
     dailyTransactions: [
@@ -189,6 +194,7 @@ export function getDemoData(): Partial<ExportPayload> {
     goals: [
       { id: 'demo-goal-1', name: 'Bufferkonto', target: 100000, source: 'bufferAccount' },
       { id: 'demo-goal-2', name: 'Oppussing', target: 150000, source: 'manual', manualCurrent: 40000 },
+      { id: 'demo-goal-3', name: 'Sommerferie', target: 50000, source: 'savingsAccount', savingsAccountId: 'demo-sav-2' },
     ],
   };
 }

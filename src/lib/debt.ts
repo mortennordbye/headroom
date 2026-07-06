@@ -56,7 +56,10 @@ export interface PayoffPlan {
  * highest rate; snowball the smallest balance.
  */
 export function planPayoff(debts: Debt[], extraMonthly: number, strategy: PayoffStrategy): PayoffPlan {
-  const active = debts.filter(d => d.balance > EPS);
+  // Revolving debts (credit cards paid in full each month) never amortize, so
+  // they're excluded from the payoff simulation — they'd otherwise show a bogus
+  // "paid off in N months" that never happens. They still count in net worth.
+  const active = debts.filter(d => d.balance > EPS && !d.revolving);
   const startTotal = active.reduce((s, d) => s + d.balance, 0);
   if (active.length === 0) {
     return { months: 0, totalInterest: 0, feasible: true, perDebt: [], balanceSeries: [{ month: 0, total: 0 }] };

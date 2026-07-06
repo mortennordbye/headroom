@@ -39,7 +39,7 @@ import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
-import { computeEquityBreakdown } from '../lib/equity';
+import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import {
   calcAmortizationSchedule,
   calcHomeownerMortgageStatus,
@@ -89,8 +89,8 @@ const LoanPage: React.FC = () => {
   // (read-only), fall back to that month's stored loan snapshot instead of the
   // live derived figures.
   const liquidEquity = useMemo(
-    () => Math.round(assets.bsu + assets.savings + assets.bufferAccount + equityBreakdown.netInvestment),
-    [assets.bsu, assets.savings, assets.bufferAccount, equityBreakdown.netInvestment],
+    () => Math.round(assets.bsu + sumSavings(assets) + assets.bufferAccount + equityBreakdown.netInvestment),
+    [assets, equityBreakdown.netInvestment],
   );
   const [arslonnOverride, setArslonnOverride] = useState<number | null>(null);
   const [gjeldOverride, setGjeldOverride] = useState<number | null>(null);

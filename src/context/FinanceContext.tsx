@@ -50,6 +50,13 @@ export interface Debt {
   balance: number;      // current outstanding principal
   rate: number;         // annual nominal interest rate, %
   minPayment: number;   // normal monthly payment
+  /**
+   * A revolving balance paid in full every month (e.g. a credit card you always
+   * clear). It's a real current liability — it still reduces net worth — but it
+   * never amortizes and accrues no modelled interest, so it's excluded from the
+   * payoff planner/projection. rate/minPayment are irrelevant when this is set.
+   */
+  revolving?: boolean;
 }
 
 export interface DailyTransaction {
@@ -83,12 +90,24 @@ export interface TransactionTemplate {
   category?: string;
 }
 
+// A named cash savings account (e.g. "Sparekonto", "Feriekonto"). Multiple are
+// supported; each adds to net worth and can back a goal. The legacy scalar
+// `savings` below is superseded by `savingsAccounts` once that array exists — see
+// sumSavings() in lib/equity.ts, which prefers the accounts and falls back to the
+// scalar for pre-migration/older snapshot data.
+export interface SavingsAccount {
+  id: string;
+  name: string;
+  balance: number;
+}
+
 export interface Assets {
   portfolio: number;
   unrealizedGain: number;
   taxRate: number;
   bsu: number;
-  savings: number;
+  savings: number;               // legacy single savings; superseded by savingsAccounts
+  savingsAccounts?: SavingsAccount[];
   houseValue: number;
   houseDebt: number;
   crypto: number;
@@ -250,7 +269,7 @@ export interface InflationPoint {
   yoyPercent: number;
 }
 
-export type GoalSource = 'manual' | 'bsu' | 'savings' | 'totalEquity' | 'portfolio' | 'bufferAccount';
+export type GoalSource = 'manual' | 'bsu' | 'savings' | 'savingsAccount' | 'totalEquity' | 'portfolio' | 'bufferAccount';
 
 export interface Goal {
   id: string;
@@ -258,6 +277,7 @@ export interface Goal {
   target: number;                 // NOK
   source: GoalSource;
   manualCurrent?: number;         // used when source === 'manual'
+  savingsAccountId?: string;      // used when source === 'savingsAccount'
   deadline?: string;              // optional 'YYYY-MM'
   notes?: string;
 }
@@ -302,6 +322,7 @@ const DEFAULT_ASSETS: Assets = {
   taxRate: DEFAULT_TAX_RATES.stockTaxRate,
   bsu: 0,
   savings: 0,
+  savingsAccounts: [],
   houseValue: 0,
   houseDebt: 0,
   crypto: 0,
@@ -457,6 +478,9 @@ interface FinanceDataContextType {
   setRecurringTemplates: (val: TransactionTemplate[]) => void;
   assets: Assets;
   updateAsset: (key: keyof Assets, value: number) => void;
+  addSavingsAccount: (name: string, balance: number) => void;
+  updateSavingsAccount: (id: string, patch: Partial<Omit<SavingsAccount, 'id'>>) => void;
+  removeSavingsAccount: (id: string) => void;
   loan: LoanData;
   updateLoan: (key: keyof LoanData, value: number | string) => void;
   pension: Pension;
@@ -608,6 +632,31 @@ export interface DailyDataEntry {
 const makeId = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
+// Normalise a loaded/imported assets blob into a savings-accounts array. If the
+// array is present it's cleaned (valid id/name/number balance); otherwise the
+// legacy single `savings` scalar is migrated into one account. Returning an array
+// (never undefined) makes `savingsAccounts` the canonical source going forward.
+function migrateSavingsAccounts(a: Assets): SavingsAccount[] {
+  const raw: unknown = a.savingsAccounts;
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((x): x is Record<string, unknown> => x != null && typeof x === 'object')
+      .map((x) => {
+        const bal = x.balance;
+        const balance = typeof bal === 'number' && Number.isFinite(bal)
+          ? bal
+          : typeof bal === 'string' ? (parseFloat(bal.replace(',', '.')) || 0) : 0;
+        return {
+          id: typeof x.id === 'string' && x.id ? x.id : makeId('sav'),
+          name: typeof x.name === 'string' ? x.name : 'Sparekonto',
+          balance,
+        };
+      });
+  }
+  const legacy = typeof a.savings === 'number' && Number.isFinite(a.savings) ? a.savings : 0;
+  return legacy > 0 ? [{ id: makeId('sav'), name: 'Sparekonto', balance: legacy }] : [];
+}
+
 const FinanceSettingsContext = createContext<FinanceSettingsContextType | undefined>(undefined);
 const FinanceDataContext = createContext<FinanceDataContextType | undefined>(undefined);
 const FinanceDerivedContext = createContext<FinanceDerivedContextType | undefined>(undefined);
@@ -753,7 +802,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions); else if (resetMissing) setDailyTransactions([]);
     if (data.deletedBankIds !== undefined) setDeletedBankIds(data.deletedBankIds); else if (resetMissing) setDeletedBankIds([]);
     if (data.categoryBudgets !== undefined) setCategoryBudgets(data.categoryBudgets); else if (resetMissing) setCategoryBudgets({});
-    if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
+    if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets, savingsAccounts: migrateSavingsAccounts(data.assets) }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
     if (data.loan) setLoan(data.loan); else if (resetMissing) setLoan(DEFAULT_LOAN);
     if (data.pension) setPension({ ...DEFAULT_PENSION, ...data.pension }); else if (resetMissing) setPension(DEFAULT_PENSION);
     if (data.recurringTemplates !== undefined) setRecurringTemplates(data.recurringTemplates); else if (resetMissing) setRecurringTemplates([]);
@@ -1245,6 +1294,25 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const addSavingsAccount = useCallback((name: string, balance: number) => {
+    setAssets(prev => ({
+      ...prev,
+      savingsAccounts: [...(prev.savingsAccounts ?? []), { id: makeId('sav'), name, balance }],
+    }));
+  }, []);
+  const updateSavingsAccount = useCallback((id: string, patch: Partial<Omit<SavingsAccount, 'id'>>) => {
+    setAssets(prev => ({
+      ...prev,
+      savingsAccounts: (prev.savingsAccounts ?? []).map(s => s.id === id ? { ...s, ...patch } : s),
+    }));
+  }, []);
+  const removeSavingsAccount = useCallback((id: string) => {
+    setAssets(prev => ({
+      ...prev,
+      savingsAccounts: (prev.savingsAccounts ?? []).filter(s => s.id !== id),
+    }));
+  }, []);
+
   const updateLoan = useCallback((key: keyof LoanData, value: number | string) => {
     setLoan(prev => ({ ...prev, [key]: value }));
   }, []);
@@ -1429,7 +1497,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setRecurringTemplates([]);
     setAssets({
       portfolio: 0, unrealizedGain: 0, taxRate: 37.84,
-      bsu: 0, savings: 0, houseValue: 0, houseDebt: 0,
+      bsu: 0, savings: 0, savingsAccounts: [], houseValue: 0, houseDebt: 0,
       crypto: 0, cryptoUnrealizedGain: 0, cryptoTaxRate: 22,
       bufferAccount: 0,
     });
@@ -1611,7 +1679,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
     categoryBudgets, setCategoryBudget,
     recurringTemplates, setRecurringTemplates,
-    assets, updateAsset, loan, updateLoan, pension, updatePension,
+    assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
+    loan, updateLoan, pension, updatePension,
     housingMode, setHousingMode: changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
     jobs, addJob, updateJob, removeJob,
     salaries, addSalary, updateSalary, removeSalary,
@@ -1628,7 +1697,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
     clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, categoryBudgets, setCategoryBudget, recurringTemplates,
-    assets, updateAsset, loan, updateLoan, pension, updatePension, housingMode,
+    assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
+    loan, updateLoan, pension, updatePension, housingMode,
     changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
     jobs, addJob, updateJob, removeJob, salaries, addSalary, updateSalary, removeSalary,
     bonuses, addBonus, updateBonus, removeBonus, overtime, addOvertime, updateOvertime,

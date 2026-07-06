@@ -6,7 +6,18 @@ export interface EquityBreakdown {
   houseEquity: number;
   cryptoTaxOnGain: number;
   netCrypto: number;
+  savingsTotal: number;
   totalEquity: number;
+}
+
+// Total cash across savings accounts. Prefers the `savingsAccounts` array; falls
+// back to the legacy single `savings` scalar for pre-migration/older-snapshot
+// data (so historical balance snapshots without the array still value correctly).
+export function sumSavings(a: Assets): number {
+  if (Array.isArray(a.savingsAccounts)) {
+    return a.savingsAccounts.reduce((s, acc) => s + (Number.isFinite(acc.balance) ? acc.balance : 0), 0);
+  }
+  return a.savings;
 }
 
 // Single source of truth for turning raw asset inputs into post-tax net equity.
@@ -24,6 +35,7 @@ export function computeEquityBreakdown(a: Assets): EquityBreakdown {
   const houseEquity = a.houseValue - a.houseDebt;
   const cryptoTaxOnGain = (a.cryptoUnrealizedGain * a.cryptoTaxRate) / 100;
   const netCrypto = a.crypto - cryptoTaxOnGain;
-  const totalEquity = netInvestment + netCrypto + a.bsu + a.savings + a.bufferAccount + houseEquity;
-  return { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity };
+  const savingsTotal = sumSavings(a);
+  const totalEquity = netInvestment + netCrypto + a.bsu + savingsTotal + a.bufferAccount + houseEquity;
+  return { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, savingsTotal, totalEquity };
 }

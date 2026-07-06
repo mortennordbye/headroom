@@ -10,6 +10,8 @@ import {
   Bitcoin,
   Shield,
   Briefcase,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -20,7 +22,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { useFinance, DEFAULT_TAX_RATES, type Assets, type Pension } from '../context/FinanceContext';
+import { useFinance, DEFAULT_TAX_RATES, type Assets, type Pension, type SavingsAccount } from '../context/FinanceContext';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
@@ -30,7 +32,7 @@ import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
-import { computeEquityBreakdown } from '../lib/equity';
+import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { parseLocaleNumber } from '../lib/validators';
 
@@ -53,6 +55,9 @@ const AssetPage: React.FC = () => {
     t,
     assets: liveAssets,
     updateAsset,
+    addSavingsAccount,
+    updateSavingsAccount,
+    removeSavingsAccount,
     formatCurrency,
     totalDebt,
     growthReturnRate,
@@ -117,8 +122,28 @@ const AssetPage: React.FC = () => {
     });
     };
 
+    // Add or edit a named savings account (name + balance).
+    const editSavingsAccount = (acc?: SavingsAccount) => {
+    openModal({
+      title: acc ? acc.name : t.assetPage.addSavingsAccount,
+      fields: [
+        { key: 'name', label: t.assetPage.accountName, type: 'text', value: acc?.name ?? '' },
+        { key: 'balance', label: t.savings, type: 'number', value: (acc?.balance ?? 0).toString() },
+      ],
+      onSave: (vals) => {
+        const name = vals.name.trim() || t.savings;
+        const parsed = parseLocaleNumber(vals.balance);
+        const balance = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+        if (acc) updateSavingsAccount(acc.id, { name, balance });
+        else addSavingsAccount(name, balance);
+        closeModal();
+      },
+    });
+    };
+
+    const savingsAccounts = assets.savingsAccounts ?? [];
     const annualSavings = Math.max(0, recommendedInvestment * 12);
-  const cashStart = assets.savings + assets.bsu + assets.bufferAccount;
+  const cashStart = sumSavings(assets) + assets.bsu + assets.bufferAccount;
   const houseByYear = useMemo(
     () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15),
     [assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears]
@@ -152,7 +177,7 @@ const AssetPage: React.FC = () => {
     });
   };
 
-  const cashTotal = assets.bsu + assets.savings + assets.bufferAccount;
+  const cashTotal = assets.bsu + sumSavings(assets) + assets.bufferAccount;
   const pensionTotal = pension.otpBalance + pension.ipsBalance;
   // Allocation / liquidity views. Liquid = what you can actually reach today;
   // locked = property equity + pension (tied up / retirement-locked).
@@ -302,12 +327,24 @@ const AssetPage: React.FC = () => {
                 onEdit={() => openAssetEdit(t.bsu, assets.bsu, 'bsu')}
                 formatCurrency={formatCurrency}
               />
-              <AssetRow
-                label={t.savings}
-                value={assets.savings}
-                onEdit={() => openAssetEdit(t.savings, assets.savings, 'savings')}
-                formatCurrency={formatCurrency}
-              />
+              {savingsAccounts.map(acc => (
+                <SavingsAccountRow
+                  key={acc.id}
+                  account={acc}
+                  formatCurrency={formatCurrency}
+                  onEdit={() => editSavingsAccount(acc)}
+                  onRemove={() => removeSavingsAccount(acc.id)}
+                  removeLabel={`${t.delete} — ${acc.name}`}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={() => editSavingsAccount()}
+                className="flex items-center gap-1.5 py-3 text-[12px] font-medium transition-colors"
+                style={{ color: 'var(--accent)' }}
+              >
+                <Plus size={13} /> {t.assetPage.addSavingsAccount}
+              </button>
               <AssetRow
                 label={t.bufferAccount}
                 value={assets.bufferAccount}
@@ -385,7 +422,7 @@ const AssetPage: React.FC = () => {
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-2)' }}>{t.grossAssets}</span>
                   <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                    {formatCurrency(assets.portfolio + assets.crypto + assets.houseValue + assets.bsu + assets.savings + assets.bufferAccount)}
+                    {formatCurrency(assets.portfolio + assets.crypto + assets.houseValue + assets.bsu + sumSavings(assets) + assets.bufferAccount)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -576,6 +613,58 @@ function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, ic
         ) : (
           <span className="w-[13px] shrink-0" />
         )}
+      </div>
+    </div>
+  );
+}
+
+// A single named savings account: click name/value to edit, trash to remove.
+function SavingsAccountRow({
+  account,
+  formatCurrency,
+  onEdit,
+  onRemove,
+  removeLabel,
+}: {
+  account: SavingsAccount;
+  formatCurrency: (v: number) => string;
+  onEdit: () => void;
+  onRemove: () => void;
+  removeLabel: string;
+}) {
+  return (
+    <div className="flex justify-between items-center group py-3.5 border-b border-[var(--border)] last:border-0">
+      <button
+        type="button"
+        onClick={onEdit}
+        className="text-[13px] font-medium text-[var(--text-1)] group-hover:text-[var(--positive)] transition-colors truncate text-left mr-4 flex-1 min-w-0"
+      >
+        {account.name}
+      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-[13px] font-mono font-medium text-[var(--text-1)] group-hover:opacity-70 transition-opacity"
+        >
+          {formatCurrency(account.balance)}
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label={`edit ${account.name}`}
+          className="text-[var(--text-2)] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0"
+        >
+          <Edit2 size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={removeLabel}
+          className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0"
+        >
+          <Trash2 size={13} />
+        </button>
       </div>
     </div>
   );
