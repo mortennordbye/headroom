@@ -11,6 +11,7 @@ import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
 import { AccountBadge } from '../components/AccountBadge';
 import { txDisplayName } from '../lib/labelRules';
+import { EquityCompositionBar } from '../components/EquityCompositionBar';
 import NetWorthHistoryModal from '../components/NetWorthHistoryModal';
 import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear,
@@ -51,7 +52,6 @@ const DashboardPage: React.FC = () => {
     totalEquity,
     totalDebt,
     netWorth,
-    studentDebt,
     netInvestment,
     netCrypto,
     houseEquity,
@@ -345,11 +345,7 @@ const DashboardPage: React.FC = () => {
           <div className="text-[13px] mt-2" style={{ color: 'var(--text-2)' }}>
             {t.dashboardPage.postTax}
           </div>
-          {studentDebt > 0 && (
-            <div className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>
-              {t.dashboardPage.exStudentLoan} <span className="tabular-nums font-medium" style={{ color: 'var(--text-2)' }}>{formatCurrency(netWorth + studentDebt)}</span>
-            </div>
-          )}
+          <EquityCompositionBar />
 
           {/* Stat row */}
           <div className="mt-5 flex gap-6 flex-wrap">

@@ -27,6 +27,7 @@ import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
 import EditModal, { type ModalField } from '../components/EditModal';
+import { EquityCompositionBar } from '../components/EquityCompositionBar';
 import DebtSection from '../components/DebtSection';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
@@ -60,7 +61,6 @@ const AssetPage: React.FC = () => {
     removeSavingsAccount,
     formatCurrency,
     totalDebt,
-    studentDebt,
     growthReturnRate,
     setGrowthReturnRate,
     houseGrowthRate,
@@ -435,12 +435,7 @@ const AssetPage: React.FC = () => {
                     {liabilitiesTotal >= 0 ? '−' : '+'}{formatCurrency(Math.abs(liabilitiesTotal))}
                   </span>
                 </div>
-                {studentDebt > 0 && (
-                  <div className="flex justify-between pt-1 border-t" style={{ borderColor: 'var(--rule)' }}>
-                    <span style={{ color: 'var(--text-3)' }}>{t.dashboardPage.exStudentLoan}</span>
-                    <span className="tabular-nums" style={{ color: 'var(--text-2)' }}>{formatCurrency(netWorth + studentDebt)}</span>
-                  </div>
-                )}
+                <EquityCompositionBar />
               </div>
             </div>
             <ArrowUpRight size={100} className="absolute -top-4 -right-4" style={{ color: 'var(--brass-dim)', opacity: 0.5 }} />
