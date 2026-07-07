@@ -150,3 +150,13 @@ export function formatMonths(months: number, lang: 'nb' | 'en'): string {
 }
 
 export const DEBT_TYPES: DebtType[] = ['student', 'consumer', 'credit_card', 'other'];
+
+/**
+ * Sum the outstanding balance of debts of one type. Used to show net worth
+ * "excluding student loan" alongside the true figure: studielån is soft debt
+ * (low-interest, human-capital) whose real bite is on borrowing capacity, not
+ * wealth — so it's worth seeing equity both with and without it.
+ */
+export function sumDebtByType(debts: Debt[], type: DebtType): number {
+  return debts.reduce((s, d) => (d.type === type ? s + Math.max(0, d.balance) : s), 0);
+}

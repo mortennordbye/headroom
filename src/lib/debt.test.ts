@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths } from './debt';
+import { amortize, planPayoff, formatMonths, sumDebtByType } from './debt';
 import type { Debt } from '../context/FinanceContext';
 
 const debt = (over: Partial<Debt> = {}): Debt => ({
@@ -101,5 +101,20 @@ describe('formatMonths', () => {
     expect(formatMonths(14, 'en')).toBe('1 yr 2 mo');
     expect(formatMonths(24, 'nb')).toBe('2 år');
     expect(formatMonths(5, 'nb')).toBe('5 mnd');
+  });
+});
+
+describe('sumDebtByType', () => {
+  it('sums only the balances of the given type, ignoring negatives', () => {
+    const debts = [
+      debt({ id: 'a', type: 'student', balance: 300_000 }),
+      debt({ id: 'b', type: 'student', balance: 50_000 }),
+      debt({ id: 'c', type: 'consumer', balance: 80_000 }),
+      debt({ id: 'd', type: 'credit_card', balance: -10 }),
+    ];
+    expect(sumDebtByType(debts, 'student')).toBe(350_000);
+    expect(sumDebtByType(debts, 'consumer')).toBe(80_000);
+    expect(sumDebtByType(debts, 'credit_card')).toBe(0);
+    expect(sumDebtByType([], 'student')).toBe(0);
   });
 });

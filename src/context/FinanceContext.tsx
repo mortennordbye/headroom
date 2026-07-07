@@ -23,6 +23,7 @@ import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
+import { sumDebtByType } from '../lib/debt';
 import { sanitizePayload } from '../lib/sanitizePayload';
 import {
   type EmployerCostConfig,
@@ -594,6 +595,7 @@ interface FinanceDerivedContextType {
   conservativeReason: ConservativeReason;
   totalDebt: number;
   netWorth: number;
+  studentDebt: number;
   mortgageRate: number;
   mortgageTermYears: number;
   totalResidual: number;
@@ -1385,6 +1387,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Non-mortgage debts reduce it further to give true net worth.
   const totalDebt = debts.reduce((s, d) => s + Math.max(0, d.balance), 0);
   const netWorth = totalEquity - totalDebt;
+  // Student loans are "soft" debt (low-interest, human-capital) whose real bite
+  // is on borrowing capacity, not wealth. Surface net worth excluding it so a big
+  // studielån doesn't make the headline equity read poorer than it feels; it
+  // still counts fully in totalDebt (so gjeldsgrad/låneevne are unaffected).
+  const studentDebt = sumDebtByType(debts, 'student');
   // Single source of truth for the mortgage rate/term used by net-worth projections,
   // selected by the active housing mode (first-buyer & transitioning use the `loan`
   // inputs; homeowner uses the `homeowner` inputs).
@@ -1923,14 +1930,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, netWorth, mortgageRate, mortgageTermYears,
+    totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
     totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   }), [
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, netWorth, mortgageRate, mortgageTermYears,
+    totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
     totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   ]);
