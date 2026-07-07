@@ -288,6 +288,25 @@ app.get('/api/bank/status', (_req, res) => {
   res.json(bank.getStatus());
 });
 
+// The connectable banks for the picker (proxied so the client never needs the key).
+app.get('/api/bank/aspsps', async (_req, res) => {
+  try {
+    res.json({ aspsps: await bank.getAspsps() });
+  } catch (err) {
+    console.error('[bank] aspsps failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disconnect one bank. Its already-imported rows stay in the ledger.
+app.delete('/api/bank/connection/:id', (req, res) => {
+  try {
+    res.json({ ok: true, ...bank.removeConnection(String(req.params.id)), ...bank.getStatus() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Upload the app's private key (write-only — never read back). Validates the
 // PEM and verifies it against Enable Banking before storing it (chmod 600,
 // encrypted at rest when EB_KEY_SECRET is set).
@@ -314,10 +333,11 @@ app.post('/api/bank/config', (req, res) => {
   }
 });
 
-// Start BankID: returns the redirect url the client sends the browser to.
-app.post('/api/bank/link', async (_req, res) => {
+// Start BankID for the chosen bank: returns the redirect url the client sends the browser to.
+app.post('/api/bank/link', async (req, res) => {
   try {
-    res.json(await bank.startLink());
+    const aspsp = req.body && req.body.aspsp;
+    res.json(await bank.startLink(typeof aspsp === 'string' ? aspsp : undefined));
   } catch (err) {
     console.error('[bank] link failed:', err.message);
     res.status(500).json({ error: err.message });

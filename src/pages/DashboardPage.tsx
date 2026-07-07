@@ -9,6 +9,7 @@ import { useFinance, DEFAULT_GROWTH_RATES, DEFAULT_TAX_RATES } from '../context/
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
+import { AccountBadge } from '../components/AccountBadge';
 import NetWorthHistoryModal from '../components/NetWorthHistoryModal';
 import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear,
@@ -878,8 +879,9 @@ const DashboardPage: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <div className="text-[14px] font-medium truncate">{tx.description}</div>
-                      <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                      <div className="text-[11px] flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
                         {format(date, 'EEEE, dd MMM')}
+                        <AccountBadge tx={tx} size="xs" />
                       </div>
                     </div>
                     {tx.category && (

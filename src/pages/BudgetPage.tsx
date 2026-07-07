@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
+import { AccountBadge } from '../components/AccountBadge';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
@@ -782,6 +783,7 @@ const BudgetPage: React.FC = () => {
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                       )}
                       <span>{tx.description}</span>
+                      <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                       {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
                       <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
@@ -842,6 +844,7 @@ const BudgetPage: React.FC = () => {
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                           )}
                           <span>{tx.description}</span>
+                          <AccountBadge tx={tx} size="xs" />
                           <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                           {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
                           {tx.category && (

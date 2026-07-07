@@ -86,6 +86,15 @@ export interface DailyTransaction {
   /** ISO 18245 merchant category code from the bank feed, when provided. */
   mcc?: string;
   /**
+   * Which connected account/bank this row came from, for the per-account badge.
+   * `account` is a stable key; `accountName`/`bank` are display strings. Display
+   * only — set by bank sync, never touched by the money math. Absent on manual
+   * rows and legacy imports.
+   */
+  account?: string;
+  accountName?: string;
+  bank?: string;
+  /**
    * How `category` was set. 'auto' = the rule engine; 'manual' = a user edit.
    * Manual labels are never overwritten by re-sync or re-categorization.
    * Missing on legacy rows — treat as 'auto'.

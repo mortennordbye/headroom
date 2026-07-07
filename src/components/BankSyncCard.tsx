@@ -1,31 +1,47 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { Landmark, RefreshCw, KeyRound, ShieldCheck } from 'lucide-react';
+import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
 
-interface BankStatus {
-  linked: boolean;
-  configured: boolean;
-  hasRedirect?: boolean;
-  redirectUrl?: string;
-  redirectFromEnv?: boolean;
-  hasKey?: boolean;
-  keyEncrypted?: boolean;
-  keySecretSource?: 'env' | 'managed';
+interface BankAccount {
+  key?: string;
+  name?: string;
+  product?: string;
+  currency?: string;
+}
+
+interface BankConnection {
+  id: string;
   aspsp?: string | null;
-  accounts?: { name?: string; currency?: string }[];
+  accounts?: BankAccount[];
   lastSync?: string | null;
   validUntil?: string | null;
   daysLeft?: number;
   needsRelink?: boolean;
 }
 
+interface BankStatus {
+  linked: boolean;
+  configured: boolean;
+  connections?: BankConnection[];
+  hasRedirect?: boolean;
+  redirectUrl?: string;
+  redirectFromEnv?: boolean;
+  hasKey?: boolean;
+  keyEncrypted?: boolean;
+  keySecretSource?: 'env' | 'managed';
+}
+
 const defaultRedirect = () => `${window.location.origin}/api/bank/callback`;
 
+// Human-readable name for one account, falling back to the bank name.
+const accountLabel = (a: BankAccount, aspsp?: string | null) => a.name || a.product || aspsp || '';
+
 // In-app Enable Banking control: set the callback URL, upload the app key,
-// connect / re-link with BankID, and sync. Backed by /api/bank/* (server/bank.js).
+// connect any number of banks with BankID, and sync them all. Backed by
+// /api/bank/* (server/bank.js).
 export function BankSyncCard() {
   const { t, setDailyTransactions } = useFinance();
   const b = t.settings.bank;
@@ -34,6 +50,10 @@ export function BankSyncCard() {
   const [uploading, setUploading] = useState(false);
   const [savingCfg, setSavingCfg] = useState(false);
   const [redirectInput, setRedirectInput] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [aspsps, setAspsps] = useState<{ name: string }[] | null>(null);
+  const [selectedBank, setSelectedBank] = useState('');
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState(() => {
     const outcome = new URLSearchParams(window.location.search).get('bank');
@@ -115,21 +135,54 @@ export function BankSyncCard() {
     }
   };
 
-  const connect = async () => {
+  // Start BankID for a specific bank (or re-link an existing one).
+  const connect = async (aspsp?: string) => {
     setBusy('connecting');
     setMessage('');
     try {
-      const res = await fetch('/api/bank/link', { method: 'POST' });
+      const res = await fetch('/api/bank/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aspsp ? { aspsp } : {}),
+      });
       const data = await res.json();
       if (!res.ok || !data.url) {
         setBusy('idle');
         setMessage(data.error ? `${b.linkError} (${data.error})` : b.linkError);
         return;
       }
-      window.location.href = data.url;
+      window.location.assign(data.url);
     } catch {
       setBusy('idle');
       setMessage(b.linkError);
+    }
+  };
+
+  // Reveal the bank picker and load the list.
+  const startAdd = async () => {
+    setAdding(true);
+    setMessage('');
+    if (aspsps) return;
+    try {
+      const res = await fetch('/api/bank/aspsps');
+      const data = await res.json();
+      const list: { name: string }[] = Array.isArray(data.aspsps) ? data.aspsps : [];
+      setAspsps(list);
+      setSelectedBank(list[0]?.name || '');
+    } catch {
+      setAspsps([]);
+    }
+  };
+
+  const disconnect = async (id: string) => {
+    setMessage('');
+    try {
+      const res = await fetch(`/api/bank/connection/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('delete failed');
+      setConfirmingId(null);
+      await loadStatus();
+    } catch {
+      setMessage(b.syncError);
     }
   };
 
@@ -204,6 +257,71 @@ export function BankSyncCard() {
     </div>
   );
 
+  const connections = status?.connections ?? [];
+
+  const connectionRow = (c: BankConnection) => (
+    <div key={c.id} className="rounded-[8px] border p-3 space-y-1" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center justify-between gap-2">
+        <div className={`${row} font-medium`}>{c.aspsp}</div>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="secondary" size="sm" disabled={busy !== 'idle'} onClick={() => connect(c.aspsp || undefined)}>
+            {busy === 'connecting' ? b.connecting : b.relink}
+          </Button>
+          {confirmingId === c.id ? (
+            <Button variant="secondary" size="sm" leadingIcon={<Unlink size={14} />} onClick={() => disconnect(c.id)}>
+              {b.confirmDisconnect}
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" leadingIcon={<Unlink size={14} />} onClick={() => setConfirmingId(c.id)}>
+              {b.disconnect}
+            </Button>
+          )}
+        </div>
+      </div>
+      {(c.accounts ?? []).length > 0 && (
+        <div className={row} style={muted}>
+          {(c.accounts ?? []).map((a) => `${accountLabel(a, c.aspsp)}${a.currency ? ` · ${a.currency}` : ''}`).join(', ')}
+        </div>
+      )}
+      <div className={row} style={muted}>
+        {b.lastSync}: {c.lastSync ? new Date(c.lastSync).toLocaleString() : b.never}
+      </div>
+      <div className={row} style={{ color: c.needsRelink ? 'var(--warning, var(--text))' : 'var(--text-2)' }}>
+        {c.needsRelink ? b.needsRelink : b.expiresIn.replace('{n}', String(c.daysLeft ?? 0))}
+      </div>
+    </div>
+  );
+
+  const addBlock = adding ? (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        value={selectedBank}
+        onChange={(e) => setSelectedBank(e.target.value)}
+        disabled={!aspsps}
+        className="h-9 px-3 rounded-[6px] text-[13px] border min-w-[16rem]"
+        style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
+      >
+        {!aspsps ? (
+          <option>{b.loadingBanks}</option>
+        ) : aspsps.length === 0 ? (
+          <option>{b.noBanksAvailable}</option>
+        ) : (
+          aspsps.map((a) => (
+            <option key={a.name} value={a.name}>{a.name}</option>
+          ))
+        )}
+      </select>
+      <Button variant="primary" size="sm" disabled={busy !== 'idle' || !selectedBank} onClick={() => connect(selectedBank)}>
+        {busy === 'connecting' ? b.connecting : b.connect}
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>{b.cancel}</Button>
+    </div>
+  ) : (
+    <Button variant="secondary" size="sm" leadingIcon={<Plus size={14} />} disabled={busy !== 'idle'} onClick={startAdd}>
+      {b.addBank}
+    </Button>
+  );
+
   return (
     <Card padding="lg" className="md:col-span-12">
       <SectionLabel icon={<Landmark />}>{b.title}</SectionLabel>
@@ -211,45 +329,24 @@ export function BankSyncCard() {
         {b.desc}
       </p>
 
-      {status?.linked ? (
-        <div className="mt-4 space-y-1">
-          <div className={row}>
-            <span style={muted}>{b.linkedTo}: </span>
-            {status.aspsp}
-            {status.accounts?.[0]?.currency ? ` · ${status.accounts[0].currency}` : ''}
-          </div>
-          <div className={row} style={muted}>
-            {b.lastSync}: {status.lastSync ? new Date(status.lastSync).toLocaleString() : b.never}
-          </div>
-          <div className={row} style={{ color: status.needsRelink ? 'var(--warning, var(--text))' : 'var(--text-2)' }}>
-            {status.needsRelink ? b.needsRelink : b.expiresIn.replace('{n}', String(status.daysLeft ?? 0))}
-          </div>
-          <div className="pt-1">{keyBlock}</div>
-          <div className="flex flex-wrap gap-2 pt-3">
-            <Button variant="primary" size="sm" leadingIcon={<RefreshCw size={14} />} disabled={busy !== 'idle'} onClick={sync}>
-              {busy === 'syncing' ? b.syncing : b.syncNow}
-            </Button>
-            <Button variant="secondary" size="sm" disabled={busy !== 'idle'} onClick={connect}>
-              {busy === 'connecting' ? b.connecting : b.relink}
-            </Button>
-          </div>
-        </div>
-      ) : (
+      {status && !status.configured ? (
         <div className="mt-4 space-y-4">
           {redirectBlock}
           {keyBlock}
-          <div className="space-y-2">
-            <div className={row} style={muted}>{b.notLinked}</div>
-            <Button
-              variant="primary"
-              size="sm"
-              leadingIcon={<Landmark size={14} />}
-              disabled={busy !== 'idle' || uploading || (status != null && !status.configured)}
-              onClick={connect}
-            >
-              {busy === 'connecting' ? b.connecting : b.connect}
-            </Button>
+          <div className={row} style={muted}>{b.notConfigured}</div>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {connections.length > 0 ? connections.map(connectionRow) : <div className={row} style={muted}>{b.notLinked}</div>}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {addBlock}
+            {connections.length > 0 && (
+              <Button variant="primary" size="sm" leadingIcon={<RefreshCw size={14} />} disabled={busy !== 'idle'} onClick={sync}>
+                {busy === 'syncing' ? b.syncing : b.syncNow}
+              </Button>
+            )}
           </div>
+          <div className="pt-1">{keyBlock}</div>
         </div>
       )}
 

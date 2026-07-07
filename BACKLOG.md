@@ -166,6 +166,29 @@ data volume. Remaining:
 - **`out/` + `.cert/` leftovers** from the retired CLI prototype live under
   `scripts/enable-banking/` (gitignored, `out/` holds a real-data dump). Safe to delete.
 
+- **Multi-bank / multi-account — Tier 1 shipped (2026-07); Tier 2 deferred.** The engine now
+  holds *many* bank connections at once (`server/bank.js` `readStore`/`writeStore`,
+  `connections[]` in `$DATA_DIR/eb-session.json`, legacy single-session auto-migrated on read),
+  each with its own `idPrefix` so rows can't collide across banks. A bank picker
+  (`GET /api/bank/aspsps`), per-bank connect/re-link/disconnect
+  (`POST /api/bank/link {aspsp}`, `DELETE /api/bank/connection/:id`), and a "Sync now" that
+  loops every live connection (one expired bank flags itself without blocking the others).
+  Imported rows carry `account`/`accountName`/`bank` (`DailyTransaction`), rendered as a colored
+  per-account badge (`src/components/AccountBadge.tsx`) on the Dashboard recent list and the
+  Budget ledger. Bank copy genericized (i18n `settings.bank`). Deferred Tier 2:
+  - **User-editable friendly account labels.** Badges currently show the bank-provided account
+    name/product. A rename ("Salary", "Everyday card") needs an `accountLabels: Record<string,
+    string>` map keyed by the transaction `account` key, wired through **every** persist site
+    (`buildPayload` + deps, `applyPayload`, `ExportPayload`, `SettingsPage` export/import, demo
+    snapshot, reset) per the persist-payload rule in CLAUDE.md. **Where**:
+    `src/context/FinanceContext.tsx`, `src/components/BankSyncCard.tsx` (inline rename UI),
+    `src/components/AccountBadge.tsx` (resolve label from the map).
+  - **Filter-by-account in the ledger.** An "All accounts / …" dropdown on the Budget page
+    filtering `dailyTransactions` by `tx.account`. **Where**: `src/pages/BudgetPage.tsx`.
+  - **Legacy rows are unlabeled.** Transactions imported before Tier 1 have no `account`/`bank`,
+    so they show no badge (can't be back-attributed — the source account is unknown). New syncs
+    tag correctly; this only affects pre-upgrade rows.
+
 ## Envelope budgeting (fixed-expense ↔ category reconciliation) — follow-ups
 
 Shipped (2026-07): a fixed expense can be linked to a tracked spending category (optional

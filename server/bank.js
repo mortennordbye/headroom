@@ -152,11 +152,24 @@ async function api(method, apiPath, body) {
   return data;
 }
 
-async function resolveAspsp(match = /norwegian/i) {
+async function listAspsps() {
   const { aspsps = [] } = await api('GET', `/aspsps?country=${COUNTRY}`);
-  const found = aspsps.find((a) => match.test(a.name));
-  if (!found) throw new Error(`No ASPSP matching ${match} in ${COUNTRY}`);
+  return aspsps;
+}
+
+// Resolve a bank by exact name (from the picker). With no name, fall back to the
+// historical Bank Norwegian default so old callers keep working.
+async function resolveAspsp(name) {
+  const aspsps = await listAspsps();
+  const found = name ? aspsps.find((a) => a.name === name) : aspsps.find((a) => /norwegian/i.test(a.name));
+  if (!found) throw new Error(name ? `ASPSP not found: ${name}` : `No default ASPSP in ${COUNTRY}`);
   return found.name;
+}
+
+// The connectable banks, trimmed to what the picker needs.
+async function getAspsps() {
+  const aspsps = await listAspsps();
+  return aspsps.map((a) => ({ name: a.name, country: a.country, logo: a.logo || null }));
 }
 
 async function fetchTransactions(accountUid, dateFrom) {
@@ -183,9 +196,45 @@ function readJson(p) {
   }
 }
 
-function writeSession(session) {
+function writeStore(store) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(SESSION_PATH, JSON.stringify(session, null, 2));
+  fs.writeFileSync(SESSION_PATH, JSON.stringify(store, null, 2));
+}
+
+// Read the session store, transparently migrating the legacy single-session
+// shape ({ session_id, accounts, ... }) into the multi-connection shape
+// ({ connections: [...] }). The migrated connection keeps the bare `eb-` id
+// prefix so already-imported rows still match on the next sync (no duplicates).
+function readStore() {
+  const raw = readJson(SESSION_PATH);
+  if (!raw) return { connections: [] };
+  if (Array.isArray(raw.connections)) return raw;
+  if (raw.session_id) {
+    return {
+      connections: [
+        {
+          id: raw.id || 'legacy',
+          aspsp: raw.aspsp || null,
+          idPrefix: EB_ID_PREFIX,
+          session_id: raw.session_id,
+          valid_until: raw.valid_until,
+          linked_at: raw.linked_at,
+          last_sync: raw.last_sync || null,
+          needs_relink: Boolean(raw.needs_relink),
+          relink_reason: raw.relink_reason,
+          accounts: raw.accounts || [],
+        },
+      ],
+    };
+  }
+  return { connections: [] };
+}
+
+// Stable per-account key stamped onto every imported transaction, so the client
+// can badge and (later) filter by account even across banks with colliding
+// account names.
+function accountKey(connection, acc) {
+  return `${connection.id.slice(0, 8)}:${acc.uid}`;
 }
 
 // --- redirect URL: env wins, else a UI setting in eb-config.json ------------
@@ -259,6 +308,11 @@ function mapEBTransaction(tx, opts = {}) {
     // itself is client-side; the server never assigns a category.
     ...(merchant ? { merchant } : {}),
     ...(mcc ? { mcc } : {}),
+    // Which account/bank this row came from, for the per-account badge. Display
+    // only — never touches the money math.
+    ...(opts.account ? { account: opts.account } : {}),
+    ...(opts.bank ? { bank: opts.bank } : {}),
+    ...(opts.accountName ? { accountName: opts.accountName } : {}),
   };
 }
 
@@ -296,16 +350,28 @@ function mergeTransactions(existing, incoming, deletedIds = []) {
 
 // --- high-level flow used by the routes -------------------------------------
 
-function markRelink(reason) {
-  const session = readJson(SESSION_PATH);
-  if (session) writeSession({ ...session, needs_relink: true, relink_reason: reason });
+function markRelink(connId, reason) {
+  const store = readStore();
+  const c = store.connections.find((x) => x.id === connId);
+  if (c) {
+    c.needs_relink = true;
+    c.relink_reason = reason;
+    writeStore(store);
+  }
 }
 
-/** Start the BankID flow; returns the redirect url for the browser. */
-async function startLink() {
+/**
+ * Start the BankID flow for a bank; returns the redirect url for the browser.
+ * Re-linking a bank that's already connected reuses its connection id and id
+ * prefix so its stored rows keep matching (no duplicates on the next sync).
+ */
+async function startLink(bankName) {
   const redirectUrl = getRedirect();
   if (!redirectUrl) throw new Error('redirect URL not set (add it in Settings and register it on the EB app)');
-  const aspspName = await resolveAspsp();
+  const aspspName = await resolveAspsp(bankName);
+  const existing = readStore().connections.find((c) => c.aspsp === aspspName);
+  const connectionId = existing ? existing.id : crypto.randomUUID();
+  const idPrefix = existing ? existing.idPrefix : `${EB_ID_PREFIX}${connectionId.slice(0, 8)}-`;
   const state = crypto.randomUUID();
   const validUntil = new Date(Date.now() + DAYS * 864e5).toISOString();
   const auth = await api('POST', '/auth', {
@@ -316,30 +382,49 @@ async function startLink() {
     psu_type: 'personal',
   });
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(PENDING_PATH, JSON.stringify({ state, validUntil, aspspName }));
+  fs.writeFileSync(PENDING_PATH, JSON.stringify({ state, validUntil, aspspName, connectionId, idPrefix }));
   return { url: auth.url };
 }
 
-/** Complete the BankID flow from the callback's code+state; saves the session. */
+/** Complete the BankID flow from the callback's code+state; upserts the connection. */
 async function finishLink(code, state) {
   const pending = readJson(PENDING_PATH);
   if (!pending || !pending.state) throw new Error('no pending link');
   if (state && state !== pending.state) throw new Error('state mismatch');
   const session = await api('POST', '/sessions', { code });
   const accounts = session.accounts || [];
-  writeSession({
+  const store = readStore();
+  const idx = store.connections.findIndex((c) => c.id === pending.connectionId);
+  const connection = {
+    id: pending.connectionId,
+    aspsp: pending.aspspName,
+    idPrefix: pending.idPrefix || EB_ID_PREFIX,
     session_id: session.session_id,
     valid_until: (session.access && session.access.valid_until) || pending.validUntil,
-    aspsp: pending.aspspName,
-    accounts: accounts.map((a) => ({ uid: a.uid, name: a.name, currency: a.currency })),
     linked_at: new Date().toISOString(),
-  });
+    // Preserve the prior sync time on a re-link so we don't refetch 90 days.
+    last_sync: idx >= 0 ? store.connections[idx].last_sync || null : null,
+    needs_relink: false,
+    accounts: accounts.map((a) => ({ uid: a.uid, name: a.name, product: a.product, currency: a.currency })),
+  };
+  if (idx >= 0) store.connections[idx] = connection;
+  else store.connections.push(connection);
+  writeStore(store);
   try {
     fs.unlinkSync(PENDING_PATH);
   } catch {
     /* already gone */
   }
   return { accounts: accounts.length };
+}
+
+/** Disconnect a bank. Its already-imported rows stay in the ledger. */
+function removeConnection(id) {
+  const store = readStore();
+  const before = store.connections.length;
+  store.connections = store.connections.filter((c) => c.id !== id);
+  writeStore(store);
+  return { removed: before - store.connections.length };
 }
 
 /** Status for the Settings card. Never throws. */
@@ -356,20 +441,20 @@ function getStatus() {
     keySecretSource: keySecretSource(),
     configured: hasRedirect && keyPresent,
   };
-  const session = readJson(SESSION_PATH);
-  if (!session || !session.session_id) return { linked: false, ...base };
-  const expiry = new Date(session.valid_until).getTime();
-  const daysLeft = Number.isFinite(expiry) ? Math.max(0, Math.ceil((expiry - Date.now()) / 864e5)) : 0;
-  return {
-    linked: true,
-    ...base,
-    aspsp: session.aspsp || null,
-    accounts: (session.accounts || []).map((a) => ({ name: a.name, currency: a.currency })),
-    lastSync: session.last_sync || null,
-    validUntil: session.valid_until || null,
-    daysLeft,
-    needsRelink: Boolean(session.needs_relink) || !sessionValid(session),
-  };
+  const connections = readStore().connections.map((c) => {
+    const expiry = new Date(c.valid_until).getTime();
+    const daysLeft = Number.isFinite(expiry) ? Math.max(0, Math.ceil((expiry - Date.now()) / 864e5)) : 0;
+    return {
+      id: c.id,
+      aspsp: c.aspsp || null,
+      accounts: (c.accounts || []).map((a) => ({ key: accountKey(c, a), name: a.name, product: a.product, currency: a.currency })),
+      lastSync: c.last_sync || null,
+      validUntil: c.valid_until || null,
+      daysLeft,
+      needsRelink: Boolean(c.needs_relink) || !sessionValid(c),
+    };
+  });
+  return { linked: connections.length > 0, connections, ...base };
 }
 
 /**
@@ -377,43 +462,65 @@ function getStatus() {
  * (Error with .needsRelink) when consent has lapsed.
  */
 async function fetchMappedTransactions() {
-  const session = readJson(SESSION_PATH);
-  if (!session) {
+  const store = readStore();
+  if (!store.connections.length) {
     const e = new Error('not linked');
     e.needsRelink = true;
     throw e;
   }
-  if (!sessionValid(session)) {
-    markRelink('consent expired');
+  let mapped = [];
+  let anyValid = false;
+  for (const c of store.connections) {
+    // A single expired bank flags itself for re-link but doesn't block the
+    // others — we still sync every bank whose consent is live.
+    if (!sessionValid(c)) {
+      markRelink(c.id, 'consent expired');
+      continue;
+    }
+    anyValid = true;
+    const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
+    const fromMs = lastSync ? lastSync - 7 * 864e5 : Date.now() - DAYS * 864e5;
+    const from = new Date(fromMs).toISOString().slice(0, 10);
+    try {
+      for (const acc of c.accounts || []) {
+        const raw = await fetchTransactions(acc.uid, from);
+        mapped = mapped.concat(
+          mapEBTransactions(raw, {
+            idPrefix: c.idPrefix,
+            account: accountKey(c, acc),
+            bank: c.aspsp || undefined,
+            accountName: acc.name || acc.product || '',
+          }),
+        );
+      }
+    } catch (err) {
+      if (err.status === 401 || err.status === 403) {
+        markRelink(c.id, `fetch ${err.status}`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  // Only a hard stop when nothing was syncable at all.
+  if (!anyValid) {
     const e = new Error('consent expired');
     e.needsRelink = true;
     throw e;
   }
-  const accounts = session.accounts || [];
-  const lastSync = session.last_sync ? new Date(session.last_sync).getTime() : null;
-  const fromMs = lastSync ? lastSync - 7 * 864e5 : Date.now() - DAYS * 864e5;
-  const from = new Date(fromMs).toISOString().slice(0, 10);
-  let raw = [];
-  try {
-    for (const acc of accounts) {
-      raw = raw.concat(await fetchTransactions(acc.uid, from));
-    }
-  } catch (err) {
-    if (err.status === 401 || err.status === 403) {
-      markRelink(`fetch ${err.status}`);
-      const e = new Error('consent expired');
-      e.needsRelink = true;
-      throw e;
-    }
-    throw err;
-  }
-  return mapEBTransactions(raw);
+  return mapped;
 }
 
-/** Record a successful sync time (clears the relink flag). */
+/** Record a successful sync time on every live connection (clears its relink flag). */
 function recordSync() {
-  const session = readJson(SESSION_PATH);
-  if (session) writeSession({ ...session, last_sync: new Date().toISOString(), needs_relink: false });
+  const store = readStore();
+  const now = new Date().toISOString();
+  for (const c of store.connections) {
+    if (sessionValid(c)) {
+      c.last_sync = now;
+      c.needs_relink = false;
+    }
+  }
+  writeStore(store);
 }
 
 module.exports = {
@@ -423,11 +530,13 @@ module.exports = {
   mapEBTransactions,
   mergeTransactions,
   // flow
+  getAspsps,
   startLink,
   finishLink,
   getStatus,
   fetchMappedTransactions,
   recordSync,
+  removeConnection,
   // key management
   hasKey,
   saveKey,

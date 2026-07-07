@@ -84,6 +84,25 @@ describe('mapEBTransaction', () => {
     expect(mapEBTransaction(tx({ booking_date: undefined, value_date: undefined, transaction_date: '2026-05-02' })).date).toBe('2026-05-02');
   });
 
+  it('stamps account/bank/accountName from opts, and omits them when absent', () => {
+    const tagged = mapEBTransaction(tx(), { account: 'abcd1234:uid-1', bank: 'Handelsbanken', accountName: 'Brukskonto' });
+    expect(tagged.account).toBe('abcd1234:uid-1');
+    expect(tagged.bank).toBe('Handelsbanken');
+    expect(tagged.accountName).toBe('Brukskonto');
+    const bare = mapEBTransaction(tx());
+    expect(bare.account).toBeUndefined();
+    expect(bare.bank).toBeUndefined();
+    expect(bare.accountName).toBeUndefined();
+  });
+
+  it('gives colliding entry_references distinct ids under different connection prefixes', () => {
+    const a = mapEBTransaction(tx({ entry_reference: 'ref-1' }), { idPrefix: 'eb-aaaa1111-' });
+    const b = mapEBTransaction(tx({ entry_reference: 'ref-1' }), { idPrefix: 'eb-bbbb2222-' });
+    expect(a.id).not.toBe(b.id);
+    expect(a.id.startsWith('eb-')).toBe(true);
+    expect(b.id.startsWith('eb-')).toBe(true);
+  });
+
   it('throws on an unparseable or blank amount', () => {
     expect(() => mapEBTransaction(tx({ transaction_amount: { currency: 'NOK', amount: 'n/a' } }))).toThrow();
     expect(() => mapEBTransaction(tx({ transaction_amount: { currency: 'NOK', amount: '' } }))).toThrow();
@@ -127,6 +146,14 @@ describe('mergeTransactions', () => {
     expect(merged[0].amount).toBe(260); // fresh bank amount wins
     expect(merged[0].category).toBe('groceries'); // but the label survives
     expect(merged[0].categorySource).toBe('manual');
+  });
+
+  it('keeps rows from two different connections side by side (no collision)', () => {
+    const bankA = mapEBTransactions([tx({ entry_reference: 'ref-1' })], { idPrefix: 'eb-aaaa1111-', account: 'aaaa1111:1', accountName: 'Card' });
+    const bankB = mapEBTransactions([tx({ entry_reference: 'ref-1' })], { idPrefix: 'eb-bbbb2222-', account: 'bbbb2222:1', accountName: 'Salary' });
+    const merged = mergeTransactions(bankA, bankB);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((t: MappedTransaction) => t.accountName).sort()).toEqual(['Card', 'Salary']);
   });
 
   it('does not resurrect a soft-deleted row on re-sync', () => {
