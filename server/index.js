@@ -392,16 +392,19 @@ app.post('/api/bank/sync', async (_req, res) => {
     const before = existing.length;
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
     blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds);
-    // Bump rev so an open client's next autosave sees the conflict and refetches
-    // the freshly-synced rows instead of overwriting them.
-    writeBlob('headroom', JSON.stringify(blob), row.rev);
+    // Bump rev so *other* open tabs see the change and refetch the freshly-synced
+    // rows. We return the new rev so the tab that triggered the sync can adopt it
+    // and not treat its own sync as a conflicting external change.
+    const newRev = writeBlob('headroom', JSON.stringify(blob), row.rev);
     bank.recordSync();
+    res.set('X-Data-Rev', String(newRev));
     res.json({
       ok: true,
       fetched: mapped.length,
       added: blob.dailyTransactions.length - before,
       total: blob.dailyTransactions.length,
       dailyTransactions: blob.dailyTransactions,
+      rev: newRev,
     });
   } catch (err) {
     if (err.needsRelink) return res.status(409).json({ error: err.message, needsRelink: true });

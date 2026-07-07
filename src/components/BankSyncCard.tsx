@@ -49,7 +49,7 @@ const accountLabel = (a: BankAccount, aspsp?: string | null) => a.name || a.prod
 // connect any number of banks with BankID, and sync them all. Backed by
 // /api/bank/* (server/bank.js).
 export function BankSyncCard() {
-  const { t, setDailyTransactions, accountLabels, setAccountLabel, dataAccounts, dailyTransactions, removeAccountData } = useFinance();
+  const { t, applyBankSync, accountLabels, setAccountLabel, dataAccounts, dailyTransactions, removeAccountData } = useFinance();
   const b = t.settings.bank;
   const [status, setStatus] = useState<BankStatus | null>(null);
   const [busy, setBusy] = useState<'idle' | 'connecting' | 'syncing'>('idle');
@@ -208,7 +208,9 @@ export function BankSyncCard() {
         return;
       }
       if (!res.ok) throw new Error(data.error || 'sync failed');
-      if (Array.isArray(data.dailyTransactions)) setDailyTransactions(data.dailyTransactions);
+      // Adopt the new rev the sync returned so this tab doesn't flag its own
+      // sync as an external change (the "data changed elsewhere" reload).
+      if (Array.isArray(data.dailyTransactions)) applyBankSync(data.dailyTransactions, data.rev);
       setMessage(b.synced.replace('{n}', String(data.added ?? 0)));
       await loadStatus();
     } catch {

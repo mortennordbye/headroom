@@ -495,6 +495,7 @@ interface FinanceDataContextType {
   setDailyTransactions: (val: DailyTransaction[]) => void;
   accountLabels: Record<string, string>;
   setAccountLabel: (accountKey: string, name: string) => void;
+  applyBankSync: (txs: DailyTransaction[], rev?: number) => void;
   categoryRules: CategoryRule[];
   addCategoryRule: (match: string, category: CategoryKey) => void;
   removeCategoryRule: (id: string) => void;
@@ -1605,6 +1606,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, [dailyTransactions, setDailyTransactionsTracked]);
 
+  // Apply the transactions a bank sync just persisted, and adopt the server's new
+  // data revision so this (initiating) tab doesn't see its own sync as an
+  // external change and trigger a "data changed elsewhere" reload.
+  const applyBankSync = useCallback((txs: DailyTransaction[], rev?: number) => {
+    if (typeof rev === 'number' && Number.isFinite(rev)) revRef.current = rev;
+    setDailyTransactionsTracked(txs);
+  }, [setDailyTransactionsTracked]);
+
   // Import / demo-restore: overlay the present fields, leaving absent ones as the
   // current value (resetMissing=false). Shares the single apply path with load.
   const importAll = useCallback((data: Partial<ExportPayload>) => applyPayload(data, false), [applyPayload]);
@@ -1838,7 +1847,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     fixedExpenses, setFixedExpenses,
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
-    accountLabels, setAccountLabel,
+    accountLabels, setAccountLabel, applyBankSync,
     categoryRules, addCategoryRule, removeCategoryRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget,
@@ -1860,7 +1869,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
     clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
-    setDailyTransactionsTracked, accountLabels, setAccountLabel,
+    setDailyTransactionsTracked, accountLabels, setAccountLabel, applyBankSync,
     categoryRules, addCategoryRule, removeCategoryRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget, recurringTemplates,
