@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink, Pencil, AlertTriangle, BookOpen, ExternalLink } from 'lucide-react';
+import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink, Pencil, AlertTriangle, BookOpen, ExternalLink, Trash2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
@@ -49,7 +49,7 @@ const accountLabel = (a: BankAccount, aspsp?: string | null) => a.name || a.prod
 // connect any number of banks with BankID, and sync them all. Backed by
 // /api/bank/* (server/bank.js).
 export function BankSyncCard() {
-  const { t, setDailyTransactions, accountLabels, setAccountLabel, dataAccounts } = useFinance();
+  const { t, setDailyTransactions, accountLabels, setAccountLabel, dataAccounts, dailyTransactions, removeAccountData } = useFinance();
   const b = t.settings.bank;
   const [status, setStatus] = useState<BankStatus | null>(null);
   const [busy, setBusy] = useState<'idle' | 'connecting' | 'syncing'>('idle');
@@ -60,6 +60,7 @@ export function BankSyncCard() {
   const [aspsps, setAspsps] = useState<{ name: string }[] | null>(null);
   const [selectedBank, setSelectedBank] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmingDeleteKey, setConfirmingDeleteKey] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [showGuide, setShowGuide] = useState(false);
@@ -435,8 +436,28 @@ export function BankSyncCard() {
             <div className="rounded-[8px] border p-3 space-y-1" style={{ borderColor: 'var(--border)' }}>
               <div className={`${row} font-medium`}>{b.historicalAccounts}</div>
               <div className={row} style={muted}>{b.historicalAccountsHint}</div>
-              <div className="pt-1 space-y-1">
-                {orphanAccounts.map((a) => accountRow(a.key, a.accountName || a.bank || a.key, a.accountName && a.bank ? ` · ${a.bank}` : ''))}
+              <div className="pt-1 space-y-1.5">
+                {orphanAccounts.map((a) => {
+                  const count = dailyTransactions.filter((t) => t.account === a.key).length;
+                  return (
+                    <div key={a.key} className="flex flex-wrap items-center gap-2">
+                      {accountRow(a.key, a.accountName || a.bank || a.key, a.accountName && a.bank ? ` · ${a.bank}` : '')}
+                      {confirmingDeleteKey === a.key ? (
+                        <Button variant="danger" size="sm" leadingIcon={<Trash2 size={13} />} onClick={() => { removeAccountData(a.key); setConfirmingDeleteKey(null); }}>
+                          {b.removeDataConfirm.replace('{n}', String(count))}
+                        </Button>
+                      ) : (
+                        <button
+                          aria-label={`${b.removeData} — ${a.accountName || a.bank || a.key}`}
+                          onClick={() => setConfirmingDeleteKey(a.key)}
+                          className="text-[var(--text-2)] hover:text-[var(--negative)]"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

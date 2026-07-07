@@ -198,6 +198,31 @@ function reconcileBankTransactions(incoming) {
   return { ...incoming, dailyTransactions: [...incomingTx, ...missing] };
 }
 
+// Guard user-authored maps (custom account names, category rules) against a
+// write that omits the field entirely — e.g. an older/cached client build that
+// predates the field. Such a write must not silently wipe saved names/rules. An
+// explicit empty object is respected (that's an intentional clear); only a
+// missing field falls back to the stored value.
+function preserveUserFields(incoming) {
+  const row = getStmt.get('headroom');
+  if (!row) return incoming;
+  let stored;
+  try {
+    stored = JSON.parse(row.content);
+  } catch {
+    return incoming;
+  }
+  const out = { ...incoming };
+  for (const field of ['accountLabels', 'categoryRules']) {
+    const hasStored = stored[field] && (Array.isArray(stored[field]) ? stored[field].length : Object.keys(stored[field]).length);
+    if (incoming[field] === undefined && hasStored) {
+      console.log(`[data] preserving stored ${field} (incoming payload omitted it)`);
+      out[field] = stored[field];
+    }
+  }
+  return out;
+}
+
 app.post('/api/data', (req, res) => {
   if (!isValidFinancePayload(req.body)) {
     return res.status(400).json({ error: 'invalid finance payload' });
@@ -214,7 +239,7 @@ app.post('/api/data', (req, res) => {
       current: JSON.parse(stored.content),
     });
   }
-  const content = JSON.stringify(reconcileBankTransactions(req.body));
+  const content = JSON.stringify(preserveUserFields(reconcileBankTransactions(req.body)));
   if (content.length > SIZE_WARN_BYTES) {
     console.warn(`[data] payload is ${(content.length / 1024 / 1024).toFixed(1)} MB — approaching the body limit`);
   }

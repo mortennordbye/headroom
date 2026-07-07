@@ -498,6 +498,7 @@ interface FinanceDataContextType {
   categoryRules: CategoryRule[];
   addCategoryRule: (match: string, category: CategoryKey) => void;
   removeCategoryRule: (id: string) => void;
+  removeAccountData: (accountKey: string) => void;
   // Per-account view (Budget page): grouping, current filter, and the analysed
   // transaction set (internal transfers netted out + account filter applied).
   accountGroups: { key: string; label: string; count: number }[];
@@ -1592,6 +1593,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setCategoryRules(prev => prev.filter(r => r.id !== id));
   }, []);
 
+  // Remove all transactions belonging to one account (its key) and drop its
+  // label — for clearing out an old/historical account no longer in use. The
+  // tracked setter records deleted eb- ids so a sync can't resurrect them.
+  const removeAccountData = useCallback((accountKey: string) => {
+    setDailyTransactionsTracked(dailyTransactions.filter((t) => t.account !== accountKey));
+    setAccountLabels((prev) => {
+      const next = { ...prev };
+      delete next[accountKey];
+      return next;
+    });
+  }, [dailyTransactions, setDailyTransactionsTracked]);
+
   // Import / demo-restore: overlay the present fields, leaving absent ones as the
   // current value (resetMissing=false). Shares the single apply path with load.
   const importAll = useCallback((data: Partial<ExportPayload>) => applyPayload(data, false), [applyPayload]);
@@ -1826,7 +1839,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
     accountLabels, setAccountLabel,
-    categoryRules, addCategoryRule, removeCategoryRule,
+    categoryRules, addCategoryRule, removeCategoryRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget,
     recurringTemplates, setRecurringTemplates,
@@ -1848,7 +1861,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
     clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, accountLabels, setAccountLabel,
-    categoryRules, addCategoryRule, removeCategoryRule,
+    categoryRules, addCategoryRule, removeCategoryRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget, recurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
