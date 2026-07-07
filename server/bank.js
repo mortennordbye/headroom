@@ -329,6 +329,38 @@ function mapEBTransactions(txs, opts = {}) {
   return out;
 }
 
+// Drop legacy bare-id rows (eb-<ref>) that now have a connection-prefixed twin
+// (eb-<conn8>-<ref>) with the same entry_reference — the duplication left behind
+// when a connection went from bare to prefixed. Two *different* prefixed
+// connections may reuse a ref, so we never merge across prefixes; only a bare row
+// with a prefixed twin is removed. A manual category on the dropped row is
+// rescued onto its survivor.
+function dropStaleBareTwins(txs) {
+  const PREFIXED = /^eb-[0-9a-f]{8}-(.+)$/i;
+  const BARE = /^eb-(?![0-9a-f]{8}-)(.+)$/i;
+  const prefixedRefs = new Set();
+  for (const t of txs) {
+    const m = PREFIXED.exec(t.id);
+    if (m) prefixedRefs.add(m[1]);
+  }
+  const rescue = new Map();
+  const out = [];
+  for (const t of txs) {
+    const b = BARE.exec(t.id);
+    if (b && prefixedRefs.has(b[1])) {
+      if (t.categorySource === 'manual' && t.category != null) rescue.set(b[1], { category: t.category, categorySource: t.categorySource });
+      continue;
+    }
+    out.push(t);
+  }
+  if (rescue.size === 0) return out;
+  return out.map((t) => {
+    const m = PREFIXED.exec(t.id);
+    const r = m && rescue.get(m[1]);
+    return r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+  });
+}
+
 function mergeTransactions(existing, incoming, deletedIds = []) {
   const deleted = new Set(deletedIds);
   // A row the user soft-deleted in the UI must not come back on the next sync.
@@ -345,7 +377,7 @@ function mergeTransactions(existing, incoming, deletedIds = []) {
       byId.set(t.id, t);
     }
   }
-  return [...byId.values()];
+  return dropStaleBareTwins([...byId.values()]);
 }
 
 // --- high-level flow used by the routes -------------------------------------

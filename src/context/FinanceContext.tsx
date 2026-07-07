@@ -24,6 +24,7 @@ import { reconcile, runningEnvelopeBalance, type Reconciliation } from '../lib/e
 import { findInternalTransferIds } from '../lib/transfers';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
+import { dedupeBankTransactions } from '../lib/bankDedup';
 import { sanitizePayload } from '../lib/sanitizePayload';
 import {
   type EmployerCostConfig,
@@ -866,7 +867,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.balanceSnapshots !== undefined) setBalanceSnapshots(data.balanceSnapshots); else if (resetMissing) setBalanceSnapshots({});
     if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses); else if (resetMissing) setFixedExpenses(DEFAULT_FIXED_EXPENSES);
     if (data.debts) setDebts(data.debts); else if (resetMissing) setDebts([]);
-    if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions); else if (resetMissing) setDailyTransactions([]);
+    if (data.dailyTransactions) setDailyTransactions(dedupeBankTransactions(data.dailyTransactions)); else if (resetMissing) setDailyTransactions([]);
     if (data.deletedBankIds !== undefined) setDeletedBankIds(data.deletedBankIds); else if (resetMissing) setDeletedBankIds([]);
     if (data.accountLabels !== undefined) setAccountLabels(data.accountLabels); else if (resetMissing) setAccountLabels({});
     if (data.categoryRules !== undefined) setCategoryRules(data.categoryRules); else if (resetMissing) setCategoryRules([]);
@@ -1651,7 +1652,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // external change and trigger a "data changed elsewhere" reload.
   const applyBankSync = useCallback((txs: DailyTransaction[], rev?: number) => {
     if (typeof rev === 'number' && Number.isFinite(rev)) revRef.current = rev;
-    setDailyTransactionsTracked(txs);
+    setDailyTransactionsTracked(dedupeBankTransactions(txs));
   }, [setDailyTransactionsTracked]);
 
   // Import / demo-restore: overlay the present fields, leaving absent ones as the
