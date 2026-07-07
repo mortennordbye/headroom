@@ -16,7 +16,12 @@ Assets covers your investment portfolio, property equity, crypto, and cash reser
 
 ## Run it on your laptop
 
-Headroom is happiest as a small private app on your own machine. The only thing you need is **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (free, Mac/Windows/Linux) — no accounts, no cloud, no config files. Your data lives on your laptop and never leaves it.
+Headroom is happiest as a small private app on your own machine. All you need is Docker:
+
+- **macOS / Windows** — [Docker Desktop](https://www.docker.com/products/docker-desktop/) (free).
+- **Linux** — [Docker Engine](https://docs.docker.com/engine/install/).
+
+No accounts, no cloud, no config files. Your data lives on your machine and never leaves it.
 
 **Option A — pre-built image (recommended, no clone, nothing to build):**
 
@@ -101,16 +106,36 @@ make seed-local               # optional: seed ./data with demo data
 
 ## Security
 
-Headroom has **no authentication** — it's designed for single-user self-hosting. Anyone who can reach the port can read and overwrite your entire financial picture, so the default port mapping binds to `127.0.0.1` (loopback) only: the app is reachable from the host machine but not from other devices on your network.
+Headroom has **no login** — it's built for single-user self-hosting, and anyone who can reach the port can read and overwrite your entire financial picture. So there are exactly **two safe ways to run it:**
 
-To use it from another device:
+1. **Local only (default).** The port binds to `127.0.0.1` (loopback), so the app is reachable only from the machine it runs on. This is the recommended setup for a laptop.
+2. **In a locked-down homelab, reached over a private tunnel.** Host it on a home server and get to it through **WireGuard**, **Tailscale**, or a VPN — nothing is exposed to the public internet, and only your own devices (including your phone) can reach it.
 
-- Put it behind a reverse proxy (nginx, Caddy, Traefik) that adds authentication (basic auth or an SSO/identity layer), or
-- Reach it over a private network (VPN, Tailscale, WireGuard).
+**Do not put it directly on the open internet.** If you want it reachable from a browser without a VPN, it must sit behind a reverse proxy (nginx, Caddy, Traefik) that adds authentication (basic auth or an SSO/identity layer) — and ideally HTTPS.
 
-Only change the binding to `0.0.0.0` (all interfaces) if you understand that this exposes unauthenticated access to everyone on the network.
+Only change the port binding to `0.0.0.0` (all interfaces) if you understand that this exposes unauthenticated access to everyone who can reach that network.
 
 **Optional hardening:** set `ALLOWED_HOSTS` (see [Configuration](#configuration)) to reject requests whose `Host` header isn't one you expect — a small guard against DNS-rebinding. It's off by default so the app works behind any hostname without configuration.
+
+## Use it on your phone
+
+Headroom has a full mobile layout and is a **PWA (installable web app)** — you can add it to your phone's home screen and it opens fullscreen with its own icon, just like a native app. There's nothing to install from an app store.
+
+**This only works if your phone can reach the server.** That rules out the laptop-only setup (`localhost` is just the laptop) — you need the **homelab + private tunnel** option from [Security](#security): host it on a home server and connect your phone over **WireGuard** or **Tailscale** first. Then open the app's address (e.g. `http://headroom.local` or the server's IP) on the phone.
+
+**iPhone / iPad (Safari)** — iOS only installs web apps from Safari, not Chrome:
+
+1. Connect your WireGuard/Tailscale tunnel so the phone can reach the server.
+2. Open the app's URL in **Safari**.
+3. Tap the **Share** button (the square with an upward arrow).
+4. Scroll down and tap **Add to Home Screen**.
+5. Keep the name "Headroom", tap **Add**.
+
+It now sits on your home screen and launches fullscreen in the mobile view.
+
+**Android (Chrome):** open the URL, tap the **⋮** menu → **Install app** / **Add to Home screen**.
+
+> **HTTPS recommended.** For the full PWA experience — offline app-shell caching and the "new version" update prompt — serve it over HTTPS (a reverse proxy with a certificate, or Tailscale's HTTPS). Over plain `http://`, iOS still lets you Add to Home Screen, but the service worker (offline caching) won't register.
 
 ## Configuration
 
