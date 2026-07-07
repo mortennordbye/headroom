@@ -175,14 +175,14 @@ data volume. Remaining:
   loops every live connection (one expired bank flags itself without blocking the others).
   Imported rows carry `account`/`accountName`/`bank` (`DailyTransaction`), rendered as a colored
   per-account badge (`src/components/AccountBadge.tsx`) on the Dashboard recent list and the
-  Budget ledger. Bank copy genericized (i18n `settings.bank`). Deferred Tier 2:
-  - **User-editable friendly account labels.** Badges currently show the bank-provided account
-    name/product. A rename ("Salary", "Everyday card") needs an `accountLabels: Record<string,
-    string>` map keyed by the transaction `account` key, wired through **every** persist site
-    (`buildPayload` + deps, `applyPayload`, `ExportPayload`, `SettingsPage` export/import, demo
-    snapshot, reset) per the persist-payload rule in CLAUDE.md. **Where**:
-    `src/context/FinanceContext.tsx`, `src/components/BankSyncCard.tsx` (inline rename UI),
-    `src/components/AccountBadge.tsx` (resolve label from the map).
+  Budget ledger. Bank copy genericized (i18n `settings.bank`).
+
+  Friendly account labels also shipped (2026-07): `accountLabels: Record<string, string>`
+  (account key → user name) is wired through every persist site (`buildPayload` + deps,
+  `applyPayload`, `ExportPayload`, `SettingsPage` export/import, demo, reset); inline rename per
+  account in `BankSyncCard`; `AccountBadge` prefers the custom name over the bank-provided one
+  (which is often the account holder's own name). Color helper extracted to
+  `src/lib/accountColor.ts`. Deferred Tier 2:
   - **Filter-by-account in the ledger.** An "All accounts / …" dropdown on the Budget page
     filtering `dailyTransactions` by `tx.account`. **Where**: `src/pages/BudgetPage.tsx`.
   - **Legacy rows are unlabeled.** Transactions imported before Tier 1 have no `account`/`bank`,

@@ -1,21 +1,17 @@
 import type { DailyTransaction } from '../context/FinanceContext';
-
-// Six categorical chart tokens; a transaction's account maps to a stable one.
-const ACCOUNT_TOKENS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6'];
-
-function accountToken(key: string): string {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-  return ACCOUNT_TOKENS[Math.abs(hash) % ACCOUNT_TOKENS.length];
-}
+import { useFinance } from '../context/FinanceContext';
+import { accountToken } from '../lib/accountColor';
 
 /**
  * A small chip identifying which connected account a bank-imported row came
- * from. Renders nothing for manual rows (no account/bank). The colored dot is
- * stable per account so the same account reads the same across the ledger.
+ * from. Prefers the user's friendly name (Settings → Bank sync), falling back
+ * to the bank-provided account name, then the bank name. Renders nothing for
+ * manual rows (no account/bank). The colored dot is stable per account.
  */
 export function AccountBadge({ tx, size = 'sm' }: { tx: DailyTransaction; size?: 'sm' | 'xs' }) {
-  const label = tx.accountName || tx.bank;
+  const { accountLabels } = useFinance();
+  const custom = tx.account ? accountLabels[tx.account] : undefined;
+  const label = custom || tx.accountName || tx.bank;
   if (!label) return null;
   const token = accountToken(tx.account || label);
   const dot = size === 'xs' ? 'w-1.5 h-1.5' : 'w-2 h-2';

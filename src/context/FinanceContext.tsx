@@ -491,6 +491,8 @@ interface FinanceDataContextType {
   setDebts: (val: Debt[]) => void;
   dailyTransactions: DailyTransaction[];
   setDailyTransactions: (val: DailyTransaction[]) => void;
+  accountLabels: Record<string, string>;
+  setAccountLabel: (accountKey: string, name: string) => void;
   categoryBudgets: Partial<Record<CategoryKey, number>>;
   setCategoryBudget: (category: CategoryKey, amount: number | null) => void;
   recurringTemplates: TransactionTemplate[];
@@ -599,6 +601,8 @@ export interface ExportPayload {
   fixedExpenses: FixedExpense[];
   dailyTransactions: DailyTransaction[];
   deletedBankIds?: string[];
+  /** User-chosen friendly names for connected accounts, keyed by account key. */
+  accountLabels?: Record<string, string>;
   categoryBudgets?: Partial<Record<CategoryKey, number>>;
   debts?: Debt[];
   assets: Assets;
@@ -710,6 +714,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Ids of bank-imported (eb-) rows the user deleted. Persisted so the server's
   // sync/reconcile can't resurrect them (see server/bank.js mergeTransactions).
   const [deletedBankIds, setDeletedBankIds] = useState<string[]>([]);
+  // Friendly names for connected accounts, keyed by the transaction `account`
+  // key (e.g. 'ab12:uid-1'). Empty string clears back to the bank-provided name.
+  const [accountLabels, setAccountLabels] = useState<Record<string, string>>({});
   const [categoryBudgets, setCategoryBudgets] = useState<Partial<Record<CategoryKey, number>>>({});
   const [recurringTemplates, setRecurringTemplates] = useState<TransactionTemplate[]>([]);
   const [assets, setAssets] = useState<Assets>(DEFAULT_ASSETS);
@@ -784,7 +791,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // state and is added by the callers that need it, not here.
   const buildPayload = useCallback((): ExportPayload => ({
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
-    dailyTransactions, deletedBankIds, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, accountLabels, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang,
     savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
@@ -792,7 +799,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
-    dailyTransactions, deletedBankIds, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, accountLabels, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
@@ -822,6 +829,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.debts) setDebts(data.debts); else if (resetMissing) setDebts([]);
     if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions); else if (resetMissing) setDailyTransactions([]);
     if (data.deletedBankIds !== undefined) setDeletedBankIds(data.deletedBankIds); else if (resetMissing) setDeletedBankIds([]);
+    if (data.accountLabels !== undefined) setAccountLabels(data.accountLabels); else if (resetMissing) setAccountLabels({});
     if (data.categoryBudgets !== undefined) setCategoryBudgets(data.categoryBudgets); else if (resetMissing) setCategoryBudgets({});
     if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets, savingsAccounts: migrateSavingsAccounts(data.assets) }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
     if (data.loan) setLoan(data.loan); else if (resetMissing) setLoan(DEFAULT_LOAN);
@@ -1476,6 +1484,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Rename a connected account. An empty/blank name clears back to the
+  // bank-provided name (the entry is removed from the map).
+  const setAccountLabel = useCallback((accountKey: string, name: string) => {
+    setAccountLabels(prev => {
+      const next = { ...prev };
+      const trimmed = name.trim();
+      if (trimmed) next[accountKey] = trimmed;
+      else delete next[accountKey];
+      return next;
+    });
+  }, []);
+
   // Import / demo-restore: overlay the present fields, leaving absent ones as the
   // current value (resetMissing=false). Shares the single apply path with load.
   const importAll = useCallback((data: Partial<ExportPayload>) => applyPayload(data, false), [applyPayload]);
@@ -1523,6 +1543,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setDebts([]);
     setDailyTransactions([]);
     setDeletedBankIds([]);
+    setAccountLabels({});
     setCategoryBudgets({});
     setRecurringTemplates([]);
     setAssets({
@@ -1707,6 +1728,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     fixedExpenses, setFixedExpenses,
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
+    accountLabels, setAccountLabel,
     categoryBudgets, setCategoryBudget,
     recurringTemplates, setRecurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
@@ -1726,7 +1748,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
     clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
-    setDailyTransactionsTracked, categoryBudgets, setCategoryBudget, recurringTemplates,
+    setDailyTransactionsTracked, accountLabels, setAccountLabel, categoryBudgets, setCategoryBudget, recurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
     loan, updateLoan, pension, updatePension, housingMode,
     changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,

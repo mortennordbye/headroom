@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AccountBadge } from './AccountBadge';
 import type { DailyTransaction } from '../context/FinanceContext';
+
+// User-renamed accounts: 'k1' has a friendly label, others fall back.
+const mockCtx = { accountLabels: { k1: 'My Card' } as Record<string, string> };
+vi.mock('../context/FinanceContext', () => ({ useFinance: () => mockCtx }));
+
+const { AccountBadge } = await import('./AccountBadge');
 
 const base: DailyTransaction = { id: 'eb-1', date: '2026-04-06', description: 'REMA 1000', amount: 249.9, kind: 'expense' };
 
@@ -19,6 +24,12 @@ describe('AccountBadge', () => {
 
   it('renders nothing for a manual row (no account/bank)', () => {
     expect(renderToStaticMarkup(<AccountBadge tx={base} />)).toBe('');
+  });
+
+  it('prefers the user-chosen friendly name over the bank-provided name', () => {
+    const html = renderToStaticMarkup(<AccountBadge tx={{ ...base, account: 'k1', accountName: 'Morten Victor Nordbye', bank: 'Bank Norwegian' }} />);
+    expect(html).toContain('My Card');
+    expect(html).not.toContain('Morten Victor Nordbye');
   });
 
   it('maps different accounts to color tokens deterministically', () => {

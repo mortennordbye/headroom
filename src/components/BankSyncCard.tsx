@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink } from 'lucide-react';
+import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink, Pencil } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
+import { accountToken } from '../lib/accountColor';
 
 interface BankAccount {
   key?: string;
@@ -43,7 +44,7 @@ const accountLabel = (a: BankAccount, aspsp?: string | null) => a.name || a.prod
 // connect any number of banks with BankID, and sync them all. Backed by
 // /api/bank/* (server/bank.js).
 export function BankSyncCard() {
-  const { t, setDailyTransactions } = useFinance();
+  const { t, setDailyTransactions, accountLabels, setAccountLabel } = useFinance();
   const b = t.settings.bank;
   const [status, setStatus] = useState<BankStatus | null>(null);
   const [busy, setBusy] = useState<'idle' | 'connecting' | 'syncing'>('idle');
@@ -54,6 +55,8 @@ export function BankSyncCard() {
   const [aspsps, setAspsps] = useState<{ name: string }[] | null>(null);
   const [selectedBank, setSelectedBank] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState(() => {
     const outcome = new URLSearchParams(window.location.search).get('bank');
@@ -278,11 +281,41 @@ export function BankSyncCard() {
           )}
         </div>
       </div>
-      {(c.accounts ?? []).length > 0 && (
-        <div className={row} style={muted}>
-          {(c.accounts ?? []).map((a) => `${accountLabel(a, c.aspsp)}${a.currency ? ` · ${a.currency}` : ''}`).join(', ')}
-        </div>
-      )}
+      {(c.accounts ?? []).map((a) => {
+        const key = a.key || '';
+        const current = (key && accountLabels[key]) || accountLabel(a, c.aspsp);
+        if (editingKey === key && key) {
+          return (
+            <div key={key} className="flex flex-wrap items-center gap-2">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={accountLabel(a, c.aspsp)}
+                autoFocus
+                className="h-8 px-2.5 rounded-[6px] text-[13px] border min-w-[12rem]"
+                style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
+              />
+              <Button variant="secondary" size="sm" onClick={() => { setAccountLabel(key, draft); setEditingKey(null); }}>{b.save}</Button>
+              <Button variant="ghost" size="sm" onClick={() => setEditingKey(null)}>{b.cancel}</Button>
+            </div>
+          );
+        }
+        return (
+          <div key={key} className={`${row} flex items-center gap-1.5`} style={muted}>
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(key || current)})` }} />
+            <span>{current}{a.currency ? ` · ${a.currency}` : ''}</span>
+            {key && (
+              <button
+                aria-label={`${b.renameAccount} — ${current}`}
+                onClick={() => { setEditingKey(key); setDraft(accountLabels[key] || ''); }}
+                className="text-[var(--text-2)] hover:text-[var(--accent)]"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+          </div>
+        );
+      })}
       <div className={row} style={muted}>
         {b.lastSync}: {c.lastSync ? new Date(c.lastSync).toLocaleString() : b.never}
       </div>
