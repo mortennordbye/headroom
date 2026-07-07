@@ -387,10 +387,13 @@ async function startLink(bankName) {
 }
 
 // An account entry in the session response can be a full object or (for some
-// ASPSPs) a bare uid string. Normalize to the shape we store.
+// ASPSPs) a bare uid string. Normalize to the shape we store. The IBAN (or BBAN)
+// is captured so accounts with an identical holder name can still be told apart.
 function normalizeAccount(a) {
   if (typeof a === 'string') return { uid: a };
-  return { uid: a.uid, name: a.name, product: a.product, currency: a.currency };
+  const acctId = a.account_id || {};
+  const iban = acctId.iban || acctId.bban || (acctId.other && acctId.other.identification) || a.iban || undefined;
+  return { uid: a.uid, name: a.name, product: a.product, currency: a.currency, ...(iban ? { iban } : {}) };
 }
 
 // Accounts as returned when the session was created, with a GET fallback for
@@ -480,7 +483,7 @@ function getStatus() {
     return {
       id: c.id,
       aspsp: c.aspsp || null,
-      accounts: (c.accounts || []).map((a) => ({ key: accountKey(c, a), name: a.name, product: a.product, currency: a.currency })),
+      accounts: (c.accounts || []).map((a) => ({ key: accountKey(c, a), name: a.name, product: a.product, currency: a.currency, iban: a.iban || null })),
       accountsNote: c.accounts_note || null,
       lastSync: c.last_sync || null,
       validUntil: c.valid_until || null,
@@ -515,14 +518,21 @@ async function fetchMappedTransactions() {
     // Self-heal: a connection linked while the ASPSP exposed no accounts (or an
     // older link that didn't capture them) re-fetches the account list here so a
     // plain "Sync now" fixes it. Logs the count either way for diagnosis.
-    if (!c.accounts || c.accounts.length === 0) {
+    // Re-fetch the account list when it's empty (self-heal), or — once — when
+    // accounts exist but none carry an IBAN, so already-connected accounts pick
+    // up the identifier that tells same-named accounts apart.
+    const hasAccounts = Array.isArray(c.accounts) && c.accounts.length > 0;
+    const missingIban = hasAccounts && c.accounts.every((a) => !a.iban);
+    if (!hasAccounts || (missingIban && !c.accounts_enriched)) {
       try {
         const { accounts: refreshed, note } = await resolveSessionAccounts({ session_id: c.session_id });
-        c.accounts = refreshed;
+        if (refreshed.length) c.accounts = refreshed;
         c.accounts_note = note;
+        if (missingIban) c.accounts_enriched = true;
         writeStore(store);
         console.log(`[bank] ${c.aspsp}: ${refreshed.length} account(s) after refresh${note ? ` (${note})` : ''}`);
       } catch (err) {
+        if (missingIban) c.accounts_enriched = true;
         c.accounts_note = `fetch-failed: ${err.message}`;
         writeStore(store);
         console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);

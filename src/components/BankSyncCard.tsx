@@ -11,7 +11,11 @@ interface BankAccount {
   name?: string;
   product?: string;
   currency?: string;
+  iban?: string | null;
 }
+
+// Masked account-number tail (last 4) to distinguish same-named accounts.
+const ibanTail = (iban?: string | null) => (iban ? `••${iban.slice(-4)}` : '');
 
 interface BankConnection {
   id: string;
@@ -312,7 +316,7 @@ export function BankSyncCard() {
         return (
           <div key={key} className={`${row} flex items-center gap-1.5`} style={muted}>
             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(key || current)})` }} />
-            <span>{current}{a.currency ? ` · ${a.currency}` : ''}</span>
+            <span>{current}{a.currency ? ` · ${a.currency}` : ''}{a.iban ? ` · ${ibanTail(a.iban)}` : ''}</span>
             {key && (
               <button
                 aria-label={`${b.renameAccount} — ${current}`}

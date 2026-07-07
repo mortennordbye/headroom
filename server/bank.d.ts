@@ -34,7 +34,7 @@ export function mapEBTransaction(tx: any, opts?: MapOptions): MappedTransaction;
 export function mapEBTransactions(txs: any[], opts?: MapOptions): MappedTransaction[];
 export function mergeTransactions(a: MappedTransaction[], b: MappedTransaction[], deletedIds?: string[]): MappedTransaction[];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string };
+export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string; iban?: string };
 
 export function getAspsps(): Promise<{ name: string; country?: string; logo: string | null }[]>;
 export function startLink(bankName?: string): Promise<{ url: string }>;

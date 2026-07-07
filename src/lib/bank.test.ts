@@ -131,6 +131,15 @@ describe('normalizeAccount', () => {
   it('wraps a bare uid string (ASPSPs that return only ids)', () => {
     expect(normalizeAccount('uid-abc')).toEqual({ uid: 'uid-abc' });
   });
+
+  it('captures the IBAN from account_id so same-named accounts can be told apart', () => {
+    expect(normalizeAccount({ uid: 'u1', name: 'Ola Nordmann', account_id: { iban: 'NO2090461303497' } }))
+      .toEqual({ uid: 'u1', name: 'Ola Nordmann', iban: 'NO2090461303497' });
+  });
+
+  it('omits iban when the account carries no identifier', () => {
+    expect(normalizeAccount({ uid: 'u1', name: 'Ola' }).iban).toBeUndefined();
+  });
 });
 
 describe('mergeTransactions', () => {
