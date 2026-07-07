@@ -204,7 +204,7 @@ const LoanPage: React.FC = () => {
     const capacity = calcBorrowingCapacity(
       effArslonn, effEgenkapital, effGjeld, loan.rente, loan.nedbetalingstid,
     );
-    const totalpris = loan.betingetLaan + effEgenkapital;
+    const totalpris = loan.betingetLaan + loan.egenkapital;
     return { monthlyPaymentBase, monthlyPaymentWithFee, totalInterest, totalCost, yearOneInterest, taxDeduction, capacity, totalpris };
   }, [loan, effArslonn, effEgenkapital, effGjeld]);
 

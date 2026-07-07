@@ -20,7 +20,7 @@ export type { Language } from '../i18n/translations';
 import { categorizeWithRules, type CategoryRule } from '../lib/categorize';
 import type { LabelRule } from '../lib/labelRules';
 import type { CategoryKey } from '../lib/categories';
-import { reconcile, runningEnvelopeBalance, type Reconciliation } from '../lib/envelopes';
+import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
@@ -1164,11 +1164,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const monthKey = format(currentMonth, 'yyyy-MM');
   const prevMonthKey = format(subMonths(currentMonth, 1), 'yyyy-MM');
   const prevMonthIncome = monthlyIncomes[prevMonthKey] ?? 0;
-  const prevMonthSpending = useMemo(() =>
-    dailyTransactions
-      .filter(t => t.date.startsWith(prevMonthKey))
-      .reduce((sum, t) => sum + t.amount, 0),
-  [dailyTransactions, prevMonthKey]);
 
   // Derived monthly net income from the salary system (latest applicable salary + on-call → tax → net).
   // Falls back to the legacy static `income` when no salaries have been entered.
@@ -1316,6 +1311,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const nonTransferTransactions = useMemo(
     () => dailyTransactions.filter((tx) => !internalTransferIds.has(tx.id)),
     [dailyTransactions, internalTransferIds],
+  );
+
+  // Previous month's spending, measured like the current month's dashboard
+  // figure: income and internal transfers excluded, envelope-covered spend
+  // excluded — only discretionary spend counts, so the "vs last month" chip
+  // compares like with like instead of counting salary deposits as spending.
+  const prevMonthSpending = useMemo(
+    () => discretionarySpendForMonth(nonTransferTransactions, fixedExpenses, prevMonthKey),
+    [nonTransferTransactions, fixedExpenses, prevMonthKey],
   );
 
   // Per-account view (Budget page only, not persisted). Accounts are grouped by

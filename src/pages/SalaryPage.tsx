@@ -1501,7 +1501,7 @@ interface NextReviewCardProps {
 const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency }) => {
   const [proposed, setProposed] = useState<string>('');
   const proposedNum = (() => {
-    const n = parseFloat(proposed.replace(/\s/g, '').replace(',', '.'));
+    const n = parseLocaleNumber(proposed);
     return Number.isFinite(n) && n > 0 ? n : null;
   })();
 

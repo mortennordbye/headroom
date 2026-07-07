@@ -10,7 +10,9 @@ import { Card } from './ui/Card';
 // groceries this month than the 6-month average"). Hidden when there's nothing
 // notable to say. Text is assembled from the translations table — no lang branch.
 export default function InsightBanner() {
-  const { dailyTransactions, currentMonth, t, formatCurrency } = useFinance();
+  // Net out internal transfers so moving money between own accounts doesn't
+  // read as spending, matching SavingsRateChart/CashflowChart.
+  const { nonTransferTransactions: dailyTransactions, currentMonth, t, formatCurrency } = useFinance();
 
   const insight = useMemo(() => {
     const monthKey = format(currentMonth, 'yyyy-MM');

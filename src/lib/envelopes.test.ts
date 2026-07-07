@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
 import {
   reconcile, createEnvelopeLedger, runningEnvelopeBalance,
+  discretionarySpendForMonth,
   suggestCategoryForExpenseName, suggestEnvelopeLinks, NEAR_THRESHOLD,
 } from './envelopes';
 
@@ -204,6 +205,66 @@ describe('runningEnvelopeBalance', () => {
     expect(pts.map((p) => p.income)).toEqual([5000, 0, 0]);
     expect(pts.map((p) => p.discretionary)).toEqual([0, 0, 0]); // grocery spend covered
     expect(pts.map((p) => Math.round(p.balance))).toEqual([5000, 5000, 5000]);
+  });
+});
+
+describe('discretionarySpendForMonth', () => {
+  it('ignores income rows — a salary deposit is not spending', () => {
+    const total = discretionarySpendForMonth(
+      [
+        tx({ date: '2026-06-01', amount: 45000, kind: 'income' }), // salary
+        tx({ date: '2026-06-10', amount: 800, category: 'dining' }),
+      ],
+      [],
+      '2026-06',
+    );
+    expect(total).toBe(800);
+  });
+
+  it('only counts transactions in the requested month', () => {
+    const total = discretionarySpendForMonth(
+      [
+        tx({ date: '2026-06-10', amount: 300, category: 'dining' }),
+        tx({ date: '2026-07-10', amount: 999, category: 'dining' }), // next month
+        tx({ date: '2026-05-31', amount: 500, category: 'dining' }), // prior month
+      ],
+      [],
+      '2026-06',
+    );
+    expect(total).toBe(300);
+  });
+
+  it('excludes envelope-covered spend and counts only the spillover', () => {
+    const total = discretionarySpendForMonth(
+      [
+        tx({ date: '2026-06-05', amount: 4000, category: 'groceries' }), // covered
+        tx({ date: '2026-06-20', amount: 3000, category: 'groceries' }), // 2000 covered, 1000 spills
+        tx({ date: '2026-06-25', amount: 500, category: 'dining' }),     // non-enveloped
+      ],
+      [fe({ name: 'Mat', amount: 6000, category: 'groceries' })],
+      '2026-06',
+    );
+    expect(total).toBe(1500);
+  });
+
+  it('matches the running-balance pipeline the dashboard sums for the current month', () => {
+    const expenses = [fe({ name: 'Mat', amount: 6000, category: 'groceries' })];
+    const txs = [
+      tx({ date: '2026-07-01', amount: 4000, category: 'groceries' }),
+      tx({ date: '2026-07-02', amount: 3000, category: 'groceries' }),
+      tx({ date: '2026-07-03', amount: 500, category: 'dining' }),
+      tx({ date: '2026-07-03', amount: 45000, kind: 'income' }),
+    ];
+    const points = runningEnvelopeBalance(
+      ['2026-07-01', '2026-07-02', '2026-07-03'],
+      txs, 1000, reconcile(expenses, txs, '2026-07'),
+    );
+    const fromPipeline = points.reduce((sum, p) => sum + p.discretionary, 0);
+    expect(discretionarySpendForMonth(txs, expenses, '2026-07')).toBe(fromPipeline);
+  });
+
+  it('returns 0 for a month with no transactions', () => {
+    expect(discretionarySpendForMonth([], [fe({ name: 'Mat', amount: 6000, category: 'groceries' })], '2026-06')).toBe(0);
   });
 });
 

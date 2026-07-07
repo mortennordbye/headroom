@@ -27,20 +27,18 @@ function FunStat({ label, value, negative, highlight }: FunStatProps) {
 }
 
 export default function FunBudget() {
-  const { t, fixedExpenses, dailyData, formatCurrency } = useFinance();
+  const { t, reconciliation, formatCurrency } = useFinance();
 
-  const funExpense = fixedExpenses.find(e =>
-    ['fun', 'moro'].includes(e.name.toLowerCase())
-  );
+  // Driven by the entertainment envelope (a fixed expense linked to the
+  // canonical 'entertainment' category — see src/lib/envelopes.ts). Hidden
+  // until such an envelope exists; spend is the envelope's month-to-date actual.
+  const funEnvelope = reconciliation.byCategory.get('entertainment');
 
-  if (!funExpense) return null;
+  if (!funEnvelope) return null;
 
-  const funBudget = funExpense.amount;
-  const funSpent = dailyData
-    .flatMap(d => d.transactions)
-    .filter(tx => tx.category && ['fun', 'moro'].includes(tx.category.toLowerCase()))
-    .reduce((s, tx) => s + tx.amount, 0);
-  const funRemaining = funBudget - funSpent;
+  const funBudget = funEnvelope.budgeted;
+  const funSpent = funEnvelope.actual;
+  const funRemaining = funEnvelope.remaining;
   const pct = funBudget > 0 ? Math.min(100, (funSpent / funBudget) * 100) : 0;
 
   return (
@@ -51,7 +49,7 @@ export default function FunBudget() {
           <h2 className={sectionLabel}>{t.funBudget}</h2>
         </div>
         <span className="text-[11px] font-mono text-[var(--text-2)]">
-          {funExpense.name} — {formatCurrency(funBudget)}
+          {t.categoryLabels.entertainment} — {formatCurrency(funBudget)}
         </span>
       </div>
 

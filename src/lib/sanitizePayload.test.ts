@@ -58,6 +58,79 @@ describe('sanitizePayload', () => {
     expect(out.monthlyIncomes).toEqual({ '2026-01': 50000, '2026-03': 48000 });
   });
 
+  it('coerces locale-string amounts inside fixedExpenses and dailyTransactions', () => {
+    const out = sanitizePayload(
+      {
+        fixedExpenses: [{ id: 'a', name: 'Rent', amount: '5 000' }],
+        dailyTransactions: [{ id: 't1', date: '2026-07-01', description: 'Coffee', amount: '1,5' }],
+      } as Record<string, unknown>,
+      SCHEMAS,
+    );
+    expect((out.fixedExpenses as Record<string, unknown>[])[0].amount).toBe(5000);
+    expect((out.dailyTransactions as Record<string, unknown>[])[0].amount).toBe(1.5);
+  });
+
+  it('coerces debts numeric fields and leaves non-numeric item fields alone', () => {
+    const out = sanitizePayload(
+      { debts: [{ id: 'd1', name: 'Card', type: 'credit_card', balance: '12 000', rate: '21,9', minPayment: 500 }] } as Record<string, unknown>,
+      SCHEMAS,
+    );
+    const debt = (out.debts as Record<string, unknown>[])[0];
+    expect(debt.balance).toBe(12000);
+    expect(debt.rate).toBe(21.9);
+    expect(debt.minPayment).toBe(500);
+    expect(debt.name).toBe('Card');
+    expect(debt.type).toBe('credit_card');
+  });
+
+  it('zeroes garbage array-item numbers (no default merge exists to restore them)', () => {
+    const out = sanitizePayload(
+      {
+        fixedExpenses: [{ id: 'a', name: 'Rent', amount: 'oops' }],
+        debts: [{ id: 'd1', name: 'Loan', type: 'other', balance: 'x', rate: NaN, minPayment: 100 }],
+      } as Record<string, unknown>,
+      SCHEMAS,
+    );
+    expect((out.fixedExpenses as Record<string, unknown>[])[0].amount).toBe(0);
+    const debt = (out.debts as Record<string, unknown>[])[0];
+    expect(debt.balance).toBe(0);
+    expect(debt.rate).toBe(0);
+    expect(debt.minPayment).toBe(100);
+  });
+
+  it('leaves array items with missing numeric fields and non-object entries untouched', () => {
+    const out = sanitizePayload(
+      { fixedExpenses: [{ id: 'a', name: 'No amount yet' }, 'junk'] } as Record<string, unknown>,
+      SCHEMAS,
+    );
+    const items = out.fixedExpenses as unknown[];
+    expect('amount' in (items[0] as object)).toBe(false);
+    expect(items[1]).toBe('junk');
+  });
+
+  it('coerces nested numbers inside balanceSnapshots via the same schemas', () => {
+    const out = sanitizePayload(
+      {
+        balanceSnapshots: {
+          '2026-06': {
+            assets: { portfolio: '5 000', taxRate: 'bad', houseValue: 3000000 },
+            loan: { laanebelop: '2 000 000', gyldigTil: '2026-12-31' },
+            housingMode: 'first_buyer',
+          },
+        },
+      } as Record<string, unknown>,
+      SCHEMAS,
+    );
+    const snap = (out.balanceSnapshots as Record<string, Record<string, unknown>>)['2026-06'];
+    const snapAssets = snap.assets as Record<string, unknown>;
+    expect(snapAssets.portfolio).toBe(5000);
+    expect(snapAssets.taxRate).toBe(0); // garbage → 0, snapshots get no default merge
+    expect(snapAssets.houseValue).toBe(3000000);
+    expect((snap.loan as Record<string, unknown>).laanebelop).toBe(2000000);
+    expect((snap.loan as Record<string, unknown>).gyldigTil).toBe('2026-12-31'); // string field untouched
+    expect(snap.housingMode).toBe('first_buyer');
+  });
+
   it('leaves unrelated fields and clean data untouched', () => {
     const clean = { income: 50000, lang: 'nb', region: 'no', fixedExpenses: [{ id: 'a', amount: 100 }] };
     expect(sanitizePayload({ ...clean } as Record<string, unknown>, SCHEMAS)).toEqual(clean);

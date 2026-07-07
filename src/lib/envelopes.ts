@@ -265,6 +265,28 @@ export function createEnvelopeLedger(reconciliation: Reconciliation) {
   };
 }
 
+/**
+ * A month's total discretionary spend — the same envelope-aware figure the
+ * daily running balance produces (spillover past a full envelope plus all
+ * non-enveloped spend). Income rows never count. Pass transactions with
+ * internal transfers already netted out (the context's nonTransferTransactions)
+ * so an own-account move doesn't read as spending. Lets "vs last month"
+ * comparisons measure the previous month exactly like the current one.
+ */
+export function discretionarySpendForMonth(
+  transactions: DailyTransaction[],
+  fixedExpenses: FixedExpense[],
+  monthKey: string,
+): number {
+  const ledger = createEnvelopeLedger(reconcile(fixedExpenses, transactions, monthKey));
+  let total = 0;
+  for (const t of transactions) {
+    if (t.kind === 'income' || !t.date.startsWith(monthKey)) continue;
+    total += ledger.draw(t).spillover;
+  }
+  return total;
+}
+
 export interface DailyEnvelopePoint {
   date: string;          // 'yyyy-MM-dd'
   spent: number;         // raw expense total that day (what actually left the account)

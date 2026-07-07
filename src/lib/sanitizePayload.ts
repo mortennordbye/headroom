@@ -22,16 +22,20 @@ export function coerceNumber(v: unknown): number | undefined {
 // Coerce the numeric-typed fields of `obj` (as marked by `schema`, whose
 // number-valued keys define which fields are numeric). Unparseable numeric
 // fields are dropped so a downstream `{...default, ...result}` merge restores
-// them. Non-numeric fields pass through untouched.
-function coerceBySchema(obj: unknown, schema: object): Record<string, unknown> {
+// them — except in 'zero' mode (array items, balance snapshots), where no such
+// merge exists downstream, so unparseable values become 0 instead of leaving an
+// `undefined` to NaN-poison unguarded sums. Non-numeric fields pass through
+// untouched.
+function coerceBySchema(obj: unknown, schema: object, onInvalid: 'drop' | 'zero' = 'drop'): Record<string, unknown> {
   if (!obj || typeof obj !== 'object') return {};
   const out: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
   const schemaRec = schema as Record<string, unknown>;
   for (const key of Object.keys(schema)) {
     if (typeof schemaRec[key] === 'number' && key in out) {
       const c = coerceNumber(out[key]);
-      if (c === undefined) delete out[key];
-      else out[key] = c;
+      if (c !== undefined) out[key] = c;
+      else if (onInvalid === 'drop') delete out[key];
+      else out[key] = 0;
     }
   }
   return out;
@@ -56,6 +60,14 @@ const TOP_LEVEL_NUMERIC = [
 ] as const;
 
 const NUMBER_RECORDS = ['monthlyIncomes', 'netWorthHistory', 'categoryBudgets'] as const;
+
+// Numeric fields of the array-of-objects payload fields, as item schemas
+// (same number-marks-numeric convention as `objectSchemas`).
+const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
+  fixedExpenses: { amount: 0 },
+  dailyTransactions: { amount: 0 },
+  debts: { balance: 0, rate: 0, minPayment: 0 },
+};
 
 // Schemas (default objects) for the nested numeric objects, keyed by their
 // payload field name. Passed in by the caller so this stays decoupled from the
@@ -89,6 +101,38 @@ export function sanitizePayload<T>(data: T, objectSchemas: NumericObjectSchemas)
     if (out[key] && typeof out[key] === 'object') {
       out[key] = coerceNumberRecord(out[key]);
     }
+  }
+
+  for (const [key, schema] of Object.entries(ARRAY_ITEM_SCHEMAS)) {
+    if (Array.isArray(out[key])) {
+      out[key] = (out[key] as unknown[]).map((item) =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? coerceBySchema(item, schema, 'zero')
+          : item,
+      );
+    }
+  }
+
+  // Balance snapshots hold nested copies of the schema objects (assets, loan,
+  // pension, …), stored and re-applied verbatim — coerce their numeric fields
+  // too so an old/hand-edited snapshot can't NaN the composition chart.
+  const snaps = out.balanceSnapshots;
+  if (snaps && typeof snaps === 'object' && !Array.isArray(snaps)) {
+    const cleaned: Record<string, unknown> = {};
+    for (const [month, snap] of Object.entries(snaps as Record<string, unknown>)) {
+      if (snap && typeof snap === 'object' && !Array.isArray(snap)) {
+        const s: Record<string, unknown> = { ...(snap as Record<string, unknown>) };
+        for (const [key, schema] of Object.entries(objectSchemas)) {
+          if (s[key] && typeof s[key] === 'object' && !Array.isArray(s[key])) {
+            s[key] = coerceBySchema(s[key], schema, 'zero');
+          }
+        }
+        cleaned[month] = s;
+      } else {
+        cleaned[month] = snap;
+      }
+    }
+    out.balanceSnapshots = cleaned;
   }
 
   return out as T;

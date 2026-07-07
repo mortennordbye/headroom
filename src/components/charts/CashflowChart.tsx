@@ -17,7 +17,9 @@ import { CHART } from '../../lib/chartColors';
 export default function CashflowChart() {
   const {
     t, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
-    dailyTransactions, formatCurrencyShort,
+    // Whole-finance cashflow: net out internal transfers, but not per-account (income
+    // isn't account-scoped), so use nonTransferTransactions.
+    nonTransferTransactions: dailyTransactions, formatCurrencyShort,
   } = useFinance();
 
   const data = useMemo(() => {
