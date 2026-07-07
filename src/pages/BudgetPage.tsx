@@ -14,7 +14,6 @@ import {
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
 import { accountGroupKey } from '../lib/account';
-import { accountToken } from '../lib/accountColor';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
@@ -415,6 +414,21 @@ const BudgetPage: React.FC = () => {
   const accountMatch = (tx: DailyTransaction) =>
     accountFilter == null || accountGroupKey(tx, accountLabels) === accountFilter;
 
+  // Account scope, as a compact dropdown placed next to the analysis it filters.
+  // Default is "all accounts"; only shown when there's more than one account.
+  const accountFilterSelect = accountGroups.length > 1 ? (
+    <select
+      value={accountFilter ?? ''}
+      onChange={(e) => setAccountFilter(e.target.value || null)}
+      aria-label={t.budgetPage.accountFilterLabel}
+      className="h-7 px-2 rounded-[6px] text-[12px] border max-w-[12rem]"
+      style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+    >
+      <option value="">{t.budgetPage.allAccounts}</option>
+      {accountGroups.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+    </select>
+  ) : null;
+
   return (
     <div className="space-y-6 md:space-y-7">
       {/* Hero header */}
@@ -460,41 +474,6 @@ const BudgetPage: React.FC = () => {
           {`${t.budgetPage.incomeIntro}${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${incomeDiffPct >= 0 ? '+' : ''}${incomeDiffPct.toFixed(1)}${t.budgetPage.vsAvgSuffix}` : ''}${t.budgetPage.incomeOutro}`}
         </p>
       </header>
-
-      {/* Per-account filter — narrows the spending analysis and ledger to one
-          connected account (accounts sharing a name are merged into one). */}
-      {accountGroups.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] uppercase tracking-[0.12em] font-semibold" style={{ color: 'var(--text-3)' }}>
-            {t.budgetPage.accountFilterLabel}
-          </span>
-          <button
-            onClick={() => setAccountFilter(null)}
-            className="px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors"
-            style={accountFilter == null
-              ? { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--accent)' }
-              : { background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
-          >
-            {t.budgetPage.allAccounts}
-          </button>
-          {accountGroups.map((g) => {
-            const active = accountFilter === g.key;
-            return (
-              <button
-                key={g.key}
-                onClick={() => setAccountFilter(active ? null : g.key)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors"
-                style={active
-                  ? { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--accent)' }
-                  : { background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
-              >
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(g.key)})` }} />
-                {g.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       {/* Reminder: set this month's income while it's still auto-calculated */}
       {showIncomeReminder && (
@@ -736,8 +715,9 @@ const BudgetPage: React.FC = () => {
           </div>
 
           {/* Category dashboard — spend per category with MoM + drill-in */}
-          <div className={`${sectionLabel} pt-2 pb-3 border-t border-[var(--border)]`}>
-            {t.spendingByCategory}
+          <div className="pt-2 pb-3 border-t border-[var(--border)] flex items-center justify-between gap-3">
+            <span className={sectionLabel}>{t.spendingByCategory}</span>
+            {accountFilterSelect}
           </div>
           <CategoryBreakdown />
 
