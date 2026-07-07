@@ -81,7 +81,7 @@ const RULES: [CategoryKey, string[]][] = [
     // Generic international food words — a Norwegian abroad still eats out.
     'caffe', 'caffè', 'gelateria', 'gelato', 'ristorante', 'trattoria',
     'osteria', 'pizzeria', 'bistro', 'brasserie', 'taverna', 'tapas',
-    'restaura', 'cuisine',
+    'restaura', 'cuisine', 'namaste', 'tandoori', 'ramen',
   ]],
   ['entertainment', [
     'kino', 'cinema', 'nordisk film', 'sats', 'elixia', 'fresh fitness',

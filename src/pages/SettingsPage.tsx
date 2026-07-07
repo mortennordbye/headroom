@@ -43,6 +43,7 @@ import { DeltaChip } from '../components/ui/DeltaChip';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
 import { BankSyncCard } from '../components/BankSyncCard';
+import { CategoryRules } from '../components/CategoryRules';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
 
@@ -204,6 +205,9 @@ export default function SettingsPage() {
       <div data-tour="settings-all" className="grid grid-cols-1 md:grid-cols-12 gap-4">
         {/* ──── Bank sync (span 12) ──── */}
         <BankSyncCard />
+
+        {/* ──── Custom rules (span 12) ──── */}
+        <CategoryRules />
 
         {/* ──── Currency (span 7) ──── */}
         <Card padding="lg" className="md:col-span-7">

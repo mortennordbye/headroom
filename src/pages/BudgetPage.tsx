@@ -28,7 +28,6 @@ import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
-import { CategoryRules } from '../components/CategoryRules';
 import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
 import ConfirmModal from '../components/ConfirmModal';
 import { StatCard } from '../components/ui/StatCard';
@@ -762,7 +761,6 @@ const BudgetPage: React.FC = () => {
           <div className="pt-5 border-t border-[var(--border)]">
             <CategoryBudgets />
           </div>
-          <CategoryRules />
         </div>
       </div>
 
