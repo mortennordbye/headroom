@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Tag, Tags, ChevronDown } from 'lucide-react';
+import { X, Tag, Tags, Wallet, ChevronDown } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { categoryMeta, isCategoryKey } from '../lib/categories';
 import { Card } from './ui/Card';
@@ -11,9 +11,14 @@ import { SectionLabel } from './ui/SectionLabel';
 // removed. Global (not tied to any month) and applied to all transactions, past
 // and future.
 export function CategoryRules() {
-  const { t, categoryRules, removeCategoryRule, labelRules, removeLabelRule } = useFinance();
+  const { t, categoryRules, removeCategoryRule, labelRules, removeLabelRule, fixedExpenses, setFixedExpenses } = useFinance();
   const [open, setOpen] = useState(false);
-  const count = categoryRules.length + labelRules.length;
+  // Fixed expenses mapped to a specific pattern (e.g. Boliglån → Til:…). Shown
+  // here so every custom mapping is visible in one place; delete clears the link.
+  const matchExpenses = fixedExpenses.filter((e) => (e.match ?? '').trim());
+  const clearExpenseMatch = (id: string) =>
+    setFixedExpenses(fixedExpenses.map((e) => (e.id === id ? { ...e, match: undefined } : e)));
+  const count = categoryRules.length + labelRules.length + matchExpenses.length;
 
   return (
     <Card padding="lg" className="md:col-span-12">
@@ -65,6 +70,21 @@ export function CategoryRules() {
                   <button
                     aria-label={`${t.budgetPage.deleteRule} — ${rule.match}`}
                     onClick={() => removeLabelRule(rule.id)}
+                    className="ml-auto text-[var(--text-2)] hover:text-[var(--negative)] transition-colors shrink-0"
+                  >
+                    <X size={14} />
+                  </button>
+                </li>
+              ))}
+              {matchExpenses.map((e) => (
+                <li key={e.id} className="flex items-center gap-2 text-[13px]">
+                  <Wallet size={12} className="text-[var(--accent)] shrink-0" />
+                  <span className="font-mono text-[var(--text-1)] truncate">{e.match}</span>
+                  <span className="text-[var(--text-3)]">→</span>
+                  <span className="text-[var(--text-2)] truncate">{e.name} <span style={{ color: 'var(--text-3)' }}>({t.budgetPage.rulesFixedExpenseTag})</span></span>
+                  <button
+                    aria-label={`${t.budgetPage.deleteRule} — ${e.name}`}
+                    onClick={() => clearExpenseMatch(e.id)}
                     className="ml-auto text-[var(--text-2)] hover:text-[var(--negative)] transition-colors shrink-0"
                   >
                     <X size={14} />
