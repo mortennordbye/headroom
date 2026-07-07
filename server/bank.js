@@ -394,18 +394,27 @@ function normalizeAccount(a) {
 }
 
 // Accounts as returned when the session was created, with a GET fallback for
-// ASPSPs that don't inline them in the POST /sessions response.
+// ASPSPs that don't inline them in the POST /sessions response. Returns a
+// `note` explaining why the list is empty, surfaced in the UI for diagnosis.
 async function resolveSessionAccounts(session) {
   let accounts = (session.accounts || []).map(normalizeAccount).filter((a) => a.uid);
-  if (accounts.length === 0 && session.session_id) {
-    try {
-      const s = await api('GET', `/sessions/${session.session_id}`);
-      accounts = (s.accounts || []).map(normalizeAccount).filter((a) => a.uid);
-    } catch {
-      /* leave empty — the ASPSP exposed no accounts on this consent */
+  let note = null;
+  if (accounts.length === 0) {
+    if (!session.session_id) {
+      note = 'no-session';
+    } else {
+      try {
+        const s = await api('GET', `/sessions/${session.session_id}`);
+        accounts = (s.accounts || []).map(normalizeAccount).filter((a) => a.uid);
+        // The consent completed but the bank shared no accounts — almost always
+        // account access wasn't granted/selected during BankID.
+        if (accounts.length === 0) note = 'no-accounts-granted';
+      } catch (err) {
+        note = `fetch-failed: ${err.message}`;
+      }
     }
   }
-  return accounts;
+  return { accounts, note };
 }
 
 /** Complete the BankID flow from the callback's code+state; upserts the connection. */
@@ -414,8 +423,8 @@ async function finishLink(code, state) {
   if (!pending || !pending.state) throw new Error('no pending link');
   if (state && state !== pending.state) throw new Error('state mismatch');
   const session = await api('POST', '/sessions', { code });
-  const accounts = await resolveSessionAccounts(session);
-  console.log(`[bank] linked ${pending.aspspName}: ${accounts.length} account(s)`);
+  const { accounts, note } = await resolveSessionAccounts(session);
+  console.log(`[bank] linked ${pending.aspspName}: ${accounts.length} account(s)${note ? ` (${note})` : ''}`);
   const store = readStore();
   const idx = store.connections.findIndex((c) => c.id === pending.connectionId);
   const connection = {
@@ -429,6 +438,7 @@ async function finishLink(code, state) {
     last_sync: idx >= 0 ? store.connections[idx].last_sync || null : null,
     needs_relink: false,
     accounts,
+    accounts_note: note,
   };
   if (idx >= 0) store.connections[idx] = connection;
   else store.connections.push(connection);
@@ -471,6 +481,7 @@ function getStatus() {
       id: c.id,
       aspsp: c.aspsp || null,
       accounts: (c.accounts || []).map((a) => ({ key: accountKey(c, a), name: a.name, product: a.product, currency: a.currency })),
+      accountsNote: c.accounts_note || null,
       lastSync: c.last_sync || null,
       validUntil: c.valid_until || null,
       daysLeft,
@@ -506,13 +517,14 @@ async function fetchMappedTransactions() {
     // plain "Sync now" fixes it. Logs the count either way for diagnosis.
     if (!c.accounts || c.accounts.length === 0) {
       try {
-        const refreshed = await resolveSessionAccounts({ session_id: c.session_id });
-        if (refreshed.length) {
-          c.accounts = refreshed;
-          writeStore(store);
-        }
-        console.log(`[bank] ${c.aspsp}: ${refreshed.length} account(s) after refresh`);
+        const { accounts: refreshed, note } = await resolveSessionAccounts({ session_id: c.session_id });
+        c.accounts = refreshed;
+        c.accounts_note = note;
+        writeStore(store);
+        console.log(`[bank] ${c.aspsp}: ${refreshed.length} account(s) after refresh${note ? ` (${note})` : ''}`);
       } catch (err) {
+        c.accounts_note = `fetch-failed: ${err.message}`;
+        writeStore(store);
         console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);
       }
     }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink, Pencil } from 'lucide-react';
+import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink, Pencil, AlertTriangle, BookOpen, ExternalLink } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
@@ -17,6 +17,7 @@ interface BankConnection {
   id: string;
   aspsp?: string | null;
   accounts?: BankAccount[];
+  accountsNote?: string | null;
   lastSync?: string | null;
   validUntil?: string | null;
   daysLeft?: number;
@@ -57,6 +58,7 @@ export function BankSyncCard() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState(() => {
     const outcome = new URLSearchParams(window.location.search).get('bank');
@@ -262,6 +264,13 @@ export function BankSyncCard() {
 
   const connections = status?.connections ?? [];
 
+  // Explain why a connection has no accounts, using the server's diagnostic note.
+  const emptyAccountsMessage = (note?: string | null) => {
+    if (note && note.startsWith('fetch-failed')) return b.accountsFetchFailed.replace('{msg}', note.replace('fetch-failed: ', ''));
+    if (note === 'no-accounts-granted') return b.noAccountsGranted;
+    return b.noAccounts;
+  };
+
   const connectionRow = (c: BankConnection) => (
     <div key={c.id} className="rounded-[8px] border p-3 space-y-1" style={{ borderColor: 'var(--border)' }}>
       <div className="flex items-center justify-between gap-2">
@@ -316,6 +325,12 @@ export function BankSyncCard() {
           </div>
         );
       })}
+      {(c.accounts ?? []).length === 0 && (
+        <div className={`${row} flex items-start gap-1.5`} style={{ color: 'var(--warning, var(--text-2))' }}>
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>{emptyAccountsMessage(c.accountsNote)}</span>
+        </div>
+      )}
       <div className={row} style={muted}>
         {b.lastSync}: {c.lastSync ? new Date(c.lastSync).toLocaleString() : b.never}
       </div>
@@ -361,6 +376,34 @@ export function BankSyncCard() {
       <p className="mt-2 text-[13px]" style={muted}>
         {b.desc}
       </p>
+
+      <button
+        onClick={() => setShowGuide((v) => !v)}
+        className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium"
+        style={{ color: 'var(--accent)' }}
+      >
+        <BookOpen size={13} />
+        {showGuide ? b.setup.hide : b.setup.show}
+      </button>
+      {showGuide && (
+        <div className="mt-3 rounded-[8px] border p-4 space-y-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-2)' }}>
+          <div className="text-[13px] font-semibold">{b.setup.title}</div>
+          <ol className="list-decimal pl-5 space-y-2 text-[13px] leading-[1.5]" style={muted}>
+            {b.setup.steps.map((step, i) => (
+              <li key={i}>{step.replace('{callback}', status?.redirectUrl || defaultRedirect())}</li>
+            ))}
+          </ol>
+          <a
+            href="https://enablebanking.com"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[12px] font-medium"
+            style={{ color: 'var(--accent)' }}
+          >
+            {b.setup.openLabel} <ExternalLink size={12} />
+          </a>
+        </div>
+      )}
 
       {status && !status.configured ? (
         <div className="mt-4 space-y-4">
