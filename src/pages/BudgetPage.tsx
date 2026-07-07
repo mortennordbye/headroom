@@ -9,14 +9,17 @@ import {
   Info,
   Wallet,
   X,
+  ArrowLeftRight,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
+import { accountGroupLabel } from '../lib/account';
+import { accountToken } from '../lib/accountColor';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
-import { useFinance, type TransactionTemplate, type ExpenseType } from '../context/FinanceContext';
+import { useFinance, type TransactionTemplate, type ExpenseType, type DailyTransaction } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES } from '../lib/categories';
@@ -144,6 +147,11 @@ const BudgetPage: React.FC = () => {
     reconciliation,
     dailyTransactions,
     setDailyTransactions,
+    accountLabels,
+    accountGroups,
+    accountFilter,
+    setAccountFilter,
+    internalTransferIds,
     formatCurrency,
     formatCurrencyShort,
   } = useFinance();
@@ -393,6 +401,11 @@ const BudgetPage: React.FC = () => {
   const showIncomeReminder =
     isCurrentMonth && !isMonthlyIncomeOverridden && incomeReminderDismissedMonth !== monthKey;
 
+  // Ledger honors the account filter (transfers stay visible but marked, so the
+  // log remains a faithful record of what moved).
+  const accountMatch = (tx: DailyTransaction) =>
+    accountFilter == null || accountGroupLabel(tx, accountLabels) === accountFilter;
+
   return (
     <div className="space-y-6 md:space-y-7">
       {/* Hero header */}
@@ -438,6 +451,41 @@ const BudgetPage: React.FC = () => {
           {`${t.budgetPage.incomeIntro}${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${incomeDiffPct >= 0 ? '+' : ''}${incomeDiffPct.toFixed(1)}${t.budgetPage.vsAvgSuffix}` : ''}${t.budgetPage.incomeOutro}`}
         </p>
       </header>
+
+      {/* Per-account filter — narrows the spending analysis and ledger to one
+          connected account (accounts sharing a name are merged into one). */}
+      {accountGroups.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-[0.12em] font-semibold" style={{ color: 'var(--text-3)' }}>
+            {t.budgetPage.accountFilterLabel}
+          </span>
+          <button
+            onClick={() => setAccountFilter(null)}
+            className="px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors"
+            style={accountFilter == null
+              ? { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--accent)' }
+              : { background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
+          >
+            {t.budgetPage.allAccounts}
+          </button>
+          {accountGroups.map((g) => {
+            const active = accountFilter === g.label;
+            return (
+              <button
+                key={g.label}
+                onClick={() => setAccountFilter(active ? null : g.label)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors"
+                style={active
+                  ? { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--accent)' }
+                  : { background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(g.label)})` }} />
+                {g.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Reminder: set this month's income while it's still auto-calculated */}
       {showIncomeReminder && (
@@ -773,16 +821,18 @@ const BudgetPage: React.FC = () => {
                 </div>
               </div>
 
-              {day.transactions.length > 0 && (
+              {day.transactions.filter(accountMatch).length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {day.transactions.map((tx) => {
+                  {day.transactions.filter(accountMatch).map((tx) => {
                     const coveredBy = envelopeNameFor(tx);
+                    const isTransfer = internalTransferIds.has(tx.id);
                     return (
-                    <span key={tx.id} title={coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className="inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
+                    <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isTransfer ? 'opacity-60' : ''}`}>
                       {tx.category && (
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                       )}
                       <span>{tx.description}</span>
+                      {isTransfer && <ArrowLeftRight size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.internalTransfer} />}
                       <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                       {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
@@ -836,14 +886,16 @@ const BudgetPage: React.FC = () => {
                   </td>
                   <td className="px-7 py-4">
                     <div className="flex flex-wrap gap-2">
-                      {day.transactions.map((tx) => {
+                      {day.transactions.filter(accountMatch).map((tx) => {
                         const coveredBy = envelopeNameFor(tx);
+                        const isTransfer = internalTransferIds.has(tx.id);
                         return (
-                        <span key={tx.id} title={coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className="inline-flex items-center gap-2 bg-[var(--bg-raised)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)]">
+                        <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isTransfer ? 'opacity-60' : ''}`}>
                           {tx.category && (
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                           )}
                           <span>{tx.description}</span>
+                          {isTransfer && <ArrowLeftRight size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.internalTransfer} />}
                           <AccountBadge tx={tx} size="xs" />
                           <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                           {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}

@@ -182,12 +182,31 @@ data volume. Remaining:
   `applyPayload`, `ExportPayload`, `SettingsPage` export/import, demo, reset); inline rename per
   account in `BankSyncCard`; `AccountBadge` prefers the custom name over the bank-provided one
   (which is often the account holder's own name). Color helper extracted to
-  `src/lib/accountColor.ts`. Deferred Tier 2:
-  - **Filter-by-account in the ledger.** An "All accounts / …" dropdown on the Budget page
-    filtering `dailyTransactions` by `tx.account`. **Where**: `src/pages/BudgetPage.tsx`.
+  `src/lib/accountColor.ts`.
+
+  Per-account view + merge also shipped (2026-07):
+  - **Whole-Budget-page account filter.** An "All accounts / <account>" pill row narrows the
+    spending analysis (category breakdown, trend, heatmap, category budgets) and the ledger to
+    one account. State in `FinanceContext.tsx`: `accountFilter` / `accountGroups` /
+    `visibleBudgetTransactions` (analysis) / `nonTransferTransactions` (whole-finance surfaces
+    like the savings rate). Budget-only components alias the filtered list in their `useFinance()`
+    destructure. Grouping is by display label (`src/lib/account.ts` `accountGroupLabel`), so
+    **giving two accounts the same custom name merges them** into one group/color everywhere.
+  - **Internal-transfer netting.** A move between two own accounts (expense on one + income on the
+    other) is detected (`src/lib/transfers.ts`, conservative: opposite-kind, equal-amount,
+    different-account, ≤3 days, unambiguous only) and excluded from the spending analysis; the
+    rows stay in the ledger, marked (⇄, muted).
+
+  Deferred / notes:
+  - **Transfer netting is Budget-scoped** — the Dashboard spend charts (`InsightBanner`,
+    `CashflowChart`) still count transfers. Extend if it matters.
+  - **Transfer detection is a heuristic** — a genuine same-amount expense+income within 3 days on
+    two accounts could be wrongly netted. Mitigated by the ambiguity skip and by keeping the rows
+    visible (marked) in the ledger. Stronger signals (own-IBAN match / transfer keywords) would
+    tighten it. **Where**: `src/lib/transfers.ts`.
   - **Legacy rows are unlabeled.** Transactions imported before Tier 1 have no `account`/`bank`,
-    so they show no badge (can't be back-attributed — the source account is unknown). New syncs
-    tag correctly; this only affects pre-upgrade rows.
+    so they show no badge and fall outside every account group (can't be back-attributed). New
+    syncs tag correctly; this only affects pre-upgrade rows.
 
 ## Envelope budgeting (fixed-expense ↔ category reconciliation) — follow-ups
 

@@ -13,7 +13,9 @@ export function AccountBadge({ tx, size = 'sm' }: { tx: DailyTransaction; size?:
   const custom = tx.account ? accountLabels[tx.account] : undefined;
   const label = custom || tx.accountName || tx.bank;
   if (!label) return null;
-  const token = accountToken(tx.account || label);
+  // Color by the display label so merged accounts (same name) share one color,
+  // matching the Budget page's account-filter pills.
+  const token = accountToken(label);
   const dot = size === 'xs' ? 'w-1.5 h-1.5' : 'w-2 h-2';
   const text = size === 'xs' ? 'text-[10px]' : 'text-[11px]';
   return (

@@ -20,6 +20,8 @@ export type { Language } from '../i18n/translations';
 import { categorize } from '../lib/categorize';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, type Reconciliation } from '../lib/envelopes';
+import { findInternalTransferIds } from '../lib/transfers';
+import { accountGroupLabel } from '../lib/account';
 import { sanitizePayload } from '../lib/sanitizePayload';
 import {
   type EmployerCostConfig,
@@ -493,6 +495,14 @@ interface FinanceDataContextType {
   setDailyTransactions: (val: DailyTransaction[]) => void;
   accountLabels: Record<string, string>;
   setAccountLabel: (accountKey: string, name: string) => void;
+  // Per-account view (Budget page): grouping, current filter, and the analysed
+  // transaction set (internal transfers netted out + account filter applied).
+  accountGroups: { label: string; count: number }[];
+  accountFilter: string | null;
+  setAccountFilter: (label: string | null) => void;
+  internalTransferIds: Set<string>;
+  nonTransferTransactions: DailyTransaction[];
+  visibleBudgetTransactions: DailyTransaction[];
   categoryBudgets: Partial<Record<CategoryKey, number>>;
   setCategoryBudget: (category: CategoryKey, amount: number | null) => void;
   recurringTemplates: TransactionTemplate[];
@@ -1259,6 +1269,36 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [fixedExpenses, dailyTransactions, monthKey],
   );
 
+  // Money moved between two of the user's own connected accounts double-counts
+  // as an expense + an income; net those pairs out of the budget analysis.
+  const internalTransferIds = useMemo(() => findInternalTransferIds(dailyTransactions), [dailyTransactions]);
+  // All accounts, internal transfers removed — for whole-finance surfaces (e.g.
+  // the savings rate) that shouldn't be narrowed to one account.
+  const nonTransferTransactions = useMemo(
+    () => dailyTransactions.filter((tx) => !internalTransferIds.has(tx.id)),
+    [dailyTransactions, internalTransferIds],
+  );
+
+  // Per-account view (Budget page only, not persisted). Accounts are grouped by
+  // their display label, so giving two accounts the same name merges them here.
+  const [accountFilter, setAccountFilter] = useState<string | null>(null);
+  const accountGroups = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tx of dailyTransactions) {
+      const label = accountGroupLabel(tx, accountLabels);
+      if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return [...counts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+  }, [dailyTransactions, accountLabels]);
+  // The transaction set the Budget spending analysis uses: internal transfers
+  // removed, then narrowed to the selected account group (all when unset).
+  const visibleBudgetTransactions = useMemo(
+    () => (accountFilter == null
+      ? nonTransferTransactions
+      : nonTransferTransactions.filter((tx) => accountGroupLabel(tx, accountLabels) === accountFilter)),
+    [nonTransferTransactions, accountFilter, accountLabels],
+  );
+
   const dailyData: DailyDataEntry[] = useMemo(() => {
     const orderedDays = monthInterval.map(day => format(day, 'yyyy-MM-dd'));
     // Envelope-covered spend is excluded from the running balance; only the
@@ -1729,6 +1769,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
     accountLabels, setAccountLabel,
+    accountGroups, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget,
     recurringTemplates, setRecurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
@@ -1748,7 +1789,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
     clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
-    setDailyTransactionsTracked, accountLabels, setAccountLabel, categoryBudgets, setCategoryBudget, recurringTemplates,
+    setDailyTransactionsTracked, accountLabels, setAccountLabel,
+    accountGroups, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
+    categoryBudgets, setCategoryBudget, recurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
     loan, updateLoan, pension, updatePension, housingMode,
     changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,

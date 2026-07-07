@@ -8,7 +8,7 @@ import { useFinance } from '../../context/FinanceContext';
  * that a running total hides. Pure CSS grid, so it uses the theme tokens directly.
  */
 export default function SpendingHeatmap() {
-  const { t, currentMonth, dailyTransactions, formatCurrency } = useFinance();
+  const { t, currentMonth, visibleBudgetTransactions: dailyTransactions, formatCurrency } = useFinance();
 
   const { cells, max, leadOffset } = useMemo(() => {
     const monthKey = format(currentMonth, 'yyyy-MM');

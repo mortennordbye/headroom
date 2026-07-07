@@ -386,13 +386,36 @@ async function startLink(bankName) {
   return { url: auth.url };
 }
 
+// An account entry in the session response can be a full object or (for some
+// ASPSPs) a bare uid string. Normalize to the shape we store.
+function normalizeAccount(a) {
+  if (typeof a === 'string') return { uid: a };
+  return { uid: a.uid, name: a.name, product: a.product, currency: a.currency };
+}
+
+// Accounts as returned when the session was created, with a GET fallback for
+// ASPSPs that don't inline them in the POST /sessions response.
+async function resolveSessionAccounts(session) {
+  let accounts = (session.accounts || []).map(normalizeAccount).filter((a) => a.uid);
+  if (accounts.length === 0 && session.session_id) {
+    try {
+      const s = await api('GET', `/sessions/${session.session_id}`);
+      accounts = (s.accounts || []).map(normalizeAccount).filter((a) => a.uid);
+    } catch {
+      /* leave empty — the ASPSP exposed no accounts on this consent */
+    }
+  }
+  return accounts;
+}
+
 /** Complete the BankID flow from the callback's code+state; upserts the connection. */
 async function finishLink(code, state) {
   const pending = readJson(PENDING_PATH);
   if (!pending || !pending.state) throw new Error('no pending link');
   if (state && state !== pending.state) throw new Error('state mismatch');
   const session = await api('POST', '/sessions', { code });
-  const accounts = session.accounts || [];
+  const accounts = await resolveSessionAccounts(session);
+  console.log(`[bank] linked ${pending.aspspName}: ${accounts.length} account(s)`);
   const store = readStore();
   const idx = store.connections.findIndex((c) => c.id === pending.connectionId);
   const connection = {
@@ -405,7 +428,7 @@ async function finishLink(code, state) {
     // Preserve the prior sync time on a re-link so we don't refetch 90 days.
     last_sync: idx >= 0 ? store.connections[idx].last_sync || null : null,
     needs_relink: false,
-    accounts: accounts.map((a) => ({ uid: a.uid, name: a.name, product: a.product, currency: a.currency })),
+    accounts,
   };
   if (idx >= 0) store.connections[idx] = connection;
   else store.connections.push(connection);
@@ -478,6 +501,21 @@ async function fetchMappedTransactions() {
       continue;
     }
     anyValid = true;
+    // Self-heal: a connection linked while the ASPSP exposed no accounts (or an
+    // older link that didn't capture them) re-fetches the account list here so a
+    // plain "Sync now" fixes it. Logs the count either way for diagnosis.
+    if (!c.accounts || c.accounts.length === 0) {
+      try {
+        const refreshed = await resolveSessionAccounts({ session_id: c.session_id });
+        if (refreshed.length) {
+          c.accounts = refreshed;
+          writeStore(store);
+        }
+        console.log(`[bank] ${c.aspsp}: ${refreshed.length} account(s) after refresh`);
+      } catch (err) {
+        console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);
+      }
+    }
     const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
     const fromMs = lastSync ? lastSync - 7 * 864e5 : Date.now() - DAYS * 864e5;
     const from = new Date(fromMs).toISOString().slice(0, 10);
@@ -529,6 +567,7 @@ module.exports = {
   mapEBTransaction,
   mapEBTransactions,
   mergeTransactions,
+  normalizeAccount,
   // flow
   getAspsps,
   startLink,

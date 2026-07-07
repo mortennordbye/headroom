@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 // The Enable Banking mapping lives in the CommonJS server engine (server/bank.js)
 // so it ships in the production image; it's tested here via Vitest.
-import { mapEBTransaction, mapEBTransactions, mergeTransactions } from '../../server/bank.js';
+import { mapEBTransaction, mapEBTransactions, mergeTransactions, normalizeAccount } from '../../server/bank.js';
 import type { MappedTransaction } from '../../server/bank';
 
 interface EBTransaction {
@@ -119,6 +119,17 @@ describe('mapEBTransactions', () => {
     expect(mapEBTransactions([tx({ status: 'PDNG' })], { includePending: true })).toHaveLength(1);
     const rows = mapEBTransactions([tx(), tx({ entry_reference: 'ref-2', transaction_amount: { currency: 'NOK', amount: '' } })]);
     expect(rows.map((r: { id: string }) => r.id)).toEqual(['eb-ref-1']);
+  });
+});
+
+describe('normalizeAccount', () => {
+  it('maps a full account object, keeping name/product/currency', () => {
+    expect(normalizeAccount({ uid: 'u1', name: 'Brukskonto', product: 'Current', currency: 'NOK' }))
+      .toEqual({ uid: 'u1', name: 'Brukskonto', product: 'Current', currency: 'NOK' });
+  });
+
+  it('wraps a bare uid string (ASPSPs that return only ids)', () => {
+    expect(normalizeAccount('uid-abc')).toEqual({ uid: 'uid-abc' });
   });
 });
 

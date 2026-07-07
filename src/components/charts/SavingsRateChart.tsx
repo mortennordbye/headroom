@@ -13,7 +13,9 @@ import { CHART } from '../../lib/chartColors';
 export default function SavingsRateChart() {
   const {
     t, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
-    dailyTransactions, savingsTargetPercent,
+    // Whole-finance rate: net out internal transfers, but not per-account (income
+    // isn't account-scoped), so use nonTransferTransactions.
+    nonTransferTransactions: dailyTransactions, savingsTargetPercent,
   } = useFinance();
 
   const data = useMemo(() => {

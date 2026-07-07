@@ -38,6 +38,9 @@ const mockCtx = {
   },
   currentMonth: new Date('2026-07-15T00:00:00'),
   dailyTransactions: TRANSACTIONS,
+  // The Budget analysis components read the filtered list; mirror it to the full
+  // set for these smoke renders (no account filter, no transfers).
+  visibleBudgetTransactions: TRANSACTIONS,
   categoryBudgets: { groceries: 4000, transport: 800, dining: 700 },
   setCategoryBudget: vi.fn(),
   formatCurrency: (n: number) => `kr ${Math.round(n)}`,
@@ -67,9 +70,9 @@ describe('category UI render smoke', () => {
   });
 
   it('CategoryBreakdown shows an empty state for a month with no spend', () => {
-    mockCtx.dailyTransactions = [];
+    mockCtx.visibleBudgetTransactions = [];
     expect(renderToStaticMarkup(<CategoryBreakdown />)).toContain('No spending');
-    mockCtx.dailyTransactions = TRANSACTIONS; // restore
+    mockCtx.visibleBudgetTransactions = TRANSACTIONS; // restore
   });
 
   it('CategoryBudgets renders actual-vs-budget with an over-budget warning', () => {

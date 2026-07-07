@@ -13,7 +13,7 @@ const MONTHS = 6;
 // category's spend moves over time. Only categories with spend in the window get
 // a series, so an all-groceries user doesn't see 11 empty legend entries.
 export default function CategoryTrendChart() {
-  const { t, currentMonth, dailyTransactions, formatCurrencyShort } = useFinance();
+  const { t, currentMonth, visibleBudgetTransactions: dailyTransactions, formatCurrencyShort } = useFinance();
 
   const { data, series } = useMemo(() => {
     const months = Array.from({ length: MONTHS }, (_, i) => format(subMonths(currentMonth, MONTHS - 1 - i), 'yyyy-MM'));

@@ -11,7 +11,7 @@ import { Button } from './ui/Button';
 // Per-category monthly budgets: progress bars (actual vs cap) for the selected
 // month with over-budget warnings, plus an inline editor to set/clear caps.
 export function CategoryBudgets() {
-  const { t, currentMonth, dailyTransactions, categoryBudgets, setCategoryBudget, formatCurrency, reconciliation } = useFinance();
+  const { t, currentMonth, visibleBudgetTransactions: dailyTransactions, categoryBudgets, setCategoryBudget, formatCurrency, reconciliation } = useFinance();
   const [editing, setEditing] = useState(false);
 
   const monthKey = format(currentMonth, 'yyyy-MM');

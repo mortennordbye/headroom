@@ -922,6 +922,9 @@ export const translations = {
       incomeReminder: 'Månedsinntekten er auto-beregnet denne måneden. Sett den for et mer nøyaktig budsjett.',
       incomeReminderAction: 'Sett inntekt',
       incomeReminderDismiss: 'Skjul til neste måned',
+      accountFilterLabel: 'Konto',
+      allAccounts: 'Alle kontoer',
+      internalTransfer: 'Intern overføring (utelatt fra forbruk)',
       addShort: 'Legg til',
     },
     employerCostPage: {
@@ -1849,6 +1852,9 @@ export const translations = {
       incomeReminder: "This month's income is auto-calculated. Set it for a more accurate budget.",
       incomeReminderAction: 'Set income',
       incomeReminderDismiss: 'Hide until next month',
+      accountFilterLabel: 'Account',
+      allAccounts: 'All accounts',
+      internalTransfer: 'Internal transfer (excluded from spending)',
       addShort: 'Add',
     },
     employerCostPage: {

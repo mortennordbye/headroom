@@ -10,7 +10,9 @@ import { DeltaChip } from './ui/DeltaChip';
 // colour + share bar, a month-over-month chip, and click-to-drill into the
 // category's transactions. Reads everything from context (month, transactions).
 export function CategoryBreakdown() {
-  const { t, currentMonth, dailyTransactions, formatCurrency, reconciliation } = useFinance();
+  // Spending analysis honors the Budget page's per-account filter (and drops
+  // internal transfers) via visibleBudgetTransactions.
+  const { t, currentMonth, visibleBudgetTransactions: dailyTransactions, formatCurrency, reconciliation } = useFinance();
   const [open, setOpen] = useState<string | null>(null);
 
   const monthKey = format(currentMonth, 'yyyy-MM');
