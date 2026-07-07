@@ -21,7 +21,7 @@ import { categorizeWithRules, type CategoryRule } from '../lib/categorize';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
-import { accountGroupLabel } from '../lib/account';
+import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sanitizePayload } from '../lib/sanitizePayload';
 import {
   type EmployerCostConfig,
@@ -500,7 +500,7 @@ interface FinanceDataContextType {
   removeCategoryRule: (id: string) => void;
   // Per-account view (Budget page): grouping, current filter, and the analysed
   // transaction set (internal transfers netted out + account filter applied).
-  accountGroups: { label: string; count: number }[];
+  accountGroups: { key: string; label: string; count: number }[];
   dataAccounts: { key: string; bank?: string; accountName?: string }[];
   accountFilter: string | null;
   setAccountFilter: (label: string | null) => void;
@@ -1300,12 +1300,25 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // their display label, so giving two accounts the same name merges them here.
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
   const accountGroups = useMemo(() => {
-    const counts = new Map<string, number>();
+    // Group by the specific account (key), display its label. Accounts merge only
+    // when they share a custom label (that becomes their shared key).
+    const map = new Map<string, { key: string; label: string; count: number }>();
     for (const tx of dailyTransactions) {
-      const label = accountGroupLabel(tx, accountLabels);
-      if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
+      const key = accountGroupKey(tx, accountLabels);
+      if (!key) continue;
+      const existing = map.get(key);
+      if (existing) existing.count++;
+      else map.set(key, { key, label: accountGroupLabel(tx, accountLabels) || key, count: 1 });
     }
-    return [...counts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+    const groups = [...map.values()].sort((a, b) => b.count - a.count);
+    // Disambiguate accounts that show the same label but are different accounts
+    // (e.g. two unlabeled accounts under the same holder name) by a short suffix.
+    const labelCounts = new Map<string, number>();
+    for (const g of groups) labelCounts.set(g.label, (labelCounts.get(g.label) ?? 0) + 1);
+    for (const g of groups) {
+      if ((labelCounts.get(g.label) ?? 0) > 1 && g.key.includes(':')) g.label = `${g.label} · ${(g.key.split(':').pop() ?? '').slice(-4)}`;
+    }
+    return groups;
   }, [dailyTransactions, accountLabels]);
   // Distinct account identities seen in the transaction data (key + bank + the
   // bank-provided name). Includes historical/orphaned accounts no longer in a
@@ -1322,7 +1335,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const visibleBudgetTransactions = useMemo(
     () => (accountFilter == null
       ? nonTransferTransactions
-      : nonTransferTransactions.filter((tx) => accountGroupLabel(tx, accountLabels) === accountFilter)),
+      : nonTransferTransactions.filter((tx) => accountGroupKey(tx, accountLabels) === accountFilter)),
     [nonTransferTransactions, accountFilter, accountLabels],
   );
 

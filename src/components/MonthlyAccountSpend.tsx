@@ -40,10 +40,10 @@ export function MonthlyAccountSpend() {
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {rows.map((r) => (
-              <tr key={r.label}>
+              <tr key={r.key}>
                 <td className="py-1.5 pr-3">
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(r.label)})` }} />
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(r.key)})` }} />
                     {r.label}
                   </span>
                 </td>

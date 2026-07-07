@@ -14,17 +14,26 @@ describe('accountMonthlyTotals', () => {
       tx({ account: 'a', accountName: 'Card', date: '2026-06-10', amount: 250 }),
       tx({ account: 'b', accountName: 'Savings', date: '2026-06-01', amount: 50 }),
     ], {}, months);
-    expect(rows[0]).toEqual({ label: 'Card', totals: [100, 250, 0], sum: 350 });
-    expect(rows[1]).toEqual({ label: 'Savings', totals: [0, 50, 0], sum: 50 });
+    expect(rows[0]).toEqual({ key: 'a', label: 'Card', totals: [100, 250, 0], sum: 350 });
+    expect(rows[1]).toEqual({ key: 'b', label: 'Savings', totals: [0, 50, 0], sum: 50 });
   });
 
-  it('merges accounts that share a display label (via accountLabels)', () => {
+  it('keeps two accounts with the same holder name as separate rows (scope to specific account)', () => {
+    const rows = accountMonthlyTotals([
+      tx({ account: 'hb:1', accountName: 'Morten Victor Nordbye', date: '2026-06-02', amount: 100 }),
+      tx({ account: 'hb:2', accountName: 'Morten Victor Nordbye', date: '2026-06-03', amount: 200 }),
+    ], {}, months);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.key).sort()).toEqual(['hb:1', 'hb:2']);
+  });
+
+  it('merges only when accounts share a custom label', () => {
     const rows = accountMonthlyTotals([
       tx({ account: 'legacy:1', bank: 'Bank Norwegian', date: '2026-06-02', amount: 100 }),
       tx({ account: 'new:1', accountName: 'x', date: '2026-06-03', amount: 200 }),
     ], { 'legacy:1': 'BN-Kredittkort', 'new:1': 'BN-Kredittkort' }, months);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual({ label: 'BN-Kredittkort', totals: [0, 300, 0], sum: 300 });
+    expect(rows[0]).toEqual({ key: 'BN-Kredittkort', label: 'BN-Kredittkort', totals: [0, 300, 0], sum: 300 });
   });
 
   it('excludes income and untagged (manual) rows', () => {

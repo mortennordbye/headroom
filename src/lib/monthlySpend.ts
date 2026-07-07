@@ -3,9 +3,10 @@
 // excluded (this is money out); accounts are grouped by their display label, so
 // two accounts sharing a name (a merge) roll up into one row.
 import type { DailyTransaction } from '../context/FinanceContext';
-import { accountGroupLabel } from './account';
+import { accountGroupLabel, accountGroupKey } from './account';
 
 export interface AccountMonthRow {
+  key: string;
   label: string;
   totals: number[]; // one entry per month, same order as `months`
   sum: number;
@@ -17,18 +18,20 @@ export function accountMonthlyTotals(
   months: string[],
 ): AccountMonthRow[] {
   const idx = new Map(months.map((m, i) => [m, i]));
-  const byAcct = new Map<string, number[]>();
+  // Group by the specific account (key), display its label — same model as the
+  // Budget filter, so a table row is one account, not one holder name.
+  const byAcct = new Map<string, { label: string; totals: number[] }>();
   for (const t of txs) {
     if (t.kind === 'income') continue;
-    const label = accountGroupLabel(t, accountLabels);
-    if (!label) continue;
+    const key = accountGroupKey(t, accountLabels);
+    if (!key) continue;
     const mi = idx.get(t.date.slice(0, 7));
     if (mi === undefined) continue;
-    if (!byAcct.has(label)) byAcct.set(label, months.map(() => 0));
-    byAcct.get(label)![mi] += t.amount;
+    if (!byAcct.has(key)) byAcct.set(key, { label: accountGroupLabel(t, accountLabels) || key, totals: months.map(() => 0) });
+    byAcct.get(key)!.totals[mi] += t.amount;
   }
   return [...byAcct.entries()]
-    .map(([label, totals]) => ({ label, totals, sum: totals.reduce((a, b) => a + b, 0) }))
+    .map(([key, v]) => ({ key, label: v.label, totals: v.totals, sum: v.totals.reduce((a, b) => a + b, 0) }))
     .sort((a, b) => b.sum - a.sum);
 }
 

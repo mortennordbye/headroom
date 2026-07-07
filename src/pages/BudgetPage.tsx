@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
-import { accountGroupLabel } from '../lib/account';
+import { accountGroupKey } from '../lib/account';
 import { accountToken } from '../lib/accountColor';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
@@ -413,7 +413,7 @@ const BudgetPage: React.FC = () => {
   // Ledger honors the account filter (transfers stay visible but marked, so the
   // log remains a faithful record of what moved).
   const accountMatch = (tx: DailyTransaction) =>
-    accountFilter == null || accountGroupLabel(tx, accountLabels) === accountFilter;
+    accountFilter == null || accountGroupKey(tx, accountLabels) === accountFilter;
 
   return (
     <div className="space-y-6 md:space-y-7">
@@ -478,17 +478,17 @@ const BudgetPage: React.FC = () => {
             {t.budgetPage.allAccounts}
           </button>
           {accountGroups.map((g) => {
-            const active = accountFilter === g.label;
+            const active = accountFilter === g.key;
             return (
               <button
-                key={g.label}
-                onClick={() => setAccountFilter(active ? null : g.label)}
+                key={g.key}
+                onClick={() => setAccountFilter(active ? null : g.key)}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors"
                 style={active
                   ? { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--accent)' }
                   : { background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
               >
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(g.label)})` }} />
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(g.key)})` }} />
                 {g.label}
               </button>
             );
