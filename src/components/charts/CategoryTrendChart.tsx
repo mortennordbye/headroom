@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { format, subMonths } from 'date-fns';
 import { useFinance } from '../../context/FinanceContext';
 import ChartTooltip from '../ChartTooltip';
@@ -39,8 +39,13 @@ export default function CategoryTrendChart() {
           <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART.textSoft }} axisLine={false} tickLine={false} />
           <YAxis tickFormatter={formatCurrencyShort} tick={{ fontSize: 10, fill: CHART.textDim }} axisLine={false} tickLine={false} width={44} />
           <Tooltip cursor={{ fill: CHART.track }} content={<ChartTooltip />} />
-          {series.map((c) => (
-            <Bar key={c.key} name={t.categoryLabels[c.key]} dataKey={c.key} stackId="s" fill={c.color} maxBarSize={32} />
+          {series.map((c, i) => (
+            <Bar key={c.key} name={t.categoryLabels[c.key]} dataKey={c.key} stackId="s" fill={c.color} maxBarSize={32}>
+              {/* Total spent that month, printed at the top of the stack. */}
+              {i === series.length - 1 && (
+                <LabelList dataKey="total" position="top" formatter={(v: unknown) => formatCurrencyShort(Number(v) || 0)} style={{ fontSize: 10, fill: CHART.textSoft, fontWeight: 600 }} />
+              )}
+            </Bar>
           ))}
         </BarChart>
       </ResponsiveContainer>

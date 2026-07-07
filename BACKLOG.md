@@ -147,6 +147,16 @@ data volume. Remaining:
     is deliberately small; add merchants as gaps surface. An LLM fallback for unmatched
     merchants was declined for now (keeps the app local-only) — revisit behind a toggle if
     `other` grows large.
+  - **User-defined category rules — shipped (2026-07).** Vipps is no longer matched as a
+    transfer (it's a payment rail; `Vipps*Merchant` is a purchase). For the personal/foreign pile
+    that the generic keyword table can't know (a user's loan account number, personal payees,
+    one-off foreign merchants), users add rules: `categoryRules: CategoryRule[]` (`{id, match,
+    category}`) in the blob, `categorizeWithRules` applies them ahead of the built-in engine at
+    the ingest/backfill chokepoint (`FinanceContext.tsx`), so a rule relabels every matching row
+    past + future. Created from the transaction edit modal ("remember" checkbox + editable match
+    text, `EditModal` gained a `checkbox` field type), managed in `src/components/CategoryRules.tsx`
+    on the Budget page. Wired through every persist site. Match is a case-insensitive substring;
+    a stronger matcher (regex / anchored / by account field) could follow if needed.
 - **Cron isn't installed by anything.** The daily `curl` schedule is documented in
   `scripts/enable-banking/README.md` but must be added to the homelab crontab (or a Docker
   sidecar) by hand. Consider shipping a compose service / entrypoint hook.

@@ -22,12 +22,14 @@ import { nb, enUS } from 'date-fns/locale';
 import { useFinance, type TransactionTemplate, type ExpenseType, type DailyTransaction } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import { parseLocaleNumber } from '../lib/validators';
-import { categoryMeta, isCategoryKey, CATEGORIES } from '../lib/categories';
+import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { suggestEnvelopeLinks, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
+import { CategoryRules } from '../components/CategoryRules';
+import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
 import ConfirmModal from '../components/ConfirmModal';
 import { StatCard } from '../components/ui/StatCard';
 
@@ -152,6 +154,7 @@ const BudgetPage: React.FC = () => {
     accountFilter,
     setAccountFilter,
     internalTransferIds,
+    addCategoryRule,
     formatCurrency,
     formatCurrencyShort,
   } = useFinance();
@@ -308,7 +311,7 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  const editDailyTransaction = (id: string, description: string, amount: number, category?: string, kind?: 'income' | 'expense') => {
+  const editDailyTransaction = (id: string, description: string, amount: number, category?: string, kind?: 'income' | 'expense', merchant?: string) => {
     openModal({
       title: description,
       fields: [
@@ -316,6 +319,8 @@ const BudgetPage: React.FC = () => {
         { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
         { key: 'category', label: t.category, type: 'select', value: category ?? '', options: categoryOptions },
         kindField(kind === 'income' ? 'income' : 'expense'),
+        { key: 'rememberRule', label: t.budgetPage.rememberRule, type: 'checkbox', value: 'false', hint: t.budgetPage.rememberRuleHint },
+        { key: 'ruleMatch', label: t.budgetPage.ruleMatch, type: 'text', value: merchant || description },
       ],
       onSave: (vals) => {
         const newAmount = parsePositiveNumber(vals.amount);
@@ -324,6 +329,10 @@ const BudgetPage: React.FC = () => {
             ? { ...tx, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, categorySource: vals.category.trim() ? 'manual' : undefined, kind: vals.kind === 'income' ? 'income' : 'expense' }
             : tx
           ));
+          // Remember: create a rule so all matching rows (past + future) get this category.
+          if (vals.rememberRule === 'true' && vals.ruleMatch.trim() && isCategoryKey(vals.category.trim())) {
+            addCategoryRule(vals.ruleMatch.trim(), vals.category.trim() as CategoryKey);
+          }
           closeModal();
         } else {
           setModal(prev => prev ? { ...prev, error: !vals.description.trim() ? t.editDescription + ' er påkrevd' : t.editAmount + ' må være et positivt tall' } : null);
@@ -742,8 +751,11 @@ const BudgetPage: React.FC = () => {
           <div className="pt-5 border-t border-[var(--border)]">
             <CategoryBudgets />
           </div>
+          <CategoryRules />
         </div>
       </div>
+
+      <MonthlyAccountSpend />
 
       <FunBudget />
 
@@ -836,7 +848,7 @@ const BudgetPage: React.FC = () => {
                       <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                       {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
-                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
+                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
                         <Edit2 size={11} />
                       </button>
                       <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
@@ -902,7 +914,7 @@ const BudgetPage: React.FC = () => {
                           {tx.category && (
                             <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{isCategoryKey(tx.category) ? t.categoryLabels[tx.category] : tx.category}</span>
                           )}
-                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
+                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
                             <Edit2 size={12} />
                           </button>
                           <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">

@@ -17,7 +17,7 @@ import { translations, type Language, type Translations } from '../i18n/translat
 
 // Re-exported so existing consumers can keep importing these from the context.
 export type { Language } from '../i18n/translations';
-import { categorize } from '../lib/categorize';
+import { categorizeWithRules, type CategoryRule } from '../lib/categorize';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
@@ -495,9 +495,13 @@ interface FinanceDataContextType {
   setDailyTransactions: (val: DailyTransaction[]) => void;
   accountLabels: Record<string, string>;
   setAccountLabel: (accountKey: string, name: string) => void;
+  categoryRules: CategoryRule[];
+  addCategoryRule: (match: string, category: CategoryKey) => void;
+  removeCategoryRule: (id: string) => void;
   // Per-account view (Budget page): grouping, current filter, and the analysed
   // transaction set (internal transfers netted out + account filter applied).
   accountGroups: { label: string; count: number }[];
+  dataAccounts: { key: string; bank?: string; accountName?: string }[];
   accountFilter: string | null;
   setAccountFilter: (label: string | null) => void;
   internalTransferIds: Set<string>;
@@ -613,6 +617,8 @@ export interface ExportPayload {
   deletedBankIds?: string[];
   /** User-chosen friendly names for connected accounts, keyed by account key. */
   accountLabels?: Record<string, string>;
+  /** User-defined categorization rules (merchant/text → category). */
+  categoryRules?: CategoryRule[];
   categoryBudgets?: Partial<Record<CategoryKey, number>>;
   debts?: Debt[];
   assets: Assets;
@@ -727,6 +733,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Friendly names for connected accounts, keyed by the transaction `account`
   // key (e.g. 'ab12:uid-1'). Empty string clears back to the bank-provided name.
   const [accountLabels, setAccountLabels] = useState<Record<string, string>>({});
+  // User-defined categorization rules (merchant/text → category), applied ahead
+  // of the built-in engine at the ingest/backfill chokepoint.
+  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
   const [categoryBudgets, setCategoryBudgets] = useState<Partial<Record<CategoryKey, number>>>({});
   const [recurringTemplates, setRecurringTemplates] = useState<TransactionTemplate[]>([]);
   const [assets, setAssets] = useState<Assets>(DEFAULT_ASSETS);
@@ -801,7 +810,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // state and is added by the callers that need it, not here.
   const buildPayload = useCallback((): ExportPayload => ({
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
-    dailyTransactions, deletedBankIds, accountLabels, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, accountLabels, categoryRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang,
     savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
@@ -809,7 +818,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
-    dailyTransactions, deletedBankIds, accountLabels, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, accountLabels, categoryRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
@@ -840,6 +849,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.dailyTransactions) setDailyTransactions(data.dailyTransactions); else if (resetMissing) setDailyTransactions([]);
     if (data.deletedBankIds !== undefined) setDeletedBankIds(data.deletedBankIds); else if (resetMissing) setDeletedBankIds([]);
     if (data.accountLabels !== undefined) setAccountLabels(data.accountLabels); else if (resetMissing) setAccountLabels({});
+    if (data.categoryRules !== undefined) setCategoryRules(data.categoryRules); else if (resetMissing) setCategoryRules([]);
     if (data.categoryBudgets !== undefined) setCategoryBudgets(data.categoryBudgets); else if (resetMissing) setCategoryBudgets({});
     if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets, savingsAccounts: migrateSavingsAccounts(data.assets) }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
     if (data.loan) setLoan(data.loan); else if (resetMissing) setLoan(DEFAULT_LOAN);
@@ -1106,15 +1116,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     let changed = false;
     const next = dailyTransactions.map((t) => {
       if (t.categorySource === 'manual') return t;         // respect user edits
-      if (t.category && t.category !== 'other') return t;  // keep confident auto labels
-      const { category, source } = categorize({ merchant: t.merchant, description: t.description, mcc: t.mcc, kind: t.kind });
-      if (category === t.category) return t;                // genuinely unmatched → leave as-is
+      const ruleHit = categorizeWithRules({ merchant: t.merchant, description: t.description, mcc: t.mcc, kind: t.kind }, categoryRules);
+      // A user rule wins over any auto label; add/remove a rule and matching rows
+      // re-label. Without a rule, keep confident auto labels and only (re)label
+      // the unlabeled / auto-'other' pile as the built-in ruleset improves.
+      const matchedByRule = categoryRules.some((r) => {
+        const m = (r.match || '').trim().toLowerCase();
+        return m && ` ${t.merchant ?? ''} ${t.description ?? ''} `.toLowerCase().includes(m);
+      });
+      if (!matchedByRule && t.category && t.category !== 'other') return t;
+      if (ruleHit.category === t.category) return t;
       changed = true;
-      return { ...t, category, categorySource: source };
+      return { ...t, category: ruleHit.category, categorySource: ruleHit.source };
     });
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (changed) setDailyTransactions(next);
-  }, [dailyTransactions]);
+  }, [dailyTransactions, categoryRules]);
 
   // --- Calculations ---
 
@@ -1290,6 +1307,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
     return [...counts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
   }, [dailyTransactions, accountLabels]);
+  // Distinct account identities seen in the transaction data (key + bank + the
+  // bank-provided name). Includes historical/orphaned accounts no longer in a
+  // live connection, so they can still be renamed/merged.
+  const dataAccounts = useMemo(() => {
+    const seen = new Map<string, { key: string; bank?: string; accountName?: string }>();
+    for (const tx of dailyTransactions) {
+      if (tx.account && !seen.has(tx.account)) seen.set(tx.account, { key: tx.account, bank: tx.bank, accountName: tx.accountName });
+    }
+    return [...seen.values()];
+  }, [dailyTransactions]);
   // The transaction set the Budget spending analysis uses: internal transfers
   // removed, then narrowed to the selected account group (all when unset).
   const visibleBudgetTransactions = useMemo(
@@ -1536,6 +1563,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Add a categorization rule (merchant/text → category). Re-applying is handled
+  // by the backfill effect (categoryRules is a dep). A blank match is a no-op;
+  // an existing rule for the same match is replaced so its category updates.
+  const addCategoryRule = useCallback((match: string, category: CategoryKey) => {
+    const m = match.trim();
+    if (!m) return;
+    setCategoryRules(prev => [
+      ...prev.filter(r => r.match.trim().toLowerCase() !== m.toLowerCase()),
+      { id: makeId('rule'), match: m, category },
+    ]);
+  }, []);
+
+  const removeCategoryRule = useCallback((id: string) => {
+    setCategoryRules(prev => prev.filter(r => r.id !== id));
+  }, []);
+
   // Import / demo-restore: overlay the present fields, leaving absent ones as the
   // current value (resetMissing=false). Shares the single apply path with load.
   const importAll = useCallback((data: Partial<ExportPayload>) => applyPayload(data, false), [applyPayload]);
@@ -1584,6 +1627,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setDailyTransactions([]);
     setDeletedBankIds([]);
     setAccountLabels({});
+    setCategoryRules([]);
     setCategoryBudgets({});
     setRecurringTemplates([]);
     setAssets({
@@ -1769,7 +1813,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
     accountLabels, setAccountLabel,
-    accountGroups, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
+    categoryRules, addCategoryRule, removeCategoryRule,
+    accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget,
     recurringTemplates, setRecurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
@@ -1790,7 +1835,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
     clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, accountLabels, setAccountLabel,
-    accountGroups, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
+    categoryRules, addCategoryRule, removeCategoryRule,
+    accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget, recurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
     loan, updateLoan, pension, updatePension, housingMode,

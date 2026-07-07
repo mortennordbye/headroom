@@ -12,7 +12,7 @@ export interface ModalFieldOption {
 export interface ModalField {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'select';
+  type: 'text' | 'number' | 'select' | 'checkbox';
   value: string;
   placeholder?: string;
   options?: ModalFieldOption[]; // required when type === 'select'
@@ -72,7 +72,23 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
         </div>
 
         <div className="space-y-3">
-          {fields.map((field, idx) => (
+          {fields.map((field, idx) => field.type === 'checkbox' ? (
+            <div key={field.key} className="space-y-1.5">
+              <label htmlFor={fieldId(field.key)} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  id={fieldId(field.key)}
+                  type="checkbox"
+                  checked={values[field.key] === 'true'}
+                  onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.checked ? 'true' : 'false' }))}
+                  className="h-4 w-4 accent-[var(--accent)]"
+                />
+                <span className="text-[13px] text-[var(--text-1)]">{field.label}</span>
+              </label>
+              {field.hint && (
+                <p className="text-[11px] leading-snug text-[var(--text-2)] normal-case tracking-normal pl-6">{field.hint}</p>
+              )}
+            </div>
+          ) : (
             <div key={field.key} className="space-y-1.5">
               <label htmlFor={fieldId(field.key)} className="text-[11px] font-medium text-[var(--text-2)] uppercase tracking-wide">
                 {field.label}

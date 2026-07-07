@@ -49,7 +49,7 @@ const accountLabel = (a: BankAccount, aspsp?: string | null) => a.name || a.prod
 // connect any number of banks with BankID, and sync them all. Backed by
 // /api/bank/* (server/bank.js).
 export function BankSyncCard() {
-  const { t, setDailyTransactions, accountLabels, setAccountLabel } = useFinance();
+  const { t, setDailyTransactions, accountLabels, setAccountLabel, dataAccounts } = useFinance();
   const b = t.settings.bank;
   const [status, setStatus] = useState<BankStatus | null>(null);
   const [busy, setBusy] = useState<'idle' | 'connecting' | 'syncing'>('idle');
@@ -275,6 +275,49 @@ export function BankSyncCard() {
     return b.noAccounts;
   };
 
+  // One renamable account row (shared by live connections and historical/orphan
+  // accounts). `key` is the account key; `suffix` adds currency/IBAN.
+  const accountRow = (key: string, fallbackLabel: string, suffix = '') => {
+    const current = (key && accountLabels[key]) || fallbackLabel;
+    if (editingKey === key && key) {
+      return (
+        <div key={key} className="flex flex-wrap items-center gap-2">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={fallbackLabel}
+            autoFocus
+            className="h-8 px-2.5 rounded-[6px] text-[13px] border min-w-[12rem]"
+            style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
+          />
+          <Button variant="secondary" size="sm" onClick={() => { setAccountLabel(key, draft); setEditingKey(null); }}>{b.save}</Button>
+          <Button variant="ghost" size="sm" onClick={() => setEditingKey(null)}>{b.cancel}</Button>
+        </div>
+      );
+    }
+    return (
+      <div key={key} className={`${row} flex items-center gap-1.5`} style={muted}>
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(key || current)})` }} />
+        <span>{current}{suffix}</span>
+        {key && (
+          <button
+            aria-label={`${b.renameAccount} — ${current}`}
+            onClick={() => { setEditingKey(key); setDraft(accountLabels[key] || ''); }}
+            className="text-[var(--text-2)] hover:text-[var(--accent)]"
+          >
+            <Pencil size={12} />
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // Accounts seen in the transaction history that aren't in any current
+  // connection (e.g. a re-linked bank issued a new account id). Surfaced so the
+  // user can rename them to match — merging both under one name everywhere.
+  const connectedKeys = new Set(connections.flatMap((c) => (c.accounts ?? []).map((a) => a.key).filter(Boolean)));
+  const orphanAccounts = dataAccounts.filter((a) => !connectedKeys.has(a.key));
+
   const connectionRow = (c: BankConnection) => (
     <div key={c.id} className="rounded-[8px] border p-3 space-y-1" style={{ borderColor: 'var(--border)' }}>
       <div className="flex items-center justify-between gap-2">
@@ -294,41 +337,11 @@ export function BankSyncCard() {
           )}
         </div>
       </div>
-      {(c.accounts ?? []).map((a) => {
-        const key = a.key || '';
-        const current = (key && accountLabels[key]) || accountLabel(a, c.aspsp);
-        if (editingKey === key && key) {
-          return (
-            <div key={key} className="flex flex-wrap items-center gap-2">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={accountLabel(a, c.aspsp)}
-                autoFocus
-                className="h-8 px-2.5 rounded-[6px] text-[13px] border min-w-[12rem]"
-                style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
-              />
-              <Button variant="secondary" size="sm" onClick={() => { setAccountLabel(key, draft); setEditingKey(null); }}>{b.save}</Button>
-              <Button variant="ghost" size="sm" onClick={() => setEditingKey(null)}>{b.cancel}</Button>
-            </div>
-          );
-        }
-        return (
-          <div key={key} className={`${row} flex items-center gap-1.5`} style={muted}>
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(key || current)})` }} />
-            <span>{current}{a.currency ? ` · ${a.currency}` : ''}{a.iban ? ` · ${ibanTail(a.iban)}` : ''}</span>
-            {key && (
-              <button
-                aria-label={`${b.renameAccount} — ${current}`}
-                onClick={() => { setEditingKey(key); setDraft(accountLabels[key] || ''); }}
-                className="text-[var(--text-2)] hover:text-[var(--accent)]"
-              >
-                <Pencil size={12} />
-              </button>
-            )}
-          </div>
-        );
-      })}
+      {(c.accounts ?? []).map((a) => accountRow(
+        a.key || '',
+        accountLabel(a, c.aspsp),
+        `${a.currency ? ` · ${a.currency}` : ''}${a.iban ? ` · ${ibanTail(a.iban)}` : ''}`,
+      ))}
       {(c.accounts ?? []).length === 0 && (
         <div className={`${row} flex items-start gap-1.5`} style={{ color: 'var(--warning, var(--text-2))' }}>
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
@@ -418,6 +431,15 @@ export function BankSyncCard() {
       ) : (
         <div className="mt-4 space-y-3">
           {connections.length > 0 ? connections.map(connectionRow) : <div className={row} style={muted}>{b.notLinked}</div>}
+          {orphanAccounts.length > 0 && (
+            <div className="rounded-[8px] border p-3 space-y-1" style={{ borderColor: 'var(--border)' }}>
+              <div className={`${row} font-medium`}>{b.historicalAccounts}</div>
+              <div className={row} style={muted}>{b.historicalAccountsHint}</div>
+              <div className="pt-1 space-y-1">
+                {orphanAccounts.map((a) => accountRow(a.key, a.accountName || a.bank || a.key, a.accountName && a.bank ? ` · ${a.bank}` : ''))}
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 pt-1">
             {addBlock}
             {connections.length > 0 && (
