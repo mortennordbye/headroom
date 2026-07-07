@@ -249,3 +249,56 @@ describe('suggestEnvelopeLinks', () => {
     expect(s).toEqual([]);
   });
 });
+
+describe('pattern (match) envelopes', () => {
+  it('draws down only transactions matching the fixed expense pattern — the Ruter case', () => {
+    // Ruter budgeted 655; category "transport" also has a 2000 flight. Linking by
+    // category would show over-budget; linking by pattern only counts Ruter.
+    const r = reconcile(
+      [fe({ id: 'ruter', name: 'Ruter', amount: 655, match: 'Ruter' })],
+      [
+        tx({ description: 'Ruter AS', amount: 600, category: 'transport' }),
+        tx({ description: 'SAS Norway', amount: 2000, category: 'transport' }),
+      ],
+      '2026-07',
+    );
+    const env = r.byExpenseId.get('ruter')!;
+    expect(env.actual).toBe(600);      // only the Ruter transaction
+    expect(env.status).not.toBe('over');
+    expect(env.remaining).toBe(55);
+  });
+
+  it('a pattern match wins over a category link and is excluded from the category envelope', () => {
+    const r = reconcile(
+      [
+        fe({ id: 'loan', name: 'Boliglån', amount: 18000, match: 'Til:90467295445' }),
+        fe({ id: 'housing', name: 'Felleskostnader', amount: 3000, category: 'housing' }),
+      ],
+      [
+        tx({ description: 'Til:90467295445', amount: 17000, category: 'housing' }),
+        tx({ description: 'OBOS felleskost', amount: 3000, category: 'housing' }),
+      ],
+      '2026-07',
+    );
+    expect(r.byExpenseId.get('loan')!.actual).toBe(17000);        // the loan
+    expect(r.byCategory.get('housing')!.actual).toBe(3000);        // NOT 20000 — loan excluded
+  });
+
+  it('the ledger draws a matched transaction from its pattern envelope, spilling the rest', () => {
+    const r = reconcile([fe({ id: 'ruter', name: 'Ruter', amount: 655, match: 'Ruter' })], [], '2026-07');
+    const ledger = createEnvelopeLedger(r);
+    expect(ledger.draw(tx({ description: 'Ruter', amount: 400 }))).toEqual({ covered: 400, spillover: 0 });
+    expect(ledger.draw(tx({ description: 'Ruter', amount: 400 }))).toEqual({ covered: 255, spillover: 145 });
+    // a non-matching transport transaction is not covered by the Ruter envelope
+    expect(ledger.draw(tx({ description: 'SAS', amount: 500, category: 'transport' }))).toEqual({ covered: 0, spillover: 500 });
+  });
+
+  it('is not suggested for a category link once it has a match', () => {
+    const suggestions = suggestEnvelopeLinks(
+      [fe({ name: 'Ruter transport', amount: 655, match: 'Ruter' })],
+      [tx({ amount: 600, category: 'transport' })],
+      '2026-07',
+    );
+    expect(suggestions).toHaveLength(0);
+  });
+});

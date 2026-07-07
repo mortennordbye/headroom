@@ -50,6 +50,14 @@ export interface FixedExpense {
    * legacy/imported data — those behave exactly as before.
    */
   category?: CategoryKey;
+  /**
+   * Optional merchant/text pattern that ties THIS fixed expense to its own
+   * transactions (e.g. a mortgage's account number, or "Ruter"). More precise
+   * than `category`: only transactions matching it draw this envelope down, so
+   * a small budgeted line isn't falsely "over budget" from unrelated spend in a
+   * broad category. When set, it takes priority over `category` for matching.
+   */
+  match?: string;
 }
 
 // Non-mortgage debts (studielån, forbrukslån, kredittkort, …). Modeled separately

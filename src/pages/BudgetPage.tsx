@@ -23,7 +23,7 @@ import { useFinance, type TransactionTemplate, type ExpenseType, type DailyTrans
 import EditModal, { type ModalField } from '../components/EditModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
-import { suggestEnvelopeLinks, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
+import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
@@ -314,6 +314,14 @@ const BudgetPage: React.FC = () => {
   };
 
   const editDailyTransaction = (id: string, description: string, amount: number, category?: string, kind?: 'income' | 'expense', merchant?: string) => {
+    // A fixed expense already mapped to this transaction (by its match pattern),
+    // so the "Map to fixed expense" select can pre-select it.
+    const hay = ` ${merchant ?? ''} ${description ?? ''} `.toLowerCase();
+    const prevMapped = fixedExpenses.find(e => (e.match ?? '').trim() && hay.includes((e.match as string).trim().toLowerCase()));
+    const expenseOptions = [
+      { value: '', label: t.budgetPage.mapToFixedExpenseNone },
+      ...fixedExpenses.map(e => ({ value: e.id, label: e.name })),
+    ];
     openModal({
       title: description,
       fields: [
@@ -321,6 +329,7 @@ const BudgetPage: React.FC = () => {
         { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
         { key: 'category', label: t.category, type: 'select', value: category ?? '', options: categoryOptions },
         kindField(kind === 'income' ? 'income' : 'expense'),
+        { key: 'mapExpense', label: t.budgetPage.mapToFixedExpense, type: 'select', value: prevMapped?.id ?? '', options: expenseOptions, hint: t.budgetPage.mapToFixedExpenseHint },
         { key: 'rememberRule', label: t.budgetPage.rememberRule, type: 'checkbox', value: 'false', hint: t.budgetPage.rememberRuleHint },
         { key: 'ruleMatch', label: t.budgetPage.ruleMatch, type: 'text', value: merchant || description },
       ],
@@ -338,6 +347,18 @@ const BudgetPage: React.FC = () => {
             if (isCategoryKey(newCat) && newCat !== (category ?? '')) addCategoryRule(vals.ruleMatch.trim(), newCat as CategoryKey);
             const newName = vals.description.trim();
             if (newName && newName !== description) addLabelRule(vals.ruleMatch.trim(), newName);
+          }
+          // Map to a fixed expense: set the chosen expense's match pattern (and
+          // clear a previous mapping) so only these transactions draw it down.
+          const newMap = vals.mapExpense;
+          const prevMap = prevMapped?.id ?? '';
+          if (newMap !== prevMap && vals.ruleMatch.trim()) {
+            const pattern = vals.ruleMatch.trim();
+            setFixedExpenses(fixedExpenses.map(e => {
+              if (e.id === newMap) return { ...e, match: pattern };
+              if (e.id === prevMap) return { ...e, match: undefined };
+              return e;
+            }));
           }
           closeModal();
         } else {
@@ -384,11 +405,14 @@ const BudgetPage: React.FC = () => {
   // The linked fixed-expense name covering a transaction's category, if any — used
   // to tag drawn-down transactions in the log so it's clear why they don't move the
   // daily balance. Returns undefined for income and non-enveloped spend.
-  const envelopeNameFor = (tx: { category?: string; kind?: 'income' | 'expense' }): string | undefined => {
-    if (tx.kind === 'income' || !isCategoryKey(tx.category)) return undefined;
-    const env = reconciliation.byCategory.get(tx.category);
+  const envelopeNameFor = (tx: DailyTransaction): string | undefined => {
+    const key = envelopeKeyForTx(tx, reconciliation);
+    if (!key) return undefined;
+    const env = key.startsWith('exp:')
+      ? reconciliation.byExpenseId.get(key.slice(4))
+      : reconciliation.byCategory.get(key as CategoryKey);
     if (!env) return undefined;
-    return fixedExpenses.find(e => e.id === env.expenseIds[0])?.name;
+    return env.name ?? fixedExpenses.find(e => e.id === env.expenseIds[0])?.name;
   };
 
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -654,7 +678,7 @@ const BudgetPage: React.FC = () => {
               // real spend this month (keeps the list quiet for non-syncers). When
               // several expenses share a category, the shared bar renders once,
               // under the first of them.
-              const envelope = isCategoryKey(expense.category) ? reconciliation.byCategory.get(expense.category) : undefined;
+              const envelope = reconciliation.byExpenseId.get(expense.id);
               const showEnvelope = !!envelope && envelope.actual > 0 && envelope.expenseIds[0] === expense.id;
               return (
               <div key={expense.id} className="py-3 border-b border-[var(--border)] last:border-0">

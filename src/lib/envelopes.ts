@@ -18,11 +18,15 @@ export type EnvelopeStatus = 'under' | 'near' | 'over';
 export const NEAR_THRESHOLD = 0.85;
 
 export interface Envelope {
-  category: CategoryKey;
+  /** Unique key: `exp:<id>` for a pattern (match) envelope, else the category. */
+  key: string;
+  category?: CategoryKey;   // set for category-linked envelopes
+  match?: string;           // set (lowercased) for pattern envelopes
+  name?: string;            // fixed-expense name (for pattern envelopes / display)
   /** Fixed expenses feeding this envelope (usually one; summed when several). */
   expenseIds: string[];
   budgeted: number;       // sum of the linked fixed-expense amounts
-  actual: number;         // month-to-date expense spend in the category
+  actual: number;         // month-to-date expense spend matched to this envelope
   remaining: number;      // budgeted - actual (negative when overspent)
   overspent: number;      // max(0, actual - budgeted) — spills into discretionary
   unused: number;         // max(0, budgeted - actual) — returns to surplus
@@ -30,10 +34,14 @@ export interface Envelope {
 }
 
 export interface Reconciliation {
-  /** One envelope per distinct linked category, biggest budget first. */
+  /** All envelopes (pattern + category), biggest budget first. */
   envelopes: Envelope[];
-  byCategory: Map<CategoryKey, Envelope>;
-  envelopedCategories: Set<CategoryKey>;
+  byCategory: Map<CategoryKey, Envelope>;    // category envelopes only
+  byExpenseId: Map<string, Envelope>;        // fixed-expense id → its envelope
+  envelopedCategories: Set<CategoryKey>;     // categories covered by a category envelope
+  /** Pattern → envelope key, in priority order (used to resolve a tx's envelope). */
+  matchers: { match: string; key: string }[];
+  budgetByKey: Map<string, number>;          // envelope key → budgeted (for the ledger)
   totals: {
     budgeted: number;
     actual: number;
@@ -49,43 +57,98 @@ function statusFor(budgeted: number, actual: number): EnvelopeStatus {
 }
 
 /**
- * Reconcile linked fixed expenses against a month's transactions. Envelopes are
- * keyed by category, so several fixed expenses linked to the same category fold
- * into one envelope whose budget is their sum (no double representation).
+ * The envelope a transaction belongs to, or undefined. A pattern (`match`)
+ * envelope wins over a category envelope — that's what makes "Ruter → the Ruter
+ * line" precise instead of drawing down every Transport transaction. Income
+ * never draws an envelope.
+ */
+export function envelopeKeyForTx(tx: DailyTransaction, rec: Pick<Reconciliation, 'matchers' | 'envelopedCategories'>): string | undefined {
+  if (tx.kind === 'income') return undefined;
+  if (rec.matchers.length) {
+    const hay = ` ${tx.merchant ?? ''} ${tx.description ?? ''} `.toLowerCase();
+    for (const m of rec.matchers) if (m.match && hay.includes(m.match)) return m.key;
+  }
+  if (isCategoryKey(tx.category) && rec.envelopedCategories.has(tx.category)) return tx.category;
+  return undefined;
+}
+
+/**
+ * Reconcile linked fixed expenses against a month's transactions. A fixed
+ * expense with a `match` pattern gets its own envelope drawn down only by
+ * matching transactions; otherwise a `category` link folds fixed expenses of the
+ * same category into one shared envelope. Pattern-matched transactions are
+ * removed from their category envelope's actuals so nothing is counted twice.
  */
 export function reconcile(
   fixedExpenses: FixedExpense[],
   transactions: DailyTransaction[],
   monthKey: string,
 ): Reconciliation {
-  // Sum the budgeted amount per linked category.
+  const budgetByKey = new Map<string, number>();
+  const byExpenseId = new Map<string, Envelope>();
+  const matchers: { match: string; key: string }[] = [];
+
+  // 1. Pattern envelopes (fixed expenses with a `match`).
+  const patternEnvelopes: Envelope[] = [];
+  for (const e of fixedExpenses) {
+    const m = (e.match ?? '').trim().toLowerCase();
+    if (!m) continue;
+    const key = `exp:${e.id}`;
+    const env: Envelope = {
+      key, match: m, name: e.name, expenseIds: [e.id],
+      budgeted: e.amount, actual: 0, remaining: e.amount, overspent: 0, unused: e.amount, status: 'under',
+    };
+    patternEnvelopes.push(env);
+    byExpenseId.set(e.id, env);
+    matchers.push({ match: m, key });
+    budgetByKey.set(key, e.amount);
+  }
+
+  // 2. Category envelopes (fixed expenses with a category and no `match`).
   const budgetByCat = new Map<CategoryKey, { budgeted: number; expenseIds: string[] }>();
   for (const e of fixedExpenses) {
+    if ((e.match ?? '').trim()) continue; // a pattern already claims this expense
     if (!isCategoryKey(e.category)) continue;
     const entry = budgetByCat.get(e.category) ?? { budgeted: 0, expenseIds: [] };
     entry.budgeted += e.amount;
     entry.expenseIds.push(e.id);
     budgetByCat.set(e.category, entry);
   }
+  const envelopedCategories = new Set(budgetByCat.keys());
+  for (const [category, { budgeted }] of budgetByCat) budgetByKey.set(category, budgeted);
 
-  const spent = new Map(spendByCategory(transactions, monthKey).map((r) => [r.category, r.amount]));
+  // 3. Sum each envelope's actual by resolving every month expense to its key.
+  const rec = { matchers, envelopedCategories };
+  const actualByKey = new Map<string, number>();
+  for (const tx of transactions) {
+    if (tx.kind === 'income' || !tx.date.startsWith(monthKey)) continue;
+    const key = envelopeKeyForTx(tx, rec);
+    if (key) actualByKey.set(key, (actualByKey.get(key) ?? 0) + tx.amount);
+  }
+
+  const finalize = (env: Envelope): Envelope => {
+    const actual = actualByKey.get(env.key) ?? 0;
+    return {
+      ...env, actual,
+      remaining: env.budgeted - actual,
+      overspent: Math.max(0, actual - env.budgeted),
+      unused: Math.max(0, env.budgeted - actual),
+      status: statusFor(env.budgeted, actual),
+    };
+  };
 
   const envelopes: Envelope[] = [];
   const byCategory = new Map<CategoryKey, Envelope>();
+  for (const env of patternEnvelopes) {
+    const final = finalize(env);
+    envelopes.push(final);
+    byExpenseId.set(env.expenseIds[0], final);
+  }
   for (const [category, { budgeted, expenseIds }] of budgetByCat) {
-    const actual = spent.get(category) ?? 0;
-    const env: Envelope = {
-      category,
-      expenseIds,
-      budgeted,
-      actual,
-      remaining: budgeted - actual,
-      overspent: Math.max(0, actual - budgeted),
-      unused: Math.max(0, budgeted - actual),
-      status: statusFor(budgeted, actual),
-    };
-    envelopes.push(env);
-    byCategory.set(category, env);
+    const final = finalize({ key: category, category, expenseIds, budgeted, actual: 0, remaining: budgeted, overspent: 0, unused: budgeted, status: 'under' });
+    envelopes.push(final);
+    byCategory.set(category, final);
+    for (const id of expenseIds) byExpenseId.set(id, final);
   }
   envelopes.sort((a, b) => b.budgeted - a.budgeted);
 
@@ -99,7 +162,7 @@ export function reconcile(
     { budgeted: 0, actual: 0, overspent: 0, unused: 0 },
   );
 
-  return { envelopes, byCategory, envelopedCategories: new Set(byCategory.keys()), totals };
+  return { envelopes, byCategory, byExpenseId, envelopedCategories, matchers, budgetByKey, totals };
 }
 
 // Expense-name keywords → the category they most likely collide with. Tuned to
@@ -156,7 +219,7 @@ export function suggestEnvelopeLinks(
   const suggestions: EnvelopeSuggestion[] = [];
   const claimed = new Set<CategoryKey>();
   for (const e of fixedExpenses) {
-    if (isCategoryKey(e.category)) continue; // already an envelope
+    if (isCategoryKey(e.category) || (e.match ?? '').trim()) continue; // already an envelope
     const category = suggestCategoryForExpenseName(e.name);
     if (!category || alreadyLinked.has(category) || claimed.has(category)) continue;
     const amount = spent.get(category) ?? 0;
@@ -185,19 +248,18 @@ export interface EnvelopeDraw {
  * draws nothing (handled separately by the loop).
  */
 export function createEnvelopeLedger(reconciliation: Reconciliation) {
-  const budgets = new Map<CategoryKey, number>();
-  for (const e of reconciliation.envelopes) budgets.set(e.category, e.budgeted);
-  const used = new Map<CategoryKey, number>();
+  const used = new Map<string, number>();
   return {
     draw(tx: DailyTransaction): EnvelopeDraw {
       if (tx.kind === 'income') return { covered: 0, spillover: 0 };
-      if (!isCategoryKey(tx.category) || !budgets.has(tx.category)) {
+      const key = envelopeKeyForTx(tx, reconciliation);
+      if (!key || !reconciliation.budgetByKey.has(key)) {
         return { covered: 0, spillover: tx.amount };
       }
-      const budget = budgets.get(tx.category)!;
-      const before = used.get(tx.category) ?? 0;
+      const budget = reconciliation.budgetByKey.get(key)!;
+      const before = used.get(key) ?? 0;
       const covered = Math.max(0, Math.min(tx.amount, budget - before));
-      used.set(tx.category, before + tx.amount);
+      used.set(key, before + tx.amount);
       return { covered, spillover: tx.amount - covered };
     },
   };
