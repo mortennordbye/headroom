@@ -1,18 +1,19 @@
 import { useMemo, useState } from 'react';
 import { format, subMonths } from 'date-fns';
 import { ChevronRight, TrendingUp, TrendingDown, Circle, Wallet } from 'lucide-react';
-import { useFinance } from '../context/FinanceContext';
+import { useFinance, type DailyTransaction } from '../context/FinanceContext';
 import { categoryMeta, isCategoryKey } from '../lib/categories';
 import { categoryMoM } from '../lib/categoryStats';
+import { txDisplayName } from '../lib/labelRules';
 import { DeltaChip } from './ui/DeltaChip';
 
 // Category dashboard for the selected month: spend per category with icon +
 // colour + share bar, a month-over-month chip, and click-to-drill into the
 // category's transactions. Reads everything from context (month, transactions).
-export function CategoryBreakdown() {
+export function CategoryBreakdown({ onEditTransaction }: { onEditTransaction?: (tx: DailyTransaction) => void } = {}) {
   // Spending analysis honors the Budget page's per-account filter (and drops
   // internal transfers) via visibleBudgetTransactions.
-  const { t, currentMonth, visibleBudgetTransactions: dailyTransactions, formatCurrency, reconciliation } = useFinance();
+  const { t, currentMonth, visibleBudgetTransactions: dailyTransactions, labelRules, formatCurrency, reconciliation } = useFinance();
   const [open, setOpen] = useState<string | null>(null);
 
   const monthKey = format(currentMonth, 'yyyy-MM');
@@ -93,10 +94,16 @@ export function CategoryBreakdown() {
               <ul className="mt-2 mb-1 ml-[27px] flex flex-col gap-1">
                 {txForCategory(r.category).map((tx) => (
                   <li key={tx.id} className="flex items-center justify-between text-[12px]" style={{ color: 'var(--text-2)' }}>
-                    <span className="truncate flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={onEditTransaction ? () => onEditTransaction(tx) : undefined}
+                      disabled={!onEditTransaction}
+                      title={onEditTransaction ? t.budgetPage.relabelHint : undefined}
+                      className={`truncate flex items-center gap-2 text-left ${onEditTransaction ? 'hover:text-[var(--accent)] transition-colors cursor-pointer' : 'cursor-default'}`}
+                    >
                       <span className="font-mono text-[10px] text-[var(--text-3)] tabular-nums">{tx.date.slice(8, 10)}.</span>
-                      <span className="truncate text-[var(--text-1)]">{tx.description}</span>
-                    </span>
+                      <span className="truncate text-[var(--text-1)]">{txDisplayName(tx, labelRules)}</span>
+                    </button>
                     <span className="font-mono tabular-nums shrink-0">{formatCurrency(tx.amount)}</span>
                   </li>
                 ))}

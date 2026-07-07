@@ -14,6 +14,7 @@ import {
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
 import { accountGroupKey } from '../lib/account';
+import { txDisplayName } from '../lib/labelRules';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
@@ -154,6 +155,8 @@ const BudgetPage: React.FC = () => {
     setAccountFilter,
     internalTransferIds,
     addCategoryRule,
+    labelRules,
+    addLabelRule,
     formatCurrency,
     formatCurrencyShort,
   } = useFinance();
@@ -328,9 +331,13 @@ const BudgetPage: React.FC = () => {
             ? { ...tx, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, categorySource: vals.category.trim() ? 'manual' : undefined, kind: vals.kind === 'income' ? 'income' : 'expense' }
             : tx
           ));
-          // Remember: create a rule so all matching rows (past + future) get this category.
-          if (vals.rememberRule === 'true' && vals.ruleMatch.trim() && isCategoryKey(vals.category.trim())) {
-            addCategoryRule(vals.ruleMatch.trim(), vals.category.trim() as CategoryKey);
+          // Remember: create rules so matching rows (past + future) inherit only
+          // what you actually changed here — the category and/or the custom name.
+          if (vals.rememberRule === 'true' && vals.ruleMatch.trim()) {
+            const newCat = vals.category.trim();
+            if (isCategoryKey(newCat) && newCat !== (category ?? '')) addCategoryRule(vals.ruleMatch.trim(), newCat as CategoryKey);
+            const newName = vals.description.trim();
+            if (newName && newName !== description) addLabelRule(vals.ruleMatch.trim(), newName);
           }
           closeModal();
         } else {
@@ -356,7 +363,7 @@ const BudgetPage: React.FC = () => {
       return [
         tx.date,
         t.days[date.getDay()],
-        `"${tx.description.replace(/"/g, '""')}"`,
+        `"${txDisplayName(tx, labelRules).replace(/"/g, '""')}"`,
         tx.category ? `"${isCategoryKey(tx.category) ? t.categoryLabels[tx.category] : tx.category}"` : '',
         tx.amount.toString(),
       ];
@@ -719,7 +726,7 @@ const BudgetPage: React.FC = () => {
             <span className={sectionLabel}>{t.spendingByCategory}</span>
             {accountFilterSelect}
           </div>
-          <CategoryBreakdown />
+          <CategoryBreakdown onEditTransaction={(tx) => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} />
 
           {/* Multi-month spending trend by category */}
           <div className={`${sectionLabel} pt-5 pb-3 border-t border-[var(--border)]`}>
@@ -823,7 +830,7 @@ const BudgetPage: React.FC = () => {
                       {tx.category && (
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                       )}
-                      <span>{tx.description}</span>
+                      <span>{txDisplayName(tx, labelRules)}</span>
                       {isTransfer && <ArrowLeftRight size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.internalTransfer} />}
                       <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
@@ -886,7 +893,7 @@ const BudgetPage: React.FC = () => {
                           {tx.category && (
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                           )}
-                          <span>{tx.description}</span>
+                          <span>{txDisplayName(tx, labelRules)}</span>
                           {isTransfer && <ArrowLeftRight size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.internalTransfer} />}
                           <AccountBadge tx={tx} size="xs" />
                           <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>

@@ -10,6 +10,7 @@ import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
 import { AccountBadge } from '../components/AccountBadge';
+import { txDisplayName } from '../lib/labelRules';
 import NetWorthHistoryModal from '../components/NetWorthHistoryModal';
 import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear,
@@ -44,6 +45,7 @@ const DashboardPage: React.FC = () => {
     totalFixedExpenses,
     dailyData,
     dailyTransactions,
+    labelRules,
     monthlyIncomes,
     currentMonth,
     totalEquity,
@@ -878,7 +880,7 @@ const DashboardPage: React.FC = () => {
                       {format(date, 'dd')}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[14px] font-medium truncate">{tx.description}</div>
+                      <div className="text-[14px] font-medium truncate">{txDisplayName(tx, labelRules)}</div>
                       <div className="text-[11px] flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
                         {format(date, 'EEEE, dd MMM')}
                         <AccountBadge tx={tx} size="xs" />
