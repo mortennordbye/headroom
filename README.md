@@ -14,9 +14,11 @@ Track monthly budgets with variable-income support, fixed expenses, a daily tran
 
 Assets covers your investment portfolio, property equity, crypto, and cash reserves with tax-aware calculations and a 15-year growth projection. The loan calculator handles first-time buyer, homeowner, and buy-and-sell scenarios with full amortization schedules and tax benefit calculations. Supports NOK, USD, or any custom currency, and ships with full Norwegian and English translations.
 
-## Quick start
+## Run it on your laptop
 
-**Using the pre-built image** — the fastest way, no clone required:
+Headroom is happiest as a small private app on your own machine. The only thing you need is **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (free, Mac/Windows/Linux) — no accounts, no cloud, no config files. Your data lives on your laptop and never leaves it.
+
+**Option A — pre-built image (recommended, no clone, nothing to build):**
 
 ```bash
 docker run -d \
@@ -27,7 +29,7 @@ docker run -d \
   ghcr.io/mortennordbye/headroom:latest
 ```
 
-**Building from source** — requires [Docker](https://docs.docker.com/get-docker/) and [Make](https://www.gnu.org/software/make/):
+**Option B — build from source** (if you want to modify it; also needs [Make](https://www.gnu.org/software/make/)):
 
 ```bash
 git clone https://github.com/mortennordbye/headroom.git
@@ -35,11 +37,42 @@ cd headroom
 make build
 ```
 
-Open http://localhost:8080.
+Either way, open **http://localhost:8080** and you're done — **no config files, no environment variables required.**
 
-That's the whole setup — **no config files, no environment variables required.** Your data persists in the `headroom_data` volume across restarts and image upgrades. The container fixes its own storage permissions on startup, so persistent storage works out of the box with a Docker volume, a bind mount, NFS, or a Kubernetes PVC.
+- The `--restart unless-stopped` flag (and `make up`) means it comes back automatically after you reboot your laptop, so it's always there when you open the browser.
+- Everything you enter is saved in the **`headroom_data`** volume on your machine. It survives restarts, reboots, and updates (see [Updating](#updating) and [Data persistence](#data-persistence)).
 
-**Running it on a server / behind a reverse proxy?** Just change the port binding (`-p 8080:3001` for all interfaces, or map it into your proxy) — nothing else is needed. See [Security](#security) before exposing it beyond localhost.
+**Later, want it on a home server or another device?** Change the port binding (`-p 8080:3001` for all interfaces, or map it into a reverse proxy) — nothing else changes. Read [Security](#security) first: there's no login, so don't expose it to the open internet without a proxy or VPN in front.
+
+## Updating
+
+New versions never touch your data — it's in the `headroom_data` volume, separate from the app. To move to a newer version:
+
+**Option A — pre-built image:**
+
+```bash
+docker pull ghcr.io/mortennordbye/headroom:latest   # get the new version
+docker rm -f headroom                                # remove the old container (NOT the volume)
+docker run -d \
+  --name headroom \
+  -p 127.0.0.1:8080:3001 \
+  -v headroom_data:/data \
+  --restart unless-stopped \
+  ghcr.io/mortennordbye/headroom:latest              # start the new one, same volume
+```
+
+**Option B — from source:**
+
+```bash
+git pull
+make build
+```
+
+Because you re-attach the same `-v headroom_data:/data` volume (Option A) or reuse the same Docker Compose volume (Option B, via `make build`), **all your budgets, transactions, and settings carry over untouched.** Only `docker-compose down -v` or deleting the volume by hand ever removes data.
+
+> **Tip:** before a big update, it costs nothing to take a snapshot first — `make backup`, or **Settings → Export** in the app (see [Data persistence](#data-persistence)).
+
+> **Browser shows an old version after updating?** The app is a PWA and caches itself. Accept the "new version available" prompt, or hard-reload (Cmd/Ctrl+Shift+R). Your data is unaffected — this is only the UI cache.
 
 ## Commands
 
@@ -52,6 +85,8 @@ That's the whole setup — **no config files, no environment variables required.
 | `make backup` | Copy the SQLite database to `./backups/` (timestamped) |
 
 ## Local development (without Docker)
+
+_For contributors hacking on the code — if you just want to **use** Headroom on your laptop, use [Run it on your laptop](#run-it-on-your-laptop) above instead._
 
 For iterating on the frontend you can run the API and Vite dev server directly:
 
@@ -89,13 +124,30 @@ All optional — the defaults are sensible and nothing needs to be set.
 
 ## Data persistence
 
-All data lives in a named Docker volume (`headroom_data`). Running `make down` keeps your data intact. To wipe everything:
+Everything you enter lives in one SQLite database inside the named Docker volume **`headroom_data`** on your machine — there is no browser storage and nothing in the cloud. The volume is independent of the container, which is what makes your data stick around.
 
-```bash
-docker-compose down -v
-```
+**Your data survives:**
+- Stopping/starting the app (`make down` / `make up`, or `docker stop`/`start`)
+- Rebooting your laptop
+- Updating to a new version (see [Updating](#updating))
 
-**Backups.** The volume is the only copy of your data. Run `make backup` to copy the SQLite file to `./backups/` (gitignored), or use the JSON export in Settings. Restore by copying a backup back into the volume (`docker cp backups/<file>.sqlite headroom:/data/database.sqlite && make restart`).
+**Your data is only removed if you explicitly delete it:**
+- `docker-compose down -v` (the `-v` deletes the volume), or
+- `docker volume rm headroom_data`
+
+### Backups
+
+The volume is the only live copy, so keep a backup — two easy options:
+
+1. **In-app export (best, portable).** **Settings → Export** downloads your entire state as a single JSON file. This is the safest backup: it's independent of Docker, survives losing the volume, and can be imported on a fresh install or a different machine via **Settings → Import**. Because it holds your full accumulated transaction history, an occasional export is a complete backup.
+2. **Database snapshot.** `make backup` copies the SQLite file to `./backups/` (timestamped, gitignored).
+
+### Restore
+
+- From a JSON export: open the app and use **Settings → Import**.
+- From a SQLite snapshot: `docker cp backups/<file>.sqlite headroom:/data/database.sqlite && make restart` (for the pre-built image, replace `make restart` with `docker restart headroom`).
+
+> Bank sync only reaches ~90 days back per fetch, but stored transactions are never dropped — they accumulate as you keep syncing. So your history keeps growing on your machine, and an export captures all of it. Sync regularly (don't leave gaps longer than ~90 days) and export now and then, and you have a durable, ever-growing record.
 
 ## Tech stack
 
