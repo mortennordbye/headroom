@@ -35,6 +35,7 @@
   --brass: #C9A24A;         /* headline totals, active nav, warnings — never decorative */
   --brass-dim: #8C7A45;
   --rust: #B5533A;          /* debt, negative values, risk */
+  --rust-dim: #9c4632;      /* darker rust for danger-button hover (matches --forest-dim pattern) */
 
   /* ── Legacy aliases (map old names → old-money palette) ── */
   --bg-page: var(--bg);
@@ -62,6 +63,15 @@
   --accent-bg: color-mix(in srgb, var(--accent) 14%, transparent);
   --violet-bg: color-mix(in srgb, var(--violet) 14%, transparent);
   --pink-bg: color-mix(in srgb, var(--pink) 14%, transparent);
+
+  /* Neutral white-tint surface overlays (raised rows, inputs, hover). Numbered
+     by increasing opacity; kept as tokens so the levels don't drift. Dark-only
+     theme, so a single white-alpha value per level is correct. */
+  --surface-1: rgba(255,255,255,0.025);
+  --surface-2: rgba(255,255,255,0.03);
+  --surface-3: rgba(255,255,255,0.04);
+  --surface-4: rgba(255,255,255,0.05);
+  --surface-5: rgba(255,255,255,0.06);
 
   /* Chart roles — max ~4 hues + neutral "Annet"; group the rest, never add a 5th color. */
   --chart-1: var(--forest);

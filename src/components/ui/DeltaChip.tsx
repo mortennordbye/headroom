@@ -19,7 +19,7 @@ const toneStyle: Record<Tone, { bg: string; color: string }> = {
   accent: { bg: 'var(--accent-bg)', color: 'var(--accent)' },
   violet: { bg: 'var(--violet-bg)', color: 'var(--violet)' },
   pink: { bg: 'var(--pink-bg)', color: 'var(--pink)' },
-  muted: { bg: 'rgba(255,255,255,0.06)', color: 'var(--text-2)' },
+  muted: { bg: 'var(--surface-5)', color: 'var(--text-2)' },
 };
 
 export function DeltaChip({

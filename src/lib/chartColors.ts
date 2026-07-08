@@ -16,6 +16,7 @@ export const CHART = {
   rule: '#262A20',         // --rule / --border
   grid: 'rgba(236,231,216,0.06)',
   track: 'rgba(236,231,216,0.05)',
+  surface2: 'rgba(255,255,255,0.03)', // --surface-2 (tooltip cursor fill; SVG can't resolve var())
 } as const;
 
 // Categorical series colour order (matches the 4 category hues + accents).

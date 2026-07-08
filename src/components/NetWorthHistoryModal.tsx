@@ -102,7 +102,7 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
                       onBlur={(e) => commit(p.monthKey, e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                       className="flex-1 min-w-0 h-9 px-3 rounded-[8px] text-[13px] font-mono outline-none border focus:ring-2 focus:ring-[var(--positive)]"
-                      style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+                      style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
                     />
                     <ProvenanceBadge kind={p.estimated ? 'estimate' : 'custom'} />
                     <button
