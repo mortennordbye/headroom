@@ -371,7 +371,11 @@ app.post('/api/bank/config', (req, res) => {
 app.post('/api/bank/link', async (req, res) => {
   try {
     const aspsp = req.body && req.body.aspsp;
-    res.json(await bank.startLink(typeof aspsp === 'string' ? aspsp : undefined));
+    const connectionId = req.body && req.body.connectionId;
+    res.json(await bank.startLink(
+      typeof aspsp === 'string' ? aspsp : undefined,
+      typeof connectionId === 'string' ? connectionId : undefined,
+    ));
   } catch (err) {
     console.error('[bank] link failed:', err.message);
     res.status(500).json({ error: err.message });

@@ -38,7 +38,7 @@ export function dropStaleBareTwins(txs: MappedTransaction[]): MappedTransaction[
 export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string; iban?: string };
 
 export function getAspsps(): Promise<{ name: string; country?: string; logo: string | null }[]>;
-export function startLink(bankName?: string): Promise<{ url: string }>;
+export function startLink(bankName?: string, connectionId?: string): Promise<{ url: string }>;
 export function finishLink(code: string, state: string): Promise<{ accounts: number }>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getStatus(): Record<string, any>;

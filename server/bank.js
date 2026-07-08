@@ -157,12 +157,14 @@ async function listAspsps() {
   return aspsps;
 }
 
-// Resolve a bank by exact name (from the picker). With no name, fall back to the
-// historical Bank Norwegian default so old callers keep working.
+// Resolve a bank by exact name (from the picker). A name is required — there is
+// no default bank; re-linking a legacy connection with an unknown aspsp goes
+// through the picker (the client passes its connectionId, see startLink).
 async function resolveAspsp(name) {
+  if (!name) throw new Error('bank name required');
   const aspsps = await listAspsps();
-  const found = name ? aspsps.find((a) => a.name === name) : aspsps.find((a) => /norwegian/i.test(a.name));
-  if (!found) throw new Error(name ? `ASPSP not found: ${name}` : `No default ASPSP in ${COUNTRY}`);
+  const found = aspsps.find((a) => a.name === name);
+  if (!found) throw new Error(`ASPSP not found: ${name}`);
   return found.name;
 }
 
@@ -201,16 +203,19 @@ function writeStore(store) {
   fs.writeFileSync(SESSION_PATH, JSON.stringify(store, null, 2));
 }
 
-// Read the session store, transparently migrating the legacy single-session
-// shape ({ session_id, accounts, ... }) into the multi-connection shape
+// Read the session store, migrating the legacy single-session shape
+// ({ session_id, accounts, ... }) into the multi-connection shape
 // ({ connections: [...] }). The migrated connection keeps the bare `eb-` id
 // prefix so already-imported rows still match on the next sync (no duplicates).
+// The migration is written back to disk immediately, so it runs once instead of
+// on every read; a migrated connection may still have `aspsp: null` (the legacy
+// store didn't record the bank) until the user re-links it via the picker.
 function readStore() {
   const raw = readJson(SESSION_PATH);
   if (!raw) return { connections: [] };
   if (Array.isArray(raw.connections)) return raw;
   if (raw.session_id) {
-    return {
+    const migrated = {
       connections: [
         {
           id: raw.id || 'legacy',
@@ -226,6 +231,9 @@ function readStore() {
         },
       ],
     };
+    writeStore(migrated);
+    console.log('[bank] migrated legacy single-session store to connections[]');
+    return migrated;
   }
   return { connections: [] };
 }
@@ -396,8 +404,11 @@ function markRelink(connId, reason) {
  * Start the BankID flow for a bank; returns the redirect url for the browser.
  * Re-linking a bank that's already connected reuses its connection id and id
  * prefix so its stored rows keep matching (no duplicates on the next sync).
+ * An explicit connectionId (re-linking a migrated legacy connection whose
+ * aspsp is unknown) wins over the aspsp match; finishLink then stamps the
+ * chosen bank onto that connection, backfilling the missing aspsp.
  */
-async function startLink(bankName) {
+async function startLink(bankName, relinkConnectionId) {
   const redirectUrl = getRedirect();
   if (!redirectUrl) throw new Error('redirect URL not set (add it in Settings and register it on the EB app)');
   const aspspName = await resolveAspsp(bankName);
@@ -405,8 +416,9 @@ async function startLink(bankName) {
   // Reuse the id/prefix of a live connection to this bank, or of a removed one
   // (tombstoned by removeConnection) — the ledger keeps its rows on disconnect,
   // so a fresh prefix would re-import the 90-day history as duplicates.
-  const existing = store.connections.find((c) => c.aspsp === aspspName)
-    || (store.removed || []).find((c) => c.aspsp === aspspName);
+  const match = relinkConnectionId ? (c) => c.id === relinkConnectionId : (c) => c.aspsp === aspspName;
+  const existing = store.connections.find(match)
+    || (store.removed || []).find(match);
   const connectionId = existing ? existing.id : crypto.randomUUID();
   const idPrefix = existing ? existing.idPrefix : `${EB_ID_PREFIX}${connectionId.slice(0, 8)}-`;
   const state = crypto.randomUUID();

@@ -57,6 +57,10 @@ export function BankSyncCard() {
   const [savingCfg, setSavingCfg] = useState(false);
   const [redirectInput, setRedirectInput] = useState('');
   const [adding, setAdding] = useState(false);
+  // Set when the picker was opened to re-link a legacy connection whose bank is
+  // unknown (aspsp null); sent along so the server reuses that connection's
+  // id/prefix and backfills the chosen bank instead of minting a duplicate.
+  const [relinkId, setRelinkId] = useState<string | null>(null);
   const [aspsps, setAspsps] = useState<{ name: string }[] | null>(null);
   const [selectedBank, setSelectedBank] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -146,14 +150,14 @@ export function BankSyncCard() {
   };
 
   // Start BankID for a specific bank (or re-link an existing one).
-  const connect = async (aspsp?: string) => {
+  const connect = async (aspsp?: string, connectionId?: string) => {
     setBusy('connecting');
     setMessage('');
     try {
       const res = await fetch('/api/bank/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(aspsp ? { aspsp } : {}),
+        body: JSON.stringify({ ...(aspsp ? { aspsp } : {}), ...(connectionId ? { connectionId } : {}) }),
       });
       const data = await res.json();
       if (!res.ok || !data.url) {
@@ -168,8 +172,10 @@ export function BankSyncCard() {
     }
   };
 
-  // Reveal the bank picker and load the list.
-  const startAdd = async () => {
+  // Reveal the bank picker and load the list. With a connection id, the picker
+  // re-links that connection (legacy aspsp-less store) instead of adding a bank.
+  const startAdd = async (relinkConnectionId?: string) => {
+    setRelinkId(relinkConnectionId ?? null);
     setAdding(true);
     setMessage('');
     if (aspsps) return;
@@ -324,9 +330,9 @@ export function BankSyncCard() {
   const connectionRow = (c: BankConnection) => (
     <div key={c.id} className="rounded-[8px] border p-3 space-y-1" style={{ borderColor: 'var(--border)' }}>
       <div className="flex items-center justify-between gap-2">
-        <div className={`${row} font-medium`}>{c.aspsp}</div>
+        <div className={`${row} font-medium`}>{c.aspsp || b.unknownBank}</div>
         <div className="flex gap-2 shrink-0">
-          <Button variant="secondary" size="sm" disabled={busy !== 'idle'} onClick={() => connect(c.aspsp || undefined)}>
+          <Button variant="secondary" size="sm" disabled={busy !== 'idle'} onClick={() => (c.aspsp ? connect(c.aspsp, c.id) : startAdd(c.id))}>
             {busy === 'connecting' ? b.connecting : b.relink}
           </Button>
           {confirmingId === c.id ? (
@@ -379,13 +385,13 @@ export function BankSyncCard() {
           ))
         )}
       </select>
-      <Button variant="primary" size="sm" disabled={busy !== 'idle' || !selectedBank} onClick={() => connect(selectedBank)}>
+      <Button variant="primary" size="sm" disabled={busy !== 'idle' || !selectedBank} onClick={() => connect(selectedBank, relinkId ?? undefined)}>
         {busy === 'connecting' ? b.connecting : b.connect}
       </Button>
-      <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>{b.cancel}</Button>
+      <Button variant="ghost" size="sm" onClick={() => { setAdding(false); setRelinkId(null); }}>{b.cancel}</Button>
     </div>
   ) : (
-    <Button variant="secondary" size="sm" leadingIcon={<Plus size={14} />} disabled={busy !== 'idle'} onClick={startAdd}>
+    <Button variant="secondary" size="sm" leadingIcon={<Plus size={14} />} disabled={busy !== 'idle'} onClick={() => startAdd()}>
       {b.addBank}
     </Button>
   );
