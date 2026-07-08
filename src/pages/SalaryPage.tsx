@@ -42,6 +42,7 @@ import ChartTooltip from '../components/ChartTooltip';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
 import { salaryAt, hoursAt } from '../lib/salary';
+import { formatSignedPct } from '../lib/format';
 import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
@@ -764,28 +765,28 @@ const SalaryPage: React.FC = () => {
         />
         <SummaryTile
           label={t.salary.cumulativeGrowth}
-          value={`${cumulativeGrowthPct >= 0 ? '+' : ''}${cumulativeGrowthPct.toFixed(1)}%`}
+          value={formatSignedPct(cumulativeGrowthPct)}
           sub={first ? `${t.salary.growthSinceFirst} ${first.month}` : ''}
           color={cumulativeGrowthPct >= 0 ? 'var(--positive)' : 'var(--negative)'}
         />
         {isGeneric ? (
           <SummaryTile
             label={t.salaryPage.yoySalary}
-            value={yoy ? `${yoy.salary >= 0 ? '+' : ''}${yoy.salary.toFixed(1)}%` : '—'}
+            value={formatSignedPct(yoy?.salary)}
             sub={first ? `${t.salary.growthSinceFirst} ${first.month}` : ''}
             color={yoy && yoy.salary >= 0 ? 'var(--positive)' : yoy ? 'var(--negative)' : undefined}
           />
         ) : (
           <SummaryTile
             label={t.salary.yoyVsInflation}
-            value={yoy ? `${yoy.salary >= 0 ? '+' : ''}${yoy.salary.toFixed(1)}%` : '—'}
-            sub={yoy ? `KPI ${yoy.cpi >= 0 ? '+' : ''}${yoy.cpi.toFixed(1)}%` : ''}
+            value={formatSignedPct(yoy?.salary)}
+            sub={yoy ? `KPI ${formatSignedPct(yoy.cpi)}` : ''}
             chip={yoyChip != null ? (
               <span
                 className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold"
                 style={{ color: chipColor, background: chipBg }}
               >
-                {yoyChip >= 0 ? '+' : ''}{yoyChip.toFixed(1)}pp · {yoyChip >= 0 ? t.salary.beatsCpi : t.salary.losesCpi}
+                {formatSignedPct(yoyChip, 1, 'pp')} · {yoyChip >= 0 ? t.salary.beatsCpi : t.salary.losesCpi}
               </span>
             ) : undefined}
           />
@@ -962,7 +963,7 @@ const SalaryPage: React.FC = () => {
                 {yoyByYear.map((row) => (
                   <Cell key={row.year} fill={row.gap >= 0 ? 'var(--positive)' : 'var(--negative)'} />
                 ))}
-                <LabelList dataKey="gap" position="top" formatter={(v) => `${Number(v ?? 0) >= 0 ? '+' : ''}${Number(v ?? 0).toFixed(1)}pp`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--text-1)' }} />
+                <LabelList dataKey="gap" position="top" formatter={(v) => formatSignedPct(Number(v ?? 0), 1, 'pp')} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--text-1)' }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -992,16 +993,16 @@ const SalaryPage: React.FC = () => {
                   <tr key={row.year} className="border-t border-[var(--border)]">
                     <td className="py-2 pr-3 font-mono font-semibold text-[var(--text-1)]">{row.year}</td>
                     <td className="py-2 px-2 font-mono text-right" style={{ color: 'var(--accent)' }}>
-                      {row.salaryPct >= 0 ? '+' : ''}{row.salaryPct.toFixed(1)}%
+                      {formatSignedPct(row.salaryPct)}
                     </td>
                     <td className="py-2 px-2 font-mono text-right" style={{ color: 'var(--violet)' }}>
-                      {row.cpiPct >= 0 ? '+' : ''}{row.cpiPct.toFixed(1)}%
+                      {formatSignedPct(row.cpiPct)}
                     </td>
                     <td
                       className="py-2 pl-2 font-mono font-semibold text-right"
                       style={{ color: row.gap >= 0 ? 'var(--positive)' : 'var(--negative)' }}
                     >
-                      {row.gap >= 0 ? '+' : ''}{row.gap.toFixed(1)}pp
+                      {formatSignedPct(row.gap, 1, 'pp')}
                     </td>
                   </tr>
                 ))}
@@ -1213,12 +1214,12 @@ const SalaryPage: React.FC = () => {
                       <span
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap"
                         style={{ color: pctColor, background: pctBg }}
-                        title={gap != null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(1)}pp ${t.salary.vsCpi}` : undefined}
+                        title={gap != null ? `${formatSignedPct(gap, 1, 'pp')} ${t.salary.vsCpi}` : undefined}
                       >
-                        {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
+                        {formatSignedPct(pct)}
                         {gap != null && (
                           <span style={{ color: gap >= 0 ? 'var(--positive)' : 'var(--warning)', opacity: 0.85 }}>
-                            ({gap >= 0 ? '+' : ''}{gap.toFixed(1)} {t.salary.vsCpi})
+                            ({formatSignedPct(gap, 1, '')} {t.salary.vsCpi})
                           </span>
                         )}
                       </span>
@@ -1520,7 +1521,7 @@ const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency 
     ? proposedPct - ctx.cpiRolling12Pct
     : null;
 
-  const fmtPct = (v: number | null) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+  const fmtPct = formatSignedPct;
   const gapColor = (v: number | null) => v == null
     ? 'var(--text-2)'
     : v >= 0 ? 'var(--positive)' : 'var(--warning)';
@@ -1603,13 +1604,13 @@ const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency 
           />
           <SummaryTile
             label={t.salary.realRaiseSinceLabel}
-            value={realVsSince != null ? `${realVsSince >= 0 ? '+' : ''}${realVsSince.toFixed(1)}pp` : '—'}
+            value={formatSignedPct(realVsSince, 1, 'pp')}
             sub={ctx.cpiSincePct != null ? `KPI ${fmtPct(ctx.cpiSincePct)}` : ''}
             color={gapColor(realVsSince)}
           />
           <SummaryTile
             label={t.salary.realRaiseRollingLabel}
-            value={realVsRolling != null ? `${realVsRolling >= 0 ? '+' : ''}${realVsRolling.toFixed(1)}pp` : '—'}
+            value={formatSignedPct(realVsRolling, 1, 'pp')}
             sub={ctx.cpiRolling12Pct != null ? `KPI ${fmtPct(ctx.cpiRolling12Pct)}` : ''}
             color={gapColor(realVsRolling)}
           />

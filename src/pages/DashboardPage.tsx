@@ -28,6 +28,7 @@ import { CHART } from '../lib/chartColors';
 import { buildNetWorthSeries } from '../lib/netWorth';
 import { sumSavings } from '../lib/equity';
 import { sumDiscretionarySpent } from '../lib/spentTotals';
+import { formatSignedPct } from '../lib/format';
 
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
@@ -343,7 +344,7 @@ const DashboardPage: React.FC = () => {
             <SectionLabel icon={<TrendingUp />}>{t.totalEquity}</SectionLabel>
             {netEquityDelta !== null && (
               <DeltaChip tone={netEquityDelta >= 0 ? 'positive' : 'negative'} showArrow>
-                {(netEquityDelta >= 0 ? '+' : '') + netEquityDelta.toFixed(1)}% MoM
+                {formatSignedPct(netEquityDelta)} MoM
               </DeltaChip>
             )}
           </div>
@@ -433,7 +434,7 @@ const DashboardPage: React.FC = () => {
             <SectionLabel icon={<Receipt />}>{t.dashboardPage.monthlyResidual}</SectionLabel>
             {incomeDelta !== null && (
               <DeltaChip tone={incomeDelta >= 0 ? 'positive' : 'negative'} size="sm">
-                {(incomeDelta >= 0 ? '+' : '') + incomeDelta.toFixed(1)}%
+                {formatSignedPct(incomeDelta)}
               </DeltaChip>
             )}
           </div>
@@ -458,7 +459,7 @@ const DashboardPage: React.FC = () => {
             {t.dashboardPage.recommendedSpendingLabel}
             {spendingDelta !== null && (
               <span className="ml-2">
-                · {(spendingDelta >= 0 ? '+' : '') + spendingDelta.toFixed(1)}% {t.vsLastMonth}
+                · {formatSignedPct(spendingDelta)} {t.vsLastMonth}
               </span>
             )}
           </div>
@@ -508,7 +509,7 @@ const DashboardPage: React.FC = () => {
               <div className="text-[24px] font-semibold tabular-nums">{formatCurrency(effectiveIncome)}</div>
               <div className="mt-1">
                 <DeltaChip tone={incomeDiffPct >= 0 ? 'positive' : 'negative'} size="sm">
-                  {incomeDiffPct >= 0 ? '+' : ''}{incomeDiffPct.toFixed(1)}% vs avg
+                  {formatSignedPct(incomeDiffPct)} vs avg
                 </DeltaChip>
               </div>
             </div>

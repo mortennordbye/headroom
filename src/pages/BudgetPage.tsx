@@ -25,6 +25,7 @@ import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
 import { sumLedgerSpent } from '../lib/spentTotals';
+import { formatSignedPct } from '../lib/format';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
@@ -504,7 +505,7 @@ const BudgetPage: React.FC = () => {
           {t.budgetPage.heroTitlePre}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.budgetPage.heroTitleEm}</em>{t.budgetPage.heroTitlePost}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
-          {`${t.budgetPage.incomeIntro}${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${incomeDiffPct >= 0 ? '+' : ''}${incomeDiffPct.toFixed(1)}${t.budgetPage.vsAvgSuffix}` : ''}${t.budgetPage.incomeOutro}`}
+          {`${t.budgetPage.incomeIntro}${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${formatSignedPct(incomeDiffPct, 1, '')}${t.budgetPage.vsAvgSuffix}` : ''}${t.budgetPage.incomeOutro}`}
         </p>
       </header>
 
