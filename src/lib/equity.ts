@@ -32,12 +32,15 @@ export function sumSavings(a: Assets): number {
 // deductible (e.g. an ASK/aksjekonto loss offsets share-income tax at the same
 // rate). Both are contingent-on-selling, so treating them symmetrically is fair.
 export function computeEquityBreakdown(a: Assets): EquityBreakdown {
-  const taxOnGain = (a.unrealizedGain * a.taxRate) / 100;
-  const netInvestment = a.portfolio - taxOnGain;
-  const houseEquity = a.houseValue - a.houseDebt;
-  const cryptoTaxOnGain = (a.cryptoUnrealizedGain * a.cryptoTaxRate) / 100;
-  const netCrypto = a.crypto - cryptoTaxOnGain;
+  // Old balance snapshots are stored verbatim and may predate a field
+  // (cryptoUnrealizedGain, bufferAccount, ...); guard each with ?? 0 so a
+  // missing field can't turn the whole breakdown into NaN.
+  const taxOnGain = ((a.unrealizedGain ?? 0) * (a.taxRate ?? 0)) / 100;
+  const netInvestment = (a.portfolio ?? 0) - taxOnGain;
+  const houseEquity = (a.houseValue ?? 0) - (a.houseDebt ?? 0);
+  const cryptoTaxOnGain = ((a.cryptoUnrealizedGain ?? 0) * (a.cryptoTaxRate ?? 0)) / 100;
+  const netCrypto = (a.crypto ?? 0) - cryptoTaxOnGain;
   const savingsTotal = sumSavings(a);
-  const totalEquity = netInvestment + netCrypto + a.bsu + savingsTotal + a.bufferAccount + houseEquity;
+  const totalEquity = netInvestment + netCrypto + (a.bsu ?? 0) + savingsTotal + (a.bufferAccount ?? 0) + houseEquity;
   return { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, savingsTotal, totalEquity };
 }

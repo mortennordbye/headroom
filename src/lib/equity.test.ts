@@ -65,6 +65,18 @@ describe('computeEquityBreakdown', () => {
     expect(computeEquityBreakdown(withoutScalar).totalEquity).toBe(0);
   });
 
+  it('never yields NaN for an old snapshot missing newer fields', () => {
+    // Snapshots are stored verbatim; one saved before cryptoUnrealizedGain /
+    // bufferAccount existed feeds undefined into the maths.
+    const oldSnapshot = {
+      portfolio: 100_000, unrealizedGain: 20_000, taxRate: 37.84,
+      houseValue: 3_000_000, houseDebt: 2_000_000,
+    } as unknown as Assets;
+    const b = computeEquityBreakdown(oldSnapshot);
+    for (const v of Object.values(b)) expect(Number.isFinite(v)).toBe(true);
+    expect(b.totalEquity).toBeCloseTo(100_000 - 7568 + 1_000_000, 0);
+  });
+
   it('rolls the loss benefit into total equity', () => {
     const flat = computeEquityBreakdown(assets({ portfolio: 100_000 }));
     const withLoss = computeEquityBreakdown(assets({ portfolio: 100_000, unrealizedGain: -10_000, taxRate: 37.84 }));
