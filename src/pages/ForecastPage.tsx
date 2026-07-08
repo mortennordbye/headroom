@@ -7,6 +7,8 @@ import { useFinance } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
+import { calcMonthlyPayment } from '../lib/calculations';
+import { pensionFutureValue } from '../lib/pension';
 import { currentMonthKey } from '../lib/date';
 import { salaryAt } from '../lib/salary';
 
@@ -46,14 +48,8 @@ const ForecastPage: React.FC = () => {
       : 0;
     const otpAnnual = (currentGross + currentOnCall) * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
     const ipsAnnual = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
-    const futureValue = (start: number, contrib: number, rate: number, n: number) => {
-      const r = rate / 100;
-      if (n <= 0) return start;
-      if (Math.abs(r) < 1e-9) return start + contrib * n;
-      return start * Math.pow(1 + r, n) + contrib * (Math.pow(1 + r, n) - 1) / r;
-    };
-    const otpAtRetire = futureValue(pension.otpBalance, otpAnnual, pension.otpGrowthRate, yearsToRetire);
-    const ipsAtRetire = futureValue(pension.ipsBalance, ipsAnnual, pension.ipsGrowthRate, yearsToRetire);
+    const otpAtRetire = pensionFutureValue(pension.otpBalance, otpAnnual, pension.otpGrowthRate, yearsToRetire);
+    const ipsAtRetire = pensionFutureValue(pension.ipsBalance, ipsAnnual, pension.ipsGrowthRate, yearsToRetire);
     return {
       hasBirthYear,
       yearsToRetire,
@@ -78,17 +74,15 @@ const ForecastPage: React.FC = () => {
   // would forecast a hypothetical first-buyer loan instead of their actual one.
   const isHomeowner = housingMode === 'homeowner';
   const startingMortgage = (isHomeowner ? homeowner.currentMortgageBalance : loan.laanebelop) ?? 0;
-  const mortgageRate = ((isHomeowner ? homeowner.rente : loan.rente) ?? 5) / 100;
+  const mortgageRatePct = (isHomeowner ? homeowner.rente : loan.rente) ?? 5;
+  const mortgageRate = mortgageRatePct / 100;
   const mortgageTermYears = (isHomeowner ? homeowner.nedbetalingstid : loan.nedbetalingstid) ?? 25;
-  // Annual mortgage payment = annuitet
-  const annualMortgagePayment = useMemo(() => {
-    if (!startingMortgage || mortgageTermYears <= 0) return 0;
-    const r = mortgageRate;
-    const n = mortgageTermYears;
-    // A 0% rate has no annuity denominator — pay the principal off linearly.
-    if (r <= 0) return startingMortgage / n;
-    return (startingMortgage * r) / (1 - Math.pow(1 + r, -n));
-  }, [startingMortgage, mortgageRate, mortgageTermYears]);
+  // Annual mortgage payment = 12 × the shared monthly annuity, so the forecast
+  // uses the same payment as the Loan page rather than re-deriving it annually.
+  const annualMortgagePayment = useMemo(
+    () => calcMonthlyPayment(startingMortgage, mortgageRatePct, mortgageTermYears) * 12,
+    [startingMortgage, mortgageRatePct, mortgageTermYears],
+  );
 
   // Forecast series
   const projection = useMemo(() => {

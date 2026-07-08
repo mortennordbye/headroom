@@ -183,23 +183,24 @@ const LoanPage: React.FC = () => {
     </span>
   );
 
+  const amortizationSchedule = useMemo(
+    () => calcAmortizationSchedule(loan.laanebelop, loan.rente, loan.nedbetalingstid),
+    [loan.laanebelop, loan.rente, loan.nedbetalingstid]
+  );
+  const chartData = amortizationSchedule.filter((_, i) => i % Math.ceil(amortizationSchedule.length / 15) === 0 || i === amortizationSchedule.length - 1);
+
   // First-buyer calculations
   const calc = useMemo(() => {
-    const monthlyRate = loan.rente / 100 / 12;
     const n = loan.nedbetalingstid * 12;
     // Shared helper (guards term ≤ 0 → 0, avoiding Infinity/NaN); do not inline
     // the annuity formula here — see calculations.ts:calcMonthlyPayment.
     const monthlyPaymentBase = calcMonthlyPayment(loan.laanebelop, loan.rente, loan.nedbetalingstid);
     const monthlyPaymentWithFee = monthlyPaymentBase + loan.termingebyr;
-    const totalInterest = monthlyPaymentBase * n - loan.laanebelop;
+    // Interest from the real amortization schedule, not monthlyPayment × n −
+    // principal, which goes negative when the term is 0 (allowed by the editor).
+    const yearOneInterest = amortizationSchedule[0]?.interestPaid ?? 0;
+    const totalInterest = amortizationSchedule.reduce((s, y) => s + y.interestPaid, 0);
     const totalCost = loan.laanebelop + totalInterest + loan.etableringsgebyr + loan.termingebyr * n;
-    let balance = loan.laanebelop;
-    let yearOneInterest = 0;
-    for (let i = 0; i < 12; i++) {
-      const interest = balance * monthlyRate;
-      yearOneInterest += interest;
-      balance -= (monthlyPaymentBase - interest);
-    }
     const taxDeduction = yearOneInterest * (loan.skattefradragssats / 100);
     // Real Norwegian lending limits: the affordable price is the lower of the
     // 5× income cap and the 15%-equity (85% LTV) cap, plus a +3pp stress test.
@@ -208,13 +209,7 @@ const LoanPage: React.FC = () => {
     );
     const totalpris = loan.betingetLaan + loan.egenkapital;
     return { monthlyPaymentBase, monthlyPaymentWithFee, totalInterest, totalCost, yearOneInterest, taxDeduction, capacity, totalpris };
-  }, [loan, effArslonn, effEgenkapital, effGjeld]);
-
-  const amortizationSchedule = useMemo(
-    () => calcAmortizationSchedule(loan.laanebelop, loan.rente, loan.nedbetalingstid),
-    [loan.laanebelop, loan.rente, loan.nedbetalingstid]
-  );
-  const chartData = amortizationSchedule.filter((_, i) => i % Math.ceil(amortizationSchedule.length / 15) === 0 || i === amortizationSchedule.length - 1);
+  }, [loan, effArslonn, effEgenkapital, effGjeld, amortizationSchedule]);
 
   // Homeowner calculations
   const homeownerStatus = useMemo(

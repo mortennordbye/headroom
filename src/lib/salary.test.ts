@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { salaryAt, hoursAt } from './salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from './salary';
 import type { SalaryEntry, JobEntry, HoursSnapshot } from '../context/FinanceContext';
 
 const sal = (id: string, effectiveDate: string, grossAnnual: number, jobId = 'j1'): SalaryEntry => ({
@@ -8,8 +8,24 @@ const sal = (id: string, effectiveDate: string, grossAnnual: number, jobId = 'j1
 const job = (id: string, contractedHoursPerWeek: number): JobEntry => ({
   id, startDate: '2020-01', endDate: null, employer: 'Acme', role: 'Dev', contractedHoursPerWeek,
 });
-const snap = (id: string, periodMonth: string, actualHoursPerWeek: number): HoursSnapshot => ({
-  id, periodMonth, actualHoursPerWeek,
+const snap = (id: string, periodMonth: string, actualHoursPerWeek: number, jobId?: string): HoursSnapshot => ({
+  id, periodMonth, actualHoursPerWeek, jobId,
+});
+
+describe('nominalHourlyRate', () => {
+  it('divides monthly pay (base + on-call) by monthly hours', () => {
+    // 37.5h/week × 4.345 weeks ≈ 162.94h/month
+    expect(nominalHourlyRate(60000, 0, 37.5)).toBeCloseTo(60000 / (WEEKS_PER_MONTH * 37.5), 6);
+  });
+
+  it('counts on-call pay toward the rate', () => {
+    expect(nominalHourlyRate(60000, 6000, 37.5)).toBeCloseTo(66000 / (WEEKS_PER_MONTH * 37.5), 6);
+  });
+
+  it('returns 0 for non-positive hours (no divide-by-zero)', () => {
+    expect(nominalHourlyRate(60000, 0, 0)).toBe(0);
+    expect(nominalHourlyRate(60000, 0, -5)).toBe(0);
+  });
 });
 
 describe('salaryAt', () => {
@@ -48,5 +64,22 @@ describe('hoursAt', () => {
   it('falls back to 37.5 when neither snapshot nor job resolves', () => {
     expect(hoursAt('2024-12', snaps, jobs, null)).toBe(37.5);
     expect(hoursAt('2024-12', snaps, [], sal('a', '2024-01', 600000, 'missing'))).toBe(37.5);
+  });
+
+  it('ignores a snapshot assigned to a different job, using the active job contracted hours', () => {
+    const twoJobs = [job('j1', 37.5), job('j2', 20)];
+    // A 40h snapshot belongs to the ended job j1; the active salary is for j2.
+    const jobSnaps = [snap('s1', '2025-01', 40, 'j1')];
+    expect(hoursAt('2025-06', jobSnaps, twoJobs, sal('b', '2025-05', 500000, 'j2'))).toBe(20);
+  });
+
+  it('applies a snapshot assigned to the active job', () => {
+    const jobSnaps = [snap('s1', '2025-01', 40, 'j1')];
+    expect(hoursAt('2025-06', jobSnaps, jobs, sal('b', '2025-05', 500000, 'j1'))).toBe(40);
+  });
+
+  it('applies unassigned snapshots to whichever job is active', () => {
+    const twoJobs = [job('j1', 37.5), job('j2', 20)];
+    expect(hoursAt('2025-09', snaps, twoJobs, sal('b', '2025-05', 500000, 'j2'))).toBe(32);
   });
 });

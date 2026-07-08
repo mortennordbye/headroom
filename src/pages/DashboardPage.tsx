@@ -39,6 +39,11 @@ import { isCategoryKey } from '../lib/categories';
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
 
+// Assumed growth applied to each projected (future) month's income bar (~2%/month).
+const PROJECTED_INCOME_GROWTH = 1.02;
+// Target reference line on the income sparkline, drawn at 85% of the tallest bar.
+const INCOME_TARGET_SHARE = 0.85;
+
 const DashboardPage: React.FC = () => {
   const {
     t,
@@ -210,7 +215,7 @@ const DashboardPage: React.FC = () => {
       for (let i = 1; i <= 2; i++) {
         const d = parse(last.month, 'yyyy-MM', new Date());
         d.setMonth(d.getMonth() + i);
-        months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM', { locale: dateLocale }), value: Math.round(baseVal * 1.02 ** i), projected: true });
+        months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM', { locale: dateLocale }), value: Math.round(baseVal * PROJECTED_INCOME_GROWTH ** i), projected: true });
       }
     }
     return months;
@@ -1114,14 +1119,14 @@ function MonthlyInvestmentBars({ bars }: { bars: { key: string; label: string; v
       display.push({
         key: `proj-extra-${i}`,
         label: '',
-        value: Math.round(baseVal * Math.pow(1.02, i + (bars.length - realBars.length))),
+        value: Math.round(baseVal * Math.pow(PROJECTED_INCOME_GROWTH, i + (bars.length - realBars.length))),
         projected: true,
       });
     }
   }
 
   const max = Math.max(...display.map(b => b.value)) || 1;
-  const target = max * 0.85;
+  const target = max * INCOME_TARGET_SHARE;
   const todayIdx = realBars.length - 1;
 
   return (
