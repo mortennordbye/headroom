@@ -4,6 +4,7 @@ import { X, RotateCcw, Camera } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
+import { parseLocaleNumber } from '../lib/validators';
 import { ProvenanceBadge } from './ui/ProvenanceBadge';
 
 export interface NetWorthPoint {
@@ -40,7 +41,7 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
   const commit = (monthKey: string, raw: string) => {
     const trimmed = raw.trim();
     if (trimmed === '') { clearNetWorthForMonth(monthKey); return; }
-    const n = parseFloat(trimmed.replace(/\s/g, ''));
+    const n = parseLocaleNumber(trimmed.replace(/\s/g, ''));
     if (Number.isFinite(n)) setNetWorthForMonth(monthKey, n);
   };
 

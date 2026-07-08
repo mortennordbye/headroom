@@ -10,6 +10,7 @@ import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
+import { parseLocaleNumber } from '../lib/validators';
 import { currentMonthKey } from '../lib/date';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
@@ -300,7 +301,7 @@ function NumberRow({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
-          const n = parseFloat(draft);
+          const n = parseLocaleNumber(draft);
           onCommit(Number.isFinite(n) ? n : 0);
         }}
         className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"

@@ -8,6 +8,7 @@ import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
 import { currentMonthKey } from '../lib/date';
+import { parseLocaleNumber } from '../lib/validators';
 
 const EmployerCostPage: React.FC = () => {
   const {
@@ -105,7 +106,7 @@ const EmployerCostPage: React.FC = () => {
                 type="number"
                 value={gross}
                 onChange={(e) => {
-                  const n = parseFloat(e.target.value);
+                  const n = parseLocaleNumber(e.target.value);
                   setSalaryOverride(Number.isFinite(n) ? n : 0);
                 }}
                 className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
@@ -183,7 +184,7 @@ const EmployerCostPage: React.FC = () => {
               onChange={(e) => {
                 const raw = e.target.value.trim();
                 if (raw === '') { updateBillingConfig('billableHoursOverride', null); return; }
-                const n = parseFloat(raw);
+                const n = parseLocaleNumber(raw);
                 updateBillingConfig('billableHoursOverride', Number.isFinite(n) && n > 0 ? n : null);
               }}
               className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
@@ -277,7 +278,7 @@ function NumberRow({ label, value, onCommit, suffix, badge }: { label: string; v
         type="number"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => { const n = parseFloat(draft); onCommit(Number.isFinite(n) ? n : 0); }}
+        onBlur={() => { const n = parseLocaleNumber(draft); onCommit(Number.isFinite(n) ? n : 0); }}
         className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
         style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
       />

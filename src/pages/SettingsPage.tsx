@@ -42,6 +42,7 @@ import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { DeltaChip } from '../components/ui/DeltaChip';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
+import { parseLocaleNumber } from '../lib/validators';
 import { BankSyncCard } from '../components/BankSyncCard';
 import { CategoryRules } from '../components/CategoryRules';
 
@@ -267,7 +268,7 @@ export default function SettingsPage() {
                   variant="secondary"
                   size="md"
                   onClick={() => {
-                    const v = parseFloat(usdRateInput);
+                    const v = parseLocaleNumber(usdRateInput);
                     if (!isNaN(v) && v > 0) setNokToUsd(v);
                   }}
                 >
@@ -320,12 +321,12 @@ export default function SettingsPage() {
                   size="md"
                   disabled={
                     !customCodeInput.trim() ||
-                    isNaN(parseFloat(customRateInput)) ||
-                    parseFloat(customRateInput) <= 0
+                    isNaN(parseLocaleNumber(customRateInput)) ||
+                    parseLocaleNumber(customRateInput) <= 0
                   }
                   onClick={() => {
                     const code = customCodeInput.trim().toUpperCase();
-                    const rate = parseFloat(customRateInput);
+                    const rate = parseLocaleNumber(customRateInput);
                     if (code && !isNaN(rate) && rate > 0) {
                       setCustomCurrencyCode(code);
                       setCustomCurrencyRate(rate);
@@ -917,7 +918,7 @@ function RangeRow({
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setDraft(value.toString()); }, [value]);
   const commitDraft = () => {
-    const n = parseFloat(draft);
+    const n = parseLocaleNumber(draft);
     if (Number.isFinite(n) && n >= 0) onChange(n);
     else setDraft(value.toString());
   };

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { AlertTriangle, TrendingUp, Edit2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -38,7 +39,7 @@ function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: E
   };
 
   const commit = () => {
-    const n = parseFloat(draft);
+    const n = parseLocaleNumber(draft);
     if (!isNaN(n) && n >= 0) onCommit(n);
     setEditing(false);
   };
@@ -111,7 +112,7 @@ export default function SmartRecommendations() {
   }, [editingPct, savingsTargetPercent]);
 
   const commitPct = () => {
-    const n = parseFloat(pctDraft);
+    const n = parseLocaleNumber(pctDraft);
     if (!isNaN(n) && n >= 0 && n <= 100) setSavingsTargetPercent(n);
     setEditingPct(false);
   };
