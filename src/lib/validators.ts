@@ -31,6 +31,11 @@ export function isOptionalYearMonth(s: string): boolean {
  * ("4,5" → 4.5). Returns NaN for anything that isn't a clean number — including
  * trailing garbage like "4,5kr", which `parseFloat` would silently truncate to
  * 4. Use this in every text-input save handler instead of `parseFloat`.
+ *
+ * Deliberately STRICTER than `coerceNumber` in sanitizePayload.ts: this rejects
+ * a thousands-space ("12 000" → NaN) so an ambiguous live keystroke surfaces as
+ * an error, whereas coerceNumber tolerates it when salvaging already-stored /
+ * imported blobs. Keep the two grammars distinct on purpose.
  */
 export function parseLocaleNumber(s: string): number {
   const cleaned = s.trim().replace(',', '.');
@@ -39,7 +44,8 @@ export function parseLocaleNumber(s: string): number {
   return parseFloat(cleaned);
 }
 
-export function isPositiveNumber(s: string): boolean {
+/** A finite number ≥ 0 (accepts 0; rejects negatives and garbage). */
+export function isNonNegativeNumber(s: string): boolean {
   const n = parseLocaleNumber(s);
   return !isNaN(n) && isFinite(n) && n >= 0;
 }

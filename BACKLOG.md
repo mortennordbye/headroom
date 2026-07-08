@@ -265,3 +265,36 @@ Most of `AUDIT.md` is done (see its "Progress log"). These remaining entries are
 - **§4.5 Unify the two charting systems — DONE (2026-07).** `DashboardPage`'s 4 bespoke SVG charts (`HeroChart`, `BurnRateChart`, `MonthlyInvestmentBars`, `ProjectionChart`) are now Recharts (`AreaChart`/`BarChart` with `ReferenceLine`/`ReferenceDot`/`Cell`), sharing the common `ChartTooltip` and `CHART` tokens; the private `ChartTip` and the `smoothPath` helper are gone. Trade-off accepted: the old charts used `preserveAspectRatio="none"` (edge-to-edge stretch) + HTML overlays for crisp round dots, which Recharts' true-aspect `ResponsiveContainer` doesn't reproduce, so proportions shifted slightly; the per-hover "estimert" tooltip sub-caption dropped (the hollow/dashed dot & bar still signal estimated). Visually verified in Docker (0 console errors).
 - **§7.2 Self-host fonts + offline read-only data — fonts DONE (2026-07); offline data PENDING a decision.** Fonts are now self-hosted via Fontsource (`src/fonts.ts` imports the `latin` subset at the exact weights: Cormorant 400/500/600 + italic 400/500, IBM Plex Mono 400/500/600, Inter 400/500/600/700). The Google `<link>`s are gone from `index.html`, the CSP dropped `fonts.googleapis.com`/`fonts.gstatic.com` (`styleSrc`/`fontSrc` now `'self'` only), and `woff2` was added to the PWA precache glob (12 files precached). Verified in Docker: fonts render identically, zero requests to Google, 0 console/CSP errors. **Offline-data caching declined (2026-07)**: a NetworkFirst cache for `GET /api/data` was considered and deliberately NOT added — it would persist the full financial blob in the browser's Cache Storage (data-at-rest), which isn't worth it for a single-user loopback app. `/api/data` stays network-only; offline shows the existing load-failed state. Revisit only if a real offline-read need arises.
 - **§5.5 ESLint depth.** Baseline only — no `recommendedTypeChecked`, no `eslint-plugin-jsx-a11y` (would auto-catch icon-button/label regressions), no formatter/pre-commit hooks. `no-unused-vars` is now configured. **Where**: `eslint.config.js`.
+
+## IMPROVEMENTS §5.6/§5.7 logic-cleanup — deferred data-safety items
+
+Two items from the logic-cleanup pass were deferred because touching them risks
+resurrecting or double-counting real bank transactions.
+
+- **Bank-id dedup regex ambiguity.** **What**: the bare-vs-prefixed split in the
+  twin-dedup regexes classifies any `eb-<8hex>-<rest>` id as connection-prefixed,
+  so a legacy *bare* id whose ref happens to begin with 8 hex chars + `-` is
+  misclassified as prefixed (and could drop a same-ref bare row that is actually a
+  distinct transaction). **Why deferred**: the two id shapes (`eb-<8hex>-<ref>`
+  prefixed vs `eb-<8hexref…>` bare) are genuinely indistinguishable by structure;
+  no safe discriminator exists, and guessing wrong risks data loss/duplication in a
+  money app. **What would unblock**: convergence of the id format so bare ids no
+  longer exist (see the §2.3 note — "keep; shrink after 2.3 converges the blob"),
+  after which the bare branch can be removed entirely instead of disambiguated; or a
+  reliable secondary key (own-IBAN / booking-date match) to break the tie. **Where**:
+  `src/lib/bankDedup.ts` (`BARE`/`PREFIXED`) and its byte-equivalent twin
+  `dropStaleBareTwins` in `server/bank.js`; behavior locked by a documenting test in
+  `src/lib/bankDedup.test.ts`.
+- **`deletedBankIds` grows unbounded.** **What**: soft-deleted bank-row ids
+  accumulate forever in the persisted blob and are never pruned. **Why deferred**:
+  an id stays in `deletedBankIds` precisely because its row is absent from
+  `dailyTransactions`, so "prune ids no longer in the stored blob" would prune the
+  whole set and let the next server reconcile (`mergeTransactions`) resurrect every
+  deleted transaction. There is no client-side signal proving a deleted id can never
+  return from a future bank sync (the sync window is server-side), so no prune is
+  provably safe. **What would unblock**: a server-side retention rule keyed to the
+  Enable Banking sync window (drop a deleted id only once the bank can no longer
+  return it), or tying deleted ids to a connection lifecycle so they can be dropped
+  when a connection is removed. **Where**: `src/context/FinanceContext.tsx`
+  (`deletedBankIds`, `setDailyTransactionsTracked`), consumed by
+  `mergeTransactions` in `server/bank.js`.

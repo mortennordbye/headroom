@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseLocaleNumber,
-  isPositiveNumber,
+  isNonNegativeNumber,
   isFiniteNumber,
   isValidYearMonth,
   isValidYearMonthDay,
@@ -30,15 +30,19 @@ describe('parseLocaleNumber', () => {
   });
 });
 
-describe('isPositiveNumber / isFiniteNumber', () => {
+describe('isNonNegativeNumber / isFiniteNumber', () => {
   it('accepts comma decimals', () => {
-    expect(isPositiveNumber('4,5')).toBe(true);
+    expect(isNonNegativeNumber('4,5')).toBe(true);
     expect(isFiniteNumber('-4,5')).toBe(true);
   });
 
-  it('rejects negatives for isPositiveNumber', () => {
-    expect(isPositiveNumber('-1')).toBe(false);
-    expect(isPositiveNumber('4,5kr')).toBe(false);
+  it('accepts 0 (name reflects that it allows non-negative, not strictly > 0)', () => {
+    expect(isNonNegativeNumber('0')).toBe(true);
+  });
+
+  it('rejects negatives for isNonNegativeNumber', () => {
+    expect(isNonNegativeNumber('-1')).toBe(false);
+    expect(isNonNegativeNumber('4,5kr')).toBe(false);
   });
 });
 

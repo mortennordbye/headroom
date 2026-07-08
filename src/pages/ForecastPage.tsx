@@ -24,20 +24,23 @@ function formatAxisInt(val: number): string {
 const ForecastPage: React.FC = () => {
   const { t, totalEquity, salaries, jobs, loan, income, housingMode, homeowner, formatCurrency, region, customTaxRatePct, pension } = useFinance();
 
+  // Current month in render scope so the memos below recompute if the month
+  // rolls over during a long-lived session.
+  const today = currentMonthKey();
   // Find current salary (most recent effectiveDate <= today).
   const currentGross = useMemo(() => {
     // Fall back to the legacy monthly `income` annualized (matching
     // grossAnnualIncome elsewhere) rather than a fabricated magic number.
-    return salaryAt(currentMonthKey(), salaries)?.grossAnnual ?? income * 12;
-  }, [salaries, income]);
+    return salaryAt(today, salaries)?.grossAnnual ?? income * 12;
+  }, [salaries, income, today]);
 
   // Current job's on-call annual (for OTP base).
   const currentOnCall = useMemo(() => {
-    const latest = salaryAt(currentMonthKey(), salaries);
+    const latest = salaryAt(today, salaries);
     if (!latest) return 0;
     const job = jobs.find(j => j.id === latest.jobId);
     return job?.onCallAnnual ?? 0;
-  }, [salaries, jobs]);
+  }, [salaries, jobs, today]);
 
   // Retirement readiness: years to retirement + projected pension wealth.
   const retirement = useMemo(() => {

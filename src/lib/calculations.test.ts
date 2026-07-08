@@ -224,8 +224,8 @@ describe('calcHomeownerMortgageStatus', () => {
     const s = calcHomeownerMortgageStatus(2_000_000, 2_500_000, 5, 20, 22);
     expect(s.monthlyInterest).toBeCloseTo(2_000_000 * 0.05 / 12, 6);
     expect(s.monthlyInterest + s.monthlyPrincipal).toBeCloseTo(s.monthlyPaymentCalc, 6);
-    // "equityPercent" is actually % of original loan repaid (see 5.7 rename note).
-    expect(s.equityPercent).toBeCloseTo(20, 6);
+    // % of the original loan repaid (20% of 2.5M paid down to 2.0M).
+    expect(s.originalLoanRepaidPercent).toBeCloseTo(20, 6);
   });
 
   it('bases the tax deduction on year-one amortized interest, below the flat ×12 figure', () => {
@@ -242,8 +242,8 @@ describe('calcHomeownerMortgageStatus', () => {
   });
 
   it('clamps repaid share to 0 and handles a zero original loan', () => {
-    expect(calcHomeownerMortgageStatus(2_600_000, 2_500_000, 5, 20, 22).equityPercent).toBe(0);
-    expect(calcHomeownerMortgageStatus(2_000_000, 0, 5, 20, 22).equityPercent).toBe(0);
+    expect(calcHomeownerMortgageStatus(2_600_000, 2_500_000, 5, 20, 22).originalLoanRepaidPercent).toBe(0);
+    expect(calcHomeownerMortgageStatus(2_000_000, 0, 5, 20, 22).originalLoanRepaidPercent).toBe(0);
   });
 });
 

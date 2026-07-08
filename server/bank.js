@@ -408,6 +408,18 @@ function mapEBTransactions(txs, opts = {}) {
 // connections may reuse a ref, so we never merge across prefixes; only a bare row
 // with a prefixed twin is removed. A manual category on the dropped row is
 // rescued onto its survivor.
+//
+// TWIN: `dedupeBankTransactions` in src/lib/bankDedup.ts (TS/ESM) is a
+// byte-equivalent copy of this logic, including the two regexes below. This CJS
+// server can't import from src/, so the two are hand-maintained and MUST stay
+// identical — change both or neither.
+//
+// Known limitation (see BACKLOG.md "Bank-id dedup regex ambiguity"): the
+// prefixed-vs-bare split is inherently ambiguous. A legacy BARE id whose ref
+// happens to start with 8 hex chars + '-' (e.g. `eb-a1b2c3d4-...`) is
+// indistinguishable from a real PREFIXED id and is treated as prefixed. Not
+// tightened here because no safe structural discriminator exists — guessing wrong
+// could resurrect or double-count real bank transactions.
 function dropStaleBareTwins(txs) {
   const PREFIXED = /^eb-[0-9a-f]{8}-(.+)$/i;
   const BARE = /^eb-(?![0-9a-f]{8}-)(.+)$/i;

@@ -37,11 +37,14 @@ const PensionPage: React.FC = () => {
     ? Math.max(0, pension.retirementAge - (currentYear - pension.birthYear))
     : 0;
 
-  // Pensionable income: latest salary + on-call.
-  const pensionableIncome = useMemo(() => {
-    const today = currentMonthKey();
-    return calcActiveGrossAnnual(salaries, jobs, today);
-  }, [salaries, jobs]);
+  // Pensionable income: latest salary + on-call. `today` lives in render scope
+  // (not inside the memo) so the value recomputes if the month rolls over during
+  // a long-lived session.
+  const today = currentMonthKey();
+  const pensionableIncome = useMemo(
+    () => calcActiveGrossAnnual(salaries, jobs, today),
+    [salaries, jobs, today],
+  );
 
   const otpAnnualContribution = pensionableIncome * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
   const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);

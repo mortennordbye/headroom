@@ -99,6 +99,14 @@ export default function SettingsPage() {
   const [usdRateInput, setUsdRateInput] = useState(String(nokToUsd));
   const [customCodeInput, setCustomCodeInput] = useState(customCurrencyCode);
   const [customRateInput, setCustomRateInput] = useState(String(customCurrencyRate));
+  // Re-sync the editable drafts when the committed context values change from
+  // outside (a JSON import or demo toggle) — same pattern as RangeRow below.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setUsdRateInput(String(nokToUsd)); }, [nokToUsd]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setCustomCodeInput(customCurrencyCode); }, [customCurrencyCode]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setCustomRateInput(String(customCurrencyRate)); }, [customCurrencyRate]);
 
   // Import state
   const [importState, setImportState] = useState<ImportState>('idle');

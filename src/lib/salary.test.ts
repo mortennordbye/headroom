@@ -46,6 +46,14 @@ describe('salaryAt', () => {
     const shuffled = [salaries[2], salaries[0], salaries[1]];
     expect(salaryAt('2025-12', shuffled)?.id).toBe('b');
   });
+
+  // calcActiveGrossAnnual (FinanceContext) reuses this selection per job, so its
+  // tie-break is whatever salaryAt does: on equal effectiveDate the reduce keeps
+  // the last entry in array order.
+  it('breaks a same-month tie by taking the last entry in array order', () => {
+    const tied = [sal('a', '2025-06', 600000), sal('b', '2025-06', 700000)];
+    expect(salaryAt('2025-06', tied)?.id).toBe('b');
+  });
 });
 
 describe('hoursAt', () => {

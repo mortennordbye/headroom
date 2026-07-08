@@ -5,7 +5,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import { sumSavings } from '../lib/equity';
 import { ProgressBar } from './ui/ProgressBar';
-import { isValidYearMonth, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
+import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -110,7 +110,7 @@ const GoalsSection: React.FC = () => {
           setModal(prev => prev && { ...prev, error: t.validation.nameRequired });
           return;
         }
-        if (!isPositiveNumber(vals.target)) {
+        if (!isNonNegativeNumber(vals.target)) {
           setModal(prev => prev && { ...prev, error: t.validation.targetPositive });
           return;
         }

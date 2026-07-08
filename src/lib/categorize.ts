@@ -6,6 +6,7 @@
 // Pure and unit-tested. The client applies it at ingest (bank sync + backfill);
 // the server never categorizes — it only preserves categories on re-sync.
 import type { CategoryKey } from './categories';
+import { buildMatchHaystack } from './text';
 
 export interface CategorizeInput {
   merchant?: string;
@@ -183,7 +184,7 @@ function categoryFromMcc(mcc: string): CategoryKey | undefined {
 export function categorizeWithRules(input: CategorizeInput, rules: CategoryRule[]): CategorizeResult {
   if (input.kind === 'income') return { category: 'income', source: 'auto' };
   if (rules && rules.length) {
-    const hay = ` ${input.merchant ?? ''} ${input.description ?? ''} `.toLowerCase();
+    const hay = buildMatchHaystack(input.merchant, input.description);
     for (const r of rules) {
       const m = (r.match || '').trim().toLowerCase();
       if (m && hay.includes(m)) return { category: r.category, source: 'auto' };
@@ -196,9 +197,7 @@ export function categorizeWithRules(input: CategorizeInput, rules: CategoryRule[
 export function categorize(input: CategorizeInput): CategorizeResult {
   if (input.kind === 'income') return { category: 'income', source: 'auto' };
 
-  // Pad with spaces so leading/trailing-space keywords (e.g. ' esso', 'vy ')
-  // act as word boundaries — 'esso' must not match inside 'espresso'.
-  const hay = ` ${input.merchant ?? ''} ${input.description ?? ''} `.toLowerCase();
+  const hay = buildMatchHaystack(input.merchant, input.description);
   for (const [category, keywords] of RULES) {
     if (keywords.some((kw) => hay.includes(kw))) return { category, source: 'auto' };
   }

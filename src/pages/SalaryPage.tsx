@@ -44,7 +44,7 @@ import { calcTaxByRegion } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
 import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/salary';
 import { formatSignedPct } from '../lib/format';
-import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
+import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -427,7 +427,7 @@ const SalaryPage: React.FC = () => {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidEndDate });
           return;
         }
-        if (!isPositiveNumber(vals.contractedHoursPerWeek)) {
+        if (!isNonNegativeNumber(vals.contractedHoursPerWeek)) {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errHoursPositive });
           return;
         }
@@ -515,7 +515,7 @@ const SalaryPage: React.FC = () => {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateMonth });
           return;
         }
-        if (!isPositiveNumber(vals.grossAnnual)) {
+        if (!isNonNegativeNumber(vals.grossAnnual)) {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errSalaryPositive });
           return;
         }
@@ -576,7 +576,7 @@ const SalaryPage: React.FC = () => {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateDay });
           return;
         }
-        if (!isPositiveNumber(vals.amount)) {
+        if (!isNonNegativeNumber(vals.amount)) {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errAmountPositive });
           return;
         }
@@ -619,7 +619,7 @@ const SalaryPage: React.FC = () => {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateDay });
           return;
         }
-        if (!isPositiveNumber(vals.hours) || !isPositiveNumber(vals.amount)) {
+        if (!isNonNegativeNumber(vals.hours) || !isNonNegativeNumber(vals.amount)) {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errHoursAmountPositive });
           return;
         }
@@ -660,7 +660,7 @@ const SalaryPage: React.FC = () => {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidMonth });
           return;
         }
-        if (!isPositiveNumber(vals.actualHoursPerWeek)) {
+        if (!isNonNegativeNumber(vals.actualHoursPerWeek)) {
           setModal(prev => prev && { ...prev, error: t.salaryPage.errHoursPositiveShort });
           return;
         }

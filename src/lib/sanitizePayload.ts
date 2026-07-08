@@ -6,7 +6,15 @@
 // caller's `{...DEFAULT, ...data}` merge fills the gap. It never removes or
 // rewrites non-numeric data. Pure + unit-tested; applied at the apply boundary.
 
-/** A finite number, or undefined if the value can't be one. */
+/**
+ * A finite number, or undefined if the value can't be one.
+ *
+ * Deliberately MORE lenient than `parseLocaleNumber` in validators.ts: this
+ * strips thousands spaces ("12 000" → 12000) to salvage locale-formatted values
+ * from an already-stored / hand-edited / imported blob, whereas parseLocaleNumber
+ * rejects them so an ambiguous live keystroke errors instead. Keep the grammars
+ * distinct on purpose (input strict, salvage lenient).
+ */
 export function coerceNumber(v: unknown): number | undefined {
   if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
   if (typeof v === 'string') {
