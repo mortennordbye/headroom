@@ -3,9 +3,10 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { format, subMonths } from 'date-fns';
+import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
 import ChartTooltip from '../ChartTooltip';
-import { CHART } from '../../lib/chartColors';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
 /**
  * Monthly cashflow for the last 12 months: money in (income) vs money out
@@ -16,11 +17,12 @@ import { CHART } from '../../lib/chartColors';
  */
 export default function CashflowChart() {
   const {
-    t, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
+    t, lang, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
     // Whole-finance cashflow: net out internal transfers, but not per-account (income
     // isn't account-scoped), so use nonTransferTransactions.
     nonTransferTransactions: dailyTransactions, formatCurrencyShort,
   } = useFinance();
+  const dateLocale = lang === 'nb' ? nb : enUS;
 
   const data = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => {
@@ -31,16 +33,16 @@ export default function CashflowChart() {
         .filter(tx => tx.date.startsWith(key) && tx.kind !== 'income')
         .reduce((s, tx) => s + tx.amount, 0);
       const expenses = totalFixedExpenses + variable;
-      return { label: format(d, 'MMM'), income, expenses, net: income - expenses };
+      return { label: format(d, 'MMM', { locale: dateLocale }), income, expenses, net: income - expenses };
     });
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale]);
 
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART.textSoft }} axisLine={false} tickLine={false} />
-        <YAxis tickFormatter={formatCurrencyShort} tick={{ fontSize: 10, fill: CHART.textDim }} axisLine={false} tickLine={false} width={44} />
+        <CartesianGrid {...GRID_PROPS} vertical={false} />
+        <XAxis dataKey="label" {...AXIS_PROPS} />
+        <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={44} />
         <Tooltip cursor={{ fill: CHART.track }} content={<ChartTooltip />} />
         <ReferenceLine y={0} stroke={CHART.rule} />
         <Bar name={t.charts.income} dataKey="income" fill={CHART.forestLight} radius={[2, 2, 0, 0]} maxBarSize={18} />

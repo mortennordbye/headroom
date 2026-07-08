@@ -33,7 +33,7 @@ export default function ConfirmModal({
         className="w-full sm:w-auto sm:min-w-[340px] sm:max-w-sm bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 space-y-4 border border-[var(--border)]"
       >
         <div className="flex items-center gap-3">
-          {danger && <AlertTriangle size={18} className="text-[#B5533A] shrink-0" />}
+          {danger && <AlertTriangle size={18} className="text-[var(--negative)] shrink-0" />}
           <h3 id={titleId} className="text-[14px] font-semibold text-[var(--text-1)]">{title}</h3>
         </div>
         <p id={messageId} className="text-[13px] text-[var(--text-2)] leading-relaxed">{message}</p>

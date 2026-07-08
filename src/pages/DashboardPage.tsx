@@ -574,7 +574,7 @@ const DashboardPage: React.FC = () => {
                         <div
                           key={i}
                           className="flex items-center justify-center font-mono text-[10px]"
-                          style={{ width: `${pct}%`, background: r.color, color: '#0E1310' }}
+                          style={{ width: `${pct}%`, background: r.color, color: 'var(--bg-page)' }}
                           title={r.label}
                         >
                           {pct >= 10 ? `${pct.toFixed(0)}%` : ''}

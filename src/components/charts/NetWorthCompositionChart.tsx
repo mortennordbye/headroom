@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format, parse } from 'date-fns';
+import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
 import { computeEquityBreakdown } from '../../lib/equity';
 import ChartTooltip from '../ChartTooltip';
-import { CHART } from '../../lib/chartColors';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
 /**
  * How net-worth composition (stocks / house equity / crypto / cash) has shifted
@@ -13,7 +14,8 @@ import { CHART } from '../../lib/chartColors';
  * months accumulate.
  */
 export default function NetWorthCompositionChart() {
-  const { t, balanceSnapshots, assets, currentMonth, formatCurrencyShort } = useFinance();
+  const { t, lang, balanceSnapshots, assets, currentMonth, formatCurrencyShort } = useFinance();
+  const dateLocale = lang === 'nb' ? nb : enUS;
 
   const data = useMemo(() => {
     const curKey = format(currentMonth, 'yyyy-MM');
@@ -22,14 +24,14 @@ export default function NetWorthCompositionChart() {
       const a = key === curKey ? assets : (balanceSnapshots[key]?.assets ?? assets);
       const eq = computeEquityBreakdown(a);
       return {
-        label: format(parse(key, 'yyyy-MM', new Date()), 'MMM yy'),
+        label: format(parse(key, 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }),
         stocks: Math.round(eq.netInvestment),
         house: Math.round(eq.houseEquity),
         crypto: Math.round(eq.netCrypto),
         cash: Math.round(eq.savingsTotal + a.bsu + a.bufferAccount),
       };
     });
-  }, [balanceSnapshots, assets, currentMonth]);
+  }, [balanceSnapshots, assets, currentMonth, dateLocale]);
 
   if (data.length < 2) {
     return (
@@ -49,9 +51,9 @@ export default function NetWorthCompositionChart() {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART.textSoft }} axisLine={false} tickLine={false} />
-        <YAxis tickFormatter={formatCurrencyShort} tick={{ fontSize: 10, fill: CHART.textDim }} axisLine={false} tickLine={false} width={44} />
+        <CartesianGrid {...GRID_PROPS} vertical={false} />
+        <XAxis dataKey="label" {...AXIS_PROPS} />
+        <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={44} />
         <Tooltip cursor={{ stroke: CHART.rule }} content={<ChartTooltip />} />
         {areas.map(a => (
           <Area

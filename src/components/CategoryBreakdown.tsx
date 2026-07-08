@@ -3,6 +3,7 @@ import { format, subMonths } from 'date-fns';
 import { ChevronRight, TrendingUp, TrendingDown, Circle, Wallet } from 'lucide-react';
 import { useFinance, type DailyTransaction } from '../context/FinanceContext';
 import { categoryMeta, isCategoryKey } from '../lib/categories';
+import { CHART } from '../lib/chartColors';
 import { categoryMoM } from '../lib/categoryStats';
 import { txDisplayName } from '../lib/labelRules';
 import { DeltaChip } from './ui/DeltaChip';
@@ -26,7 +27,7 @@ export function CategoryBreakdown({ onEditTransaction }: { onEditTransaction?: (
   const total = rows.reduce((s, r) => s + r.current, 0);
 
   const label = (cat: string) => (isCategoryKey(cat) ? t.categoryLabels[cat] : cat);
-  const color = (cat: string) => categoryMeta(cat)?.color ?? '#5F6555';
+  const color = (cat: string) => categoryMeta(cat)?.color ?? CHART.textDim;
 
   const txForCategory = (cat: string) =>
     dailyTransactions

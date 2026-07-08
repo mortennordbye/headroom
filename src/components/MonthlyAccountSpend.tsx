@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { format, subMonths } from 'date-fns';
+import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
 import { accountMonthlyTotals, monthlyColumnTotals } from '../lib/monthlySpend';
 import { accountToken } from '../lib/accountColor';
@@ -9,7 +10,8 @@ const MONTHS = 6;
 // Spending per connected account per month (last 6), from the real transaction
 // data (internal transfers netted out). Hidden when no account-tagged spend.
 export function MonthlyAccountSpend() {
-  const { t, currentMonth, nonTransferTransactions, accountLabels, formatCurrency } = useFinance();
+  const { t, lang, currentMonth, nonTransferTransactions, accountLabels, formatCurrency } = useFinance();
+  const dateLocale = lang === 'nb' ? nb : enUS;
 
   const { months, rows, colTotals } = useMemo(() => {
     const months = Array.from({ length: MONTHS }, (_, i) => format(subMonths(currentMonth, MONTHS - 1 - i), 'yyyy-MM'));
@@ -32,7 +34,7 @@ export function MonthlyAccountSpend() {
               <th className="text-left font-medium py-1.5 pr-3">{t.budgetPage.accountFilterLabel}</th>
               {months.map((m) => (
                 <th key={m} className="text-right font-medium py-1.5 px-2 whitespace-nowrap capitalize">
-                  {format(new Date(`${m}-01T00:00:00`), 'MMM')}
+                  {format(new Date(`${m}-01T00:00:00`), 'MMM', { locale: dateLocale })}
                 </th>
               ))}
               <th className="text-right font-semibold py-1.5 pl-2">{t.budgetPage.total}</th>

@@ -15,6 +15,7 @@ import { currentMonthKey } from '../lib/date';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import ChartTooltip from '../components/ChartTooltip';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 
 function formatAxisInt(val: number): string {
   if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
@@ -145,26 +146,26 @@ const PensionPage: React.FC = () => {
                 <AreaChart data={projection} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="otpGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#1F5A42" stopOpacity={0.92} />
-                      <stop offset="100%" stopColor="#1F5A42" stopOpacity={0.92} />
+                      <stop offset="0%" stopColor={CHART.forest} stopOpacity={0.92} />
+                      <stop offset="100%" stopColor={CHART.forest} stopOpacity={0.92} />
                     </linearGradient>
                     <linearGradient id="ipsGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3F7373" stopOpacity={0.85} />
-                      <stop offset="100%" stopColor="#3F7373" stopOpacity={0.85} />
+                      <stop offset="0%" stopColor={CHART.teal} stopOpacity={0.85} />
+                      <stop offset="100%" stopColor={CHART.teal} stopOpacity={0.85} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
-                  <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="year" {...AXIS_PROPS} />
+                  <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Area type="monotone" dataKey="ips" stackId="1" name="IPS" stroke="#3F7373" fill="url(#ipsGrad)" />
-                  <Area type="monotone" dataKey="otp" stackId="1" name="OTP" stroke="#7FCBA0" fill="url(#otpGrad)" />
+                  <Area type="monotone" dataKey="ips" stackId="1" name="IPS" stroke={CHART.teal} fill="url(#ipsGrad)" />
+                  <Area type="monotone" dataKey="otp" stackId="1" name="OTP" stroke={CHART.forestLight} fill="url(#otpGrad)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] mt-3" style={{ color: 'var(--text-2)' }}>
-              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#7FCBA0' }} />OTP</div>
-              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#3F7373' }} />IPS</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.forestLight }} />OTP</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.teal }} />IPS</div>
             </div>
           </>
         )}

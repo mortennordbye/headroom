@@ -192,7 +192,7 @@ const GoalsSection: React.FC = () => {
                     <button aria-label={`${t.edit} — ${g.name}`} onClick={() => openModal(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[var(--text-1)] opacity-0 group-hover:opacity-100 transition-opacity">
                       <Edit2 size={12} />
                     </button>
-                    <button aria-label={`${t.delete} — ${g.name}`} onClick={() => confirmDelete(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[#B5533A] opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button aria-label={`${t.delete} — ${g.name}`} onClick={() => confirmDelete(g)} className="p-1 rounded text-[var(--text-2)] hover:text-[var(--negative)] opacity-0 group-hover:opacity-100 transition-opacity">
                       <Trash2 size={12} />
                     </button>
                   </div>

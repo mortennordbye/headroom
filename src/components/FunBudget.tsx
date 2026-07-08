@@ -16,8 +16,8 @@ function FunStat({ label, value, negative, highlight }: FunStatProps) {
     <div className="flex flex-col gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] rounded-[8px] p-3 md:p-4">
       <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{label}</span>
       <span className={`text-[13px] md:text-[15px] font-bold font-mono tracking-tight ${
-        negative ? 'text-[#B5533A]' :
-        highlight ? 'text-[#B5533A]' :
+        negative ? 'text-[var(--negative)]' :
+        highlight ? 'text-[var(--negative)]' :
         'text-[var(--text-1)]'
       }`}>
         {negative ? '−' : ''}{value}
@@ -71,9 +71,9 @@ export default function FunBudget() {
         <div className="h-3 bg-[var(--bg-elev)] rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-700 ${
-              pct >= 100 ? 'bg-[#B5533A]' :
+              pct >= 100 ? 'bg-[var(--negative)]' :
               pct >= 75 ? 'bg-[var(--brass)]' :
-              'bg-[#7FCBA0]'
+              'bg-[var(--positive)]'
             }`}
             style={{ width: `${pct}%` }}
           />
@@ -86,7 +86,7 @@ export default function FunBudget() {
       </div>
 
       {funRemaining < 0 && (
-        <div className="mt-3 text-[12px] text-[#B5533A] font-medium">
+        <div className="mt-3 text-[12px] text-[var(--negative)] font-medium">
           {t.funBudgetOverspent} {formatCurrency(Math.abs(funRemaining))}
         </div>
       )}
