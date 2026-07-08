@@ -4,7 +4,7 @@
  * Components:
  *   - Skatt på alminnelig inntekt (22%) on income after minstefradrag og personfradrag
  *   - Trinnskatt (progressive bracket tax) on gross
- *   - Trygdeavgift (7.8%) on gross above the lower threshold
+ *   - Trygdeavgift on gross above the lower threshold
  *
  * Brackets and deductions are estimates rounded to public figures. Real tax
  * depends on residence, marital status, deductions etc. — this is a
@@ -29,7 +29,7 @@ export interface TaxParams {
 export const TAX_PARAMS: Record<number, TaxParams> = {
   2025: {
     skattAlminneligRate: 0.22,
-    trygdeavgiftRate: 0.078,
+    trygdeavgiftRate: 0.077,
     trygdeavgiftLowerLimit: 99_650,
     minstefradragRate: 0.46,
     minstefradragMax: 92_000,
@@ -43,10 +43,33 @@ export const TAX_PARAMS: Record<number, TaxParams> = {
       { from: 1_410_750,  rate: 0.177  },
     ],
   },
+  // Skatteetaten, Forskuddsutskrivingen 2026 (final adopted figures).
+  2026: {
+    skattAlminneligRate: 0.22,
+    trygdeavgiftRate: 0.076,
+    trygdeavgiftLowerLimit: 99_650,
+    minstefradragRate: 0.46,
+    minstefradragMax: 95_700,
+    personfradrag: 114_540,
+    trinnskatt: [
+      { from: 0,          rate: 0      },
+      { from: 226_100,    rate: 0.017  },
+      { from: 318_300,    rate: 0.040  },
+      { from: 725_050,    rate: 0.137  },
+      { from: 980_100,    rate: 0.168  },
+      { from: 1_467_200,  rate: 0.178  },
+    ],
+  },
 };
 
-/** Active tax year. Update alongside a new `TAX_PARAMS` entry. */
-export const TAX_YEAR = 2025;
+/**
+ * Active tax year: the newest `TAX_PARAMS` year that has started. Derived from
+ * the clock so adding next year's entry activates it on Jan 1, and a missed
+ * update falls back to the latest known year instead of a missing table.
+ */
+export const TAX_YEAR = Math.max(
+  ...Object.keys(TAX_PARAMS).map(Number).filter((y) => y <= new Date().getFullYear()),
+);
 
 const PARAMS = TAX_PARAMS[TAX_YEAR];
 
@@ -57,8 +80,7 @@ export const IPS_MAX_DEDUCTION = 15_000;
 // smoothly instead of it jumping to the full rate at the threshold.
 const TRYGDE_OPPTRAPPING_RATE = 0.25;
 
-function trinnskatt(gross: number): number {
-  const brackets = PARAMS.trinnskatt;
+function trinnskatt(gross: number, brackets: TaxParams['trinnskatt']): number {
   let tax = 0;
   for (let i = 0; i < brackets.length; i++) {
     const lower = brackets[i].from;
@@ -116,21 +138,26 @@ export function calcTaxByRegion(
   };
 }
 
-export function calcNorwegianTax(grossAnnual: number, ipsContribution: number = 0): NorwegianTaxBreakdown {
+export function calcNorwegianTax(
+  grossAnnual: number,
+  ipsContribution: number = 0,
+  year: number = TAX_YEAR,
+): NorwegianTaxBreakdown {
+  const P = TAX_PARAMS[year] ?? PARAMS;
   const gross = Math.max(0, grossAnnual);
   const ipsDeduction = Math.min(Math.max(0, ipsContribution), IPS_MAX_DEDUCTION);
 
-  const minstefradrag = Math.min(gross * PARAMS.minstefradragRate, PARAMS.minstefradragMax);
+  const minstefradrag = Math.min(gross * P.minstefradragRate, P.minstefradragMax);
   const alminneligInntekt = Math.max(0, gross - minstefradrag - ipsDeduction);
-  const skattegrunnlag = Math.max(0, alminneligInntekt - PARAMS.personfradrag);
-  const inntektsskatt = skattegrunnlag * PARAMS.skattAlminneligRate;
+  const skattegrunnlag = Math.max(0, alminneligInntekt - P.personfradrag);
+  const inntektsskatt = skattegrunnlag * P.skattAlminneligRate;
 
-  const trinn = trinnskatt(gross);
+  const trinn = trinnskatt(gross, P.trinnskatt);
 
-  const trygde = gross > PARAMS.trygdeavgiftLowerLimit
+  const trygde = gross > P.trygdeavgiftLowerLimit
     ? Math.min(
-        gross * PARAMS.trygdeavgiftRate,
-        TRYGDE_OPPTRAPPING_RATE * (gross - PARAMS.trygdeavgiftLowerLimit),
+        gross * P.trygdeavgiftRate,
+        TRYGDE_OPPTRAPPING_RATE * (gross - P.trygdeavgiftLowerLimit),
       )
     : 0;
 

@@ -12,9 +12,36 @@ describe('TAX_PARAMS / TAX_YEAR', () => {
     expect(TAX_PARAMS[TAX_YEAR]).toBeDefined();
   });
 
+  it('resolves the active year from the clock (2026 or later)', () => {
+    // IMPROVEMENTS 1.2 — the year was a hardcoded 2025 well into 2026.
+    expect(TAX_YEAR).toBeGreaterThanOrEqual(2026);
+  });
+
   it('uses the 2025 personfradrag (108 550), not the stale 2024 value', () => {
     // Regression guard for AUDIT §3.1 — the 2024 value (88 250) overstated tax.
     expect(TAX_PARAMS[2025].personfradrag).toBe(108_550);
+  });
+});
+
+describe('golden values, hand-computed from the statutory parameters', () => {
+  // One exact-total assertion per tax year (IMPROVEMENTS §6): a wrong rate or
+  // threshold anywhere in TAX_PARAMS shifts these totals, which is what the
+  // purely structural assertions above can't catch. Expected figures are
+  // computed by hand from Skatteetaten's published parameters for each year.
+  it('2025: 744 000 gross', () => {
+    const r = calcNorwegianTax(744_000, 0, 2025);
+    expect(r.inntektsskatt).toBeCloseTo(119_559.0, 2);  // (744000 − 92000 − 108550) × 0.22
+    expect(r.trinnskatt).toBeCloseTo(23_569.5, 2);      // 88650×0.017 + 391100×0.04 + 46850×0.137
+    expect(r.trygdeavgift).toBeCloseTo(57_288.0, 2);    // 744000 × 0.077
+    expect(r.totalTax).toBeCloseTo(200_416.5, 2);
+  });
+
+  it('2026: 700 000 gross', () => {
+    const r = calcNorwegianTax(700_000, 0, 2026);
+    expect(r.inntektsskatt).toBeCloseTo(107_747.2, 2);  // (700000 − 95700 − 114540) × 0.22
+    expect(r.trinnskatt).toBeCloseTo(16_835.4, 2);      // 92200×0.017 + 381700×0.04
+    expect(r.trygdeavgift).toBeCloseTo(53_200.0, 2);    // 700000 × 0.076
+    expect(r.totalTax).toBeCloseTo(177_782.6, 2);
   });
 });
 
