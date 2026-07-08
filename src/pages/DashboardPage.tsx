@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format, parse, format as fmtDate, subMonths } from 'date-fns';
+import { nb, enUS } from 'date-fns/locale';
 import { useFinance, DEFAULT_GROWTH_RATES, DEFAULT_TAX_RATES } from '../context/FinanceContext';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
@@ -39,6 +40,7 @@ const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFund
 const DashboardPage: React.FC = () => {
   const {
     t,
+    lang,
     effectiveIncome,
     averageIncome,
     prevMonthIncome,
@@ -76,6 +78,8 @@ const DashboardPage: React.FC = () => {
     assumptionsNudgeDismissed,
     dismissAssumptionsNudge,
   } = useFinance();
+  // Month names must follow the UI language (BudgetPage does the same).
+  const dateLocale = lang === 'nb' ? nb : enUS;
 
   // ─── Derived numbers ───
   // Discretionary spend, not raw spend: envelope-covered spend (food, etc.) is
@@ -192,7 +196,7 @@ const DashboardPage: React.FC = () => {
     const months: { key: string; label: string; value: number; projected?: boolean }[] =
       incomeSeries.map(({ month, value }) => ({
         key: month,
-        label: fmtDate(parse(month, 'yyyy-MM', new Date()), 'MMM'),
+        label: fmtDate(parse(month, 'yyyy-MM', new Date()), 'MMM', { locale: dateLocale }),
         value: Math.round(investFrom(value)),
       }));
     // 2 projected months ahead
@@ -202,11 +206,11 @@ const DashboardPage: React.FC = () => {
       for (let i = 1; i <= 2; i++) {
         const d = parse(last.month, 'yyyy-MM', new Date());
         d.setMonth(d.getMonth() + i);
-        months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM'), value: Math.round(baseVal * 1.02 ** i), projected: true });
+        months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM', { locale: dateLocale }), value: Math.round(baseVal * 1.02 ** i), projected: true });
       }
     }
     return months;
-  }, [incomeSeries, savingsTargetPercent, totalFixedExpenses]);
+  }, [incomeSeries, savingsTargetPercent, totalFixedExpenses, dateLocale]);
 
   // ─── Insight 2: top categories MoM (shared categoryMoM math; localize at render) ───
   const categoryDeltas = useMemo(() => {
@@ -625,7 +629,7 @@ const DashboardPage: React.FC = () => {
                 {formatCurrency(recommendedInvestment)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                {format(currentMonth, 'MMM')} · {Math.round(savingsTargetPercent)}% {t.dashboardPage.savingsRate}
+                {format(currentMonth, 'MMM', { locale: dateLocale })} · {Math.round(savingsTargetPercent)}% {t.dashboardPage.savingsRate}
               </div>
             </div>
           </div>

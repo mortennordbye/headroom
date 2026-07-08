@@ -202,7 +202,7 @@ const BudgetPage: React.FC = () => {
         setMonthlyIncomeForMonth(format(currentMonth, 'yyyy-MM'), n);
         closeModal();
       } else {
-        setModal(prev => prev ? { ...prev, error: t.editAmount + ' må være et positivt tall' } : null);
+        setModal(prev => prev ? { ...prev, error: t.editAmount + t.validation.positiveAmountSuffix } : null);
       }
     },
   });
@@ -225,7 +225,7 @@ const BudgetPage: React.FC = () => {
     openModal({
       title: t.fixedCosts,
       fields: [
-        { key: 'name', label: t.newExpenseName, type: 'text', value: '', placeholder: 'Mat, Strøm...' },
+        { key: 'name', label: t.newExpenseName, type: 'text', value: '', placeholder: t.budgetPage.expenseNamePlaceholder },
         { key: 'amount', label: t.newAmount, type: 'number', value: '', placeholder: '0' },
         { key: 'type', label: t.expenseTypeLabel, type: 'select', value: 'fixed', options: typeOptions },
         trackCategoryField(),
@@ -236,7 +236,7 @@ const BudgetPage: React.FC = () => {
           setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: vals.name.trim(), amount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category) }]);
           closeModal();
         } else {
-          setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.newExpenseName + ' er påkrevd' : t.newAmount + ' må være et positivt tall' } : null);
+          setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.newExpenseName + t.validation.requiredSuffix : t.newAmount + t.validation.positiveAmountSuffix } : null);
         }
       },
     });
@@ -257,7 +257,7 @@ const BudgetPage: React.FC = () => {
           setFixedExpenses(fixedExpenses.map(e => e.id === id ? { ...e, name: vals.name.trim(), amount: newAmount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category) } : e));
           closeModal();
         } else {
-          setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.editName + ' er påkrevd' : t.editAmount + ' må være et positivt tall' } : null);
+          setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.editName + t.validation.requiredSuffix : t.editAmount + t.validation.positiveAmountSuffix } : null);
         }
       },
     });
@@ -289,7 +289,7 @@ const BudgetPage: React.FC = () => {
     openModal({
       title: format(new Date(dateStr + 'T00:00:00'), 'dd.MM.yyyy'),
       fields: [
-        { key: 'description', label: t.transactionDetails, type: 'text', value: prefill?.description ?? '', placeholder: 'Dagligvare, Kaffe...' },
+        { key: 'description', label: t.transactionDetails, type: 'text', value: prefill?.description ?? '', placeholder: t.budgetPage.transactionPlaceholder },
         { key: 'amount', label: t.impact, type: 'number', value: prefill?.amount?.toString() ?? '', placeholder: '0' },
         { key: 'category', label: t.category, type: 'select', value: prefill?.category ?? '', options: categoryOptions },
         kindField('expense'),
@@ -308,7 +308,7 @@ const BudgetPage: React.FC = () => {
           }]);
           closeModal();
         } else {
-          setModal(prev => prev ? { ...prev, error: !vals.description.trim() ? t.transactionDetails + ' er påkrevd' : t.impact + ' må være et positivt tall' } : null);
+          setModal(prev => prev ? { ...prev, error: !vals.description.trim() ? t.transactionDetails + t.validation.requiredSuffix : t.impact + t.validation.positiveAmountSuffix } : null);
         }
       },
     });
@@ -363,7 +363,7 @@ const BudgetPage: React.FC = () => {
           }
           closeModal();
         } else {
-          setModal(prev => prev ? { ...prev, error: !vals.description.trim() ? t.editDescription + ' er påkrevd' : t.editAmount + ' må være et positivt tall' } : null);
+          setModal(prev => prev ? { ...prev, error: !vals.description.trim() ? t.editDescription + t.validation.requiredSuffix : t.editAmount + t.validation.positiveAmountSuffix } : null);
         }
       },
     });

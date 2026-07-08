@@ -780,7 +780,7 @@ const SalaryPage: React.FC = () => {
           <SummaryTile
             label={t.salary.yoyVsInflation}
             value={formatSignedPct(yoy?.salary)}
-            sub={yoy ? `KPI ${formatSignedPct(yoy.cpi)}` : ''}
+            sub={yoy ? `${t.salaryPage.cpi} ${formatSignedPct(yoy.cpi)}` : ''}
             chip={yoyChip != null ? (
               <span
                 className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold"
@@ -794,7 +794,7 @@ const SalaryPage: React.FC = () => {
         <SummaryTile
           label={t.salary.effectiveHourly}
           value={current ? formatCurrency(trailingHourly) : '—'}
-          sub={current ? `${current.hoursPerWeek.toFixed(1)} t/uke` : ''}
+          sub={current ? `${current.hoursPerWeek.toFixed(1)} ${t.common.hoursPerWeekUnit}` : ''}
         />
       </div>
 
@@ -956,7 +956,7 @@ const SalaryPage: React.FC = () => {
               <Bar dataKey="salaryPct" name={t.salaryPage.salaryIncrease} fill="var(--accent)" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="salaryPct" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--accent)' }} />
               </Bar>
-              <Bar dataKey="cpiPct" name="KPI" fill="var(--violet)" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="cpiPct" name={t.salaryPage.cpi} fill="var(--violet)" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="cpiPct" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--violet)' }} />
               </Bar>
               <Bar dataKey="gap" name={t.salaryPage.gap} radius={[4, 4, 0, 0]}>
@@ -971,7 +971,7 @@ const SalaryPage: React.FC = () => {
         {/* Inline series legend */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{t.salaryPage.salaryIncrease}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />KPI</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />{t.salaryPage.cpi}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--positive)' }} />{t.salaryPage.beatsCpiLegend}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--negative)' }} />{t.salaryPage.belowCpi}</div>
         </div>
@@ -984,7 +984,7 @@ const SalaryPage: React.FC = () => {
                 <tr className="text-left" style={{ color: 'var(--text-2)' }}>
                   <th className="py-2 pr-3 font-medium uppercase tracking-wider text-[10px]">{t.salaryPage.year}</th>
                   <th className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.salaryCol}</th>
-                  <th className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">KPI</th>
+                  <th className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.cpi}</th>
                   <th className="py-2 pl-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.gap}</th>
                 </tr>
               </thead>
@@ -1087,7 +1087,7 @@ const SalaryPage: React.FC = () => {
               <YAxis yAxisId="right" orientation="right" tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={56} />
               <Tooltip
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                content={<ChartTooltip valueFormatter={(v, e) => e?.dataKey === 'hoursPerWeek' ? `${v.toFixed(1)} t/uke` : formatCurrency(v)} />}
+                content={<ChartTooltip valueFormatter={(v, e) => e?.dataKey === 'hoursPerWeek' ? `${v.toFixed(1)} ${t.common.hoursPerWeekUnit}` : formatCurrency(v)} />}
               />
               <Bar yAxisId="left" dataKey="hoursPerWeek" name={t.salaryPage.hoursPerWk} fill="url(#hoursGradient)" radius={[6, 6, 0, 0]}>
                 <LabelList dataKey="hoursPerWeek" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}t`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--warning)' }} />
@@ -1124,7 +1124,7 @@ const SalaryPage: React.FC = () => {
         items={jobs.map(j => ({
           id: j.id,
           primary: `${j.employer} — ${j.role}`,
-          secondary: `${j.startDate} → ${j.endDate ?? t.salaryPage.now} · ${j.contractedHoursPerWeek}t/uke`,
+          secondary: `${j.startDate} → ${j.endDate ?? t.salaryPage.now} · ${j.contractedHoursPerWeek}${t.common.hoursPerWeekUnit}`,
           chip: j.onCallAnnual && j.onCallAnnual > 0 ? (
             <span
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold font-mono tabular-nums shrink-0"
@@ -1293,7 +1293,7 @@ const SalaryPage: React.FC = () => {
                 .sort((a, b) => b.periodMonth.localeCompare(a.periodMonth))
                 .map(h => ({
                   id: h.id,
-                  primary: `${h.actualHoursPerWeek}t/uke`,
+                  primary: `${h.actualHoursPerWeek}${t.common.hoursPerWeekUnit}`,
                   secondary: `${h.periodMonth}${jobSuffix(h.jobId)}${h.notes ? ` · ${h.notes}` : ''}`,
                   onEdit: () => openHoursModal(h),
                   onDelete: () => confirmDelete(h.periodMonth, () => removeHoursSnapshot(h.id)),
@@ -1405,6 +1405,9 @@ interface RealHourlyChartProps {
       nominal: string;
       real: string;
     };
+    salaryPage: {
+      inflationGap: string;
+    };
   };
 }
 
@@ -1448,7 +1451,7 @@ const RealHourlyChart: React.FC<RealHourlyChartProps> = ({ series, formatCurrenc
           {t.salary.real} {formatCurrency(last.real)}
         </span>
         <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-mono" style={{ background: 'color-mix(in srgb, var(--warning) 14%, transparent)', color: 'var(--warning)' }}>
-          Inflation gap {eatenPct.toFixed(1)}%
+          {t.salaryPage.inflationGap} {eatenPct.toFixed(1)}%
         </span>
       </div>
       <div className="h-[300px] w-full">
@@ -1605,13 +1608,13 @@ const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency 
           <SummaryTile
             label={t.salary.realRaiseSinceLabel}
             value={formatSignedPct(realVsSince, 1, 'pp')}
-            sub={ctx.cpiSincePct != null ? `KPI ${fmtPct(ctx.cpiSincePct)}` : ''}
+            sub={ctx.cpiSincePct != null ? `${t.salaryPage.cpi} ${fmtPct(ctx.cpiSincePct)}` : ''}
             color={gapColor(realVsSince)}
           />
           <SummaryTile
             label={t.salary.realRaiseRollingLabel}
             value={formatSignedPct(realVsRolling, 1, 'pp')}
-            sub={ctx.cpiRolling12Pct != null ? `KPI ${fmtPct(ctx.cpiRolling12Pct)}` : ''}
+            sub={ctx.cpiRolling12Pct != null ? `${t.salaryPage.cpi} ${fmtPct(ctx.cpiRolling12Pct)}` : ''}
             color={gapColor(realVsRolling)}
           />
         </div>
