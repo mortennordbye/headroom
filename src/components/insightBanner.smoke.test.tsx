@@ -30,7 +30,7 @@ const mockCtx = {
     insightTop: 'Your biggest spending category this month is {cat} ({amount}).',
   },
   currentMonth: new Date('2026-07-15T00:00:00'),
-  dailyTransactions: TRANSACTIONS,
+  nonTransferTransactions: TRANSACTIONS,
   formatCurrency: (n: number) => `kr ${Math.round(n)}`,
 };
 
@@ -47,8 +47,8 @@ describe('InsightBanner render smoke', () => {
   });
 
   it('renders nothing when there is no spend', () => {
-    mockCtx.dailyTransactions = [];
+    mockCtx.nonTransferTransactions = [];
     expect(renderToStaticMarkup(<InsightBanner />)).toBe('');
-    mockCtx.dailyTransactions = TRANSACTIONS; // restore
+    mockCtx.nonTransferTransactions = TRANSACTIONS; // restore
   });
 });
