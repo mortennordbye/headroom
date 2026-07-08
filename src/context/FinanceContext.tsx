@@ -25,6 +25,7 @@ import { findInternalTransferIds } from '../lib/transfers';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
 import { dedupeBankTransactions } from '../lib/bankDedup';
+import { stableStringify } from '../lib/stableStringify';
 import { sanitizePayload } from '../lib/sanitizePayload';
 import {
   type EmployerCostConfig,
@@ -833,6 +834,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Optimistic-concurrency revision last seen from the server; echoed on every
   // save so a stale write is rejected instead of clobbering a newer one.
   const revRef = useRef(0);
+  // Stable-stringified content the server is known to hold (set on load, on
+  // adopting a newer version, and after each successful save). doSave skips the
+  // POST when the built payload matches it, so merely opening the app doesn't
+  // bump the rev and trigger 409s in other open clients (3.2) — while load-time
+  // migrations/sanitize fixes still differ and therefore still self-persist.
+  const lastSyncedRef = useRef<string | null>(null);
   // True after we adopted a newer server version (another tab/device or the bank
   // cron wrote in between) — surfaced as a dismissable banner.
   const [dataReloaded, setDataReloaded] = useState(false);
@@ -956,6 +963,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           const data = await r.json();
           if (cancelled) return;
           revRef.current = Number(r.headers.get('X-Data-Rev') ?? 0);
+          lastSyncedRef.current = data === null ? null : stableStringify(data);
           applyPayload(data, true);
           loaded.current = true;
           // Launch the first-run guided setup for a brand-new user (empty DB →
@@ -1038,6 +1046,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     const payload = payloadRef.current;
     if (!payload) return;
+    // No-op save: state churn (load, adopt, snapshot effects) re-triggers the
+    // autosave path with content the server already has — skip the network.
+    const stable = stableStringify(payload);
+    if (stable === lastSyncedRef.current) {
+      saveDirty.current = false;
+      saveRetries.current = 0;
+      return;
+    }
     // Supersede any in-flight save so it can't complete after this one.
     saveAbort.current?.abort();
     const ctrl = new AbortController();
@@ -1055,6 +1071,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         const body = await res.json().catch(() => null);
         if (body && body.current) {
           revRef.current = Number(body.currentRev ?? revRef.current);
+          lastSyncedRef.current = stableStringify(body.current);
           applyPayload(body.current, true);
           saveDirty.current = false;
           saveRetries.current = 0;
@@ -1065,6 +1082,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       revRef.current = Number(res.headers.get('X-Data-Rev') ?? revRef.current + 1);
+      lastSyncedRef.current = stable;
       saveDirty.current = false;
       saveRetries.current = 0;
       setSaveFailed(false);
@@ -1095,6 +1113,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         if (serverRev > revRef.current) {
           const data = await r.json();
           revRef.current = serverRev;
+          lastSyncedRef.current = data === null ? null : stableStringify(data);
           applyPayload(data, true);
           setDataReloaded(true);
         }
@@ -1131,6 +1150,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const flush = () => {
       if (!loaded.current || demoMode || !saveDirty.current || !payloadRef.current) return;
+      // Same no-op check as doSave: closing a tab whose state matches the
+      // server must not bump the rev.
+      if (stableStringify(payloadRef.current) === lastSyncedRef.current) {
+        saveDirty.current = false;
+        return;
+      }
       // sendBeacon can't set headers, so the optimistic-concurrency rev rides
       // inside the body; the server reads `_rev` as the X-Data-Rev fallback and
       // strips it before storing. Without it this flush would be
@@ -1438,8 +1463,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (!loaded.current) return;
     if (monthKey !== format(new Date(), 'yyyy-MM')) return;
     // Deliberate: snapshot the current month's net worth into persisted state when equity changes.
+    // Returning `prev` unchanged when the value already matches keeps a plain
+    // load/reload from dirtying the data (3.2).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setNetWorthHistory(prev => ({ ...prev, [monthKey]: Math.round(totalEquity) }));
+    setNetWorthHistory(prev => {
+      const v = Math.round(totalEquity);
+      return prev[monthKey] === v ? prev : { ...prev, [monthKey]: v };
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalEquity]);
 
@@ -1450,10 +1480,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded.current) return;
     const nowKey = format(new Date(), 'yyyy-MM');
-    setBalanceSnapshots(prev => ({
-      ...prev,
-      [nowKey]: { assets, loan, pension, homeowner, transition, housingMode },
-    }));
+    const snap: BalanceSnapshot = { assets, loan, pension, homeowner, transition, housingMode };
+    // Skip the rewrite when the stored snapshot is structurally identical —
+    // the slices get fresh identities on every load/adopt, and rewriting the
+    // entry anyway would dirty the data on a plain open (3.2).
+    setBalanceSnapshots(prev => (
+      prev[nowKey] && stableStringify(prev[nowKey]) === stableStringify(snap)
+        ? prev
+        : { ...prev, [nowKey]: snap }
+    ));
   }, [assets, loan, pension, homeowner, transition, housingMode]);
 
   // The current home's value and mortgage are one real quantity stored in three
