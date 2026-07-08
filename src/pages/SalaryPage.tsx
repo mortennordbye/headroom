@@ -166,9 +166,11 @@ const SalaryPage: React.FC = () => {
       ? ((current.totalAnnual / first.totalAnnual) - 1) * 100
       : 0;
 
-  // YoY: compare current month to 12 months ago (total comp including on-call)
+  // YoY: compare current month to 12 months ago (total comp including on-call).
+  // Null with under 13 months of history — a fabricated +0.0% would read as a
+  // confident "flat vs inflation" to a new user.
   const yoy = useMemo(() => {
-    if (series.length < 13) return { salary: 0, cpi: 0 };
+    if (series.length < 13) return null;
     const last = series[series.length - 1];
     const prior = series[series.length - 13];
     const salaryPct = prior.totalAnnual > 0
@@ -265,8 +267,10 @@ const SalaryPage: React.FC = () => {
   // a promotion, or — after a job change — the starting salary of the new
   // role. Anything else would compare today's CPI against an old employer.
   const reviewContext = useMemo(() => {
-    if (sortedSalaries.length === 0) return null;
-    const lastRaise = sortedSalaries[sortedSalaries.length - 1];
+    // The salary in effect today, not the last entry — a future-dated raise
+    // isn't setting your pay yet and would skew the CPI-since-baseline maths.
+    const lastRaise = salaryAt(currentMonthKey, sortedSalaries);
+    if (!lastRaise) return null;
 
     const nowMonth = currentMonthKey;
     const [ry, rm] = lastRaise.effectiveDate.split('-').map(Number);
@@ -693,14 +697,15 @@ const SalaryPage: React.FC = () => {
     return val.toString();
   };
 
-  const currentJob = sortedSalaries.length > 0
-    ? jobsById.get(sortedSalaries[sortedSalaries.length - 1].jobId)
-    : undefined;
+  // Clamp to the salary in effect *today* — the last entry may be a
+  // future-dated raise, and the headline (`current`) is already clamped.
+  const activeSalary = salaryAt(currentMonthKey, sortedSalaries);
+  const currentJob = activeSalary ? jobsById.get(activeSalary.jobId) : undefined;
   const currentOnCallAnnual = currentJob?.onCallAnnual ?? 0;
 
-  const yoyChip = yoy.salary - yoy.cpi;
-  const chipColor = yoyChip >= 0 ? 'var(--positive)' : 'var(--negative)';
-  const chipBg = yoyChip >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
+  const yoyChip = yoy ? yoy.salary - yoy.cpi : null;
+  const chipColor = yoyChip != null && yoyChip >= 0 ? 'var(--positive)' : 'var(--negative)';
+  const chipBg = yoyChip != null && yoyChip >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
 
   return (
     <div className="space-y-6 md:space-y-7">
@@ -766,23 +771,23 @@ const SalaryPage: React.FC = () => {
         {isGeneric ? (
           <SummaryTile
             label={t.salaryPage.yoySalary}
-            value={`${yoy.salary >= 0 ? '+' : ''}${yoy.salary.toFixed(1)}%`}
+            value={yoy ? `${yoy.salary >= 0 ? '+' : ''}${yoy.salary.toFixed(1)}%` : '—'}
             sub={first ? `${t.salary.growthSinceFirst} ${first.month}` : ''}
-            color={yoy.salary >= 0 ? 'var(--positive)' : 'var(--negative)'}
+            color={yoy && yoy.salary >= 0 ? 'var(--positive)' : yoy ? 'var(--negative)' : undefined}
           />
         ) : (
           <SummaryTile
             label={t.salary.yoyVsInflation}
-            value={`${yoy.salary >= 0 ? '+' : ''}${yoy.salary.toFixed(1)}%`}
-            sub={`KPI ${yoy.cpi >= 0 ? '+' : ''}${yoy.cpi.toFixed(1)}%`}
-            chip={
+            value={yoy ? `${yoy.salary >= 0 ? '+' : ''}${yoy.salary.toFixed(1)}%` : '—'}
+            sub={yoy ? `KPI ${yoy.cpi >= 0 ? '+' : ''}${yoy.cpi.toFixed(1)}%` : ''}
+            chip={yoyChip != null ? (
               <span
                 className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold"
                 style={{ color: chipColor, background: chipBg }}
               >
                 {yoyChip >= 0 ? '+' : ''}{yoyChip.toFixed(1)}pp · {yoyChip >= 0 ? t.salary.beatsCpi : t.salary.losesCpi}
               </span>
-            }
+            ) : undefined}
           />
         )}
         <SummaryTile
