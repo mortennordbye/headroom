@@ -501,7 +501,12 @@ blocks with hardcoded `#262A20`/`#5F6555`, the old hex twins of the same tokens)
 export `AXIS_PROPS` / `AXIS_PROPS_Y` / `GRID_PROPS` from `src/lib/chartColors.ts` (already
 imported everywhere) and spread them; this also closes most of 5.5's SVG-context hex list.
 
-**8.4 🟡 FinanceContext CRUD triple × 7 entities.**
+**8.4 ✅ FINISHED (f0d620a) FinanceContext CRUD triple × 7 entities.**
+(`makeCrud<T>(setter, prefix)` → `{ add, update, remove }` at module level; jobs, salaries,
+bonuses, overtime, hoursSnapshots, goals each bind it once via `useMemo` for stable action
+identity, and savingsAccounts reuses it through a setAssets adapter. `add` always returns the
+id; `removeJob`'s salary cascade and `addSavingsAccount`'s `(name, balance)` signature are
+preserved. ~65 lines → ~30.)
 `FinanceContext.tsx:1518-1582` (jobs, salaries, bonuses, overtime, hoursSnapshots, goals)
 plus savingsAccounts at :1442-1459 repeat the identical add/update/remove shape
 (`[...prev, {...entry, id: makeId(pfx)}]` / `map(x => x.id === id ? {...x, ...patch} : x)` /
