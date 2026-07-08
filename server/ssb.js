@@ -2,15 +2,26 @@
  * SSB inflation client — queries Statistics Norway table 03013
  * (Konsumprisindeksen, KPI) and returns { month, cpiIndex, yoyPercent } points.
  *
- * Docs: https://data.ssb.no/api/v0/no/table/03013/
- * Table 03013 dimensions: KonsumKoder (item), Tid (month), ContentsCode (value)
- *   - KonsumKoder = 'TOTAL' for the all-items index
+ * Primary: PxWebApi v2 (GET), launched autumn 2025 —
+ *   https://data.ssb.no/api/pxwebapi/v2/tables/03013/data
+ * Fallback: the classic PxWebApi v1 (POST) while it remains up —
+ *   https://data.ssb.no/api/v0/no/table/03013/
+ * Both return json-stat2, so parsing is shared (and unit-tested).
+ *
+ * SSB rate limit is 30 queries/min per IP — the caller (server/index.js)
+ * additionally throttles upstream attempts so a broken query or an SSB outage
+ * can't turn every page load into an SSB hit.
+ *
+ * Table 03013 dimensions: Konsumgrp (item), Tid (month), ContentsCode (value)
+ *   - Konsumgrp = 'TOTAL' for the all-items index
  *   - ContentsCode = 'KpiIndMnd' for the monthly index (base 2015=100)
  *
  * Node 18+ ships fetch globally; no external HTTP dep needed.
  */
 
-const SSB_URL = 'https://data.ssb.no/api/v0/no/table/03013/';
+const SSB_V2_BASE = 'https://data.ssb.no/api/pxwebapi/v2/tables/03013/data';
+const SSB_V1_URL = 'https://data.ssb.no/api/v0/no/table/03013/';
+const FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Build the time codes (YYYYMmm) for an inclusive month range.
@@ -35,43 +46,24 @@ function ssbCodeToMonth(code) {
   return `${y}-${m}`;
 }
 
-async function fetchCpi(fromMonth, toMonth) {
-  // Estimate how many months back we need to cover, plus margin.
-  // Use SSB's "top" filter so we don't request months that haven't been
-  // published yet (which would make the entire query 400).
-  const desired = monthsInRange(fromMonth, toMonth).length;
-  const topCount = Math.max(desired + 6, 24);
+/** PxWebApi v2 data URL: GET with valueCodes filters, json-stat2 out. */
+function buildV2Url(topCount) {
+  // Pin all three dimensions so Tid is the only non-singleton one — the
+  // parser relies on that (value[] is then ordered by the Tid index).
+  // Built literally (brackets/parens unencoded) to match SSB's documented
+  // examples exactly; every value here is from a fixed safe alphabet.
+  return `${SSB_V2_BASE}?lang=no&outputFormat=json-stat2`
+    + '&valueCodes[Konsumgrp]=TOTAL'
+    + '&valueCodes[ContentsCode]=KpiIndMnd'
+    + `&valueCodes[Tid]=top(${Math.floor(topCount)})`;
+}
 
-  const body = {
-    query: [
-      {
-        code: 'Konsumgrp',
-        selection: { filter: 'item', values: ['TOTAL'] },
-      },
-      {
-        code: 'Tid',
-        selection: { filter: 'top', values: [String(topCount)] },
-      },
-    ],
-    response: { format: 'json-stat2' },
-  };
-
-  const res = await fetch(SSB_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
-    // Bound the upstream call so a black-holed connection can't hang
-    // /api/inflation for minutes — the caller falls back to cached data.
-    signal: AbortSignal.timeout(10_000),
-  });
-
-  if (!res.ok) {
-    throw new Error(`SSB returned ${res.status}: ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  // json-stat2: data.value[] is a flat array; dimensions describe layout.
-  // With one item ('TOTAL') and N time codes, value is ordered by Tid index.
+/**
+ * Parse a json-stat2 KPI response (v1 and v2 share the format) into
+ * { month, cpiIndex } points, trimmed to `toMonth`. Assumes Tid is the only
+ * dimension with more than one value, so value[] is ordered by the Tid index.
+ */
+function parseCpiJsonStat2(data, toMonth) {
   const timeDim = data.dimension?.Tid;
   if (!timeDim) throw new Error('SSB response missing Tid dimension');
 
@@ -90,6 +82,51 @@ async function fetchCpi(fromMonth, toMonth) {
   return points.filter(p => p.month <= toMonth);
 }
 
+async function fetchJson(url, init) {
+  const res = await fetch(url, {
+    ...init,
+    // Bound the upstream call so a black-holed connection can't hang
+    // /api/inflation for long — the caller falls back to cached data.
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`SSB returned ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+async function fetchCpi(fromMonth, toMonth) {
+  // Estimate how many months back we need to cover, plus margin.
+  // "top" counts from the newest published month, so we never request months
+  // that don't exist yet (which would make a code-list query 400).
+  const desired = monthsInRange(fromMonth, toMonth).length;
+  const topCount = Math.max(desired + 6, 24);
+
+  try {
+    const data = await fetchJson(buildV2Url(topCount), { headers: { Accept: 'application/json' } });
+    return parseCpiJsonStat2(data, toMonth);
+  } catch (v2Err) {
+    // v1 stays up "during a transition period" (SSB) — try it before giving up.
+    const body = {
+      query: [
+        { code: 'Konsumgrp', selection: { filter: 'item', values: ['TOTAL'] } },
+        { code: 'Tid', selection: { filter: 'top', values: [String(topCount)] } },
+      ],
+      response: { format: 'json-stat2' },
+    };
+    try {
+      const data = await fetchJson(SSB_V1_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return parseCpiJsonStat2(data, toMonth);
+    } catch (v1Err) {
+      throw new Error(`v2: ${v2Err.message}; v1: ${v1Err.message}`);
+    }
+  }
+}
+
 /**
  * Compute year-over-year % change for each point given a full series
  * (which must include the 12 prior months for the YoY to be defined).
@@ -105,4 +142,4 @@ function withYoy(points) {
   });
 }
 
-module.exports = { fetchCpi, withYoy, monthsInRange };
+module.exports = { fetchCpi, withYoy, monthsInRange, parseCpiJsonStat2, buildV2Url };
