@@ -21,11 +21,14 @@ const EmployerCostPage: React.FC = () => {
   const ec = t.employerCost;
   const isNo = region === 'no';
 
-  // Salary auto-filled from the salary system, with manual override.
-  const derivedGross = useMemo(() => {
-    const today = currentMonthKey();
-    return calcActiveGrossAnnual(salaries, jobs, today);
-  }, [salaries, jobs]);
+  // Salary auto-filled from the salary system, with manual override. `today`
+  // lives in render scope so the value recomputes if the month rolls over during
+  // a long-lived session.
+  const today = currentMonthKey();
+  const derivedGross = useMemo(
+    () => calcActiveGrossAnnual(salaries, jobs, today),
+    [salaries, jobs, today],
+  );
   const [salaryOverride, setSalaryOverride] = useState<number | null>(null);
   const gross = salaryOverride ?? derivedGross;
   const isAuto = salaryOverride === null;
