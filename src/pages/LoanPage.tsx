@@ -71,6 +71,7 @@ const LoanPage: React.FC = () => {
     grossAnnualIncome, totalDebt,
     formatCurrency,
   } = useFinance();
+  const lp = t.loanPage;
 
   // Time machine: when viewing a past month, render that month's snapshot (read-only).
   const hist = useBalanceHistory();
@@ -331,37 +332,37 @@ const LoanPage: React.FC = () => {
             <div className={`${card} p-5 md:p-7 space-y-5`}>
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <Calculator size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>Låneevne</h2>
+                <h2 className={sectionLabel}>{lp.borrowingPower}</h2>
               </div>
               <div className="space-y-1">
-                <LoanRow label="Årslønn" notes="Bruttoinntekt per år før skatt — fra Lønn"
+                <LoanRow label={lp.annualSalary} notes={lp.annualSalaryNote}
                   value={fmtNum(effArslonn)}
-                  onEdit={() => editOverride('Årslønn', effArslonn, setArslonnOverride)}
+                  onEdit={() => editOverride(lp.annualSalary, effArslonn, setArslonnOverride)}
                   badge={sourceBadge(arslonnOverride === null)}
                   onReset={arslonnOverride === null ? undefined : () => setArslonnOverride(null)}
-                  resetLabel={t.loanPage.resetAuto} />
-                <LoanRow label="Gjeld" notes="Total eksisterende gjeld — fra Gjeld"
+                  resetLabel={lp.resetAuto} />
+                <LoanRow label={lp.debtLabel} notes={lp.debtNote}
                   value={fmtNum(effGjeld)}
-                  onEdit={() => editOverride('Gjeld', effGjeld, setGjeldOverride)}
+                  onEdit={() => editOverride(lp.debtLabel, effGjeld, setGjeldOverride)}
                   badge={sourceBadge(gjeldOverride === null)}
                   onReset={gjeldOverride === null ? undefined : () => setGjeldOverride(null)}
-                  resetLabel={t.loanPage.resetAuto} />
-                <LoanRow label="Lånesum" notes="Beløpet du planlegger å låne"
+                  resetLabel={lp.resetAuto} />
+                <LoanRow label={lp.loanSum} notes={lp.loanSumNote}
                   value={fmtNum(loan.laanebelop)}
-                  onEdit={() => editNum('Lånesum', 'laanebelop', loan.laanebelop)} />
-                <LoanRow label="Egenkapital" notes="Oppspart kapital (BSU, fond, kontoer) — fra Formue"
+                  onEdit={() => editNum(lp.loanSum, 'laanebelop', loan.laanebelop)} />
+                <LoanRow label={lp.equityLabel} notes={lp.equityAutoNote}
                   value={fmtNum(effEgenkapital)}
-                  onEdit={() => editOverride('Egenkapital', effEgenkapital, setEgenkapitalOverride)}
+                  onEdit={() => editOverride(lp.equityLabel, effEgenkapital, setEgenkapitalOverride)}
                   badge={sourceBadge(egenkapitalOverride === null)}
                   onReset={egenkapitalOverride === null ? undefined : () => setEgenkapitalOverride(null)}
-                  resetLabel={t.loanPage.resetAuto} />
-                <LoanRow label="Maks kjøpesum" notes={calc.capacity.ltvBound ? 'Begrenset av 15 % egenkapital (85 % belåning)' : 'Begrenset av 5x inntekt – gjeld'}
+                  resetLabel={lp.resetAuto} />
+                <LoanRow label={lp.maxPrice} notes={calc.capacity.ltvBound ? lp.maxPriceLtvNote : lp.maxPriceIncomeNote}
                   value={fmtNum(Math.round(calc.capacity.maxPrice))}
                   highlight />
-                <LoanRow label="Maks lån" notes="Kjøpesum – egenkapital"
+                <LoanRow label={lp.maxLoan} notes={lp.maxLoanNote}
                   value={fmtNum(Math.round(calc.capacity.debtAtMaxPrice))} />
-                <LoanRow label="Stresstest (rente +3 pp)" notes={`Månedlig betaling ved ${fmtPct(calc.capacity.stressRatePct)}`}
-                  value={`${fmtNum(Math.round(calc.capacity.stressedMonthlyPayment))}/mnd`} />
+                <LoanRow label={lp.stressTest} notes={`${lp.stressTestNotePrefix}${fmtPct(calc.capacity.stressRatePct)}`}
+                  value={`${fmtNum(Math.round(calc.capacity.stressedMonthlyPayment))}/${t.common.moAbbr}`} />
               </div>
             </div>
 
@@ -369,32 +370,32 @@ const LoanPage: React.FC = () => {
             <div className={`${card} p-5 md:p-7 space-y-5`}>
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>Kostnad på lån</h2>
+                <h2 className={sectionLabel}>{lp.loanCost}</h2>
               </div>
               <div className="space-y-1">
-                <LoanRow label="Lånebeløp" notes="Beløpet du søker om å låne"
+                <LoanRow label={lp.loanAmount} notes={lp.loanAmountNote}
                   value={fmtNum(loan.laanebelop)}
-                  onEdit={() => editNum('Lånebeløp', 'laanebelop', loan.laanebelop)} />
-                <LoanRow label="Rente (nominell p.a.)" notes="Årlig nominell rente"
+                  onEdit={() => editNum(lp.loanAmount, 'laanebelop', loan.laanebelop)} />
+                <LoanRow label={lp.nominalRate} notes={lp.nominalRateNote}
                   value={fmtPct(loan.rente)}
-                  onEdit={() => editNum('Rente (%)', 'rente', loan.rente)} />
-                <LoanRow label="Nedbetalingstid" notes="Antall år"
-                  value={`${loan.nedbetalingstid} år`}
-                  onEdit={() => editNum('Nedbetalingstid (år)', 'nedbetalingstid', loan.nedbetalingstid)} />
-                <LoanRow label="Terminbetalinger/år" notes="Vanligvis 12" value="12" />
-                <LoanRow label="Etableringsgebyr" notes="Engangsgebyr"
+                  onEdit={() => editNum(lp.rateEditTitle, 'rente', loan.rente)} />
+                <LoanRow label={lp.repaymentTerm} notes={lp.repaymentTermNote}
+                  value={`${loan.nedbetalingstid} ${lp.yearsSuffix}`}
+                  onEdit={() => editNum(lp.repaymentTermEditTitle, 'nedbetalingstid', loan.nedbetalingstid)} />
+                <LoanRow label={lp.paymentsPerYear} notes={lp.paymentsPerYearNote} value="12" />
+                <LoanRow label={lp.setupFee} notes={lp.setupFeeNote}
                   value={fmtNum(loan.etableringsgebyr)}
-                  onEdit={() => editNum('Etableringsgebyr', 'etableringsgebyr', loan.etableringsgebyr)} />
-                <LoanRow label="Termingebyr" notes="Fast gebyr per termin"
+                  onEdit={() => editNum(lp.setupFee, 'etableringsgebyr', loan.etableringsgebyr)} />
+                <LoanRow label={lp.termFee} notes={lp.termFeeNote}
                   value={fmtNum(loan.termingebyr)}
-                  onEdit={() => editNum('Termingebyr', 'termingebyr', loan.termingebyr)} />
-                <LoanRow label="Månedlig betaling (uten gebyrer)" notes="Kun rente og avdrag"
+                  onEdit={() => editNum(lp.termFee, 'termingebyr', loan.termingebyr)} />
+                <LoanRow label={lp.monthlyExFees} notes={lp.monthlyExFeesNote}
                   value={fmtNum(calc.monthlyPaymentBase)} />
-                <LoanRow label="Månedlig betaling (inkl. gebyr)" notes="Inkludert termingebyr"
+                <LoanRow label={lp.monthlyInclFee} notes={lp.monthlyInclFeeNote}
                   value={fmtNum(calc.monthlyPaymentWithFee)} highlight />
-                <LoanRow label="Totale rentekostnader" notes="Total rente gjennom løpetiden"
+                <LoanRow label={lp.totalInterestLabel} notes={lp.totalInterestNote}
                   value={fmtNum(calc.totalInterest)} />
-                <LoanRow label="Totalkostnad" notes="Lån + rente + gebyrer"
+                <LoanRow label={lp.totalCostLabel} notes={lp.totalCostNote}
                   value={fmtNum(calc.totalCost)} highlight />
               </div>
             </div>
@@ -403,15 +404,15 @@ const LoanPage: React.FC = () => {
             <div className={`${card} p-5 md:p-7 space-y-5`}>
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <ShieldCheck size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>Skattelettelse på boliglån</h2>
+                <h2 className={sectionLabel}>{lp.taxReliefTitle}</h2>
               </div>
               <div className="space-y-1">
-                <LoanRow label="Betalte renter i året (år 1)" notes="Beregnet fra lånekostnadstabell"
+                <LoanRow label={lp.yearOneInterest} notes={lp.yearOneInterestNote}
                   value={fmtNum(calc.yearOneInterest)} />
-                <LoanRow label="Skattefradragsprosent" notes="Standard fradragssats"
+                <LoanRow label={lp.deductionRate} notes={lp.deductionRateNote}
                   value={fmtPct(loan.skattefradragssats)}
-                  onEdit={() => editNum('Skattefradragsprosent (%)', 'skattefradragssats', loan.skattefradragssats)} />
-                <LoanRow label="Skattelettelse per år" notes="Årlig skattefradrag på rentene"
+                  onEdit={() => editNum(lp.deductionRateEditTitle, 'skattefradragssats', loan.skattefradragssats)} />
+                <LoanRow label={lp.annualRelief} notes={lp.annualReliefNote}
                   value={fmtNum(calc.taxDeduction)} highlight highlightColor="green" />
               </div>
             </div>
@@ -421,28 +422,28 @@ const LoanPage: React.FC = () => {
               <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
                   <Building2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                  <h2 className={sectionLabel}>Finansieringsbevis</h2>
+                  <h2 className={sectionLabel}>{lp.financingProof}</h2>
                 </div>
                 <button
-                  onClick={() => editText('Gyldig til', 'gyldigTil', loan.gyldigTil)}
+                  onClick={() => editText(lp.validUntil, 'gyldigTil', loan.gyldigTil)}
                   className="flex items-center gap-1 text-[var(--text-2)] hover:text-[var(--positive)] transition-colors shrink-0 ml-2"
                 >
                   <Clock size={11} />
-                  <span className="text-[10px] font-medium whitespace-nowrap">Gyldig til {loan.gyldigTil}</span>
+                  <span className="text-[10px] font-medium whitespace-nowrap">{lp.validUntil} {loan.gyldigTil}</span>
                   <Edit2 size={11} />
                 </button>
               </div>
               <div className="space-y-1">
-                <LoanRow label="Lån (betinget)" notes="Endelige vilkår fastsettes ved pant"
+                <LoanRow label={lp.conditionalLoan} notes={lp.conditionalLoanNote}
                   value={fmtNum(loan.betingetLaan)}
-                  onEdit={() => editNum('Lån (betinget)', 'betingetLaan', loan.betingetLaan)} />
-                <LoanRow label="Egenkapital" notes="Må stilles av deg ved overtakelse"
+                  onEdit={() => editNum(lp.conditionalLoan, 'betingetLaan', loan.betingetLaan)} />
+                <LoanRow label={lp.equityLabel} notes={lp.equityProofNote}
                   value={fmtNum(loan.egenkapital)}
-                  onEdit={() => editNum('Egenkapital', 'egenkapital', loan.egenkapital)} />
-                <LoanRow label="Kjøpesum (maks)" notes="Øvre grense for bud/kontrakt"
+                  onEdit={() => editNum(lp.equityLabel, 'egenkapital', loan.egenkapital)} />
+                <LoanRow label={lp.maxPurchase} notes={lp.maxPurchaseNote}
                   value={fmtNum(loan.kjoepesum)}
-                  onEdit={() => editNum('Kjøpesum (maks)', 'kjoepesum', loan.kjoepesum)} />
-                <LoanRow label="Totalpris" notes="Betinget lån + egenkapital"
+                  onEdit={() => editNum(lp.maxPurchase, 'kjoepesum', loan.kjoepesum)} />
+                <LoanRow label={lp.totalPrice} notes={lp.totalPriceNote}
                   value={fmtNum(calc.totalpris)} highlight />
               </div>
             </div>
@@ -469,7 +470,7 @@ const LoanPage: React.FC = () => {
             <div className={`${card} p-5 md:p-7 space-y-5`}>
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <Calculator size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>Nåværende lån</h2>
+                <h2 className={sectionLabel}>{lp.currentLoanTitle}</h2>
               </div>
               <div className="space-y-1">
                 <LoanRow label={t.currentMortgageBalance}
@@ -478,21 +479,21 @@ const LoanPage: React.FC = () => {
                 <LoanRow label={t.originalLoanAmount}
                   value={fmtNum(homeowner.originalLoanAmount)}
                   onEdit={() => editHomeowner(t.originalLoanAmount, 'originalLoanAmount', homeowner.originalLoanAmount)} />
-                <LoanRow label="Rente (nominell p.a.)"
+                <LoanRow label={lp.nominalRate}
                   value={fmtPct(homeowner.rente)}
-                  onEdit={() => editHomeowner('Rente (%)', 'rente', homeowner.rente)} />
+                  onEdit={() => editHomeowner(lp.rateEditTitle, 'rente', homeowner.rente)} />
                 <LoanRow label={t.yearsRemaining}
-                  value={`${homeowner.nedbetalingstid} år`}
+                  value={`${homeowner.nedbetalingstid} ${lp.yearsSuffix}`}
                   onEdit={() => editHomeowner(t.yearsRemaining, 'nedbetalingstid', homeowner.nedbetalingstid)} />
-                <LoanRow label="Termingebyr"
+                <LoanRow label={lp.termFee}
                   value={fmtNum(homeowner.termingebyr)}
-                  onEdit={() => editHomeowner('Termingebyr', 'termingebyr', homeowner.termingebyr)} />
+                  onEdit={() => editHomeowner(lp.termFee, 'termingebyr', homeowner.termingebyr)} />
                 <LoanRow label={t.monthlyPaymentCalc}
                   value={fmtNum(homeownerStatus.monthlyPaymentCalc + homeowner.termingebyr)}
                   highlight />
-                <LoanRow label="Herav renter / måned"
+                <LoanRow label={lp.ofWhichInterest}
                   value={fmtNum(homeownerStatus.monthlyInterest)} />
-                <LoanRow label="Herav avdrag / måned"
+                <LoanRow label={lp.ofWhichPrincipal}
                   value={fmtNum(homeownerStatus.monthlyPrincipal)} />
               </div>
             </div>
@@ -502,7 +503,7 @@ const LoanPage: React.FC = () => {
               <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
                   <Home size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                  <h2 className={sectionLabel}>Boligegenkapital</h2>
+                  <h2 className={sectionLabel}>{lp.homeEquityTitle}</h2>
                 </div>
                 <Link
                   to="/assets"
@@ -535,7 +536,7 @@ const LoanPage: React.FC = () => {
               {assets.houseValue > 0 && homeowner.originalLoanAmount > 0 && (
                 <div className="pt-2">
                   <div className="flex justify-between text-[11px] text-[var(--text-2)] mb-1.5">
-                    <span>Nedbetalt av opprinnelig lån</span>
+                    <span>{lp.repaidOfOriginal}</span>
                     <span className="font-mono font-medium text-[var(--text-1)]">
                       {homeownerStatus.equityPercent.toFixed(1)}%
                     </span>
@@ -554,14 +555,14 @@ const LoanPage: React.FC = () => {
             <div className={`${card} p-5 md:p-7 space-y-5`}>
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <ShieldCheck size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>Skattelettelse på boliglån</h2>
+                <h2 className={sectionLabel}>{lp.taxReliefTitle}</h2>
               </div>
               <div className="space-y-1">
-                <LoanRow label="Månedsrenter"
+                <LoanRow label={lp.monthlyInterestLabel}
                   value={fmtNum(homeownerStatus.monthlyInterest)} />
-                <LoanRow label="Skattefradragsprosent"
+                <LoanRow label={lp.deductionRate}
                   value={fmtPct(homeowner.skattefradragssats)}
-                  onEdit={() => editHomeowner('Skattefradragsprosent (%)', 'skattefradragssats', homeowner.skattefradragssats)} />
+                  onEdit={() => editHomeowner(lp.deductionRateEditTitle, 'skattefradragssats', homeowner.skattefradragssats)} />
                 <LoanRow label={t.annualTaxBenefit}
                   value={fmtNum(homeownerStatus.annualTaxDeduction)}
                   highlight highlightColor="green" />
@@ -572,16 +573,15 @@ const LoanPage: React.FC = () => {
             <div className={`${card} p-5 md:p-7 space-y-5`}>
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <TrendingDown size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>Sammenlign renten din</h2>
+                <h2 className={sectionLabel}>{lp.compareRateTitle}</h2>
               </div>
               <p className="text-[13px] text-[var(--text-2)]">
-                En lavere rente i markedet er forhandlingskort mot banken din – be om bedre
-                rente, eller vurder å refinansiere. Bruk tallene under på Finansportalen.
+                {lp.compareRateBody}
               </p>
               <div className="space-y-1">
-                <LoanRow label="Din rente (nominell p.a.)" value={fmtPct(homeowner.rente)} />
-                <LoanRow label="Restgjeld" value={fmtNum(homeowner.currentMortgageBalance)} />
-                <LoanRow label="Belåningsgrad"
+                <LoanRow label={lp.yourRate} value={fmtPct(homeowner.rente)} />
+                <LoanRow label={lp.remainingDebt} value={fmtNum(homeowner.currentMortgageBalance)} />
+                <LoanRow label={lp.ltv}
                   value={assets.houseValue > 0
                     ? fmtPct((homeowner.currentMortgageBalance / assets.houseValue) * 100)
                     : '–'}
@@ -593,7 +593,7 @@ const LoanPage: React.FC = () => {
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-[6px] bg-[var(--forest)] text-[var(--text)] text-[13px] font-medium hover:bg-[var(--forest-dim)] transition-colors"
               >
-                Sammenlign på Finansportalen
+                {lp.compareCta}
                 <ExternalLink size={14} strokeWidth={2} />
               </a>
             </div>
@@ -667,7 +667,7 @@ const LoanPage: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <LoanRow label={t.bridgeMonths}
-                  value={`${transition.bridgeMonths} mnd`}
+                  value={`${transition.bridgeMonths} ${t.common.moAbbr}`}
                   onEdit={() => editTransition(t.bridgeMonths, 'bridgeMonths', transition.bridgeMonths)} />
                 <LoanRow label={t.bridgeLoanRate}
                   value={fmtPct(transition.bridgeLoanRate)}
@@ -685,19 +685,19 @@ const LoanPage: React.FC = () => {
                 <h2 className={sectionLabel}>{t.newHouseCard}</h2>
               </div>
               <div className="space-y-1">
-                <LoanRow label="Kjøpesum"
+                <LoanRow label={lp.purchasePrice}
                   value={fmtNum(loan.kjoepesum)}
-                  onEdit={() => editNum('Kjøpesum', 'kjoepesum', loan.kjoepesum)} />
-                <LoanRow label="Rente (nominell p.a.)"
+                  onEdit={() => editNum(lp.purchasePrice, 'kjoepesum', loan.kjoepesum)} />
+                <LoanRow label={lp.nominalRate}
                   value={fmtPct(loan.rente)}
-                  onEdit={() => editNum('Rente (%)', 'rente', loan.rente)} />
-                <LoanRow label="Nedbetalingstid"
-                  value={`${loan.nedbetalingstid} år`}
-                  onEdit={() => editNum('Nedbetalingstid (år)', 'nedbetalingstid', loan.nedbetalingstid)} />
+                  onEdit={() => editNum(lp.rateEditTitle, 'rente', loan.rente)} />
+                <LoanRow label={lp.repaymentTerm}
+                  value={`${loan.nedbetalingstid} ${lp.yearsSuffix}`}
+                  onEdit={() => editNum(lp.repaymentTermEditTitle, 'nedbetalingstid', loan.nedbetalingstid)} />
                 <LoanRow label={t.additionalEquity}
-                  notes="Ekstra egenkapital utover salgsproveny"
+                  notes={lp.extraEquityNote}
                   value={fmtNum(loan.egenkapital)}
-                  onEdit={() => editNum('Ekstra egenkapital', 'egenkapital', loan.egenkapital)} />
+                  onEdit={() => editNum(lp.extraEquityEditTitle, 'egenkapital', loan.egenkapital)} />
                 <LoanRow label={t.equityFromSale}
                   value={fmtNum(transitionNewLoan.equityFromSale)} />
                 <LoanRow label={t.totalEquityNew}
@@ -722,19 +722,19 @@ const LoanPage: React.FC = () => {
 
             {/* Flow diagram */}
             <div className="flex items-center gap-2 flex-wrap mb-6">
-              <FlowStep label="Selger" value={fmtNum(transition.currentHouseValue)} color="blue" />
+              <FlowStep label={lp.flowSell} value={fmtNum(transition.currentHouseValue)} color="blue" />
               <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
-              <FlowStep label="Betaler lån" value={fmtNum(transition.currentMortgageBalance)} color="red" />
+              <FlowStep label={lp.flowPayLoan} value={fmtNum(transition.currentMortgageBalance)} color="red" />
               <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
               <FlowStep
-                label="Netto proveny"
+                label={lp.flowNetProceeds}
                 value={fmtNum(saleProceeds.netProceeds)}
                 color={saleProceeds.netProceeds < 0 ? 'red' : 'green'}
               />
               <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
-              <FlowStep label="Kjøper" value={fmtNum(loan.kjoepesum)} color="blue" />
+              <FlowStep label={lp.flowBuy} value={fmtNum(loan.kjoepesum)} color="blue" />
               <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
-              <FlowStep label="Trenger lån" value={fmtNum(transitionNewLoan.newLoanNeeded)} color="red" />
+              <FlowStep label={lp.flowNeedLoan} value={fmtNum(transitionNewLoan.newLoanNeeded)} color="red" />
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

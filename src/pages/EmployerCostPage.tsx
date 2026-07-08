@@ -126,7 +126,7 @@ const EmployerCostPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
               <SliderRow label={feriepengerLabel} value={employerCostConfig.feriepengesatsPct} onChange={(v) => updateEmployerCostConfig('feriepengesatsPct', v)} min={0} max={16} step={0.1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.feriepengesatsPct, DEFAULT_EMPLOYER_COST_CONFIG.feriepengesatsPct)} />} />
               <SliderRow label={payrollLabel} value={employerCostConfig.payrollTaxPct} onChange={(v) => updateEmployerCostConfig('payrollTaxPct', v)} min={0} max={20} step={0.1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.payrollTaxPct, DEFAULT_EMPLOYER_COST_CONFIG.payrollTaxPct)} />} />
-              <NumberRow label={ec.overheadFlat} value={employerCostConfig.overheadAnnual} onCommit={(v) => updateEmployerCostConfig('overheadAnnual', Math.max(0, v))} suffix="kr/år" badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.overheadAnnual, DEFAULT_EMPLOYER_COST_CONFIG.overheadAnnual)} />} />
+              <NumberRow label={ec.overheadFlat} value={employerCostConfig.overheadAnnual} onCommit={(v) => updateEmployerCostConfig('overheadAnnual', Math.max(0, v))} suffix={t.common.krPerYear} badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.overheadAnnual, DEFAULT_EMPLOYER_COST_CONFIG.overheadAnnual)} />} />
               <SliderRow label={ec.overheadPct} value={employerCostConfig.overheadPct} onChange={(v) => updateEmployerCostConfig('overheadPct', v)} min={0} max={50} step={1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(employerCostConfig.overheadPct, DEFAULT_EMPLOYER_COST_CONFIG.overheadPct)} />} />
             </div>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.overheadHint}</p>
@@ -170,12 +170,12 @@ const EmployerCostPage: React.FC = () => {
         </div>
 
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5">
-          <NumberRow label={ec.workHoursPerYear} value={billingConfig.workHoursPerYear} onCommit={(v) => updateBillingConfig('workHoursPerYear', Math.max(0, v))} suffix="t/år" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.workHoursPerYear, DEFAULT_BILLING_CONFIG.workHoursPerYear)} />} />
+          <NumberRow label={ec.workHoursPerYear} value={billingConfig.workHoursPerYear} onCommit={(v) => updateBillingConfig('workHoursPerYear', Math.max(0, v))} suffix={t.common.hoursPerYearUnit} badge={<ProvenanceBadge kind={provenanceOf(billingConfig.workHoursPerYear, DEFAULT_BILLING_CONFIG.workHoursPerYear)} />} />
           <SliderRow label={ec.utilization} value={billingConfig.utilizationPct} onChange={(v) => updateBillingConfig('utilizationPct', v)} min={0} max={100} step={1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.utilizationPct, DEFAULT_BILLING_CONFIG.utilizationPct)} />} />
           <div>
             <div className="flex items-baseline justify-between mb-2">
               <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{ec.billableOverride}</label>
-              <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>t/år</span>
+              <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{t.common.hoursPerYearUnit}</span>
             </div>
             <input
               type="number"
@@ -207,7 +207,7 @@ const EmployerCostPage: React.FC = () => {
           <StatBlock label={ec.annualRevenue} value={formatCurrency(billing.annualRevenueAtTarget)} />
           <StatBlock label={ec.annualProfit} value={formatCurrency(billing.profitAnnual)} color="var(--positive)" />
           <div className="col-span-2 lg:col-span-2 flex items-end">
-            <NumberRow label={ec.hoursPerDay} value={billingConfig.hoursPerDay} onCommit={(v) => updateBillingConfig('hoursPerDay', Math.max(0, v))} suffix="t" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.hoursPerDay, DEFAULT_BILLING_CONFIG.hoursPerDay)} />} />
+            <NumberRow label={ec.hoursPerDay} value={billingConfig.hoursPerDay} onCommit={(v) => updateBillingConfig('hoursPerDay', Math.max(0, v))} suffix={t.common.hourUnit} badge={<ProvenanceBadge kind={provenanceOf(billingConfig.hoursPerDay, DEFAULT_BILLING_CONFIG.hoursPerDay)} />} />
           </div>
         </div>
 

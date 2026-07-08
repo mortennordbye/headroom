@@ -203,7 +203,7 @@ const PensionPage: React.FC = () => {
               label={t.ipsAnnualContribution}
               value={pension.ipsAnnualContribution}
               onCommit={(v) => updatePension('ipsAnnualContribution', Math.min(Math.max(0, v), IPS_MAX_DEDUCTION))}
-              suffix="kr/år"
+              suffix={t.common.krPerYear}
             />
             <SliderRow label={t.ipsGrowthRate} value={pension.ipsGrowthRate} onChange={(v) => updatePension('ipsGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.ipsGrowthRate, DEFAULT_PENSION.ipsGrowthRate)} />} />
           </div>

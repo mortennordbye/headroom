@@ -22,7 +22,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { useFinance, DEFAULT_TAX_RATES, type Assets, type Pension, type SavingsAccount } from '../context/FinanceContext';
+import { useFinance, DEFAULT_TAX_RATES, type Assets, type Debt, type Pension, type SavingsAccount } from '../context/FinanceContext';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
@@ -35,6 +35,7 @@ import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
+import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
 import { parseLocaleNumber } from '../lib/validators';
 
 interface ModalConfig {
@@ -45,6 +46,10 @@ interface ModalConfig {
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+
+// Stable fallback for snapshots recorded before debts were historized, so the
+// history-mode memo deps don't churn on a fresh [] every render.
+const NO_DEBTS: Debt[] = [];
 
 const NetWorthCompositionChart = lazy(() => import('../components/charts/NetWorthCompositionChart'));
 const AllocationDonut = lazy(() => import('../components/charts/AllocationDonut'));
@@ -60,7 +65,7 @@ const AssetPage: React.FC = () => {
     updateSavingsAccount,
     removeSavingsAccount,
     formatCurrency,
-    totalDebt,
+    debts: liveDebts,
     growthReturnRate,
     setGrowthReturnRate,
     houseGrowthRate,
@@ -82,6 +87,12 @@ const AssetPage: React.FC = () => {
   const hist = useBalanceHistory();
   const assets = hist.snapshot?.assets ?? liveAssets;
   const pension = hist.snapshot?.pension ?? livePension;
+  // Debts follow the viewed month too — never mix past assets with today's debt.
+  // Snapshots from before debt historization have no `debts`; those months render
+  // equity-only, matching what netWorthHistory recorded at the time.
+  const debts = hist.isLive ? liveDebts : hist.snapshot?.debts ?? NO_DEBTS;
+  const totalDebt = debts.reduce((s, d) => s + Math.max(0, d.balance), 0);
+  const studentDebt = sumDebtByType(debts, 'student');
   const { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity } = useMemo(
     () => computeEquityBreakdown(assets),
     [assets],
@@ -149,6 +160,7 @@ const AssetPage: React.FC = () => {
     () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15),
     [assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears]
   );
+  const debtByYear = useMemo(() => calcDebtBalanceByYear(debts, 15), [debts]);
   const projectionData = useMemo(
     () => calcNetWorthProjectionByBucket(
       { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity },
@@ -156,8 +168,9 @@ const AssetPage: React.FC = () => {
       { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate },
       15,
       houseByYear,
+      debtByYear,
     ),
-    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, houseByYear]
+    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, houseByYear, debtByYear]
   );
 
   const formatAxisValue = (val: number) => {
@@ -435,7 +448,7 @@ const AssetPage: React.FC = () => {
                     {liabilitiesTotal >= 0 ? '−' : '+'}{formatCurrency(Math.abs(liabilitiesTotal))}
                   </span>
                 </div>
-                <EquityCompositionBar />
+                <EquityCompositionBar netWorth={netWorth} totalDebt={totalDebt} studentDebt={studentDebt} />
               </div>
             </div>
             <ArrowUpRight size={100} className="absolute -top-4 -right-4" style={{ color: 'var(--brass-dim)', opacity: 0.5 }} />
@@ -469,8 +482,9 @@ const AssetPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Debt (non-mortgage) */}
-      <DebtSection />
+      {/* Debt (non-mortgage) — a live editor/planner, so it has no historical
+          view; hide it in the time machine instead of showing today's debts. */}
+      {hist.isLive && <DebtSection />}
 
       {/* Mortgage payoff over time */}
       <div className={`${card} p-5 md:p-7 space-y-4`}>
@@ -515,7 +529,7 @@ const AssetPage: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-[13px]">
           <div>
             <div className={sectionLabel + ' mb-1'}>{t.assetPage.now}</div>
-            <div className="font-mono font-semibold text-[var(--text-1)]">{formatCurrency(projectionData[0]?.total ?? totalEquity)}</div>
+            <div className="font-mono font-semibold text-[var(--text-1)]">{formatCurrency(projectionData[0]?.total ?? netWorth)}</div>
           </div>
           <div>
             <div className={sectionLabel + ' mb-1'}>{t.assetPage.inFiveYears}</div>

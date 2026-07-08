@@ -636,6 +636,10 @@ export interface BalanceSnapshot {
   homeowner: HomeownerData;
   transition: TransitionData;
   housingMode: HousingMode;
+  /** Non-mortgage debts as of that month. Absent on snapshots recorded before
+   *  debt historization — those months render equity-only, matching what
+   *  `netWorthHistory` recorded at the time. */
+  debts?: Debt[];
 }
 
 export interface ExportPayload {
@@ -1460,20 +1464,21 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const mortgageRate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
   const mortgageTermYears = housingMode === 'homeowner' ? homeowner.nedbetalingstid : loan.nedbetalingstid;
 
-  // Snapshot current month's net worth whenever equity changes (only for the current real month)
+  // Snapshot current month's net worth (equity − non-mortgage debt, matching the
+  // Dashboard headline) whenever it changes (only for the current real month)
   useEffect(() => {
     if (!loaded.current) return;
     if (monthKey !== format(new Date(), 'yyyy-MM')) return;
-    // Deliberate: snapshot the current month's net worth into persisted state when equity changes.
+    // Deliberate: snapshot the current month's net worth into persisted state when it changes.
     // Returning `prev` unchanged when the value already matches keeps a plain
     // load/reload from dirtying the data (3.2).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNetWorthHistory(prev => {
-      const v = Math.round(totalEquity);
+      const v = Math.round(netWorth);
       return prev[monthKey] === v ? prev : { ...prev, [monthKey]: v };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalEquity]);
+  }, [netWorth]);
 
   // Capture the full balance state for the current calendar month whenever it
   // changes, so the balance pages can be viewed historically later. This state is
@@ -1482,7 +1487,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded.current) return;
     const nowKey = format(new Date(), 'yyyy-MM');
-    const snap: BalanceSnapshot = { assets, loan, pension, homeowner, transition, housingMode };
+    const snap: BalanceSnapshot = { assets, loan, pension, homeowner, transition, housingMode, debts };
     // Skip the rewrite when the stored snapshot is structurally identical —
     // the slices get fresh identities on every load/adopt, and rewriting the
     // entry anyway would dirty the data on a plain open (3.2).
@@ -1491,7 +1496,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         ? prev
         : { ...prev, [nowKey]: snap }
     ));
-  }, [assets, loan, pension, homeowner, transition, housingMode]);
+  }, [assets, loan, pension, homeowner, transition, housingMode, debts]);
 
   // The current home's value and mortgage are one real quantity stored in three
   // slices (assets drives net worth; homeowner drives LTV/payment; transition

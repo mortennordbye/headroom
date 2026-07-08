@@ -131,6 +131,25 @@ describe('sanitizePayload', () => {
     expect(snap.housingMode).toBe('first_buyer');
   });
 
+  it('coerces the debts array inside balanceSnapshots like top-level debts', () => {
+    const out = sanitizePayload(
+      {
+        balanceSnapshots: {
+          '2026-06': {
+            debts: [{ id: 'd1', name: 'Lån', balance: '5 000', rate: 'bad', minPayment: 100 }],
+          },
+        },
+      } as Record<string, unknown>,
+      SCHEMAS,
+    );
+    const snap = (out.balanceSnapshots as Record<string, Record<string, unknown>>)['2026-06'];
+    const snapDebt = (snap.debts as Record<string, unknown>[])[0];
+    expect(snapDebt.balance).toBe(5000);
+    expect(snapDebt.rate).toBe(0); // garbage → 0, snapshots get no default merge
+    expect(snapDebt.minPayment).toBe(100);
+    expect(snapDebt.name).toBe('Lån');
+  });
+
   it('leaves unrelated fields and clean data untouched', () => {
     const clean = { income: 50000, lang: 'nb', region: 'no', fixedExpenses: [{ id: 'a', amount: 100 }] };
     expect(sanitizePayload({ ...clean } as Record<string, unknown>, SCHEMAS)).toEqual(clean);

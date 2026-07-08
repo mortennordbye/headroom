@@ -279,4 +279,18 @@ describe('calcNetWorthProjectionByBucket', () => {
     const p = calcNetWorthProjectionByBucket(start, 0, rates, 2, houseByYear);
     expect(p.map(pt => pt.house)).toEqual(houseByYear);
   });
+
+  it('nets debtByYear out of total so the projection starts at net worth', () => {
+    const debtByYear = [100_000, 60_000, 0];
+    const p = calcNetWorthProjectionByBucket(start, 0, rates, 2, undefined, debtByYear);
+    expect(p.map(pt => pt.debt)).toEqual(debtByYear);
+    expect(p[0].total).toBe(1_170_000 - 100_000);
+    expect(p[1].total).toBe(p[1].stocks + p[1].crypto + p[1].cash + p[1].house - 60_000);
+  });
+
+  it('defaults debt to 0 when debtByYear is not provided', () => {
+    const p = calcNetWorthProjectionByBucket(start, 0, rates, 1);
+    expect(p.every(pt => pt.debt === 0)).toBe(true);
+    expect(p[0].total).toBe(1_170_000);
+  });
 });

@@ -31,7 +31,7 @@ export default function BalanceHistoryBar({ hist }: { hist: BalanceHistory }) {
           <button
             onClick={hist.goPrev}
             disabled={!hist.canPrev}
-            aria-label="Previous snapshot"
+            aria-label={tm.prevSnapshot}
             className="grid place-items-center w-7 h-7 rounded-[6px] transition-colors disabled:opacity-30 disabled:cursor-default"
             style={{ color: 'var(--text-2)' }}
           >
@@ -40,7 +40,7 @@ export default function BalanceHistoryBar({ hist }: { hist: BalanceHistory }) {
           <button
             onClick={hist.goNext}
             disabled={!hist.canNext}
-            aria-label="Next snapshot"
+            aria-label={tm.nextSnapshot}
             className="grid place-items-center w-7 h-7 rounded-[6px] transition-colors disabled:opacity-30 disabled:cursor-default"
             style={{ color: 'var(--text-2)' }}
           >

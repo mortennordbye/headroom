@@ -732,7 +732,7 @@ export default function SettingsPage() {
                       {t.settings.replaceConfirm}
                     </Button>
                     <Button variant="ghost" size="md" onClick={resetImport}>
-                      Cancel
+                      {t.cancel}
                     </Button>
                   </div>
                 </div>

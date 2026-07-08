@@ -279,6 +279,8 @@ export interface BucketProjectionPoint {
   crypto: number;
   cash: number;
   house: number;
+  /** Non-mortgage debt remaining that year (0 unless `debtByYear` is passed). */
+  debt: number;
   total: number;
 }
 
@@ -361,13 +363,18 @@ export function calcMortgageBalanceByYear(
  * Pass `houseByYear` (see `calcHouseEquityByYear`) to model housing with
  * appreciation + mortgage paydown; without it, the house bucket simply
  * compounds `start.house` at `rates.house`.
+ *
+ * Pass `debtByYear` (see `calcDebtBalanceByYear`) to net non-mortgage debt
+ * paydown out of `total`, so the projection starts at true net worth instead
+ * of asset equity; without it, debt is 0 and `total` is the asset sum.
  */
 export function calcNetWorthProjectionByBucket(
   start: BucketAmounts,
   annualSavings: number,
   rates: BucketRates,
   years: number,
-  houseByYear?: number[]
+  houseByYear?: number[],
+  debtByYear?: number[]
 ): BucketProjectionPoint[] {
   const result: BucketProjectionPoint[] = [];
   let { stocks, crypto, cash, house } = start;
@@ -375,13 +382,15 @@ export function calcNetWorthProjectionByBucket(
 
   for (let y = 0; y <= years; y++) {
     const houseVal = houseByYear ? houseByYear[y] ?? house : house;
+    const debtVal = debtByYear ? debtByYear[y] ?? 0 : 0;
     result.push({
       year: currentYear + y,
       stocks: Math.round(stocks),
       crypto: Math.round(crypto),
       cash: Math.round(cash),
       house: Math.round(houseVal),
-      total: Math.round(stocks + crypto + cash + houseVal),
+      debt: Math.round(debtVal),
+      total: Math.round(stocks + crypto + cash + houseVal - debtVal),
     });
     stocks = stocks * (1 + rates.stocks / 100) + annualSavings;
     crypto = crypto * (1 + rates.crypto / 100);

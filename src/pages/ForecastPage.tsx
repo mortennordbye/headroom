@@ -325,18 +325,21 @@ interface SummaryTileProps {
   color?: string;
 }
 
-const SummaryTile: React.FC<SummaryTileProps> = ({ label, now, then, thenLabel, subThen, color }) => (
-  <div className={`${card} p-4 md:p-5 space-y-1.5`}>
-    <div className={sectionLabel}>{label}</div>
-    <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
-      {then}
+const SummaryTile: React.FC<SummaryTileProps> = ({ label, now, then, thenLabel, subThen, color }) => {
+  const { t } = useFinance();
+  return (
+    <div className={`${card} p-4 md:p-5 space-y-1.5`}>
+      <div className={sectionLabel}>{label}</div>
+      <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
+        {then}
+      </div>
+      <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{thenLabel}</div>
+      <div className="text-[11px] font-mono pt-1 border-t" style={{ color: 'var(--text-2)', borderColor: 'var(--border)' }}>
+        {t.forecastPage.now} · {now}
+      </div>
+      {subThen && <div className="text-[10px] font-mono" style={{ color: 'var(--violet)' }}>{subThen}</div>}
     </div>
-    <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{thenLabel}</div>
-    <div className="text-[11px] font-mono pt-1 border-t" style={{ color: 'var(--text-2)', borderColor: 'var(--border)' }}>
-      Nå · {now}
-    </div>
-    {subThen && <div className="text-[10px] font-mono" style={{ color: 'var(--violet)' }}>{subThen}</div>}
-  </div>
-);
+  );
+};
 
 export default ForecastPage;
