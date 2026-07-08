@@ -110,6 +110,20 @@ function writeBlob(id, content, prevRev) {
   return rev;
 }
 
+// Read + parse the single stored finance blob. Returns { content, rev } or null
+// when the row is missing or its JSON is corrupt — callers decide the fallback
+// (send null, keep the incoming payload, or 409). Guards the parse that was
+// previously unguarded in /api/bank/sync.
+function readBlob(id = 'headroom') {
+  const row = getStmt.get(id);
+  if (!row) return null;
+  try {
+    return { content: JSON.parse(row.content), rev: row.rev };
+  } catch {
+    return null;
+  }
+}
+
 const inflationGetRange = db.prepare(
   'SELECT month, cpi_index AS cpiIndex, fetched_at AS fetchedAt FROM inflation_cache WHERE month >= ? AND month <= ? ORDER BY month ASC'
 );
@@ -150,10 +164,10 @@ app.get('/healthz', (_req, res) => {
 });
 
 app.get('/api/data', (req, res) => {
-  const row = getStmt.get('headroom');
+  const blob = readBlob();
   // The client echoes this rev back on save so we can detect a stale write.
-  res.set('X-Data-Rev', String(row ? row.rev : 0));
-  res.json(row ? JSON.parse(row.content) : null);
+  res.set('X-Data-Rev', String(blob ? blob.rev : 0));
+  res.json(blob ? blob.content : null);
 });
 
 // Minimal shape check so a stray/garbage POST can't overwrite the single data
@@ -183,14 +197,9 @@ const EB_ID_PREFIX = bank.EB_ID_PREFIX;
 // clobbered. (Trade-off: deleting an imported row in the UI can resurrect it —
 // tracked in BACKLOG.md.)
 function reconcileBankTransactions(incoming) {
-  const row = getStmt.get('headroom');
-  if (!row) return incoming;
-  let stored;
-  try {
-    stored = JSON.parse(row.content);
-  } catch {
-    return incoming;
-  }
+  const blob = readBlob();
+  if (!blob) return incoming;
+  const stored = blob.content;
   const storedTx = Array.isArray(stored.dailyTransactions) ? stored.dailyTransactions : [];
   const incomingTx = Array.isArray(incoming.dailyTransactions) ? incoming.dailyTransactions : [];
   const incomingIds = new Set(incomingTx.map((t) => t && t.id));
@@ -215,14 +224,9 @@ function reconcileBankTransactions(incoming) {
 // respected (that's an intentional clear); only a missing field falls back to
 // the stored value.
 function preserveUserFields(incoming) {
-  const row = getStmt.get('headroom');
-  if (!row) return incoming;
-  let stored;
-  try {
-    stored = JSON.parse(row.content);
-  } catch {
-    return incoming;
-  }
+  const blob = readBlob();
+  if (!blob) return incoming;
+  const stored = blob.content;
   const out = { ...incoming };
   for (const field of ['accountLabels', 'categoryRules', 'labelRules', 'categoryBudgets', 'deletedBankIds']) {
     const hasStored = stored[field] && (Array.isArray(stored[field]) ? stored[field].length : Object.keys(stored[field]).length);
@@ -341,73 +345,66 @@ app.get('/api/wage-stats', (_req, res) => {
 // ── Bank sync (Enable Banking) ───────────────────────────────────
 // Drives the in-app link/re-link/sync flow. Engine in server/bank.js.
 
+// Wrap a bank route so a thrown error becomes `status` + { error: message }
+// instead of a repeated try/catch. Server faults (5xx) are logged; client
+// faults (4xx) aren't. Routes with bespoke error handling — the callback
+// redirect and sync's needsRelink 409 — keep their own try/catch.
+function bankRoute(status, handler) {
+  return async (req, res) => {
+    try {
+      await handler(req, res);
+    } catch (err) {
+      if (status >= 500) console.error(`[bank] ${req.path} failed:`, err.message);
+      res.status(status).json({ error: err.message });
+    }
+  };
+}
+
 app.get('/api/bank/status', (_req, res) => {
   res.json(bank.getStatus());
 });
 
 // The connectable banks for the picker (proxied so the client never needs the key).
-app.get('/api/bank/aspsps', async (_req, res) => {
-  try {
-    res.json({ aspsps: await bank.getAspsps() });
-  } catch (err) {
-    console.error('[bank] aspsps failed:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+app.get('/api/bank/aspsps', bankRoute(500, async (_req, res) => {
+  res.json({ aspsps: await bank.getAspsps() });
+}));
 
 // Disconnect one bank. Its already-imported rows stay in the ledger.
-app.delete('/api/bank/connection/:id', (req, res) => {
-  try {
-    res.json({ ok: true, ...bank.removeConnection(String(req.params.id)), ...bank.getStatus() });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
+app.delete('/api/bank/connection/:id', bankRoute(400, (req, res) => {
+  res.json({ ok: true, ...bank.removeConnection(String(req.params.id)), ...bank.getStatus() });
+}));
 
 // Upload the app's private key (write-only — never read back). Validates the
 // PEM and verifies it against Enable Banking before storing it (chmod 600,
 // encrypted at rest when EB_KEY_SECRET is set).
-app.post('/api/bank/key', async (req, res) => {
-  try {
-    const pem = req.body && req.body.pem;
-    if (typeof pem !== 'string' || !pem.includes('PRIVATE KEY')) {
-      return res.status(400).json({ error: 'expected a PEM private key' });
-    }
-    const { verified, encrypted } = await bank.saveKey(pem);
-    res.json({ ok: true, verified, encrypted, ...bank.getStatus() });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+app.post('/api/bank/key', bankRoute(400, async (req, res) => {
+  const pem = req.body && req.body.pem;
+  if (typeof pem !== 'string' || !pem.includes('PRIVATE KEY')) {
+    return res.status(400).json({ error: 'expected a PEM private key' });
   }
-});
+  const { verified, encrypted } = await bank.saveKey(pem);
+  res.json({ ok: true, verified, encrypted, ...bank.getStatus() });
+}));
 
 // Set non-secret bank settings stored server-side: the redirect (callback)
 // URL and/or the Enable Banking application ID. Each is applied only when
 // present in the body, so the client can save them independently.
-app.post('/api/bank/config', (req, res) => {
-  try {
-    const body = req.body || {};
-    if (body.redirectUrl !== undefined) bank.setRedirect(String(body.redirectUrl || ''));
-    if (body.appId !== undefined) bank.setAppId(String(body.appId || ''));
-    res.json({ ok: true, ...bank.getStatus() });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
+app.post('/api/bank/config', bankRoute(400, (req, res) => {
+  const body = req.body || {};
+  if (body.redirectUrl !== undefined) bank.setRedirect(String(body.redirectUrl || ''));
+  if (body.appId !== undefined) bank.setAppId(String(body.appId || ''));
+  res.json({ ok: true, ...bank.getStatus() });
+}));
 
 // Start BankID for the chosen bank: returns the redirect url the client sends the browser to.
-app.post('/api/bank/link', async (req, res) => {
-  try {
-    const aspsp = req.body && req.body.aspsp;
-    const connectionId = req.body && req.body.connectionId;
-    res.json(await bank.startLink(
-      typeof aspsp === 'string' ? aspsp : undefined,
-      typeof connectionId === 'string' ? connectionId : undefined,
-    ));
-  } catch (err) {
-    console.error('[bank] link failed:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+app.post('/api/bank/link', bankRoute(500, async (req, res) => {
+  const aspsp = req.body && req.body.aspsp;
+  const connectionId = req.body && req.body.connectionId;
+  res.json(await bank.startLink(
+    typeof aspsp === 'string' ? aspsp : undefined,
+    typeof connectionId === 'string' ? connectionId : undefined,
+  ));
+}));
 
 // BankID redirect lands here; exchange the code, save the session, bounce to Settings.
 app.get('/api/bank/callback', async (req, res) => {
@@ -425,9 +422,9 @@ app.get('/api/bank/callback', async (req, res) => {
 app.post('/api/bank/sync', async (_req, res) => {
   try {
     const mapped = await bank.fetchMappedTransactions();
-    const row = getStmt.get('headroom');
-    if (!row) return res.status(409).json({ error: 'no finance data yet — open the app first' });
-    const blob = JSON.parse(row.content);
+    const stored = readBlob();
+    if (!stored) return res.status(409).json({ error: 'no finance data yet — open the app first' });
+    const blob = stored.content;
     const existing = Array.isArray(blob.dailyTransactions) ? blob.dailyTransactions : [];
     const before = existing.length;
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
@@ -435,7 +432,7 @@ app.post('/api/bank/sync', async (_req, res) => {
     // Bump rev so *other* open tabs see the change and refetch the freshly-synced
     // rows. We return the new rev so the tab that triggered the sync can adopt it
     // and not treat its own sync as a conflicting external change.
-    const newRev = writeBlob('headroom', JSON.stringify(blob), row.rev);
+    const newRev = writeBlob('headroom', JSON.stringify(blob), stored.rev);
     bank.recordSync();
     res.set('X-Data-Rev', String(newRev));
     res.json({
