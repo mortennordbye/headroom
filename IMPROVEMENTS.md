@@ -376,10 +376,10 @@ of CHART values). CSS contexts where `var()` would already work: `FunBudget`,
   `DEFAULT_ASSETS`/`DEFAULT_PENSION` (loan/homeowner/transition keep zero literals — their
   DEFAULT_* constants hold non-zero example values, wrong for a wipe).
 - `server/bank.js` — ✅ FINISHED (f43420f) session/pending/config JSON writes are now
-  atomic (tmp+rename). Still open: `pickDate` (`bank.js:281`) falls back to `''`, storing
-  rows invisible to every month filter and undeletable via UI, and a feed omitting
-  `credit_debit_indicator` (`bank.js:293-306`) records refunds as positive expenses
-  (`amount: Math.abs(parsed)` + kind solely from `indicator === 'CRDT'`).
+  atomic (tmp+rename). ✅ FINISHED (86864fe) `mapEBTransaction` now rejects a row with no
+  usable date (was storing `date:''`, invisible to month filters and undeletable) and infers
+  direction from the amount sign when `credit_debit_indicator` is absent (was recording
+  refunds as positive expenses); both covered in `src/lib/bank.test.ts`.
 
 ---
 
