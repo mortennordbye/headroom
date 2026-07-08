@@ -10,6 +10,7 @@ import {
 import { useFinance, type Assets, type Pension, type Language, type Region, type ExpenseType, type DebtType } from '../../context/FinanceContext';
 import { DEBT_TYPES } from '../../lib/debt';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { ProgressBar } from '../ui/ProgressBar';
 import { parseLocaleNumber } from '../../lib/validators';
 import {
   ONBOARDING_TOPICS,
@@ -212,9 +213,7 @@ function StepView({ topic, copy, step, total, isLast, onBack, onNext, onClose }:
       </div>
 
       {/* Progress bar */}
-      <div className="h-1 rounded-full mb-4 overflow-hidden" style={{ background: 'var(--bg-raised)' }}>
-        <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${(step / total) * 100}%`, background: 'var(--brass)' }} />
-      </div>
+      <ProgressBar pct={(step / total) * 100} heightClass="h-1" trackColor="var(--bg-raised)" color="var(--brass)" className="mb-4" />
 
       <div className="flex items-center gap-2.5 mb-2">
         <span className="grid place-items-center w-8 h-8 rounded-[6px] shrink-0" style={{ background: 'var(--warning-bg)', color: 'var(--brass)' }}>

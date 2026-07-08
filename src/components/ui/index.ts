@@ -5,3 +5,4 @@ export { Sparkline } from './Sparkline';
 export { Button } from './Button';
 export { ProvenanceBadge } from './ProvenanceBadge';
 export { ModalShell } from './ModalShell';
+export { ProgressBar } from './ProgressBar';

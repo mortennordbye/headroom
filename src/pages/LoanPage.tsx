@@ -38,6 +38,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
+import { ProgressBar } from '../components/ui/ProgressBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import {
@@ -525,12 +526,7 @@ const LoanPage: React.FC = () => {
                       {((houseEquity / assets.houseValue) * 100).toFixed(1)}%
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-[var(--bg-elev)] overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-[var(--positive)] transition-all"
-                      style={{ width: `${Math.min(100, Math.max(0, (houseEquity / assets.houseValue) * 100))}%` }}
-                    />
-                  </div>
+                  <ProgressBar pct={(houseEquity / assets.houseValue) * 100} color="var(--positive)" />
                 </div>
               )}
               {assets.houseValue > 0 && homeowner.originalLoanAmount > 0 && (
@@ -541,12 +537,7 @@ const LoanPage: React.FC = () => {
                       {homeownerStatus.equityPercent.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-[var(--bg-elev)] overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-[var(--positive)] transition-all"
-                      style={{ width: `${Math.min(100, homeownerStatus.equityPercent)}%` }}
-                    />
-                  </div>
+                  <ProgressBar pct={homeownerStatus.equityPercent} color="var(--positive)" />
                 </div>
               )}
             </div>

@@ -7,6 +7,7 @@ import { CHART } from '../lib/chartColors';
 import { categoryMoM } from '../lib/categoryStats';
 import { txDisplayName } from '../lib/labelRules';
 import { DeltaChip } from './ui/DeltaChip';
+import { ProgressBar } from './ui/ProgressBar';
 
 // Category dashboard for the selected month: spend per category with icon +
 // colour + share bar, a month-over-month chip, and click-to-drill into the
@@ -86,9 +87,7 @@ export function CategoryBreakdown({ onEditTransaction }: { onEditTransaction?: (
                 </span>
                 <span className="font-mono text-[var(--text-2)] tabular-nums shrink-0">{formatCurrency(r.current)}</span>
               </div>
-              <div className="h-1.5 rounded-[3px] bg-[var(--bg-raised)] overflow-hidden ml-[27px]">
-                <div className="h-full rounded-[3px]" style={{ width: `${pct}%`, background: color(r.category) }} />
-              </div>
+              <ProgressBar pct={pct} heightClass="h-1.5" square trackColor="var(--bg-raised)" color={color(r.category)} className="ml-[27px]" />
             </button>
 
             {isOpen && (

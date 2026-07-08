@@ -28,6 +28,7 @@ import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
+import { ProgressBar } from '../components/ui/ProgressBar';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
 import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
@@ -81,9 +82,7 @@ function EnvelopeBar({ envelope, formatCurrency, labels }: {
   const pct = envelope.budgeted > 0 ? Math.min(100, (envelope.actual / envelope.budgeted) * 100) : 0;
   return (
     <div className="mt-2 pl-[15px] space-y-1">
-      <div className="h-[3px] rounded-full bg-[var(--bg-elev)] overflow-hidden">
-        <div className="h-full rounded-full transition-[width]" style={{ width: `${pct}%`, background: color }} />
-      </div>
+      <ProgressBar pct={pct} heightClass="h-[3px]" color={color} />
       <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-2)]">
         <span>{formatCurrency(envelope.actual)} / {formatCurrency(envelope.budgeted)}</span>
         <span style={{ color }}>
