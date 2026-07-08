@@ -1,14 +1,14 @@
-# Headroom
-
 <div align="center">
 
-[![CI](https://github.com/mortennordbye/headroom/actions/workflows/build.yml/badge.svg)](https://github.com/mortennordbye/headroom/actions/workflows/build.yml) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mortennordbye/headroom/badge)](https://scorecard.dev/viewer/?uri=github.com/mortennordbye/headroom)
+# Headroom
+
+### Budgets · Assets · Investments · Loan modeling
 
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vite.dev/) [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/) [![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 
-[![License](https://img.shields.io/github/license/mortennordbye/headroom?style=flat-square)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/commits/main) [![Stars](https://img.shields.io/github/stars/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/stargazers)
+[![CI](https://github.com/mortennordbye/headroom/actions/workflows/build.yml/badge.svg)](https://github.com/mortennordbye/headroom/actions/workflows/build.yml) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mortennordbye/headroom/badge)](https://scorecard.dev/viewer/?uri=github.com/mortennordbye/headroom)
 
-</div>
+[![License](https://img.shields.io/github/license/mortennordbye/headroom?style=flat-square)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/commits/main) [![Issues](https://img.shields.io/github/issues/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/issues) [![Stars](https://img.shields.io/github/stars/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/stargazers)
 
 A self-hosted personal finance tracker. Track monthly budgets, manage assets and investments, model housing loans, and get smart spending recommendations. All data is stored server-side in a SQLite database via Docker — zero browser storage. Norwegian is natively supported.
 
@@ -17,6 +17,8 @@ A self-hosted personal finance tracker. Track monthly budgets, manage assets and
 | ![Dashboard](screenshots/dashboard.png) | ![Budget](screenshots/budget.png) |
 
 ![Net worth](screenshots/assets.png)
+
+</div>
 
 ## Features
 
