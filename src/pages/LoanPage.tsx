@@ -529,10 +529,10 @@ const LoanPage: React.FC = () => {
                   <div className="flex justify-between text-[11px] text-[var(--text-2)] mb-1.5">
                     <span>{lp.repaidOfOriginal}</span>
                     <span className="font-mono font-medium text-[var(--text-1)]">
-                      {homeownerStatus.equityPercent.toFixed(1)}%
+                      {homeownerStatus.originalLoanRepaidPercent.toFixed(1)}%
                     </span>
                   </div>
-                  <ProgressBar pct={homeownerStatus.equityPercent} color="var(--positive)" />
+                  <ProgressBar pct={homeownerStatus.originalLoanRepaidPercent} color="var(--positive)" />
                 </div>
               )}
             </div>

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { coerceNumber, sanitizePayload } from './sanitizePayload';
+import { parseLocaleNumber } from './validators';
 
 const SCHEMAS = {
   assets: { portfolio: 0, taxRate: 0, houseValue: 0 },
@@ -24,6 +25,13 @@ describe('coerceNumber', () => {
     expect(coerceNumber(null)).toBeUndefined();
     expect(coerceNumber(undefined)).toBeUndefined();
     expect(coerceNumber({})).toBeUndefined();
+  });
+
+  it('tolerates a thousands-space that parseLocaleNumber deliberately rejects', () => {
+    // Salvage grammar (stored/imported blobs) vs strict input grammar are
+    // intentionally different — this documents that divergence.
+    expect(coerceNumber('12 000')).toBe(12000);
+    expect(parseLocaleNumber('12 000')).toBeNaN();
   });
 });
 

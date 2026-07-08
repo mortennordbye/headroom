@@ -232,7 +232,8 @@ export interface HomeownerStatus {
   monthlyInterest: number;
   monthlyPrincipal: number;
   annualTaxDeduction: number;
-  equityPercent: number;
+  /** Share of the ORIGINAL loan already repaid, as a percent (not home equity). */
+  originalLoanRepaidPercent: number;
 }
 
 export function calcHomeownerMortgageStatus(
@@ -252,11 +253,11 @@ export function calcHomeownerMortgageStatus(
   const yearOneInterest = calcAmortizationSchedule(currentBalance, annualRate, yearsRemaining)[0]?.interestPaid
     ?? monthlyInterest * 12;
   const annualTaxDeduction = yearOneInterest * (skattefradragssats / 100);
-  const equityPercent =
+  const originalLoanRepaidPercent =
     originalLoan > 0
       ? Math.max(0, ((originalLoan - currentBalance) / originalLoan) * 100)
       : 0;
-  return { monthlyPaymentCalc, monthlyInterest, monthlyPrincipal, annualTaxDeduction, equityPercent };
+  return { monthlyPaymentCalc, monthlyInterest, monthlyPrincipal, annualTaxDeduction, originalLoanRepaidPercent };
 }
 
 export interface BucketAmounts {
