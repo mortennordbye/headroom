@@ -61,8 +61,19 @@ export default function MoneyFlowSankey() {
     const savings = Math.min(recommendedInvestment, Math.max(0, netM - fixed));
     const discretionary = Math.max(0, netM - fixed - savings);
 
+    // Round the remainder bucket LAST so the net node's outflows sum exactly to
+    // its inflow, and drop zero links entirely — a genuinely empty bucket must
+    // not render as a fabricated 1 kr flow.
+    const roundedTax = Math.round(taxM);
+    const roundedNet = Math.round(netM);
+    const roundedFixed = Math.round(fixed);
+    const roundedSavings = Math.round(savings);
+    const roundedDiscretionary = discretionary > 0
+      ? Math.max(0, roundedNet - roundedFixed - roundedSavings)
+      : 0;
+
     const c = t.charts;
-    const nodes = [
+    const allNodes = [
       { name: 'gross', label: c.gross, color: NODE_COLOR.gross },
       { name: 'tax', label: c.tax, color: NODE_COLOR.tax },
       { name: 'net', label: c.netTakeHome, color: NODE_COLOR.net },
@@ -70,13 +81,18 @@ export default function MoneyFlowSankey() {
       { name: 'savings', label: c.savings, color: NODE_COLOR.savings },
       { name: 'discretionary', label: c.discretionary, color: NODE_COLOR.discretionary },
     ];
-    const links = [
-      { source: 0, target: 1, value: Math.max(1, Math.round(taxM)) },
-      { source: 0, target: 2, value: Math.max(1, Math.round(netM)) },
-      { source: 2, target: 3, value: Math.max(1, Math.round(fixed)) },
-      { source: 2, target: 4, value: Math.max(1, Math.round(savings)) },
-      { source: 2, target: 5, value: Math.max(1, Math.round(discretionary)) },
-    ];
+    const rawLinks = [
+      { source: 0, target: 1, value: roundedTax },
+      { source: 0, target: 2, value: roundedNet },
+      { source: 2, target: 3, value: roundedFixed },
+      { source: 2, target: 4, value: roundedSavings },
+      { source: 2, target: 5, value: roundedDiscretionary },
+    ].filter(l => l.value > 0);
+    // Nodes left without any flow are removed, so link indices must be remapped.
+    const usedIdx = [...new Set(rawLinks.flatMap(l => [l.source, l.target]))].sort((a, b) => a - b);
+    const remap = new Map(usedIdx.map((oldIdx, newIdx) => [oldIdx, newIdx]));
+    const nodes = usedIdx.map(i => allNodes[i]);
+    const links = rawLinks.map(l => ({ ...l, source: remap.get(l.source)!, target: remap.get(l.target)! }));
     return { nodes, links, grossM };
   }, [region, grossAnnualIncome, customTaxRatePct, pension.ipsAnnualContribution, totalFixedExpenses, recommendedInvestment, t]);
 
