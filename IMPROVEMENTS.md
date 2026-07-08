@@ -570,17 +570,23 @@ Blob read (`getStmt.get('headroom')` + `JSON.parse`) repeated at :177-185, :206-
 Seven bank routes repeat the same try/catch-to-status wrapper (:317-414); a tiny handler
 wrapper removes it.
 
-**8.10 🟢 Structural (flagged, not a quick fix): a declarative payload-field registry.**
-`buildPayload` (`FinanceContext.tsx:832-852`), `applyPayload`'s ~35
-`if (data.x !== undefined) setX(...) else if (resetMissing) setX(DEFAULT)` lines
-(:854-914), the demo snapshot, and the SettingsPage export are four hand-synced copies of
-the same field list; CLAUDE.md documents the hazard. A registry
-(`{key, setter, default, group}[]`) would collapse `applyPayload` and make `buildPayload`
-derivable, eliminating the drift class behind 2.4/2.5/2.6 permanently. Architecture-level;
-needs its own task with throwaway-`DATA_DIR` round-trip tests, not a drive-by.
+**8.10 ✅ FINISHED (b6f157d) A declarative payload-field registry.**
+The single source is now `src/lib/payloadRegistry.ts` (`makePayloadRegistry` → one
+`{group, demo, read, default}` spec per field). `applyPayload` collapsed to a registry
+loop, `buildPayload` is projected through `derivePayload`, and the registry / setter map /
+built payload are all typed over `PersistedKey`, so a newly-added `ExportPayload` field now
+FAILS TO COMPILE until it is registered everywhere — killing the drift class behind
+2.4/2.5/2.6. `migrateSavingsAccounts`/`migrateSnapshotSavings`/`makeId` moved to
+`src/lib/savingsMigration.ts` so the registry stays React-free. `getDemoData` and the
+SettingsPage export (already `buildPayload`-derived) are unchanged; a demo-coverage test
+locks the personal/preference partition. Verified with a deep-equality apply→derive
+round-trip test, resetMissing reset/preserve tests, an exhaustiveness/group-split check,
+and a throwaway-`DATA_DIR` POST confirming the built shape passes server validation
+(416 tests pass; `tsc`/`lint`/`build` green).
 
-Also noted: `BudgetDistributionChart.tsx:43-59` hand-rolls a tooltip card that the shared
-`ChartTooltip` could serve with a small "extra line" slot.
+Still open (deferred to BACKLOG "Polish items"): `BudgetDistributionChart.tsx:~43-59`
+hand-rolls a tooltip card that the shared `ChartTooltip` could serve with a small
+"extra line" slot — kept out of the persistence PR to keep its diff clean.
 
 ---
 
