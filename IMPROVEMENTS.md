@@ -558,7 +558,13 @@ so a slot component would be a bigger abstraction than the duplication it remove
 same alignment spacer; they differ only in trailing extras (notes/reset, trash, icon).
 Fix: one `ui/EditableRow` with slots.
 
-**8.9 🟢 Server boilerplate in `server/index.js`.**
+**8.9 ✅ FINISHED (92c8809) Server boilerplate in `server/index.js`.**
+(`readBlob(id)` centralizes the `getStmt.get` + `JSON.parse` from `/api/data`,
+`reconcileBankTransactions`, `preserveUserFields` and `/api/bank/sync`, guarding the parse
+that was unguarded in the last — a corrupt blob now 409s the sync instead of 500-crashing.
+`/api/data` POST keeps `getStmt`: it needs only the rev. `bankRoute(status, handler)` removes
+the identical try/catch from the five uniform bank routes; the callback redirect and sync's
+`needsRelink` 409 stay bespoke.)
 Blob read (`getStmt.get('headroom')` + `JSON.parse`) repeated at :177-185, :206-214, and
 :388-390 (the last one, in `/api/bank/sync`, has an unguarded parse); extract `readBlob()`.
 Seven bank routes repeat the same try/catch-to-status wrapper (:317-414); a tiny handler
