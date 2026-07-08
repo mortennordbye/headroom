@@ -198,11 +198,14 @@ function reconcileBankTransactions(incoming) {
   return { ...incoming, dailyTransactions: [...incomingTx, ...missing] };
 }
 
-// Guard user-authored maps (custom account names, category rules) against a
-// write that omits the field entirely — e.g. an older/cached client build that
-// predates the field. Such a write must not silently wipe saved names/rules. An
-// explicit empty object is respected (that's an intentional clear); only a
-// missing field falls back to the stored value.
+// Guard user-authored fields (custom account names, categorization/label rules,
+// category budgets, bank-row soft-deletes) against a write that omits the field
+// entirely — e.g. an older/cached client build that predates the field (a real
+// scenario given the PWA stale-service-worker gotcha). Such a write must not
+// silently wipe saved data; a dropped deletedBankIds would even resurrect
+// deleted bank rows via reconcileBankTransactions. An explicit empty value is
+// respected (that's an intentional clear); only a missing field falls back to
+// the stored value.
 function preserveUserFields(incoming) {
   const row = getStmt.get('headroom');
   if (!row) return incoming;
@@ -213,7 +216,7 @@ function preserveUserFields(incoming) {
     return incoming;
   }
   const out = { ...incoming };
-  for (const field of ['accountLabels', 'categoryRules']) {
+  for (const field of ['accountLabels', 'categoryRules', 'labelRules', 'categoryBudgets', 'deletedBankIds']) {
     const hasStored = stored[field] && (Array.isArray(stored[field]) ? stored[field].length : Object.keys(stored[field]).length);
     if (incoming[field] === undefined && hasStored) {
       console.log(`[data] preserving stored ${field} (incoming payload omitted it)`);
