@@ -43,7 +43,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors'
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
 import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/salary';
-import { formatSignedPct } from '../lib/format';
+import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
@@ -690,12 +690,6 @@ const SalaryPage: React.FC = () => {
 
   // ── Render ─────────────────────────────────────────────────────
 
-  const formatAxisInt = (val: number) => {
-    if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
-    if (Math.abs(val) >= 1_000) return `${Math.round(val / 1_000)}k`;
-    return val.toString();
-  };
-
   // Clamp to the salary in effect *today* — the last entry may be a
   // future-dated raise, and the headline (`current`) is already clamped.
   const activeSalary = salaryAt(currentMonthKey, sortedSalaries);
@@ -948,7 +942,7 @@ const SalaryPage: React.FC = () => {
               <YAxis tickFormatter={(v) => `${v}%`} {...AXIS_PROPS_Y} width={44} />
               <Tooltip
                 content={<ChartTooltip valueFormatter={(v) => `${v.toFixed(1)}%`} />}
-                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                cursor={{ fill: CHART.surface2 }}
               />
               <ReferenceLine y={0} stroke="var(--text-3)" strokeWidth={1} />
               <Bar dataKey="salaryPct" name={t.salaryPage.salaryIncrease} fill="var(--accent)" radius={[4, 4, 0, 0]}>
@@ -1044,7 +1038,7 @@ const SalaryPage: React.FC = () => {
               <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
               <Tooltip
                 content={<ChartTooltip />}
-                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                cursor={{ fill: CHART.surface2 }}
               />
               <Bar dataKey="base" stackId="a" name={t.salaryPage.baseSalary} fill="url(#compBaseGradient)" />
               <Bar dataKey="onCall" stackId="a" name={t.salary.onCallLabel} fill="url(#compOnCallGradient)" />
@@ -1084,7 +1078,7 @@ const SalaryPage: React.FC = () => {
               <YAxis yAxisId="left" tickFormatter={(v) => `${v}t`} {...AXIS_PROPS_Y} width={40} />
               <YAxis yAxisId="right" orientation="right" tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={56} />
               <Tooltip
-                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                cursor={{ fill: CHART.surface2 }}
                 content={<ChartTooltip valueFormatter={(v, e) => e?.dataKey === 'hoursPerWeek' ? `${v.toFixed(1)} ${t.common.hoursPerWeekUnit}` : formatCurrency(v)} />}
               />
               <Bar yAxisId="left" dataKey="hoursPerWeek" name={t.salaryPage.hoursPerWk} fill="url(#hoursGradient)" radius={[6, 6, 0, 0]}>

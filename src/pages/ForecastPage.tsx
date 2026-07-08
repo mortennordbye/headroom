@@ -11,15 +11,10 @@ import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { currentMonthKey } from '../lib/date';
 import { salaryAt } from '../lib/salary';
+import { formatAxisInt } from '../lib/format';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
-
-function formatAxisInt(val: number): string {
-  if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(val) >= 1_000) return `${Math.round(val / 1_000)}k`;
-  return val.toString();
-}
 
 const ForecastPage: React.FC = () => {
   const { t, totalEquity, salaries, jobs, loan, income, housingMode, homeowner, formatCurrency, region, customTaxRatePct, pension } = useFinance();

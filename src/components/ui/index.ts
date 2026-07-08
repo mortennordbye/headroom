@@ -6,3 +6,6 @@ export { Button } from './Button';
 export { ProvenanceBadge } from './ProvenanceBadge';
 export { ModalShell } from './ModalShell';
 export { ProgressBar } from './ProgressBar';
+export { SummaryTile } from './SummaryTile';
+export { NumberRow } from './NumberRow';
+export { SliderRow } from './SliderRow';

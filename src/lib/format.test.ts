@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatSignedPct } from './format';
+import { formatSignedPct, formatAxisInt } from './format';
 
 describe('formatSignedPct', () => {
   it('prefixes + for zero and positive values, nothing extra for negative', () => {
@@ -19,5 +19,27 @@ describe('formatSignedPct', () => {
     expect(formatSignedPct(undefined)).toBe('—');
     expect(formatSignedPct(NaN)).toBe('—');
     expect(formatSignedPct(Infinity)).toBe('—');
+  });
+});
+
+describe('formatAxisInt', () => {
+  it('renders millions with one decimal and an M suffix', () => {
+    expect(formatAxisInt(1_500_000)).toBe('1.5M');
+    expect(formatAxisInt(1_000_000)).toBe('1.0M');
+    expect(formatAxisInt(-2_300_000)).toBe('-2.3M');
+  });
+
+  it('renders thousands as a rounded integer with a k suffix', () => {
+    expect(formatAxisInt(12_000)).toBe('12k');
+    expect(formatAxisInt(1_000)).toBe('1k');
+    expect(formatAxisInt(1_499)).toBe('1k');
+    expect(formatAxisInt(1_500)).toBe('2k');
+    expect(formatAxisInt(-12_000)).toBe('-12k');
+  });
+
+  it('renders values below 1000 as the raw integer string', () => {
+    expect(formatAxisInt(0)).toBe('0');
+    expect(formatAxisInt(999)).toBe('999');
+    expect(formatAxisInt(-500)).toBe('-500');
   });
 });

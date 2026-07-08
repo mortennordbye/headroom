@@ -37,6 +37,7 @@ import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
 import { parseLocaleNumber } from '../lib/validators';
+import { formatAxisInt } from '../lib/format';
 
 interface ModalConfig {
   title: string;
@@ -172,12 +173,6 @@ const AssetPage: React.FC = () => {
     ),
     [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, houseByYear, debtByYear]
   );
-
-  const formatAxisValue = (val: number) => {
-    if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
-    if (Math.abs(val) >= 1_000) return `${Math.round(val / 1_000)}k`;
-    return val.toString();
-  };
 
   const editRate = (label: string, current: number, onCommit: (v: number) => void) => {
     openModal({
@@ -570,7 +565,7 @@ const AssetPage: React.FC = () => {
               </defs>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="year" {...AXIS_PROPS} />
-              <YAxis tickFormatter={formatAxisValue} {...AXIS_PROPS_Y} width={52} />
+              <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
               <Tooltip content={<ChartTooltip />} />
               <Area type="monotone" dataKey="house" stackId="1" name={t.bucketHouse} stroke={CHART.teal} fill="url(#houseGrad)" />
               <Area type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke={CHART.slate} fill="url(#cashGrad)" />
