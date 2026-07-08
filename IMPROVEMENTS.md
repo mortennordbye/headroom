@@ -273,22 +273,25 @@ Row percentages divide by unclamped `totalEquity` while rows clamp to ≥0 (can 
 
 ## 5. Legacy & hacky code to clean up
 
-**5.1 🟡 Inline financial maths that belongs in `src/lib/` with tests.**
-- Pension projection compounding duplicated in `PensionPage.tsx:51-68` (iterative) and
-  `ForecastPage.tsx:48-55` (closed form). They agree today (verified); extract one
-  `projectPensionWealth()` before they drift.
-- `ForecastPage.tsx:83-90` re-implements the annuity formula annually, giving slightly
-  different totals than the shared monthly `calcMonthlyPayment` used elsewhere.
-- `LoanPage.tsx:185-201` re-implements year-one interest (duplicates
-  `calcAmortizationSchedule`) and computes `totalInterest` that goes negative when
-  `nedbetalingstid = 0` (allowed by the editor).
-- `DashboardPage.tsx:185,1106,1113` unlabeled assumptions: `1.02 ** i` (2%/month growth,
-  twice), `max * 0.85` target line.
-- `SalaryPage.tsx:53,153,184-203` `WEEKS_PER_MONTH = 4.345` and the hourly/trailing-12
-  aggregation, untested inline. Related lib gap: `hoursAt` (`src/lib/salary.ts`) picks the
-  latest snapshot with no `jobId` filter and the page passes all snapshots
-  (`SalaryPage.tsx:146`), so a snapshot from an ended job leaks into later jobs' hourly
-  maths.
+**5.1 🟡 Inline financial maths that belongs in `src/lib/` with tests.** (mostly closed in 7e4d8b9)
+- ✅ FINISHED (7e4d8b9) Pension projection compounding duplicated in `PensionPage.tsx`
+  (iterative) and `ForecastPage.tsx` (closed form). Extracted to `src/lib/pension.ts`
+  (`pensionFutureValue` + `projectPensionWealth`, tested); both pages consume it.
+- ✅ FINISHED (7e4d8b9) `ForecastPage.tsx` re-implemented the annuity formula annually; now
+  `annualMortgagePayment = 12 × calcMonthlyPayment(...)`, matching the Loan page.
+- ✅ FINISHED (7e4d8b9) `LoanPage.tsx` re-implemented year-one interest and computed a
+  `totalInterest` that went negative at `nedbetalingstid = 0`. Both now derive from
+  `calcAmortizationSchedule` (year-one = `schedule[0].interestPaid`, total = sum of
+  `interestPaid`), so a 0-term loan reports 0 interest.
+- ✅ FINISHED (7e4d8b9) `DashboardPage` `1.02 ** i` / `max * 0.85` are now the named
+  `PROJECTED_INCOME_GROWTH` / `INCOME_TARGET_SHARE` constants.
+- ✅ FINISHED (7e4d8b9) the `hoursAt` `jobId` leak — a snapshot assigned to one job no longer
+  leaks into another job's hourly maths (unassigned snapshots stay global); `WEEKS_PER_MONTH`
+  and the per-month `nominalHourlyRate` moved to `src/lib/salary.ts` with tests.
+- 🟢 Residual: `SalaryPage.tsx` `trailingHourly` (trailing-12 hourly incl. bonus/overtime/
+  on-call) is still an inline page-level aggregation. Extract to a tested lib helper when it
+  next needs touching; it composes `series` + `bonuses` + `overtime`, so it's page-shaped
+  rather than a shared formula.
 
 **5.2 ✅ FINISHED (e7747e8) `parseFloat` where `parseLocaleNumber` is mandated.**
 Beyond 1.6: `PensionPage.tsx:303`, `EmployerCostPage.tsx:108,186,280`,
