@@ -596,6 +596,8 @@ interface FinanceDerivedContextType {
   isMonthlyIncomeOverridden: boolean;
   prevMonthIncome: number;
   prevMonthSpending: number;
+  /** This month's discretionary spend, transfer-netted — pair with prevMonthSpending. */
+  currentMonthSpending: number;
   effectiveIncome: number;
   averageIncome: number;
   /** Last-12-months net income (override or derived), oldest → newest, keyed by month. */
@@ -1374,13 +1376,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [dailyTransactions, internalTransferIds],
   );
 
-  // Previous month's spending, measured like the current month's dashboard
-  // figure: income and internal transfers excluded, envelope-covered spend
-  // excluded — only discretionary spend counts, so the "vs last month" chip
-  // compares like with like instead of counting salary deposits as spending.
+  // Both sides of the "vs last month" chip, measured identically: income and
+  // internal transfers excluded, envelope-covered spend excluded — only
+  // discretionary spend counts, so the chip compares like with like instead of
+  // counting salary deposits or own-account moves as spending. (dailyData's
+  // totalSpent is close but not identical: it is built from the raw month
+  // transactions, so a transfer's expense leg still counts there.)
   const prevMonthSpending = useMemo(
     () => discretionarySpendForMonth(nonTransferTransactions, fixedExpenses, prevMonthKey),
     [nonTransferTransactions, fixedExpenses, prevMonthKey],
+  );
+  const currentMonthSpending = useMemo(
+    () => discretionarySpendForMonth(nonTransferTransactions, fixedExpenses, monthKey),
+    [nonTransferTransactions, fixedExpenses, monthKey],
   );
 
   // Per-account view (Budget page only, not persisted). Accounts are grouped by
@@ -1997,14 +2005,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const derivedValue = useMemo<FinanceDerivedContextType>(() => ({
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
-    prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome, incomeSeries,
+    prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
     totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   }), [
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
-    prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome, incomeSeries,
+    prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
     totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,

@@ -46,6 +46,7 @@ const DashboardPage: React.FC = () => {
     averageIncome,
     prevMonthIncome,
     prevMonthSpending,
+    currentMonthSpending,
     recommendedSpending,
     recommendedInvestment,
     monthlyBudget,
@@ -107,7 +108,9 @@ const DashboardPage: React.FC = () => {
   const availablePct = Math.max(0, 100 - budgetUsedPct - spentPct);
   const incomeDiffPct = averageIncome > 0 ? ((effectiveIncome - averageIncome) / averageIncome) * 100 : 0;
   const incomeDelta = prevMonthIncome > 0 ? ((effectiveIncome - prevMonthIncome) / prevMonthIncome) * 100 : null;
-  const spendingDelta = prevMonthSpending > 0 ? ((totalSpent - prevMonthSpending) / prevMonthSpending) * 100 : null;
+  // The chip compares the context's transfer-netted pair, not totalSpent —
+  // totalSpent still counts a transfer's expense leg (see FinanceContext).
+  const spendingDelta = prevMonthSpending > 0 ? ((currentMonthSpending - prevMonthSpending) / prevMonthSpending) * 100 : null;
 
   // ─── Financial-resilience metrics ───
   const emergencyFund = calcEmergencyFundStatus(assets.bufferAccount, totalFixedExpenses);
