@@ -9,7 +9,8 @@ const path = require('path');
 const API_BASE = 'https://api.enablebanking.com';
 // Required config: every install registers its own Enable Banking application
 // (no shared code default — this repo is self-hosted by several people).
-const APP_ID = process.env.EB_APP_ID || '';
+// Env wins; otherwise it's a UI setting stored in eb-config.json (see getAppId).
+const ENV_APP_ID = process.env.EB_APP_ID || '';
 const COUNTRY = process.env.EB_COUNTRY || 'NO';
 const DAYS = Number(process.env.EB_DAYS || 90);
 
@@ -35,10 +36,11 @@ const EB_ID_PREFIX = 'eb-';
 // --- low-level API client ---------------------------------------------------
 
 function signJwtWith(privateKey) {
-  if (!APP_ID) throw new Error('EB_APP_ID is not set — register an Enable Banking app and set the env var');
+  const appId = getAppId();
+  if (!appId) throw new Error('Enable Banking application ID is not set — enter it in Settings (or set EB_APP_ID)');
   const b64 = (s) => Buffer.from(s).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
-  const header = b64(JSON.stringify({ typ: 'JWT', alg: 'RS256', kid: APP_ID }));
+  const header = b64(JSON.stringify({ typ: 'JWT', alg: 'RS256', kid: appId }));
   const payload = b64(JSON.stringify({ iss: 'enablebanking.com', aud: 'api.enablebanking.com', iat: now, exp: now + 3600 }));
   const sig = crypto.sign('RSA-SHA256', Buffer.from(`${header}.${payload}`), privateKey);
   return `${header}.${payload}.${b64(sig)}`;
@@ -269,7 +271,7 @@ function accountKey(connection, acc) {
   return `${connection.id.slice(0, 8)}:${acc.uid}`;
 }
 
-// --- redirect URL: env wins, else a UI setting in eb-config.json ------------
+// --- redirect URL + app id: env wins, else a UI setting in eb-config.json ---
 
 function getRedirect() {
   return ENV_REDIRECT || (readJson(CONFIG_PATH) || {}).redirectUrl || '';
@@ -279,6 +281,22 @@ function setRedirect(url) {
   if (!/^https:\/\/.+/.test(url)) throw new Error('redirect URL must be https://');
   const cfg = readJson(CONFIG_PATH) || {};
   cfg.redirectUrl = url;
+  writeJsonAtomic(CONFIG_PATH, cfg);
+}
+
+// The Enable Banking application ID (a public identifier, not a secret — it
+// rides in the JWT header as `kid`).
+function getAppId() {
+  return ENV_APP_ID || (readJson(CONFIG_PATH) || {}).appId || '';
+}
+
+function setAppId(id) {
+  const v = String(id).trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) {
+    throw new Error('application ID must be a UUID (from the Enable Banking control panel)');
+  }
+  const cfg = readJson(CONFIG_PATH) || {};
+  cfg.appId = v;
   writeJsonAtomic(CONFIG_PATH, cfg);
 }
 
@@ -561,6 +579,7 @@ function getStatus() {
   const redirectUrl = getRedirect();
   const hasRedirect = Boolean(redirectUrl);
   const keyPresent = hasKey();
+  const appId = getAppId();
   const base = {
     hasRedirect,
     redirectUrl,
@@ -568,8 +587,10 @@ function getStatus() {
     hasKey: keyPresent,
     keyEncrypted: keyIsEncrypted(),
     keySecretSource: keySecretSource(),
-    hasAppId: Boolean(APP_ID),
-    configured: hasRedirect && keyPresent && Boolean(APP_ID),
+    appId,
+    hasAppId: Boolean(appId),
+    appIdFromEnv: Boolean(ENV_APP_ID),
+    configured: hasRedirect && keyPresent && Boolean(appId),
   };
   const connections = readStore().connections.map((c) => {
     const expiry = new Date(c.valid_until).getTime();
@@ -699,4 +720,6 @@ module.exports = {
   // redirect config
   getRedirect,
   setRedirect,
+  getAppId,
+  setAppId,
 };

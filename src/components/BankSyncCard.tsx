@@ -38,6 +38,9 @@ interface BankStatus {
   hasKey?: boolean;
   keyEncrypted?: boolean;
   keySecretSource?: 'env' | 'managed';
+  appId?: string;
+  hasAppId?: boolean;
+  appIdFromEnv?: boolean;
 }
 
 const defaultRedirect = () => `${window.location.origin}/api/bank/callback`;
@@ -56,6 +59,7 @@ export function BankSyncCard() {
   const [uploading, setUploading] = useState(false);
   const [savingCfg, setSavingCfg] = useState(false);
   const [redirectInput, setRedirectInput] = useState('');
+  const [appIdInput, setAppIdInput] = useState('');
   const [adding, setAdding] = useState(false);
   // Set when the picker was opened to re-link a legacy connection whose bank is
   // unknown (aspsp null); sent along so the server reuses that connection's
@@ -83,6 +87,7 @@ export function BankSyncCard() {
       const data: BankStatus = await res.json();
       setStatus(data);
       setRedirectInput((prev) => prev || data.redirectUrl || defaultRedirect());
+      setAppIdInput((prev) => prev || data.appId || '');
     } catch {
       /* offline — leave status null (card stays quiet) */
     }
@@ -102,14 +107,15 @@ export function BankSyncCard() {
     }
   }, []);
 
-  const saveRedirect = async () => {
+  // Save one non-secret config field (redirectUrl or appId) via /api/bank/config.
+  const saveConfig = async (patch: { redirectUrl?: string; appId?: string }) => {
     setSavingCfg(true);
     setMessage('');
     try {
       const res = await fetch('/api/bank/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ redirectUrl: redirectInput.trim() }),
+        body: JSON.stringify(patch),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'save failed');
@@ -121,6 +127,8 @@ export function BankSyncCard() {
       setSavingCfg(false);
     }
   };
+  const saveRedirect = () => saveConfig({ redirectUrl: redirectInput.trim() });
+  const saveAppId = () => saveConfig({ appId: appIdInput.trim() });
 
   const uploadKey = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -272,6 +280,32 @@ export function BankSyncCard() {
         </div>
       )}
       <div className={row} style={muted}>{b.redirectHint}</div>
+    </div>
+  );
+
+  // Application ID: env-provided (read-only) or an editable setting, like the
+  // callback URL above.
+  const appIdBlock = (
+    <div className="space-y-1.5">
+      <label className={row} style={muted}>{b.appIdLabel}</label>
+      {status?.appIdFromEnv ? (
+        <div className={`${row} font-mono break-all`}>{status.appId}</div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={appIdInput}
+            onChange={(e) => setAppIdInput(e.target.value)}
+            placeholder="00000000-0000-0000-0000-000000000000"
+            className="flex-1 min-w-[16rem] h-9 px-3 rounded-[6px] text-[13px] border font-mono"
+            style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
+          />
+          <Button variant="secondary" size="sm" disabled={savingCfg || !appIdInput.trim()} onClick={saveAppId}>
+            {b.save}
+          </Button>
+        </div>
+      )}
+      <div className={row} style={muted}>{b.appIdHint}</div>
     </div>
   );
 
@@ -434,6 +468,7 @@ export function BankSyncCard() {
       {status && !status.configured ? (
         <div className="mt-4 space-y-4">
           {redirectBlock}
+          {appIdBlock}
           {keyBlock}
           <div className={row} style={muted}>{b.notConfigured}</div>
         </div>
