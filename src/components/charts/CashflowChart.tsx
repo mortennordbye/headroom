@@ -2,11 +2,13 @@ import { useMemo } from 'react';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { format, subMonths } from 'date-fns';
+import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
+import { lastNMonthKeys } from '../../lib/date';
+import { monthlyCashflow } from '../../lib/monthlyCashflow';
 
 /**
  * Monthly cashflow for the last 12 months: money in (income) vs money out
@@ -25,16 +27,12 @@ export default function CashflowChart() {
   const dateLocale = lang === 'nb' ? nb : enUS;
 
   const data = useMemo(() => {
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = subMonths(currentMonth, 11 - i);
-      const key = format(d, 'yyyy-MM');
-      const income = monthlyIncomes[key] ?? Math.round(effectiveIncome);
-      const variable = dailyTransactions
-        .filter(tx => tx.date.startsWith(key) && tx.kind !== 'income')
-        .reduce((s, tx) => s + tx.amount, 0);
-      const expenses = totalFixedExpenses + variable;
-      return { label: format(d, 'MMM', { locale: dateLocale }), income, expenses, net: income - expenses };
-    });
+    const months = lastNMonthKeys(currentMonth, 12);
+    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses)
+      .map(({ month, income, expenses, net }) => ({
+        label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
+        income, expenses, net,
+      }));
   }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale]);
 
   return (

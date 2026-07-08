@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
-import { format, subMonths } from 'date-fns';
+import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
+import { lastNMonthKeys } from '../../lib/date';
 import { CATEGORIES } from '../../lib/categories';
 import { monthlyCategoryTotals } from '../../lib/categoryStats';
 
@@ -18,7 +19,7 @@ export default function CategoryTrendChart() {
   const dateLocale = lang === 'nb' ? nb : enUS;
 
   const { data, series } = useMemo(() => {
-    const months = Array.from({ length: MONTHS }, (_, i) => format(subMonths(currentMonth, MONTHS - 1 - i), 'yyyy-MM'));
+    const months = lastNMonthKeys(currentMonth, MONTHS);
     const rows = monthlyCategoryTotals(dailyTransactions, months);
     const data = rows.map((r) => ({ ...r, label: format(new Date(`${r.month}-01T00:00:00`), 'MMM', { locale: dateLocale }) }));
     // Keep only categories that appear at least once across the window.

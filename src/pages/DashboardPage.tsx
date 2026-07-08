@@ -29,6 +29,7 @@ import {
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
 import { buildNetWorthSeries } from '../lib/netWorth';
+import { lastNMonthKeys } from '../lib/date';
 import { sumSavings } from '../lib/equity';
 import { sumDiscretionarySpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -137,8 +138,7 @@ const DashboardPage: React.FC = () => {
   // so the chip/chart can't track a different number than the figure they sit
   // next to. Estimated points turn real as monthly snapshots accumulate.
   const { netWorthSeries, isEstimated } = useMemo(() => {
-    const monthKeys = Array.from({ length: 12 }, (_, i) =>
-      format(subMonths(new Date(), 11 - i), 'yyyy-MM'));
+    const monthKeys = lastNMonthKeys(new Date(), 12);
     const series = buildNetWorthSeries(monthKeys, netWorthHistory, netWorth);
     return { netWorthSeries: series, isEstimated: series.some(p => p.estimated) };
   }, [netWorthHistory, netWorth]);

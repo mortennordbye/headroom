@@ -22,6 +22,7 @@ import type { LabelRule } from '../lib/labelRules';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
+import { lastNMonthKeys } from '../lib/date';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
 import { dedupeBankTransactions } from '../lib/bankDedup';
@@ -1271,14 +1272,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // its manual override if set, otherwise the income derived for THAT month. This
   // reflects real income history — averaging only the overrides map (any months
   // ever set, including the future) badly skews the mean and volatility.
-  const incomeSeries = useMemo(() => {
-    const series: { month: string; value: number }[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const mKey = format(subMonths(currentMonth, i), 'yyyy-MM');
-      series.push({ month: mKey, value: monthlyIncomes[mKey] ?? derivedNetMonthlyFor(mKey) });
-    }
-    return series;
-  }, [monthlyIncomes, currentMonth, derivedNetMonthlyFor]);
+  const incomeSeries = useMemo(
+    () => lastNMonthKeys(currentMonth, 12).map((mKey) => ({
+      month: mKey,
+      value: monthlyIncomes[mKey] ?? derivedNetMonthlyFor(mKey),
+    })),
+    [monthlyIncomes, currentMonth, derivedNetMonthlyFor],
+  );
 
   const averageIncome = useMemo(
     () => Math.round(incomeSeries.reduce((s, p) => s + p.value, 0) / incomeSeries.length),

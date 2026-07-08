@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from './date';
+import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf, lastNMonthKeys } from './date';
 
 describe('monthKeyFromDate', () => {
   it('formats a date as a local yyyy-MM key with zero-padding', () => {
@@ -40,6 +40,23 @@ describe('monthsBetween', () => {
 
   it('returns empty when from is after to', () => {
     expect(monthsBetween('2026-07', '2026-06')).toEqual([]);
+  });
+});
+
+describe('lastNMonthKeys', () => {
+  it('returns n keys ending at the anchor month, oldest first', () => {
+    expect(lastNMonthKeys(new Date(2026, 6, 8), 12)).toEqual([
+      '2025-08', '2025-09', '2025-10', '2025-11', '2025-12',
+      '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07',
+    ]);
+  });
+
+  it('spans year boundaries and uses local time (not UTC slicing)', () => {
+    expect(lastNMonthKeys(new Date(2026, 0, 1), 3)).toEqual(['2025-11', '2025-12', '2026-01']);
+  });
+
+  it('returns a single key for n = 1', () => {
+    expect(lastNMonthKeys(new Date(2026, 6, 1), 1)).toEqual(['2026-07']);
   });
 });
 
