@@ -794,7 +794,7 @@ const DashboardPage: React.FC = () => {
                     {debtToIncome.ratio.toFixed(1)}× / {debtToIncome.cap}×
                   </div>
                   <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                    {formatCurrency(assets.houseDebt)} {t.dashboardPage.debtWord} · {t.dashboardPage.gross} {formatCurrency(grossAnnualIncome)}
+                    {formatCurrency(assets.houseDebt + totalDebt)} {t.dashboardPage.debtWord} · {t.dashboardPage.gross} {formatCurrency(grossAnnualIncome)}
                   </div>
                 </>
               )}
