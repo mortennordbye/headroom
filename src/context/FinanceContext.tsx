@@ -1765,6 +1765,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const resetAll = useCallback(() => {
     setIncome(0);
     setMonthlyIncomes({});
+    setPayslips({});
     setNetWorthHistory({});
     setBalanceSnapshots({});
     setFixedExpenses([]);
