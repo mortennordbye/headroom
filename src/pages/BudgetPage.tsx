@@ -24,6 +24,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
+import { sumLedgerSpent } from '../lib/spentTotals';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
@@ -399,7 +400,9 @@ const BudgetPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const totalSpentThisMonth = dailyData.reduce((sum, d) => sum + d.spent, 0);
+  // Raw ledger total (envelope-covered included) — the Dashboard deliberately
+  // shows discretionary spend instead; see src/lib/spentTotals.ts.
+  const totalSpentThisMonth = sumLedgerSpent(dailyData);
 
   // The linked fixed-expense name covering a transaction's category, if any — used
   // to tag drawn-down transactions in the log so it's clear why they don't move the
@@ -962,12 +965,16 @@ const BudgetPage: React.FC = () => {
             </tbody>
             <tfoot className="bg-[var(--bg-raised)] border-t border-[var(--border)]">
               <tr>
-                <td colSpan={2} className="px-7 py-5 text-right text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">{t.endPeriodSurplus}</td>
-                <td className="px-7 py-5 text-right font-mono font-medium text-[13px] text-[var(--text-2)]">
-                  {formatCurrency(totalSpentThisMonth)}
+                <td colSpan={2} />
+                <td className="px-7 py-5 text-right">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">{t.monthSpent}</div>
+                  <div className="mt-1 font-mono font-medium text-[13px] text-[var(--text-2)]">
+                    {totalSpentThisMonth > 0 ? `−${formatCurrency(totalSpentThisMonth)}` : '—'}
+                  </div>
                 </td>
                 <td className="px-7 py-5 text-right">
-                  <span className={`text-xl font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[var(--accent)]' : 'text-[var(--negative)]'}`}>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">{t.endPeriodSurplus}</div>
+                  <span className={`mt-1 inline-block text-xl font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[var(--accent)]' : 'text-[var(--negative)]'}`}>
                     {formatCurrency(dailyData[dailyData.length - 1]?.balance || 0)}
                   </span>
                 </td>

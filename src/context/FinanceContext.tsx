@@ -598,6 +598,8 @@ interface FinanceDerivedContextType {
   prevMonthSpending: number;
   effectiveIncome: number;
   averageIncome: number;
+  /** Last-12-months net income (override or derived), oldest → newest, keyed by month. */
+  incomeSeries: { month: string; value: number }[];
   recommendedSpending: number;
   recommendedInvestment: number;
   suggestedInvestment: number;
@@ -1264,24 +1266,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // reflects real income history — averaging only the overrides map (any months
   // ever set, including the future) badly skews the mean and volatility.
   const incomeSeries = useMemo(() => {
-    const series: number[] = [];
+    const series: { month: string; value: number }[] = [];
     for (let i = 11; i >= 0; i--) {
       const mKey = format(subMonths(currentMonth, i), 'yyyy-MM');
-      series.push(monthlyIncomes[mKey] ?? derivedNetMonthlyFor(mKey));
+      series.push({ month: mKey, value: monthlyIncomes[mKey] ?? derivedNetMonthlyFor(mKey) });
     }
     return series;
   }, [monthlyIncomes, currentMonth, derivedNetMonthlyFor]);
 
   const averageIncome = useMemo(
-    () => Math.round(incomeSeries.reduce((s, v) => s + v, 0) / incomeSeries.length),
+    () => Math.round(incomeSeries.reduce((s, p) => s + p.value, 0) / incomeSeries.length),
     [incomeSeries],
   );
 
   const incomeVolatility = useMemo(() => {
     // Divide by the EXACT mean (not the rounded averageIncome).
-    const mean = incomeSeries.reduce((s, v) => s + v, 0) / incomeSeries.length;
+    const mean = incomeSeries.reduce((s, p) => s + p.value, 0) / incomeSeries.length;
     if (mean <= 0) return 0;
-    const variance = incomeSeries.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / incomeSeries.length;
+    const variance = incomeSeries.reduce((s, p) => s + Math.pow(p.value - mean, 2), 0) / incomeSeries.length;
     return Math.sqrt(variance) / mean;
   }, [incomeSeries]);
 
@@ -1999,14 +2001,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const derivedValue = useMemo<FinanceDerivedContextType>(() => ({
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
-    prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome,
+    prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
     totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   }), [
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
-    prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome,
+    prevMonthIncome, prevMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
     totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,

@@ -27,6 +27,7 @@ import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
 import { buildNetWorthSeries } from '../lib/netWorth';
 import { sumSavings } from '../lib/equity';
+import { sumDiscretionarySpent } from '../lib/spentTotals';
 
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
@@ -47,7 +48,7 @@ const DashboardPage: React.FC = () => {
     dailyData,
     dailyTransactions,
     labelRules,
-    monthlyIncomes,
+    incomeSeries,
     currentMonth,
     totalEquity,
     totalDebt,
@@ -76,15 +77,24 @@ const DashboardPage: React.FC = () => {
   // Discretionary spend, not raw spend: envelope-covered spend (food, etc.) is
   // already accounted for inside totalFixedExpenses, so the budget-composition
   // bar, burn rate and pacing all measure only what draws down the daily budget —
-  // otherwise the enveloped amount would be double-counted here.
-  const totalSpent = dailyData.reduce((sum, d) => sum + d.discretionary, 0);
+  // otherwise the enveloped amount would be double-counted here. (The Budget
+  // ledger deliberately uses the raw total instead — see src/lib/spentTotals.ts.)
+  const totalSpent = sumDiscretionarySpent(dailyData);
   const monthEndSurplus = dailyData[dailyData.length - 1]?.balance ?? 0;
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayEntry = dailyData.find(d => d.dateStr === todayStr);
   const todayBalance = todayEntry?.balance ?? monthEndSurplus;
 
-  const budgetUsedPct = effectiveIncome > 0 ? Math.min(100, (totalFixedExpenses / effectiveIncome) * 100) : 0;
-  const spentPct = effectiveIncome > 0 ? Math.min(100 - budgetUsedPct, (totalSpent / effectiveIncome) * 100) : 0;
+  // Budget Health composition: each legend item pairs a kr value with its share
+  // of the SAME denominator (this month's income), unclamped — an overspent
+  // month shows spent > its true share and a negative remainder. The bar
+  // segments below clamp only for rendering.
+  const budgetUsedPctRaw = effectiveIncome > 0 ? (totalFixedExpenses / effectiveIncome) * 100 : 0;
+  const spentPctRaw = effectiveIncome > 0 ? (totalSpent / effectiveIncome) * 100 : 0;
+  const remainingBudget = effectiveIncome - totalFixedExpenses - totalSpent;
+  const remainingPctRaw = effectiveIncome > 0 ? (remainingBudget / effectiveIncome) * 100 : 0;
+  const budgetUsedPct = Math.min(100, budgetUsedPctRaw);
+  const spentPct = Math.min(100 - budgetUsedPct, spentPctRaw);
   const availablePct = Math.max(0, 100 - budgetUsedPct - spentPct);
   const incomeDiffPct = averageIncome > 0 ? ((effectiveIncome - averageIncome) / averageIncome) * 100 : 0;
   const incomeDelta = prevMonthIncome > 0 ? ((effectiveIncome - prevMonthIncome) / prevMonthIncome) * 100 : null;
@@ -145,6 +155,10 @@ const DashboardPage: React.FC = () => {
     { label: t.savings, value: sumSavings(assets), icon: <PiggyBank size={14} />, color: 'var(--chart-5)' },
     { label: t.bufferAccount, value: assets.bufferAccount, icon: <Wallet size={14} />, color: 'var(--chart-6)' },
   ].filter(r => r.value > 0), [netInvestment, houseEquity, netCrypto, assets, t]);
+  // Allocation percentages divide by the sum of the CLAMPED rows above — using
+  // totalEquity (which nets negative buckets) would let the rows sum past 100%,
+  // and the strip and rows must share one denominator.
+  const allocationTotal = useMemo(() => assetRows.reduce((s, r) => s + r.value, 0), [assetRows]);
 
   // ─── Recent transactions ───
   type FilterMode = 'all' | 'income' | 'expense';
@@ -161,32 +175,33 @@ const DashboardPage: React.FC = () => {
   }, [dailyTransactions, currentMonth, filter]);
 
   // ─── Insight 1: monthly investment bar chart (12 months + 2 projected) ───
+  // Built on the context's incomeSeries — a fixed last-12-months grid where each
+  // month is its manual override or the salary-derived income — so the bars are
+  // always contiguous months, not just whichever months happen to have overrides.
   const investmentBars = useMemo(() => {
-    const months: { key: string; label: string; value: number; projected?: boolean }[] = [];
-    const sorted = Object.keys(monthlyIncomes).sort();
-    const last12 = sorted.slice(-12);
     // Match the recommendation/projection definition: invest a share of the
     // monthly *residual* (income − fixed expenses), not of gross income. Fixed
     // expenses aren't historized, so the current total is the best proxy.
     const investFrom = (monthlyIncome: number) =>
       Math.max(0, monthlyIncome - totalFixedExpenses) * (savingsTargetPercent / 100);
-    last12.forEach(k => {
-      const v = investFrom(monthlyIncomes[k]);
-      const d = parse(k, 'yyyy-MM', new Date());
-      months.push({ key: k, label: fmtDate(d, 'MMM'), value: Math.round(v) });
-    });
+    const months: { key: string; label: string; value: number; projected?: boolean }[] =
+      incomeSeries.map(({ month, value }) => ({
+        key: month,
+        label: fmtDate(parse(month, 'yyyy-MM', new Date()), 'MMM'),
+        value: Math.round(investFrom(value)),
+      }));
     // 2 projected months ahead
-    if (last12.length > 0) {
-      const lastKey = last12[last12.length - 1];
-      const baseVal = investFrom(monthlyIncomes[lastKey]);
+    const last = incomeSeries[incomeSeries.length - 1];
+    if (last) {
+      const baseVal = investFrom(last.value);
       for (let i = 1; i <= 2; i++) {
-        const d = parse(lastKey, 'yyyy-MM', new Date());
+        const d = parse(last.month, 'yyyy-MM', new Date());
         d.setMonth(d.getMonth() + i);
         months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM'), value: Math.round(baseVal * 1.02 ** i), projected: true });
       }
     }
     return months;
-  }, [monthlyIncomes, savingsTargetPercent, totalFixedExpenses]);
+  }, [incomeSeries, savingsTargetPercent, totalFixedExpenses]);
 
   // ─── Insight 2: top categories MoM ───
   const categoryDeltas = useMemo(() => {
@@ -510,14 +525,14 @@ const DashboardPage: React.FC = () => {
           </div>
 
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            <LegendItem dot="var(--teal)" name={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} pct={`${budgetUsedPct.toFixed(1)}%`} />
-            <LegendItem dot="var(--warning)" name={t.monthSpent} value={formatCurrency(totalSpent)} pct={`${spentPct.toFixed(1)}%`} />
+            <LegendItem dot="var(--teal)" name={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} pct={`${budgetUsedPctRaw.toFixed(1)}%`} />
+            <LegendItem dot="var(--warning)" name={t.monthSpent} value={formatCurrency(totalSpent)} pct={`${spentPctRaw.toFixed(1)}%`} />
             <LegendItem
               dot="var(--positive)"
               name={t.remainingBudget}
-              value={formatCurrency(monthEndSurplus)}
-              pct={`${availablePct.toFixed(1)}%`}
-              valueColor={monthEndSurplus >= 0 ? 'var(--positive)' : 'var(--negative)'}
+              value={formatCurrency(remainingBudget)}
+              pct={`${remainingPctRaw.toFixed(1)}%`}
+              valueColor={remainingBudget >= 0 ? 'var(--positive)' : 'var(--negative)'}
             />
           </div>
 
@@ -553,11 +568,10 @@ const DashboardPage: React.FC = () => {
                 const strip = rest.length
                   ? [...head, { label: t.dashboardPage.other, value: rest.reduce((s, r) => s + r.value, 0), color: 'var(--text-dim)' }]
                   : head;
-                const stripTotal = strip.reduce((s, r) => s + r.value, 0);
                 return (
                   <div className="flex h-[30px] rounded-[4px] overflow-hidden border border-[var(--rule)]">
                     {strip.map((r, i) => {
-                      const pct = stripTotal > 0 ? (r.value / stripTotal) * 100 : 0;
+                      const pct = allocationTotal > 0 ? (r.value / allocationTotal) * 100 : 0;
                       if (pct <= 0) return null;
                       return (
                         <div
@@ -575,7 +589,7 @@ const DashboardPage: React.FC = () => {
               })()}
               <div className="mt-4 space-y-1">
                 {assetRows.map((row, i) => {
-                  const pct = totalEquity > 0 ? (row.value / totalEquity) * 100 : 0;
+                  const pct = allocationTotal > 0 ? (row.value / allocationTotal) * 100 : 0;
                   return (
                     <div
                       key={i}
