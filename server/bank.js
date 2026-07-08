@@ -345,14 +345,26 @@ function mapEBTransaction(tx, opts = {}) {
   if (raw == null || String(raw).trim() === '' || !Number.isFinite(parsed)) {
     throw new Error(`unparseable amount: ${raw}`);
   }
+  // A row with no date at all would store as date:'' — invisible to every
+  // 'YYYY-MM' month filter and so undeletable in the UI. Reject it like a bad
+  // amount; mapEBTransactions skips it rather than let it poison the ledger.
+  const date = pickDate(tx);
+  if (!date) throw new Error('transaction has no usable date');
   const merchant = pickMerchant(tx);
   const mcc = tx.merchant_category_code != null ? String(tx.merchant_category_code) : undefined;
+  // Direction: honour the explicit indicator; if a feed omits it, fall back to
+  // the amount sign (statement convention: inflow positive, outflow negative),
+  // so a refund with no indicator counts as income, not a positive expense.
+  const indicator = tx.credit_debit_indicator;
+  const kind = indicator === 'CRDT' ? 'income'
+    : indicator === 'DBIT' ? 'expense'
+      : (parsed < 0 ? 'expense' : 'income');
   return {
     id: stableId(tx, prefix),
-    date: pickDate(tx),
+    date,
     description: pickDescription(tx),
     amount: Math.abs(parsed),
-    kind: tx.credit_debit_indicator === 'CRDT' ? 'income' : 'expense',
+    kind,
     // Richer bank-feed fields the client categorizer consumes. Categorization
     // itself is client-side; the server never assigns a category.
     ...(merchant ? { merchant } : {}),

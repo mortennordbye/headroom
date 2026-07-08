@@ -84,6 +84,21 @@ describe('mapEBTransaction', () => {
     expect(mapEBTransaction(tx({ booking_date: undefined, value_date: undefined, transaction_date: '2026-05-02' })).date).toBe('2026-05-02');
   });
 
+  it('throws when the feed carries no usable date (would be invisible/undeletable)', () => {
+    expect(() => mapEBTransaction(tx({ booking_date: undefined, value_date: undefined, transaction_date: undefined }))).toThrow();
+  });
+
+  it('infers direction from the amount sign when the indicator is absent', () => {
+    // A refund with no credit_debit_indicator is income (positive), not a
+    // positive expense; a purchase with no indicator stays an expense.
+    const refund = mapEBTransaction(tx({ credit_debit_indicator: undefined, transaction_amount: { currency: 'NOK', amount: '200.00' } }));
+    expect(refund.kind).toBe('income');
+    expect(refund.amount).toBe(200);
+    const purchase = mapEBTransaction(tx({ credit_debit_indicator: undefined, transaction_amount: { currency: 'NOK', amount: '-149.90' } }));
+    expect(purchase.kind).toBe('expense');
+    expect(purchase.amount).toBe(149.9);
+  });
+
   it('stamps account/bank/accountName from opts, and omits them when absent', () => {
     const tagged = mapEBTransaction(tx(), { account: 'abcd1234:uid-1', bank: 'Handelsbanken', accountName: 'Brukskonto' });
     expect(tagged.account).toBe('abcd1234:uid-1');
