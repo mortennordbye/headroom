@@ -49,4 +49,19 @@ describe('dedupeBankTransactions', () => {
     expect(dedupeBankTransactions(clean)).toHaveLength(3);
     expect(dedupeBankTransactions(dedupeBankTransactions(clean))).toHaveLength(3);
   });
+
+  // Documents the known regex ambiguity (see bankDedup.ts / BACKLOG.md): an id of
+  // shape `eb-<8hex>-<rest>` is always read as PREFIXED (conn=<8hex>, ref=<rest>),
+  // even though a legacy bare id could theoretically have that exact text. Left
+  // as-is because no safe discriminator exists; this test locks current behavior.
+  it('classifies an ambiguous eb-<8hex>-<rest> id as prefixed', () => {
+    const out = dedupeBankTransactions([
+      tx({ id: 'eb-a1b2c3d4-5678', account: 'ambiguous' }),
+      tx({ id: 'eb-5678', amount: 100 }),
+    ]);
+    // Read as prefixed with ref '5678'; the bare 'eb-5678' shares that ref, so it
+    // is dropped as a stale twin (the survivor keeps the prefixed id).
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('eb-a1b2c3d4-5678');
+  });
 });

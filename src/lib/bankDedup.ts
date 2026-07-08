@@ -10,6 +10,17 @@ import type { DailyTransaction } from '../context/FinanceContext';
 // entry_reference exists — but never merge two different prefixed connections,
 // since separate banks may reuse an entry_reference (the prefix is what keeps
 // those distinct). Manual (non-eb) rows are untouched.
+//
+// TWIN: `dropStaleBareTwins` in server/bank.js (CJS) is a byte-equivalent copy of
+// this logic, including the two regexes below. The server can't import from src/,
+// so the two are hand-maintained and MUST stay identical — change both or neither.
+//
+// Known limitation (see BACKLOG.md "Bank-id dedup regex ambiguity"): the
+// prefixed-vs-bare split is inherently ambiguous. A legacy BARE id whose ref
+// happens to start with 8 hex chars + '-' (e.g. `eb-a1b2c3d4-...`) is
+// indistinguishable from a real PREFIXED id and is treated as prefixed. Not
+// tightened here because no safe structural discriminator exists — guessing wrong
+// could resurrect or double-count real bank transactions.
 const PREFIXED = /^eb-[0-9a-f]{8}-(.+)$/i;
 const BARE = /^eb-(?![0-9a-f]{8}-)(.+)$/i;
 
