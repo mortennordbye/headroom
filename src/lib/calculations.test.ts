@@ -8,6 +8,10 @@ import {
   calcEmergencyFundStatus,
   calcDebtToIncome,
   calcBorrowingCapacity,
+  calcNetSaleProceeds,
+  calcBridgeLoanCost,
+  calcHomeownerMortgageStatus,
+  calcNetWorthProjectionByBucket,
 } from './calculations';
 
 describe('calcMonthlyPayment', () => {
@@ -187,5 +191,92 @@ describe('calcBorrowingCapacity', () => {
     expect(c.maxDebt).toBe(0);
     expect(c.maxPrice).toBe(0);
     expect(c.stressedMonthlyPayment).toBe(0);
+  });
+});
+
+describe('calcNetSaleProceeds', () => {
+  it('nets out mortgage, agent fee and fixed costs', () => {
+    const r = calcNetSaleProceeds(4_200_000, 2_950_000, 3, 7_500, 10_000);
+    expect(r.agentCost).toBe(126_000);
+    expect(r.netProceeds).toBe(4_200_000 - 2_950_000 - 126_000 - 7_500 - 10_000);
+  });
+
+  it('goes negative when the mortgage exceeds the sale price (no silent clamp)', () => {
+    const r = calcNetSaleProceeds(2_000_000, 2_500_000, 0, 0, 0);
+    expect(r.netProceeds).toBe(-500_000);
+  });
+});
+
+describe('calcBridgeLoanCost', () => {
+  it('charges simple monthly interest on the bridged amount', () => {
+    // 1 000 000 at 6%/yr for 2 months = 1 000 000 × 0.005 × 2.
+    expect(calcBridgeLoanCost(1_000_000, 6, 2)).toBeCloseTo(10_000, 6);
+  });
+
+  it('is zero with no months or no amount', () => {
+    expect(calcBridgeLoanCost(1_000_000, 6, 0)).toBe(0);
+    expect(calcBridgeLoanCost(0, 6, 2)).toBe(0);
+  });
+});
+
+describe('calcHomeownerMortgageStatus', () => {
+  it('splits the payment into interest and principal that sum back exactly', () => {
+    const s = calcHomeownerMortgageStatus(2_000_000, 2_500_000, 5, 20, 22);
+    expect(s.monthlyInterest).toBeCloseTo(2_000_000 * 0.05 / 12, 6);
+    expect(s.monthlyInterest + s.monthlyPrincipal).toBeCloseTo(s.monthlyPaymentCalc, 6);
+    // "equityPercent" is actually % of original loan repaid (see 5.7 rename note).
+    expect(s.equityPercent).toBeCloseTo(20, 6);
+  });
+
+  it('bases the tax deduction on year-one amortized interest, below the flat ×12 figure', () => {
+    const s = calcHomeownerMortgageStatus(2_000_000, 2_500_000, 5, 20, 22);
+    const flatTwelve = s.monthlyInterest * 12 * 0.22;
+    expect(s.annualTaxDeduction).toBeGreaterThan(0);
+    expect(s.annualTaxDeduction).toBeLessThan(flatTwelve);
+  });
+
+  it('falls back to flat ×12 interest when there is no amortization schedule', () => {
+    // yearsRemaining 0 → no schedule → monthlyInterest × 12 × sats.
+    const s = calcHomeownerMortgageStatus(2_000_000, 2_500_000, 5, 0, 22);
+    expect(s.annualTaxDeduction).toBeCloseTo(2_000_000 * 0.05 * 0.22, 6);
+  });
+
+  it('clamps repaid share to 0 and handles a zero original loan', () => {
+    expect(calcHomeownerMortgageStatus(2_600_000, 2_500_000, 5, 20, 22).equityPercent).toBe(0);
+    expect(calcHomeownerMortgageStatus(2_000_000, 0, 5, 20, 22).equityPercent).toBe(0);
+  });
+});
+
+describe('calcNetWorthProjectionByBucket', () => {
+  const start = { stocks: 100_000, crypto: 50_000, cash: 20_000, house: 1_000_000 };
+  const rates = { stocks: 10, crypto: 0, cash: 0, house: 2 };
+
+  it('starts at the given amounts and returns years+1 points', () => {
+    const p = calcNetWorthProjectionByBucket(start, 0, rates, 5);
+    expect(p).toHaveLength(6);
+    expect(p[0]).toMatchObject({ stocks: 100_000, crypto: 50_000, cash: 20_000, house: 1_000_000 });
+    expect(p[0].total).toBe(1_170_000);
+  });
+
+  it('accrues annual savings into the stocks bucket only', () => {
+    const flat = { stocks: 0, crypto: 0, cash: 0, house: 0 };
+    const zero = { stocks: 0, crypto: 0, cash: 0, house: 0 };
+    const p = calcNetWorthProjectionByBucket(flat, 12_000, zero, 3);
+    expect(p.map(pt => pt.stocks)).toEqual([0, 12_000, 24_000, 36_000]);
+    expect(p.every(pt => pt.crypto === 0 && pt.cash === 0 && pt.house === 0)).toBe(true);
+  });
+
+  it('compounds each bucket at its own rate', () => {
+    const p = calcNetWorthProjectionByBucket(start, 0, rates, 2);
+    expect(p[1].stocks).toBe(110_000);
+    expect(p[2].stocks).toBe(121_000);
+    expect(p[1].crypto).toBe(50_000); // 0% rate
+    expect(p[1].house).toBe(1_020_000);
+  });
+
+  it('uses houseByYear verbatim when provided (appreciation + paydown model)', () => {
+    const houseByYear = [1_000_000, 1_100_000, 1_210_000];
+    const p = calcNetWorthProjectionByBucket(start, 0, rates, 2, houseByYear);
+    expect(p.map(pt => pt.house)).toEqual(houseByYear);
   });
 });
