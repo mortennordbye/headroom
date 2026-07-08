@@ -22,6 +22,7 @@ import type { LabelRule } from '../lib/labelRules';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
+import { lastNMonthKeys } from '../lib/date';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
 import { dedupeBankTransactions } from '../lib/bankDedup';
@@ -709,6 +710,25 @@ export interface DailyDataEntry {
 const makeId = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
+// The add/update/remove triple shared by every id-keyed array entity (jobs,
+// salaries, bonuses, overtime, hours snapshots, goals). `add` mints an id and
+// returns it (callers that don't need it, e.g. bonuses, ignore the return).
+// Built once from a stable useState setter, so the actions stay referentially
+// stable (memoize the result with empty deps).
+type ArraySetter<T> = (updater: (prev: T[]) => T[]) => void;
+function makeCrud<T extends { id: string }>(setter: ArraySetter<T>, prefix: string) {
+  return {
+    add: (entry: Omit<T, 'id'>): string => {
+      const id = makeId(prefix);
+      setter(prev => [...prev, { ...entry, id } as T]);
+      return id;
+    },
+    update: (id: string, patch: Partial<Omit<T, 'id'>>): void =>
+      setter(prev => prev.map(x => (x.id === id ? { ...x, ...patch } : x))),
+    remove: (id: string): void => setter(prev => prev.filter(x => x.id !== id)),
+  };
+}
+
 // Normalise a loaded/imported assets blob into a savings-accounts array. If the
 // array is present it's cleaned (valid id/name/number balance); when it's absent
 // *or empty*, a nonzero legacy `savings` scalar is migrated into one account
@@ -1271,14 +1291,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // its manual override if set, otherwise the income derived for THAT month. This
   // reflects real income history — averaging only the overrides map (any months
   // ever set, including the future) badly skews the mean and volatility.
-  const incomeSeries = useMemo(() => {
-    const series: { month: string; value: number }[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const mKey = format(subMonths(currentMonth, i), 'yyyy-MM');
-      series.push({ month: mKey, value: monthlyIncomes[mKey] ?? derivedNetMonthlyFor(mKey) });
-    }
-    return series;
-  }, [monthlyIncomes, currentMonth, derivedNetMonthlyFor]);
+  const incomeSeries = useMemo(
+    () => lastNMonthKeys(currentMonth, 12).map((mKey) => ({
+      month: mKey,
+      value: monthlyIncomes[mKey] ?? derivedNetMonthlyFor(mKey),
+    })),
+    [monthlyIncomes, currentMonth, derivedNetMonthlyFor],
+  );
 
   const averageIncome = useMemo(
     () => Math.round(incomeSeries.reduce((s, p) => s + p.value, 0) / incomeSeries.length),
@@ -1523,24 +1542,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // savingsAccounts is nested in `assets`; adapt setAssets to the array-setter
+  // shape so it shares the same CRUD triple as the top-level entities.
+  const savingsCrud = useMemo(
+    () => makeCrud<SavingsAccount>(
+      updater => setAssets(prev => ({ ...prev, savingsAccounts: updater(prev.savingsAccounts ?? []) })),
+      'sav',
+    ),
+    [],
+  );
   const addSavingsAccount = useCallback((name: string, balance: number) => {
-    setAssets(prev => ({
-      ...prev,
-      savingsAccounts: [...(prev.savingsAccounts ?? []), { id: makeId('sav'), name, balance }],
-    }));
-  }, []);
-  const updateSavingsAccount = useCallback((id: string, patch: Partial<Omit<SavingsAccount, 'id'>>) => {
-    setAssets(prev => ({
-      ...prev,
-      savingsAccounts: (prev.savingsAccounts ?? []).map(s => s.id === id ? { ...s, ...patch } : s),
-    }));
-  }, []);
-  const removeSavingsAccount = useCallback((id: string) => {
-    setAssets(prev => ({
-      ...prev,
-      savingsAccounts: (prev.savingsAccounts ?? []).filter(s => s.id !== id),
-    }));
-  }, []);
+    savingsCrud.add({ name, balance });
+  }, [savingsCrud]);
+  const updateSavingsAccount = savingsCrud.update;
+  const removeSavingsAccount = savingsCrud.remove;
 
   const updateLoan = useCallback((key: keyof LoanData, value: number | string) => {
     setLoan(prev => ({ ...prev, [key]: value }));
@@ -1599,71 +1614,41 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [homeowner]);
 
-  const addJob = useCallback((job: Omit<JobEntry, 'id'>): string => {
-    const id = makeId('job');
-    setJobs(prev => [...prev, { ...job, id }]);
-    return id;
-  }, []);
-  const updateJob = useCallback((id: string, patch: Partial<Omit<JobEntry, 'id'>>) => {
-    setJobs(prev => prev.map(j => j.id === id ? { ...j, ...patch } : j));
-  }, []);
+  // useState setters are stable, so each CRUD bundle is built once.
+  const jobsCrud = useMemo(() => makeCrud<JobEntry>(setJobs, 'job'), []);
+  const salariesCrud = useMemo(() => makeCrud<SalaryEntry>(setSalaries, 'sal'), []);
+  const bonusesCrud = useMemo(() => makeCrud<BonusEntry>(setBonuses, 'bon'), []);
+  const overtimeCrud = useMemo(() => makeCrud<OvertimeEntry>(setOvertime, 'ot'), []);
+  const hoursCrud = useMemo(() => makeCrud<HoursSnapshot>(setHoursSnapshots, 'hrs'), []);
+  const goalsCrud = useMemo(() => makeCrud<Goal>(setGoals, 'goal'), []);
+
+  const addJob = jobsCrud.add;
+  const updateJob = jobsCrud.update;
   const removeJob = useCallback((id: string) => {
-    setJobs(prev => prev.filter(j => j.id !== id));
+    jobsCrud.remove(id);
     // Cascade: remove orphaned salaries
     setSalaries(prev => prev.filter(s => s.jobId !== id));
-  }, []);
+  }, [jobsCrud]);
 
-  const addSalary = useCallback((entry: Omit<SalaryEntry, 'id'>): string => {
-    const id = makeId('sal');
-    setSalaries(prev => [...prev, { ...entry, id }]);
-    return id;
-  }, []);
-  const updateSalary = useCallback((id: string, patch: Partial<Omit<SalaryEntry, 'id'>>) => {
-    setSalaries(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
-  }, []);
-  const removeSalary = useCallback((id: string) => {
-    setSalaries(prev => prev.filter(s => s.id !== id));
-  }, []);
+  const addSalary = salariesCrud.add;
+  const updateSalary = salariesCrud.update;
+  const removeSalary = salariesCrud.remove;
 
-  const addBonus = useCallback((entry: Omit<BonusEntry, 'id'>) => {
-    setBonuses(prev => [...prev, { ...entry, id: makeId('bon') }]);
-  }, []);
-  const updateBonus = useCallback((id: string, patch: Partial<Omit<BonusEntry, 'id'>>) => {
-    setBonuses(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
-  }, []);
-  const removeBonus = useCallback((id: string) => {
-    setBonuses(prev => prev.filter(b => b.id !== id));
-  }, []);
+  const addBonus = bonusesCrud.add;
+  const updateBonus = bonusesCrud.update;
+  const removeBonus = bonusesCrud.remove;
 
-  const addOvertime = useCallback((entry: Omit<OvertimeEntry, 'id'>) => {
-    setOvertime(prev => [...prev, { ...entry, id: makeId('ot') }]);
-  }, []);
-  const updateOvertime = useCallback((id: string, patch: Partial<Omit<OvertimeEntry, 'id'>>) => {
-    setOvertime(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o));
-  }, []);
-  const removeOvertime = useCallback((id: string) => {
-    setOvertime(prev => prev.filter(o => o.id !== id));
-  }, []);
+  const addOvertime = overtimeCrud.add;
+  const updateOvertime = overtimeCrud.update;
+  const removeOvertime = overtimeCrud.remove;
 
-  const addHoursSnapshot = useCallback((entry: Omit<HoursSnapshot, 'id'>) => {
-    setHoursSnapshots(prev => [...prev, { ...entry, id: makeId('hrs') }]);
-  }, []);
-  const updateHoursSnapshot = useCallback((id: string, patch: Partial<Omit<HoursSnapshot, 'id'>>) => {
-    setHoursSnapshots(prev => prev.map(h => h.id === id ? { ...h, ...patch } : h));
-  }, []);
-  const removeHoursSnapshot = useCallback((id: string) => {
-    setHoursSnapshots(prev => prev.filter(h => h.id !== id));
-  }, []);
+  const addHoursSnapshot = hoursCrud.add;
+  const updateHoursSnapshot = hoursCrud.update;
+  const removeHoursSnapshot = hoursCrud.remove;
 
-  const addGoal = useCallback((g: Omit<Goal, 'id'>) => {
-    setGoals(prev => [...prev, { ...g, id: makeId('goal') }]);
-  }, []);
-  const updateGoal = useCallback((id: string, patch: Partial<Omit<Goal, 'id'>>) => {
-    setGoals(prev => prev.map(g => g.id === id ? { ...g, ...patch } : g));
-  }, []);
-  const removeGoal = useCallback((id: string) => {
-    setGoals(prev => prev.filter(g => g.id !== id));
-  }, []);
+  const addGoal = goalsCrud.add;
+  const updateGoal = goalsCrud.update;
+  const removeGoal = goalsCrud.remove;
 
   // Set (or clear, with null / ≤0) a category's monthly budget cap.
   const setCategoryBudget = useCallback((category: CategoryKey, amount: number | null) => {

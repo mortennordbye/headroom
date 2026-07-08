@@ -42,7 +42,7 @@ import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
-import { salaryAt, hoursAt } from '../lib/salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/salary';
 import { formatSignedPct } from '../lib/format';
 import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
@@ -51,8 +51,6 @@ const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[v
 
 const TaxBreakdownChart = lazy(() => import('../components/charts/TaxBreakdownChart'));
 const MoneyFlowSankey = lazy(() => import('../components/charts/MoneyFlowSankey'));
-
-const WEEKS_PER_MONTH = 4.345;
 
 const CHANGE_TYPE_COLOR: Record<SalaryChangeType, string> = {
   initial: 'var(--text-dim)',
@@ -151,8 +149,7 @@ const SalaryPage: React.FC = () => {
       const onCallAnnual = job?.onCallAnnual ?? 0;
       const onCallMonthly = onCallAnnual / 12;
       const totalAnnual = grossAnnual + onCallAnnual;
-      // Nominal hourly uses total earnings — on-call is regular pay for the hours worked.
-      const nominalHourly = hours > 0 ? (monthlyGross + onCallMonthly) / (WEEKS_PER_MONTH * hours) : 0;
+      const nominalHourly = nominalHourlyRate(monthlyGross, onCallMonthly, hours);
       const cpi = cpiByMonth.get(month) ?? null;
       const realHourly = cpi && baseCpi ? nominalHourly * (baseCpi / cpi) : null;
       return { month, grossAnnual, totalAnnual, monthlyGross, onCallMonthly, hoursPerWeek: hours, nominalHourly, realHourly, cpiIndex: cpi };

@@ -41,3 +41,14 @@ export function monthsBetween(from: string, to: string): string[] {
 export function yearOf(monthOrDate: string): number {
   return parseInt(monthOrDate.slice(0, 4), 10);
 }
+
+/**
+ * The `n` 'yyyy-MM' keys ending at `anchor`'s month, oldest first.
+ * `lastNMonthKeys(new Date(2026, 6, 1), 12)` → ['2025-08', …, '2026-07'].
+ * Local-time safe (unlike ISO slicing); replaces the repeated
+ * `Array.from({length:n}, (_, i) => format(subMonths(anchor, n-1-i), 'yyyy-MM'))`.
+ */
+export function lastNMonthKeys(anchor: Date, n: number): string[] {
+  const end = monthKeyFromDate(anchor);
+  return Array.from({ length: n }, (_, i) => addMonthsKey(end, i - (n - 1)));
+}

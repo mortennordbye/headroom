@@ -11,6 +11,7 @@ import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
 import { parseLocaleNumber } from '../lib/validators';
+import { projectPensionWealth } from '../lib/pension';
 import { currentMonthKey } from '../lib/date';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
@@ -50,24 +51,16 @@ const PensionPage: React.FC = () => {
   const ipsTaxSaving = ipsAnnualContribution * ipsDeductionRate;
 
   // Year-by-year projection.
-  const projection = useMemo(() => {
-    const out: { year: number; otp: number; ips: number; total: number }[] = [];
-    let otp = pension.otpBalance;
-    let ips = pension.ipsBalance;
-    const otpRate = pension.otpGrowthRate / 100;
-    const ipsRate = pension.ipsGrowthRate / 100;
-    for (let y = 0; y <= yearsToRetire; y++) {
-      out.push({
-        year: currentYear + y,
-        otp: Math.round(otp),
-        ips: Math.round(ips),
-        total: Math.round(otp + ips),
-      });
-      otp = otp * (1 + otpRate) + otpAnnualContribution;
-      ips = ips * (1 + ipsRate) + ipsAnnualContribution;
-    }
-    return out;
-  }, [pension, yearsToRetire, otpAnnualContribution, ipsAnnualContribution, currentYear]);
+  const projection = useMemo(() => projectPensionWealth({
+    otpBalance: pension.otpBalance,
+    ipsBalance: pension.ipsBalance,
+    otpAnnualContribution,
+    ipsAnnualContribution,
+    otpGrowthRate: pension.otpGrowthRate,
+    ipsGrowthRate: pension.ipsGrowthRate,
+    yearsToRetire,
+    startYear: currentYear,
+  }), [pension, yearsToRetire, otpAnnualContribution, ipsAnnualContribution, currentYear]);
 
   const atRetirement = projection.length > 0 ? projection[projection.length - 1] : null;
   const totalNow = pension.otpBalance + pension.ipsBalance;

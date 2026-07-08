@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { format, subMonths } from 'date-fns';
+import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
+import { lastNMonthKeys } from '../lib/date';
 import { accountMonthlyTotals, monthlyColumnTotals } from '../lib/monthlySpend';
 import { accountToken } from '../lib/accountColor';
 
@@ -14,7 +15,7 @@ export function MonthlyAccountSpend() {
   const dateLocale = lang === 'nb' ? nb : enUS;
 
   const { months, rows, colTotals } = useMemo(() => {
-    const months = Array.from({ length: MONTHS }, (_, i) => format(subMonths(currentMonth, MONTHS - 1 - i), 'yyyy-MM'));
+    const months = lastNMonthKeys(currentMonth, MONTHS);
     const rows = accountMonthlyTotals(nonTransferTransactions, accountLabels, months);
     return { months, rows, colTotals: monthlyColumnTotals(rows, MONTHS) };
   }, [currentMonth, nonTransferTransactions, accountLabels]);
