@@ -5,18 +5,19 @@ import { useFinance, type Debt, type DebtType } from '../context/FinanceContext'
 import EditModal, { type ModalField } from './EditModal';
 import ConfirmModal from './ConfirmModal';
 import ChartTooltip from './ChartTooltip';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { amortize, planPayoff, formatMonths, DEBT_TYPES, type PayoffStrategy } from '../lib/debt';
 import { parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
-// Debt-type role colours (concrete hex — reused for swatches and the chart).
+// Debt-type role colours (CHART token mirrors — reused for swatches and the chart).
 const DEBT_TYPE_COLOR: Record<DebtType, string> = {
-  student: '#3F7373',     // teal
-  consumer: '#5B7280',    // slate
-  credit_card: '#B5533A', // rust — typically the priciest
-  other: '#5F6555',       // text-dim
+  student: CHART.teal,
+  consumer: CHART.slate,
+  credit_card: CHART.rust, // typically the priciest
+  other: CHART.textDim,
 };
 
 interface ModalConfig {
@@ -180,15 +181,15 @@ export default function DebtSection() {
                   <AreaChart data={plan.balanceSeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="debtGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#B5533A" stopOpacity={0.18} />
-                        <stop offset="100%" stopColor="#B5533A" stopOpacity={0.18} />
+                        <stop offset="0%" stopColor={CHART.rust} stopOpacity={0.18} />
+                        <stop offset="100%" stopColor={CHART.rust} stopOpacity={0.18} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
-                    <XAxis dataKey="month" tickFormatter={(m: number) => `${Math.round(m / 12)}${t.common.yrAbbr}`} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={44} />
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis dataKey="month" tickFormatter={(m: number) => `${Math.round(m / 12)}${t.common.yrAbbr}`} {...AXIS_PROPS} />
+                    <YAxis tickFormatter={fmtAxis} {...AXIS_PROPS_Y} width={44} />
                     <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="total" name={d.sum} stroke="#B5533A" fill="url(#debtGrad)" strokeWidth={1.8} />
+                    <Area type="monotone" dataKey="total" name={d.sum} stroke={CHART.rust} fill="url(#debtGrad)" strokeWidth={1.8} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

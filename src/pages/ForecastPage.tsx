@@ -5,6 +5,7 @@ import {
 import { TrendingUp, Wallet, Activity } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
+import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { currentMonthKey } from '../lib/date';
 import { salaryAt } from '../lib/salary';
@@ -232,9 +233,9 @@ const ForecastPage: React.FC = () => {
                   <stop offset="100%" stopColor="var(--violet)" stopOpacity={0.1} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
-              <XAxis dataKey="yearLabel" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis dataKey="yearLabel" {...AXIS_PROPS} />
+              <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
               <Tooltip
                 content={<ChartTooltip />}
                 cursor={{ stroke: 'var(--text-3)', strokeWidth: 1, strokeDasharray: '3 3' }}
@@ -261,9 +262,9 @@ const ForecastPage: React.FC = () => {
         <div className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={projection} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
-              <XAxis dataKey="yearLabel" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis dataKey="yearLabel" {...AXIS_PROPS} />
+              <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
               <Tooltip content={<ChartTooltip />} />
               <Line type="monotone" dataKey="gross" name={t.forecast.grossSalary} stroke="var(--accent)" strokeWidth={2.5} dot={false} />
               <Line type="monotone" dataKey="net" name={t.forecast.netTakeHome} stroke="var(--positive)" strokeWidth={2.5} dot={false} />

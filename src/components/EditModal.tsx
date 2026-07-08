@@ -100,7 +100,7 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
                   value={values[field.key]}
                   onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
                   onKeyDown={handleKeyDown}
-                  className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[6px] px-4 py-3 text-[14px] text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[#7FCBA0]"
+                  className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[6px] px-4 py-3 text-[14px] text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--positive)]"
                 >
                   {(field.options ?? []).map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -118,7 +118,7 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
                     autoComplete={field.suggestions ? 'off' : undefined}
                     onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
                     onKeyDown={handleKeyDown}
-                    className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[6px] px-4 py-3 text-[14px] font-mono text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[#7FCBA0] placeholder:text-[var(--text-2)] placeholder:font-sans"
+                    className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[6px] px-4 py-3 text-[14px] font-mono text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--positive)] placeholder:text-[var(--text-2)] placeholder:font-sans"
                   />
                   {field.suggestions && field.suggestions.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
@@ -150,7 +150,7 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
             </div>
           ))}
           {error && (
-            <p className="text-[12px] text-[#B5533A] font-medium">{error}</p>
+            <p className="text-[12px] text-[var(--negative)] font-medium">{error}</p>
           )}
         </div>
 

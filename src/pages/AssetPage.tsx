@@ -30,7 +30,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import { EquityCompositionBar } from '../components/EquityCompositionBar';
 import DebtSection from '../components/DebtSection';
 import ChartTooltip from '../components/ChartTooltip';
-import { CHART } from '../lib/chartColors';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
@@ -568,9 +568,9 @@ const AssetPage: React.FC = () => {
                   <stop offset="100%" stopColor={CHART.teal} stopOpacity={0.85} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART.rule} />
-              <XAxis dataKey="year" tick={{ fontSize: 11, fill: CHART.textDim }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatAxisValue} tick={{ fontSize: 11, fill: CHART.textDim }} axisLine={false} tickLine={false} width={52} />
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis dataKey="year" {...AXIS_PROPS} />
+              <YAxis tickFormatter={formatAxisValue} {...AXIS_PROPS_Y} width={52} />
               <Tooltip content={<ChartTooltip />} />
               <Area type="monotone" dataKey="house" stackId="1" name={t.bucketHouse} stroke={CHART.teal} fill="url(#houseGrad)" />
               <Area type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke={CHART.slate} fill="url(#cashGrad)" />

@@ -384,7 +384,7 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
 
         {phase.kind === 'error' && (
           <>
-            <p className="text-[13px] text-[#B5533A] leading-relaxed">{phase.message}</p>
+            <p className="text-[13px] text-[var(--negative)] leading-relaxed">{phase.message}</p>
             <button
               onClick={() => setPhase({ kind: 'idle' })}
               className="w-full py-2.5 rounded-[6px] text-[13px] font-medium text-[var(--text-2)] bg-[var(--bg-elev)] hover:bg-[var(--bg-raised)] transition-colors"

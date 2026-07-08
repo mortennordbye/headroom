@@ -20,3 +20,23 @@ export const CHART = {
 
 // Categorical series colour order (matches the 4 category hues + accents).
 export const SERIES = [CHART.teal, CHART.forest, CHART.slate, CHART.forestLight, CHART.brass, CHART.rust];
+
+// Shared Recharts prop blocks — the one axis/grid treatment every chart uses.
+// Spread them (`<XAxis {...AXIS_PROPS} …>`, `<YAxis {...AXIS_PROPS_Y} …>`,
+// `<CartesianGrid {...GRID_PROPS} …>`); per-chart extras (width, tickFormatter,
+// vertical, domain) stay as ordinary props after the spread. Deliberate
+// exceptions (emphasised year axes, category labels) keep their own tick.
+export const AXIS_PROPS = {
+  tick: { fontSize: 11, fill: CHART.textSoft },
+  axisLine: false,
+  tickLine: false,
+} as const;
+export const AXIS_PROPS_Y = {
+  tick: { fontSize: 10, fill: CHART.textDim },
+  axisLine: false,
+  tickLine: false,
+} as const;
+export const GRID_PROPS = {
+  strokeDasharray: '3 3',
+  stroke: CHART.grid,
+} as const;

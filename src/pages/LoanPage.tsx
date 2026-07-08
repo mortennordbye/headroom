@@ -36,7 +36,7 @@ import {
 } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
-import { CHART } from '../lib/chartColors';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
@@ -786,19 +786,15 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, formatC
             <div className="h-[200px] md:h-[260px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.rule} />
+                  <CartesianGrid {...GRID_PROPS} vertical={false} />
                   <XAxis
                     dataKey="year"
-                    tick={{ fontSize: 11, fill: CHART.textDim }}
-                    axisLine={false}
-                    tickLine={false}
+                    {...AXIS_PROPS}
                     tickFormatter={(v) => `${t.loanPage.yearAxisPrefix} ${v}`}
                   />
                   <YAxis
                     tickFormatter={(v) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : `${Math.round(v / 1_000)}k`}
-                    tick={{ fontSize: 11, fill: CHART.textDim }}
-                    axisLine={false}
-                    tickLine={false}
+                    {...AXIS_PROPS_Y}
                     width={48}
                   />
                   <Tooltip

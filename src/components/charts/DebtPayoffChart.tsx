@@ -1,7 +1,7 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFinance } from '../../context/FinanceContext';
 import ChartTooltip from '../ChartTooltip';
-import { CHART } from '../../lib/chartColors';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
 interface DebtPayoffChartProps {
   /** Mortgage balance at each year, index 0..N (year 0 = today). */
@@ -65,9 +65,9 @@ export default function DebtPayoffChart({ balances, startYear, nonMortgageDebt }
                 <stop offset="100%" stopColor={CHART.rust} stopOpacity={0.04} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
-            <XAxis dataKey="year" tick={{ fontSize: 11, fill: CHART.textSoft }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={formatCurrencyShort} tick={{ fontSize: 10, fill: CHART.textDim }} axisLine={false} tickLine={false} width={44} />
+            <CartesianGrid {...GRID_PROPS} vertical={false} />
+            <XAxis dataKey="year" {...AXIS_PROPS} />
+            <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={44} />
             <Tooltip cursor={{ stroke: CHART.rule }} content={<ChartTooltip valueFormatter={(v) => formatCurrency(v)} />} />
             <Area type="monotone" dataKey="debt" name={t.charts.mortgageToday} stroke={CHART.rust} strokeWidth={2} fill="url(#debtGrad)" />
           </AreaChart>

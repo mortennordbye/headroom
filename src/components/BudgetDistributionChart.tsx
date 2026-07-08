@@ -3,10 +3,7 @@ import {
   type TooltipContentProps,
 } from 'recharts';
 import type { FixedExpense } from '../context/FinanceContext';
-
-const CHART_INK = '#9A9C8C';   // text-soft — axis labels
-const CHART_GRID = 'rgba(236,231,216,0.06)';
-const CHART_TRACK = 'rgba(236,231,216,0.05)';
+import { CHART, GRID_PROPS } from '../lib/chartColors';
 
 interface Props {
   data: FixedExpense[];
@@ -28,18 +25,18 @@ export default function BudgetDistributionChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 60, left: 16, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART_GRID} />
+        <CartesianGrid {...GRID_PROPS} horizontal={false} />
         <XAxis type="number" hide />
         <YAxis
           dataKey="name"
           type="category"
           width={88}
-          tick={{ fontSize: 11, fill: CHART_INK, fontWeight: 500 }}
+          tick={{ fontSize: 11, fill: CHART.textSoft, fontWeight: 500 }}
           axisLine={false}
           tickLine={false}
         />
         <Tooltip
-          cursor={{ fill: CHART_TRACK }}
+          cursor={{ fill: CHART.track }}
           content={({ active, payload }: TooltipContentProps) => {
             if (!active || !payload?.length) return null;
             const d = payload[0].payload as { name: string; amount: number };
@@ -62,7 +59,7 @@ export default function BudgetDistributionChart({
           dataKey="amount"
           radius={[0, 3, 3, 0]}
           barSize={12}
-          background={{ fill: CHART_TRACK, radius: 3 } as unknown as React.ComponentProps<typeof Bar>['background']}
+          background={{ fill: CHART.track, radius: 3 } as unknown as React.ComponentProps<typeof Bar>['background']}
         >
           {data.map((e, i) => (
             <Cell key={`cell-${i}`} fill={expenseColor(e.type)} />
@@ -71,7 +68,7 @@ export default function BudgetDistributionChart({
             dataKey="amount"
             position="right"
             offset={10}
-            fill={CHART_INK}
+            fill={CHART.textSoft}
             fontSize={11}
             fontWeight={600}
             formatter={(v: unknown) => formatCurrencyShort(Number(v ?? 0))}

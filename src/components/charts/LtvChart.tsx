@@ -3,7 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useFinance } from '../../context/FinanceContext';
 import { calcAmortizationSchedule } from '../../lib/calculations';
 import ChartTooltip from '../ChartTooltip';
-import { CHART } from '../../lib/chartColors';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
 /**
  * Loan-to-value over time for a homeowner: the mortgage shrinks as it amortizes
@@ -36,9 +36,9 @@ export default function LtvChart() {
             <stop offset="100%" stopColor={CHART.teal} stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
-        <XAxis dataKey="year" tick={{ fontSize: 11, fill: CHART.textSoft }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={28} />
-        <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: CHART.textDim }} axisLine={false} tickLine={false} width={40} domain={[0, 'auto']} />
+        <CartesianGrid {...GRID_PROPS} vertical={false} />
+        <XAxis dataKey="year" {...AXIS_PROPS} interval="preserveStartEnd" minTickGap={28} />
+        <YAxis tickFormatter={(v) => `${v}%`} {...AXIS_PROPS_Y} width={40} domain={[0, 'auto']} />
         <Tooltip content={<ChartTooltip valueFormatter={(v) => `${v.toFixed(1)}%`} labelFormatter={(l) => String(l)} />} />
         <ReferenceLine y={85} stroke={CHART.rust} strokeDasharray="4 4" label={{ value: t.charts.ltvCap, position: 'insideTopRight', fontSize: 10, fill: CHART.rust }} />
         <Area name={t.charts.ltv} type="monotone" dataKey="ltv" stroke={CHART.teal} strokeWidth={2} fill="url(#ltvFill)" />

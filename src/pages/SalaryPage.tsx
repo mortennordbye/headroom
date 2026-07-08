@@ -39,6 +39,7 @@ import type { Translations } from '../i18n/translations';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
+import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
 import { salaryAt, hoursAt } from '../lib/salary';
@@ -54,7 +55,7 @@ const MoneyFlowSankey = lazy(() => import('../components/charts/MoneyFlowSankey'
 const WEEKS_PER_MONTH = 4.345;
 
 const CHANGE_TYPE_COLOR: Record<SalaryChangeType, string> = {
-  initial: '#5F6555',
+  initial: 'var(--text-dim)',
   raise: 'var(--positive)',
   promotion: 'var(--violet)',
   job_change: 'var(--accent)',
@@ -857,9 +858,9 @@ const SalaryPage: React.FC = () => {
                   <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.12} /><stop offset="100%" stopColor="var(--accent)" stopOpacity={0.12} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis dataKey="month" {...AXIS_PROPS} />
+              <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
               <Tooltip content={<ChartTooltip />} />
               {jobChangeMonths.map(jc => (
                 <ReferenceLine
@@ -945,9 +946,9 @@ const SalaryPage: React.FC = () => {
         <div className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={yoyByYear} margin={{ top: 28, right: 12, left: 0, bottom: 0 }} barGap={4} barCategoryGap="22%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
+              <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="year" tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 600 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={44} />
+              <YAxis tickFormatter={(v) => `${v}%`} {...AXIS_PROPS_Y} width={44} />
               <Tooltip
                 content={<ChartTooltip valueFormatter={(v) => `${v.toFixed(1)}%`} />}
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
@@ -1025,25 +1026,25 @@ const SalaryPage: React.FC = () => {
             <BarChart data={compByYear} margin={{ top: 28, right: 8, left: 0, bottom: 0 }} barCategoryGap="28%">
               <defs>
                 <linearGradient id="compBaseGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#1F5A42" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#1F5A42" stopOpacity={1} />
+                  <stop offset="0%" stopColor={CHART.forest} stopOpacity={1} />
+                  <stop offset="100%" stopColor={CHART.forest} stopOpacity={1} />
                 </linearGradient>
                 <linearGradient id="compBonusGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3F7373" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#3F7373" stopOpacity={1} />
+                  <stop offset="0%" stopColor={CHART.teal} stopOpacity={1} />
+                  <stop offset="100%" stopColor={CHART.teal} stopOpacity={1} />
                 </linearGradient>
                 <linearGradient id="compOtGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#5B7280" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#5B7280" stopOpacity={1} />
+                  <stop offset="0%" stopColor={CHART.slate} stopOpacity={1} />
+                  <stop offset="100%" stopColor={CHART.slate} stopOpacity={1} />
                 </linearGradient>
                 <linearGradient id="compOnCallGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#7FCBA0" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#7FCBA0" stopOpacity={1} />
+                  <stop offset="0%" stopColor={CHART.forestLight} stopOpacity={1} />
+                  <stop offset="100%" stopColor={CHART.forestLight} stopOpacity={1} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
+              <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="year" tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 600 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={52} />
+              <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
               <Tooltip
                 content={<ChartTooltip />}
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
@@ -1059,10 +1060,10 @@ const SalaryPage: React.FC = () => {
         </div>
         {/* Inline legend */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#1F5A42' }} />{t.salaryPage.baseSalary}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#7FCBA0' }} />{t.salary.onCallLabel}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#3F7373' }} />{t.salary.bonuses}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#5B7280' }} />{t.salary.overtime}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.forest }} />{t.salaryPage.baseSalary}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.forestLight }} />{t.salary.onCallLabel}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.teal }} />{t.salary.bonuses}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.slate }} />{t.salary.overtime}</div>
         </div>
       </div>
 
@@ -1081,10 +1082,10 @@ const SalaryPage: React.FC = () => {
                   <stop offset="0%" stopColor="var(--warning)" stopOpacity={0.85} /><stop offset="100%" stopColor="var(--warning)" stopOpacity={0.85} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
+              <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="year" tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 600 }} axisLine={false} tickLine={false} />
-              <YAxis yAxisId="left" tickFormatter={(v) => `${v}t`} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={40} />
-              <YAxis yAxisId="right" orientation="right" tickFormatter={formatAxisInt} tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} width={56} />
+              <YAxis yAxisId="left" tickFormatter={(v) => `${v}t`} {...AXIS_PROPS_Y} width={40} />
+              <YAxis yAxisId="right" orientation="right" tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={56} />
               <Tooltip
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
                 content={<ChartTooltip valueFormatter={(v, e) => e?.dataKey === 'hoursPerWeek' ? `${v.toFixed(1)} ${t.common.hoursPerWeekUnit}` : formatCurrency(v)} />}
@@ -1380,7 +1381,7 @@ const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, empty, items,
               <button aria-label={`${editLabel} — ${item.primary}`} onClick={item.onEdit} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors">
                 <Edit2 size={13} />
               </button>
-              <button aria-label={`${deleteLabel} — ${item.primary}`} onClick={item.onDelete} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[#B5533A] hover:bg-[var(--bg-elev)] transition-colors">
+              <button aria-label={`${deleteLabel} — ${item.primary}`} onClick={item.onDelete} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--negative)] hover:bg-[var(--bg-elev)] transition-colors">
                 <Trash2 size={13} />
               </button>
             </div>
@@ -1467,13 +1468,11 @@ const RealHourlyChart: React.FC<RealHourlyChartProps> = ({ series, formatCurrenc
                 <stop offset="100%" stopColor="var(--violet)" stopOpacity={0.1} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#262A20" />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#5F6555' }} axisLine={false} tickLine={false} />
+            <CartesianGrid {...GRID_PROPS} />
+            <XAxis dataKey="month" {...AXIS_PROPS} />
             <YAxis
               tickFormatter={(v) => `${Math.round(v)}`}
-              tick={{ fontSize: 11, fill: '#5F6555' }}
-              axisLine={false}
-              tickLine={false}
+              {...AXIS_PROPS_Y}
               width={44}
             />
             <Tooltip
