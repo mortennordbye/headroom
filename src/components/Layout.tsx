@@ -50,7 +50,7 @@ const Layout: React.FC = () => {
   const statusBg = isCurrentMonth
     ? 'var(--positive-bg)'
     : isPast
-      ? 'rgba(255,255,255,0.05)'
+      ? 'var(--surface-4)'
       : 'var(--violet-bg)';
   const statusLabel = isCurrentMonth
     ? t.viewingCurrent
@@ -160,7 +160,7 @@ const Layout: React.FC = () => {
           ) : hideTimeMarker ? null : (
             <div
               className="flex items-center gap-1.5 rounded-[6px] border px-3 h-9"
-              style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--border)' }}
+              style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
               title={t.asOfTodayHint}
             >
               <span

@@ -474,7 +474,7 @@ const BudgetPage: React.FC = () => {
           <span
             className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-semibold uppercase tracking-[0.1em]"
             style={{
-              background: isCurrentMonth ? 'var(--positive-bg)' : isPast ? 'rgba(255,255,255,0.05)' : 'var(--violet-bg)',
+              background: isCurrentMonth ? 'var(--positive-bg)' : isPast ? 'var(--surface-4)' : 'var(--violet-bg)',
               color: isCurrentMonth ? 'var(--positive)' : isPast ? 'var(--text-3)' : 'var(--violet)',
             }}
           >

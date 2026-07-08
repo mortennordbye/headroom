@@ -400,7 +400,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Hero chart — clean 12-month actual net-equity trend */}
-          <div className="mt-6 rounded-[8px] border p-4" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
+          <div className="mt-6 rounded-[8px] border p-4" style={{ background: 'var(--surface-1)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] mb-2" style={{ color: 'var(--text-3)' }}>
               <div className="flex items-center gap-2">
                 <span>{t.dashboardPage.netEquityLast12}</span>
@@ -469,7 +469,7 @@ const DashboardPage: React.FC = () => {
               </span>
             )}
           </div>
-          <div className="mt-4 rounded-[8px] border p-3" style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}>
+          <div className="mt-4 rounded-[8px] border p-3" style={{ background: 'var(--surface-1)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex gap-3 text-[10px] uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>
                 <span><span className="inline-block w-2 h-0.5 mr-1.5 align-middle" style={{ background: 'var(--accent)' }} /> {t.dashboardPage.actual}</span>
@@ -886,7 +886,7 @@ const DashboardPage: React.FC = () => {
                 return (
                   <div
                     key={tx.id}
-                    className="px-6 py-3.5 grid items-center gap-3 border-b last:border-0 transition-colors hover:bg-[rgba(255,255,255,0.025)]"
+                    className="px-6 py-3.5 grid items-center gap-3 border-b last:border-0 transition-colors hover:bg-[var(--surface-1)]"
                     style={{
                       gridTemplateColumns: '44px 1fr auto auto',
                       borderColor: 'var(--border)',

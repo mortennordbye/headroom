@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Receipt, Layers, HandCoins } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import { calcEmployerCost, calcBillingRate, DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from '../lib/employerCost';
@@ -6,6 +6,9 @@ import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
+import { SummaryTile } from '../components/ui/SummaryTile';
+import { NumberRow } from '../components/ui/NumberRow';
+import { SliderRow } from '../components/ui/SliderRow';
 import { provenanceOf } from '../lib/provenance';
 import { currentMonthKey } from '../lib/date';
 import { parseLocaleNumber } from '../lib/validators';
@@ -98,7 +101,7 @@ const EmployerCostPage: React.FC = () => {
                 <span
                   className="text-[10px] font-medium px-1.5 py-0.5 rounded"
                   style={{
-                    background: isAuto ? 'var(--accent-bg)' : 'rgba(255,255,255,0.06)',
+                    background: isAuto ? 'var(--accent-bg)' : 'var(--surface-5)',
                     color: isAuto ? 'var(--accent)' : 'var(--text-3)',
                   }}
                 >
@@ -113,7 +116,7 @@ const EmployerCostPage: React.FC = () => {
                   setSalaryOverride(Number.isFinite(n) ? n : 0);
                 }}
                 className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
-                style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+                style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
               />
               {!isAuto && (
                 <button
@@ -134,7 +137,7 @@ const EmployerCostPage: React.FC = () => {
             </div>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.overheadHint}</p>
 
-            <div className="flex items-baseline justify-between rounded-[8px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+            <div className="flex items-baseline justify-between rounded-[8px] px-3 py-2.5" style={{ background: 'var(--surface-2)' }}>
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{pensionLabel}</div>
                 <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{ec.employerPensionHint}</div>
@@ -191,7 +194,7 @@ const EmployerCostPage: React.FC = () => {
                 updateBillingConfig('billableHoursOverride', Number.isFinite(n) && n > 0 ? n : null);
               }}
               className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
-              style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+              style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
             />
           </div>
           <SliderRow label={ec.targetMargin} value={billingConfig.targetMarginPct} onChange={(v) => updateBillingConfig('targetMarginPct', v)} min={0} max={95} step={1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.targetMarginPct, DEFAULT_BILLING_CONFIG.targetMarginPct)} />} />
@@ -222,21 +225,9 @@ const EmployerCostPage: React.FC = () => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-function SummaryTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
-  return (
-    <Card padding="md">
-      <div className="text-[11px] font-medium uppercase tracking-[0.1em]" style={{ color: 'var(--text-2)' }}>{label}</div>
-      <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums mt-1.5" style={{ color: color ?? 'var(--text-1)' }}>
-        {value}
-      </div>
-      {sub && <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--text-3)' }}>{sub}</div>}
-    </Card>
-  );
-}
-
 function StatBlock({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="rounded-[8px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+    <div className="rounded-[8px] px-3 py-2.5" style={{ background: 'var(--surface-2)' }}>
       <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>{label}</div>
       <div className="text-[16px] md:text-[18px] leading-tight font-semibold font-mono tabular-nums mt-1 [overflow-wrap:anywhere]" style={{ color: color ?? 'var(--text-1)' }}>
         {value}
@@ -259,59 +250,6 @@ function BreakdownRow({ label, value, sub, muted, emphasis }: { label: string; v
       >
         {value}
       </span>
-    </div>
-  );
-}
-
-function NumberRow({ label, value, onCommit, suffix, badge }: { label: string; value: number; onCommit: (v: number) => void; suffix?: string; badge?: React.ReactNode }) {
-  const [draft, setDraft] = useState(value.toString());
-  // Re-sync the editable draft when the committed value changes from outside.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setDraft(value.toString()); }, [value]);
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-2 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</label>
-          {badge}
-        </div>
-        {suffix && <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{suffix}</span>}
-      </div>
-      <input
-        type="number"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => { const n = parseLocaleNumber(draft); onCommit(Number.isFinite(n) ? n : 0); }}
-        className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
-        style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
-      />
-    </div>
-  );
-}
-
-function SliderRow({ label, value, onChange, min, max, step, suffix, badge }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step: number; suffix: string; badge?: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-2 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</label>
-          {badge}
-        </div>
-        <span className="text-[18px] font-semibold tabular-nums">
-          {value}
-          {suffix && <span className="text-[12px] ml-1" style={{ color: 'var(--text-3)' }}>{suffix}</span>}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full"
-        style={{ accentColor: 'var(--accent)' }}
-      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -9,20 +9,17 @@ import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
+import { SummaryTile } from '../components/ui/SummaryTile';
+import { NumberRow } from '../components/ui/NumberRow';
+import { SliderRow } from '../components/ui/SliderRow';
 import { provenanceOf } from '../lib/provenance';
-import { parseLocaleNumber } from '../lib/validators';
 import { projectPensionWealth } from '../lib/pension';
 import { currentMonthKey } from '../lib/date';
+import { formatAxisInt } from '../lib/format';
 import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
-
-function formatAxisInt(val: number): string {
-  if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(val) >= 1_000) return `${Math.round(val / 1_000)}k`;
-  return val.toString();
-}
 
 const PensionPage: React.FC = () => {
   const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct } = useFinance();
@@ -245,115 +242,6 @@ const PensionPage: React.FC = () => {
     </>
   );
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────
-
-function SummaryTile({
-  label,
-  value,
-  sub,
-  color,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  color?: string;
-}) {
-  return (
-    <Card padding="md">
-      <div className="text-[11px] font-medium uppercase tracking-[0.1em]" style={{ color: 'var(--text-2)' }}>{label}</div>
-      <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums mt-1.5" style={{ color: color ?? 'var(--text-1)' }}>
-        {value}
-      </div>
-      {sub && <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--text-3)' }}>{sub}</div>}
-    </Card>
-  );
-}
-
-function NumberRow({
-  label,
-  value,
-  onCommit,
-  suffix,
-}: {
-  label: string;
-  value: number;
-  onCommit: (v: number) => void;
-  suffix?: string;
-}) {
-  const [draft, setDraft] = useState(value.toString());
-  // Re-sync the editable draft when the committed value changes from outside.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setDraft(value.toString()); }, [value]);
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-2">
-        <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
-          {label}
-        </label>
-        {suffix && <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{suffix}</span>}
-      </div>
-      <input
-        type="number"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          const n = parseLocaleNumber(draft);
-          onCommit(Number.isFinite(n) ? n : 0);
-        }}
-        className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
-        style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
-      />
-    </div>
-  );
-}
-
-function SliderRow({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  step,
-  suffix,
-  badge,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  min: number;
-  max: number;
-  step: number;
-  suffix: string;
-  badge?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-2 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
-            {label}
-          </label>
-          {badge}
-        </div>
-        <span className="text-[18px] font-semibold tabular-nums">
-          {value}
-          {suffix && <span className="text-[12px] ml-1" style={{ color: 'var(--text-3)' }}>{suffix}</span>}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full"
-        style={{ accentColor: 'var(--accent)' }}
-      />
-    </div>
-  );
-}
 
 export default PensionPage;
 

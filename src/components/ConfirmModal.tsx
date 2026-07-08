@@ -34,7 +34,7 @@ export default function ConfirmModal({
           <button
             onClick={onConfirm}
             className={`flex-1 py-2.5 rounded-[6px] text-[13px] font-semibold text-[var(--text)] transition-colors ${
-              danger ? 'bg-[var(--rust)] hover:bg-[#9c4632]' : 'bg-[var(--forest)] hover:bg-[var(--forest-dim)]'
+              danger ? 'bg-[var(--rust)] hover:bg-[var(--rust-dim)]' : 'bg-[var(--forest)] hover:bg-[var(--forest-dim)]'
             }`}
           >
             {confirmLabel}

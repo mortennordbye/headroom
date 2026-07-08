@@ -4,7 +4,7 @@ import type { Provenance } from '../../lib/provenance';
 const toneFor: Record<Provenance, { bg: string; color: string }> = {
   default: { bg: 'var(--warning-bg)', color: 'var(--warning)' },
   custom: { bg: 'var(--positive-bg)', color: 'var(--positive)' },
-  estimate: { bg: 'rgba(255,255,255,0.06)', color: 'var(--text-2)' },
+  estimate: { bg: 'var(--surface-5)', color: 'var(--text-2)' },
 };
 
 interface ProvenanceBadgeProps {

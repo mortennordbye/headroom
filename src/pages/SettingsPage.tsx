@@ -230,7 +230,7 @@ export default function SettingsPage() {
           {/* Segmented control */}
           <div
             className="mt-5 inline-flex p-1 rounded-[8px] border"
-            style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)' }}
+            style={{ background: 'var(--surface-3)', borderColor: 'var(--border)' }}
             role="radiogroup"
             aria-label={t.settings.currency}
           >
@@ -267,7 +267,7 @@ export default function SettingsPage() {
                   onChange={e => setUsdRateInput(e.target.value)}
                   className="flex-1 h-10 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
                   style={{
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'var(--surface-3)',
                     borderColor: 'var(--border)',
                     color: 'var(--text-1)',
                   }}
@@ -305,7 +305,7 @@ export default function SettingsPage() {
                   onChange={e => setCustomCodeInput(e.target.value.toUpperCase())}
                   className="w-20 h-10 px-3 rounded-[8px] text-[13px] font-mono uppercase outline-none border"
                   style={{
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'var(--surface-3)',
                     borderColor: 'var(--border)',
                     color: 'var(--text-1)',
                   }}
@@ -319,7 +319,7 @@ export default function SettingsPage() {
                   onChange={e => setCustomRateInput(e.target.value)}
                   className="flex-1 h-10 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
                   style={{
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'var(--surface-3)',
                     borderColor: 'var(--border)',
                     color: 'var(--text-1)',
                   }}
@@ -605,7 +605,7 @@ export default function SettingsPage() {
             {/* Export */}
             <div
               className="rounded-[8px] border p-5 flex flex-col"
-              style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}
+              style={{ background: 'var(--surface-1)', borderColor: 'var(--border)' }}
             >
               <div className="flex items-start gap-3">
                 <div
@@ -646,7 +646,7 @@ export default function SettingsPage() {
             {/* Import */}
             <div
               className="rounded-[8px] border p-5 flex flex-col"
-              style={{ background: 'rgba(255,255,255,0.025)', borderColor: 'var(--border)' }}
+              style={{ background: 'var(--surface-1)', borderColor: 'var(--border)' }}
             >
               <div className="flex items-start gap-3">
                 <div
@@ -882,7 +882,7 @@ function LangCard({
       aria-pressed={active}
       className="flex items-center gap-3 px-4 py-3 rounded-[8px] border transition-colors text-left"
       style={{
-        background: active ? 'var(--accent-bg)' : 'rgba(255,255,255,0.04)',
+        background: active ? 'var(--accent-bg)' : 'var(--surface-3)',
         borderColor: active ? 'color-mix(in srgb, var(--accent) 50%, transparent)' : 'var(--border)',
       }}
     >
@@ -953,7 +953,7 @@ function RangeRow({
             onChange={e => setDraft(e.target.value)}
             onBlur={commitDraft}
             onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
-            className="w-20 text-right text-[18px] font-semibold tabular-nums bg-transparent outline-none rounded px-1 hover:bg-[rgba(255,255,255,0.04)] focus:bg-[rgba(255,255,255,0.04)] transition-colors"
+            className="w-20 text-right text-[18px] font-semibold tabular-nums bg-transparent outline-none rounded px-1 hover:bg-[var(--surface-3)] focus:bg-[var(--surface-3)] transition-colors"
             style={{ color: 'var(--text-1)' }}
           />
           <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>{suffix}</span>

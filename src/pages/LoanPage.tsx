@@ -175,7 +175,7 @@ const LoanPage: React.FC = () => {
     <span
       className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide"
       style={{
-        background: auto ? 'var(--accent-bg)' : 'rgba(255,255,255,0.06)',
+        background: auto ? 'var(--accent-bg)' : 'var(--surface-5)',
         color: auto ? 'var(--accent)' : 'var(--text-3)',
       }}
     >
@@ -294,7 +294,7 @@ const LoanPage: React.FC = () => {
       {/* Mode selector — pill segmented control */}
       <div
         className="inline-flex p-1 rounded-[8px] border flex-wrap gap-1"
-        style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--border)' }}
+        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
         role="radiogroup"
       >
         {modeOptions.map(({ mode, label, icon }) => {
