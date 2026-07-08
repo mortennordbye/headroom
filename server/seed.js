@@ -56,43 +56,45 @@ months.forEach((k, i) => {
 
 // ── Fixed expenses (Norwegian household) ─────────────────────────
 const fixedExpenses = [
-  { id: 'fe-1', name: 'Huslån',           amount: 12_000 },
-  { id: 'fe-2', name: 'Fellesutgifter',   amount: 3_400 },
-  { id: 'fe-3', name: 'Forsikring',       amount: 850 },
-  { id: 'fe-4', name: 'Strøm',            amount: 1_350 },
-  { id: 'fe-5', name: 'Trening (SATS)',   amount: 549 },
-  { id: 'fe-6', name: 'Mobil',            amount: 449 },
-  { id: 'fe-7', name: 'Internett',        amount: 599 },
-  { id: 'fe-8', name: 'Spotify Familie',  amount: 169 },
-  { id: 'fe-9', name: 'Netflix',          amount: 159 },
-  { id: 'fe-10', name: 'BSU sparing',     amount: 2_200 },
-  { id: 'fe-11', name: 'Aksjesparing',    amount: 4_000 },
-  { id: 'fe-12', name: 'Bil leasing',     amount: 1_575 },
+  { id: 'fe-1', name: 'Huslån',           amount: 12_000, type: 'fixed' },
+  { id: 'fe-2', name: 'Fellesutgifter',   amount: 3_400,  type: 'fixed' },
+  { id: 'fe-3', name: 'Forsikring',       amount: 850,    type: 'insurance' },
+  { id: 'fe-4', name: 'Strøm',            amount: 1_350,  type: 'fixed' },
+  { id: 'fe-5', name: 'Trening',          amount: 549,    type: 'subscription' },
+  { id: 'fe-6', name: 'Mobil',            amount: 449,    type: 'subscription' },
+  { id: 'fe-7', name: 'Internett',        amount: 599,    type: 'subscription' },
+  { id: 'fe-8', name: 'Musikkstrømming',  amount: 169,    type: 'subscription' },
+  { id: 'fe-9', name: 'TV-strømming',     amount: 159,    type: 'subscription' },
+  { id: 'fe-10', name: 'BSU sparing',     amount: 2_200,  type: 'fixed' },
+  { id: 'fe-11', name: 'Aksjesparing',    amount: 4_000,  type: 'fixed' },
+  { id: 'fe-12', name: 'Bil leasing',     amount: 1_575,  type: 'fixed' },
 ];
 
 // ── Daily transactions for the CURRENT month (up to today) ───────
+// `cat` values are canonical CategoryKeys (src/lib/categories.ts), so seeded
+// rows use the same taxonomy as auto-categorized bank rows.
 const dailyTransactions = [];
 const merchants = [
-  { name: 'Rema 1000',           cat: 'Mat',         min: 180,  max: 620 },
-  { name: 'Kiwi',                cat: 'Mat',         min: 140,  max: 540 },
-  { name: 'Bunnpris',            cat: 'Mat',         min: 95,   max: 380 },
-  { name: 'Meny',                cat: 'Mat',         min: 220,  max: 780 },
-  { name: 'Vinmonopolet',        cat: 'Diverse',    min: 280,  max: 720 },
-  { name: 'Kaffebar Tim Wendelboe', cat: 'Kaffe',   min: 55,   max: 95 },
-  { name: 'Espresso House',      cat: 'Kaffe',       min: 49,   max: 89 },
-  { name: 'Sushi Hjem',          cat: 'Mat ute',     min: 280,  max: 720 },
-  { name: 'Olympen',             cat: 'Mat ute',     min: 380,  max: 950 },
-  { name: 'Burger King',         cat: 'Mat ute',     min: 120,  max: 240 },
-  { name: 'NSB Vy',              cat: 'Transport',   min: 39,   max: 199 },
-  { name: 'Ruter',               cat: 'Transport',   min: 42,   max: 124 },
-  { name: 'YX Bensinstasjon',    cat: 'Transport',   min: 420,  max: 920 },
-  { name: 'Apotek 1',            cat: 'Helse',       min: 99,   max: 480 },
-  { name: 'H&M',                 cat: 'Klær',        min: 199,  max: 1_200 },
-  { name: 'Princess',            cat: 'Hjem',        min: 149,  max: 880 },
-  { name: 'Clas Ohlson',         cat: 'Hjem',        min: 89,   max: 540 },
-  { name: 'Komplett',            cat: 'Elektronikk', min: 299,  max: 4_500 },
-  { name: 'Outland',             cat: 'Fritid',      min: 199,  max: 890 },
-  { name: 'Kino Oslo',           cat: 'Fritid',      min: 140,  max: 320 },
+  { name: 'Rema 1000',           cat: 'groceries',     min: 180,  max: 620 },
+  { name: 'Kiwi',                cat: 'groceries',     min: 140,  max: 540 },
+  { name: 'Bunnpris',            cat: 'groceries',     min: 95,   max: 380 },
+  { name: 'Meny',                cat: 'groceries',     min: 220,  max: 780 },
+  { name: 'Vinmonopolet',        cat: 'entertainment', min: 280,  max: 720 },
+  { name: 'Kaffebar',            cat: 'dining',        min: 55,   max: 95 },
+  { name: 'Espresso House',      cat: 'dining',        min: 49,   max: 89 },
+  { name: 'Sushi Hjem',          cat: 'dining',        min: 280,  max: 720 },
+  { name: 'Olympen',             cat: 'dining',        min: 380,  max: 950 },
+  { name: 'Burger King',         cat: 'dining',        min: 120,  max: 240 },
+  { name: 'NSB Vy',              cat: 'transport',     min: 39,   max: 199 },
+  { name: 'Ruter',               cat: 'transport',     min: 42,   max: 124 },
+  { name: 'YX Bensinstasjon',    cat: 'transport',     min: 420,  max: 920 },
+  { name: 'Apotek 1',            cat: 'health',        min: 99,   max: 480 },
+  { name: 'H&M',                 cat: 'shopping',      min: 199,  max: 1_200 },
+  { name: 'Princess',            cat: 'shopping',      min: 149,  max: 880 },
+  { name: 'Clas Ohlson',         cat: 'shopping',      min: 89,   max: 540 },
+  { name: 'Komplett',            cat: 'shopping',      min: 299,  max: 4_500 },
+  { name: 'Outland',             cat: 'entertainment', min: 199,  max: 890 },
+  { name: 'Kino Oslo',           cat: 'entertainment', min: 140,  max: 320 },
 ];
 
 const todayDate = today.getDate();
@@ -111,16 +113,18 @@ for (let day = 1; day <= Math.min(todayDate, 28); day++) {
       description: m.name,
       amount,
       category: m.cat,
+      kind: 'expense',
+      categorySource: 'auto',
     });
   }
 }
 
 // ── Recurring templates (suggested for quick add) ────────────────
 const recurringTemplates = [
-  { id: 'rt-1', description: 'Rema 1000',        amount: 350, category: 'Mat' },
-  { id: 'rt-2', description: 'Kaffe Tim Wendelboe', amount: 71, category: 'Kaffe' },
-  { id: 'rt-3', description: 'NSB Vy',           amount: 84,  category: 'Transport' },
-  { id: 'rt-4', description: 'Vinmonopolet',     amount: 420, category: 'Diverse' },
+  { id: 'rt-1', description: 'Rema 1000',    amount: 350, category: 'groceries' },
+  { id: 'rt-2', description: 'Kaffe',        amount: 71,  category: 'dining' },
+  { id: 'rt-3', description: 'NSB Vy',       amount: 84,  category: 'transport' },
+  { id: 'rt-4', description: 'Vinmonopolet', amount: 420, category: 'entertainment' },
 ];
 
 // ── Assets ───────────────────────────────────────────────────────
@@ -131,7 +135,10 @@ const assets = {
   houseValue: 4_800_000,
   houseDebt: 3_400_000,
   bsu: 150_000,
-  savings: 125_000,
+  savings: 0, // legacy scalar — superseded by savingsAccounts
+  savingsAccounts: [
+    { id: 'sav-1', name: 'Sparekonto', balance: 125_000 },
+  ],
   bufferAccount: 75_000,
   crypto: 48_000,
   cryptoUnrealizedGain: 12_000,
@@ -151,7 +158,7 @@ const loan = {
   eksisterendeGjeld: 0,
   betingetLaan: 3_500_000,
   kjoepesum: 4_000_000,
-  laanetype: 'annuitet',
+  gyldigTil: '',
 };
 
 const homeowner = {
@@ -159,6 +166,7 @@ const homeowner = {
   originalLoanAmount: 3_800_000,
   rente: 5.65,
   nedbetalingstid: 22,
+  termingebyr: 50,
   skattefradragssats: 22,
 };
 
@@ -179,7 +187,7 @@ const jobs = [
     id: 'job-1',
     startDate: `${thisYear - 4}-08`,
     endDate: `${thisYear - 1}-09`,
-    employer: 'Telenor',
+    employer: 'Demo Konsult AS',
     role: 'Backend Engineer',
     contractedHoursPerWeek: 37.5,
   },
@@ -187,7 +195,7 @@ const jobs = [
     id: 'job-2',
     startDate: `${thisYear - 1}-10`,
     endDate: null,
-    employer: 'Cognite',
+    employer: 'Demo Software AS',
     role: 'Senior Engineer',
     contractedHoursPerWeek: 37.5,
   },
@@ -197,7 +205,7 @@ const salaries = [
   { id: 'sal-1', jobId: 'job-1', effectiveDate: `${thisYear - 4}-08`, grossAnnual: 580_000, changeType: 'initial' },
   { id: 'sal-2', jobId: 'job-1', effectiveDate: `${thisYear - 3}-04`, grossAnnual: 610_000, changeType: 'raise' },
   { id: 'sal-3', jobId: 'job-1', effectiveDate: `${thisYear - 2}-04`, grossAnnual: 640_000, changeType: 'raise' },
-  { id: 'sal-4', jobId: 'job-2', effectiveDate: `${thisYear - 1}-10`, grossAnnual: 760_000, changeType: 'job_change', notes: 'Jobbytte til Cognite' },
+  { id: 'sal-4', jobId: 'job-2', effectiveDate: `${thisYear - 1}-10`, grossAnnual: 760_000, changeType: 'job_change', notes: 'Jobbytte' },
   { id: 'sal-5', jobId: 'job-2', effectiveDate: `${thisYear}-04`,    grossAnnual: 795_000, changeType: 'raise' },
 ];
 
@@ -207,7 +215,7 @@ const bonuses = [
   { id: 'bon-3', date: `${thisYear - 2}-06-15`, amount: 21_000, type: 'holiday_pay' },
   { id: 'bon-4', date: `${thisYear - 2}-12-15`, amount: 15_000, type: 'annual' },
   { id: 'bon-5', date: `${thisYear - 1}-06-15`, amount: 24_000, type: 'holiday_pay' },
-  { id: 'bon-6', date: `${thisYear - 1}-10-15`, amount: 35_000, type: 'signing', notes: 'Cognite signing bonus' },
+  { id: 'bon-6', date: `${thisYear - 1}-10-15`, amount: 35_000, type: 'signing', notes: 'Signeringsbonus ny jobb' },
   { id: 'bon-7', date: `${thisYear - 1}-12-15`, amount: 20_000, type: 'performance' },
   { id: 'bon-8', date: `${thisYear}-06-15`,    amount: 28_000, type: 'holiday_pay' },
 ];
@@ -271,11 +279,22 @@ const db = new Database(DB_PATH);
 db.exec(`
   CREATE TABLE IF NOT EXISTS finance_data (
     id TEXT PRIMARY KEY,
-    content TEXT NOT NULL
+    content TEXT NOT NULL,
+    rev INTEGER NOT NULL DEFAULT 0
   )
 `);
-db.prepare('INSERT OR REPLACE INTO finance_data (id, content) VALUES (?, ?)')
-  .run('headroom', JSON.stringify(payload));
+// Pre-rev volumes lack the column (same dance as server/index.js).
+if (!db.prepare('PRAGMA table_info(finance_data)').all().some((c) => c.name === 'rev')) {
+  db.exec('ALTER TABLE finance_data ADD COLUMN rev INTEGER NOT NULL DEFAULT 0');
+}
+// Bump rev instead of resetting it, so an open tab sees a normal 409/reload
+// rather than a rev that went backwards.
+const existing = db.prepare('SELECT rev FROM finance_data WHERE id = ?').get('headroom');
+const rev = (existing ? existing.rev : 0) + 1;
+db.prepare(
+  'INSERT INTO finance_data (id, content, rev) VALUES (?, ?, ?) ' +
+  'ON CONFLICT(id) DO UPDATE SET content = excluded.content, rev = excluded.rev'
+).run('headroom', JSON.stringify(payload), rev);
 
 console.log(`✓ Seeded ${DB_PATH}`);
 console.log(`  · ${months.length} months of income & net-worth history`);
