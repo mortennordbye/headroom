@@ -4,6 +4,7 @@ import { useFinance, type Goal, type GoalSource, type Assets } from '../context/
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import { sumSavings } from '../lib/equity';
+import { ProgressBar } from './ui/ProgressBar';
 import { isValidYearMonth, isOptionalYearMonth, isPositiveNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
@@ -197,15 +198,7 @@ const GoalsSection: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                <div className="h-2 rounded-[3px] overflow-hidden" style={{ background: 'var(--bg-elev)' }}>
-                  <div
-                    className="h-full rounded-[3px] transition-all duration-700"
-                    style={{
-                      width: `${progress}%`,
-                      background: barColor,
-                    }}
-                  />
-                </div>
+                <ProgressBar pct={progress} square color={barColor} />
                 <div className="flex justify-between text-[11px] font-mono" style={{ color: 'var(--text-2)' }}>
                   <span>{formatCurrency(current)}</span>
                   <span>

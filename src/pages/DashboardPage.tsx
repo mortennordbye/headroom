@@ -13,6 +13,7 @@ import { DeltaChip } from '../components/ui/DeltaChip';
 import { AccountBadge } from '../components/AccountBadge';
 import { txDisplayName } from '../lib/labelRules';
 import { EquityCompositionBar } from '../components/EquityCompositionBar';
+import { ProgressBar } from '../components/ui/ProgressBar';
 import NetWorthHistoryModal from '../components/NetWorthHistoryModal';
 import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear,
@@ -826,17 +827,13 @@ const DashboardPage: React.FC = () => {
 
           {grossAnnualIncome > 0 && (
             <>
-              <div className="mt-4 h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-elev)' }}>
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${Math.min(100, (debtToIncome.ratio / debtToIncome.cap) * 100)}%`,
-                    background: debtToIncome.status === 'high'
-                      ? 'var(--negative)'
-                      : debtToIncome.status === 'moderate' ? 'var(--warning)' : 'var(--positive)',
-                  }}
-                />
-              </div>
+              <ProgressBar
+                pct={(debtToIncome.ratio / debtToIncome.cap) * 100}
+                color={debtToIncome.status === 'high'
+                  ? 'var(--negative)'
+                  : debtToIncome.status === 'moderate' ? 'var(--warning)' : 'var(--positive)'}
+                className="mt-4"
+              />
               <div className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
                 {debtToIncome.status === 'high'
                   ? t.dashboardPage.aboveCapText

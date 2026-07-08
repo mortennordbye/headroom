@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { AlertTriangle, TrendingUp, Edit2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
+import { ProgressBar } from './ui/ProgressBar';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -240,15 +241,11 @@ export default function SmartRecommendations() {
               <span>{t.common.spent}: {formatCurrency(totalSpentThisMonth)}</span>
               <span>{Math.round(spendingPct)}% {t.spentOfRecommended}</span>
             </div>
-            <div className="h-2 bg-[var(--bg-elev)] rounded-[3px] overflow-hidden">
-              <div
-                className={`h-full rounded-[3px] transition-all duration-500 ${
-                  spendingPct >= 100 ? 'bg-[var(--rust)]' :
-                  spendingPct >= 80 ? 'bg-[var(--brass)]' : 'bg-[var(--forest-light)]'
-                }`}
-                style={{ width: `${Math.min(spendingPct, 100)}%` }}
-              />
-            </div>
+            <ProgressBar
+              pct={spendingPct}
+              square
+              color={spendingPct >= 100 ? 'var(--rust)' : spendingPct >= 80 ? 'var(--brass)' : 'var(--forest-light)'}
+            />
           </div>
         </div>
 

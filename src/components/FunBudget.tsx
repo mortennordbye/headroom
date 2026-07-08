@@ -1,5 +1,6 @@
 import { Smile } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { ProgressBar } from './ui/ProgressBar';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -68,16 +69,11 @@ export default function FunBudget() {
       </div>
 
       <div className="mt-5 space-y-1.5">
-        <div className="h-3 bg-[var(--bg-elev)] rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${
-              pct >= 100 ? 'bg-[var(--negative)]' :
-              pct >= 75 ? 'bg-[var(--brass)]' :
-              'bg-[var(--positive)]'
-            }`}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
+        <ProgressBar
+          pct={pct}
+          heightClass="h-3"
+          color={pct >= 100 ? 'var(--negative)' : pct >= 75 ? 'var(--brass)' : 'var(--positive)'}
+        />
         <div className="flex justify-between text-[10px] text-[var(--text-2)]">
           <span>0</span>
           <span>{Math.round(pct)}% {t.common.used}</span>

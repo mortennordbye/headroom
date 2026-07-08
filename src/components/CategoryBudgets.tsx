@@ -7,6 +7,7 @@ import { budgetProgress } from '../lib/categoryStats';
 import { parseLocaleNumber } from '../lib/validators';
 import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
+import { ProgressBar } from './ui/ProgressBar';
 
 // Per-category monthly budgets: progress bars (actual vs cap) for the selected
 // month with over-budget warnings, plus an inline editor to set/clear caps.
@@ -93,12 +94,7 @@ export function CategoryBudgets() {
                     {formatCurrency(p.spent)} / {formatCurrency(p.budget)}
                   </span>
                 </div>
-                <div className="h-1.5 rounded-[3px] bg-[var(--bg-raised)] overflow-hidden">
-                  <div
-                    className="h-full rounded-[3px]"
-                    style={{ width: `${barPct}%`, background: p.over ? 'var(--negative)' : meta.color }}
-                  />
-                </div>
+                <ProgressBar pct={barPct} heightClass="h-1.5" square trackColor="var(--bg-raised)" color={p.over ? 'var(--negative)' : meta.color} />
                 <div className="text-[11px] tabular-nums" style={{ color: p.over ? 'var(--negative)' : 'var(--text-3)' }}>
                   {p.over
                     ? `${t.overBudgetBy} ${formatCurrency(p.spent - p.budget)}`
