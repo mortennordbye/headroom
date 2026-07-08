@@ -35,6 +35,13 @@ import {
   DEFAULT_EMPLOYER_COST_CONFIG,
   DEFAULT_BILLING_CONFIG,
 } from '../lib/employerCost';
+import { makeId } from '../lib/savingsMigration';
+import {
+  makePayloadRegistry,
+  applyPersistedFields,
+  derivePayload,
+  type PayloadSetters,
+} from '../lib/payloadRegistry';
 
 // --- Types ---
 
@@ -418,6 +425,15 @@ export const DEFAULT_PENSION: Pension = {
   retirementAge: 67,
 };
 
+// Single source of the persisted-field list (§8.10). The object-field defaults
+// (reused as sanitize schemas and by pages) are injected from the DEFAULT_*
+// constants above so the registry module stays free of any context value import.
+// Built once at module scope: reads/defaults never change, only the bound state.
+const PAYLOAD_REGISTRY = makePayloadRegistry({
+  assets: DEFAULT_ASSETS, loan: DEFAULT_LOAN, pension: DEFAULT_PENSION,
+  homeowner: DEFAULT_HOMEOWNER, transition: DEFAULT_TRANSITION, fixedExpenses: DEFAULT_FIXED_EXPENSES,
+});
+
 // --- Context ---
 
 // The context is split into three slices (§4.1) so a change to one doesn't
@@ -703,10 +719,8 @@ export interface DailyDataEntry {
   transactions: DailyTransaction[];
 }
 
-// Module-level so id-minting actions can stay referentially stable (no closure
-// over component state → useCallback with empty deps).
-const makeId = (prefix: string) =>
-  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+// `makeId` (imported from lib/savingsMigration) is module-level so id-minting
+// actions stay referentially stable (no closure over component state).
 
 // The add/update/remove triple shared by every id-keyed array entity (jobs,
 // salaries, bonuses, overtime, hours snapshots, goals). `add` mints an id and
@@ -727,48 +741,9 @@ function makeCrud<T extends { id: string }>(setter: ArraySetter<T>, prefix: stri
   };
 }
 
-// Normalise a loaded/imported assets blob into a savings-accounts array. If the
-// array is present it's cleaned (valid id/name/number balance); when it's absent
-// *or empty*, a nonzero legacy `savings` scalar is migrated into one account
-// (empty-array-with-scalar is real in the wild: the pre-1.8 onboarding wrote the
-// scalar next to the default empty array). Returning an array (never undefined)
-// makes `savingsAccounts` the canonical source; the caller zeroes the scalar.
-function migrateSavingsAccounts(a: Assets): SavingsAccount[] {
-  const raw: unknown = a.savingsAccounts;
-  if (Array.isArray(raw)) {
-    const cleaned = raw
-      .filter((x): x is Record<string, unknown> => x != null && typeof x === 'object')
-      .map((x) => {
-        const bal = x.balance;
-        const balance = typeof bal === 'number' && Number.isFinite(bal)
-          ? bal
-          : typeof bal === 'string' ? (parseFloat(bal.replace(',', '.')) || 0) : 0;
-        return {
-          id: typeof x.id === 'string' && x.id ? x.id : makeId('sav'),
-          name: typeof x.name === 'string' ? x.name : 'Sparekonto',
-          balance,
-        };
-      });
-    if (cleaned.length > 0) return cleaned;
-  }
-  const legacy = typeof a.savings === 'number' && Number.isFinite(a.savings) ? a.savings : 0;
-  return legacy > 0 ? [{ id: makeId('sav'), name: 'Sparekonto', balance: legacy }] : [];
-}
-
-// One-time migration of stored balance snapshots, mirroring what applyPayload
-// does to the live assets: give each snapshot's assets the canonical
-// savingsAccounts array and zero the legacy scalar. The client re-saves the
-// whole blob after load, so this self-persists and `sumSavings`' scalar
-// fallback stops being load-bearing for migrated data.
-function migrateSnapshotSavings(snaps: Record<string, BalanceSnapshot>): Record<string, BalanceSnapshot> {
-  const out: Record<string, BalanceSnapshot> = {};
-  for (const [month, snap] of Object.entries(snaps)) {
-    out[month] = snap && snap.assets && typeof snap.assets === 'object'
-      ? { ...snap, assets: { ...snap.assets, savings: 0, savingsAccounts: migrateSavingsAccounts(snap.assets) } }
-      : snap;
-  }
-  return out;
-}
+// `migrateSavingsAccounts` / `migrateSnapshotSavings` moved to
+// lib/savingsMigration.ts so the payload registry (and its tests) can apply them
+// without pulling in React; the registry now owns the assets/snapshot reads.
 
 const FinanceSettingsContext = createContext<FinanceSettingsContextType | undefined>(undefined);
 const FinanceDataContext = createContext<FinanceDataContextType | undefined>(undefined);
@@ -888,7 +863,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // The one place that projects app state → the persisted/exported blob. Used by
   // autosave, the demo snapshot, and Settings export. `currentMonth` is view
   // state and is added by the callers that need it, not here.
-  const buildPayload = useCallback((): ExportPayload => ({
+  // The field literal is projected through the registry (`derivePayload`), so its
+  // key type is `BuiltPayload` — omitting any persisted field FAILS TO COMPILE.
+  const buildPayload = useCallback((): ExportPayload => derivePayload(PAYLOAD_REGISTRY, {
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang,
@@ -917,57 +894,28 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       homeowner: DEFAULT_HOMEOWNER, transition: DEFAULT_TRANSITION,
       employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG, billingConfig: DEFAULT_BILLING_CONFIG,
     });
-
-    // ── Group A: default-on-absent (load) / leave-on-absent (import) ──
-    if (data.income !== undefined) setIncome(data.income); else if (resetMissing) setIncome(55000);
-    if (data.monthlyIncomes !== undefined) setMonthlyIncomes(data.monthlyIncomes); else if (resetMissing) setMonthlyIncomes({});
-    if (data.payslips !== undefined) setPayslips(data.payslips); else if (resetMissing) setPayslips({});
-    if (data.netWorthHistory !== undefined) setNetWorthHistory(data.netWorthHistory); else if (resetMissing) setNetWorthHistory({});
-    if (data.balanceSnapshots !== undefined) setBalanceSnapshots(migrateSnapshotSavings(data.balanceSnapshots)); else if (resetMissing) setBalanceSnapshots({});
-    if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses); else if (resetMissing) setFixedExpenses(DEFAULT_FIXED_EXPENSES);
-    if (data.debts) setDebts(data.debts); else if (resetMissing) setDebts([]);
-    if (data.dailyTransactions) setDailyTransactions(dedupeBankTransactions(data.dailyTransactions)); else if (resetMissing) setDailyTransactions([]);
-    if (data.deletedBankIds !== undefined) setDeletedBankIds(data.deletedBankIds); else if (resetMissing) setDeletedBankIds([]);
-    if (data.accountLabels !== undefined) setAccountLabels(data.accountLabels); else if (resetMissing) setAccountLabels({});
-    if (data.categoryRules !== undefined) setCategoryRules(data.categoryRules); else if (resetMissing) setCategoryRules([]);
-    if (data.labelRules !== undefined) setLabelRules(data.labelRules); else if (resetMissing) setLabelRules([]);
-    if (data.categoryBudgets !== undefined) setCategoryBudgets(data.categoryBudgets); else if (resetMissing) setCategoryBudgets({});
-    if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets, savings: 0, savingsAccounts: migrateSavingsAccounts(data.assets) }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
-    if (data.loan) setLoan(data.loan); else if (resetMissing) setLoan(DEFAULT_LOAN);
-    if (data.pension) setPension({ ...DEFAULT_PENSION, ...data.pension }); else if (resetMissing) setPension(DEFAULT_PENSION);
-    if (data.recurringTemplates !== undefined) setRecurringTemplates(data.recurringTemplates); else if (resetMissing) setRecurringTemplates([]);
-    if (data.housingMode !== undefined) setHousingMode(data.housingMode); else if (resetMissing) setHousingMode('first_buyer');
-    if (data.homeowner) setHomeowner({ ...DEFAULT_HOMEOWNER, ...data.homeowner }); else if (resetMissing) setHomeowner(DEFAULT_HOMEOWNER);
-    if (data.transition) setTransition({ ...DEFAULT_TRANSITION, ...data.transition }); else if (resetMissing) setTransition(DEFAULT_TRANSITION);
-    if (data.employerCostConfig) setEmployerCostConfig({ ...DEFAULT_EMPLOYER_COST_CONFIG, ...data.employerCostConfig }); else if (resetMissing) setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
-    if (data.billingConfig) setBillingConfig({ ...DEFAULT_BILLING_CONFIG, ...data.billingConfig }); else if (resetMissing) setBillingConfig(DEFAULT_BILLING_CONFIG);
-    // Legacy blobs pre-date this flag — absent → treated as onboarded (true) on
-    // load so existing users never re-trigger the first-run tour.
-    if (typeof data.onboardingCompleted === 'boolean') setOnboardingCompleted(data.onboardingCompleted); else if (resetMissing) setOnboardingCompleted(true);
-    if (typeof data.assumptionsNudgeDismissed === 'boolean') setAssumptionsNudgeDismissed(data.assumptionsNudgeDismissed); else if (resetMissing) setAssumptionsNudgeDismissed(false);
-    if (typeof data.incomeReminderDismissedMonth === 'string') setIncomeReminderDismissedMonth(data.incomeReminderDismissedMonth); else if (resetMissing) setIncomeReminderDismissedMonth('');
-
-    // ── Group B: apply only when present (identical on load + import) ──
-    // `currentMonth` is view state, never persisted — ignored on both paths.
-    if (data.lang) setLang(data.lang);
-    if (data.savingsTargetPercent !== undefined) setSavingsTargetPercent(data.savingsTargetPercent);
-    if (data.growthReturnRate !== undefined) setGrowthReturnRate(data.growthReturnRate);
-    if (data.houseGrowthRate !== undefined) setHouseGrowthRate(data.houseGrowthRate);
-    if (data.cashGrowthRate !== undefined) setCashGrowthRate(data.cashGrowthRate);
-    if (data.cryptoGrowthRate !== undefined) setCryptoGrowthRate(data.cryptoGrowthRate);
-    if (data.displayCurrency) setDisplayCurrency(data.displayCurrency);
-    if (data.nokToUsd !== undefined) setNokToUsdState(data.nokToUsd);
-    if (data.customCurrencyCode !== undefined) setCustomCurrencyCode(data.customCurrencyCode);
-    if (data.customCurrencyRate !== undefined) setCustomCurrencyRate(data.customCurrencyRate);
-    if (Array.isArray(data.jobs)) setJobs(data.jobs);
-    if (Array.isArray(data.salaries)) setSalaries(data.salaries);
-    if (Array.isArray(data.bonuses)) setBonuses(data.bonuses);
-    if (Array.isArray(data.overtime)) setOvertime(data.overtime);
-    if (Array.isArray(data.hoursSnapshots)) setHoursSnapshots(data.hoursSnapshots);
-    if (Array.isArray(data.goals)) setGoals(data.goals);
-    if (data.region === 'no' || data.region === 'generic') setRegion(data.region);
-    if (typeof data.customTaxRatePct === 'number') setCustomTaxRatePct(data.customTaxRatePct);
-    if (Array.isArray(data.hiddenNavItems)) setHiddenNavItems(data.hiddenNavItems);
+    // Bind the persisted-field registry to the raw React state setters (the
+    // `PayloadSetters` type makes this map exhaustive — a new field won't compile
+    // until it's wired). `currentMonth` is view state and is in neither map.
+    const setters: PayloadSetters = {
+      income: setIncome, monthlyIncomes: setMonthlyIncomes, payslips: setPayslips,
+      netWorthHistory: setNetWorthHistory, balanceSnapshots: setBalanceSnapshots,
+      fixedExpenses: setFixedExpenses, dailyTransactions: setDailyTransactions,
+      deletedBankIds: setDeletedBankIds, accountLabels: setAccountLabels, categoryRules: setCategoryRules,
+      labelRules: setLabelRules, categoryBudgets: setCategoryBudgets, debts: setDebts, assets: setAssets,
+      loan: setLoan, pension: setPension, recurringTemplates: setRecurringTemplates,
+      housingMode: setHousingMode, homeowner: setHomeowner, transition: setTransition, lang: setLang,
+      savingsTargetPercent: setSavingsTargetPercent, growthReturnRate: setGrowthReturnRate,
+      houseGrowthRate: setHouseGrowthRate, cashGrowthRate: setCashGrowthRate, cryptoGrowthRate: setCryptoGrowthRate,
+      displayCurrency: setDisplayCurrency, nokToUsd: setNokToUsdState, customCurrencyCode: setCustomCurrencyCode,
+      customCurrencyRate: setCustomCurrencyRate, jobs: setJobs, salaries: setSalaries, bonuses: setBonuses,
+      overtime: setOvertime, hoursSnapshots: setHoursSnapshots, goals: setGoals, region: setRegion,
+      customTaxRatePct: setCustomTaxRatePct, employerCostConfig: setEmployerCostConfig,
+      billingConfig: setBillingConfig, hiddenNavItems: setHiddenNavItems,
+      onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
+      incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
+    };
+    applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
 
   useEffect(() => {
