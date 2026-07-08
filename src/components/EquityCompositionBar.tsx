@@ -4,8 +4,20 @@ import { useFinance } from '../context/FinanceContext';
 // net equity plus the debt layered on top — the "leverage" view. Net worth stays
 // the honest headline; this makes the debt transparent and flags studielån (soft)
 // distinctly from other debt (hard). Hidden when there's no non-mortgage debt.
-export function EquityCompositionBar() {
-  const { t, netWorth, totalDebt, studentDebt, formatCurrency } = useFinance();
+//
+// Defaults to the live context figures; the Assets time machine passes the
+// viewed month's values so history doesn't mix past assets with today's debt.
+interface EquityCompositionBarProps {
+  netWorth?: number;
+  totalDebt?: number;
+  studentDebt?: number;
+}
+
+export function EquityCompositionBar(props: EquityCompositionBarProps = {}) {
+  const { t, netWorth: liveNetWorth, totalDebt: liveTotalDebt, studentDebt: liveStudentDebt, formatCurrency } = useFinance();
+  const netWorth = props.netWorth ?? liveNetWorth;
+  const totalDebt = props.totalDebt ?? liveTotalDebt;
+  const studentDebt = props.studentDebt ?? liveStudentDebt;
   const otherDebt = Math.max(0, totalDebt - studentDebt);
   const total = netWorth + totalDebt; // = asset equity (mortgage already netted in property)
   if (totalDebt <= 0 || total <= 0) return null;

@@ -17,6 +17,7 @@ import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear,
   calcEmergencyFundStatus, calcDebtToIncome,
 } from '../lib/calculations';
+import { calcDebtBalanceByYear } from '../lib/debt';
 import GoalsSection from '../components/GoalsSection';
 import InsightBanner from '../components/InsightBanner';
 import {
@@ -53,9 +54,9 @@ const DashboardPage: React.FC = () => {
     labelRules,
     incomeSeries,
     currentMonth,
-    totalEquity,
     totalDebt,
     netWorth,
+    debts,
     netInvestment,
     netCrypto,
     houseEquity,
@@ -124,14 +125,15 @@ const DashboardPage: React.FC = () => {
   // Months with a recorded snapshot are real; gaps are filled (interpolated
   // between recorded months, gently back-projected before the earliest one) and
   // tagged estimated so the chart can mark them distinctly. The current month is
-  // always an anchor at the live totalEquity. Estimated points turn real as
-  // monthly snapshots accumulate.
+  // always an anchor at the live netWorth — the same quantity as the headline,
+  // so the chip/chart can't track a different number than the figure they sit
+  // next to. Estimated points turn real as monthly snapshots accumulate.
   const { netWorthSeries, isEstimated } = useMemo(() => {
     const monthKeys = Array.from({ length: 12 }, (_, i) =>
       format(subMonths(new Date(), 11 - i), 'yyyy-MM'));
-    const series = buildNetWorthSeries(monthKeys, netWorthHistory, totalEquity);
+    const series = buildNetWorthSeries(monthKeys, netWorthHistory, netWorth);
     return { netWorthSeries: series, isEstimated: series.some(p => p.estimated) };
-  }, [netWorthHistory, totalEquity]);
+  }, [netWorthHistory, netWorth]);
 
   // Month-over-month change in NET EQUITY (from the series above), for the hero
   // card chip and subtitle. Previously these showed income MoM — an honest but
@@ -224,9 +226,10 @@ const DashboardPage: React.FC = () => {
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
-    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear);
+    const debtByYear = calcDebtBalanceByYear(debts, 15);
+    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear, debtByYear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, assets.houseValue, assets.houseDebt, mortgageRate, mortgageTermYears]);
+  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, assets.houseValue, assets.houseDebt, mortgageRate, mortgageTermYears, debts]);
 
   const projectionEndYear = projection15y[projection15y.length - 1]?.year;
   const projectionEndValue = projection15y[projection15y.length - 1]?.total ?? 0;

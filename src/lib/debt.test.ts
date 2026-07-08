@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths, sumDebtByType } from './debt';
+import { amortize, planPayoff, formatMonths, sumDebtByType, calcDebtBalanceByYear } from './debt';
 import type { Debt } from '../context/FinanceContext';
 
 const debt = (over: Partial<Debt> = {}): Debt => ({
@@ -110,6 +110,38 @@ describe('formatMonths', () => {
     expect(formatMonths(14, 'en')).toBe('1 yr 2 mo');
     expect(formatMonths(24, 'nb')).toBe('2 år');
     expect(formatMonths(5, 'nb')).toBe('5 mnd');
+  });
+});
+
+describe('calcDebtBalanceByYear', () => {
+  it('returns years+1 zeros for no debts', () => {
+    expect(calcDebtBalanceByYear([], 3)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('pays an interest-free debt down at its minimum and stays at zero', () => {
+    // 12 000 @ 0% with 1 000/mo clears in exactly 12 months.
+    const d = debt({ balance: 12_000, rate: 0, minPayment: 1_000 });
+    expect(calcDebtBalanceByYear([d], 3)).toEqual([12_000, 0, 0, 0]);
+  });
+
+  it('declines monotonically for an amortizing debt until paid off', () => {
+    const out = calcDebtBalanceByYear([debt()], 5); // 100k @ 10%, 3k/mo ≈ 3.2 yrs
+    expect(out[0]).toBe(100_000);
+    for (let y = 1; y < out.length; y++) expect(out[y]).toBeLessThanOrEqual(out[y - 1]);
+    expect(out[5]).toBe(0);
+  });
+
+  it('carries revolving balances flat forever', () => {
+    const card = debt({ balance: 18_000, rate: 0, minPayment: 0, revolving: true });
+    expect(calcDebtBalanceByYear([card], 2)).toEqual([18_000, 18_000, 18_000]);
+    // Mixed: the amortizing part clears, the revolving floor remains.
+    const out = calcDebtBalanceByYear([card, debt({ balance: 12_000, rate: 0, minPayment: 1_000 })], 2);
+    expect(out).toEqual([30_000, 18_000, 18_000]);
+  });
+
+  it('carries an infeasible debt at its starting balance instead of growing without bound', () => {
+    const d = debt({ balance: 500_000, rate: 25, minPayment: 100 });
+    expect(calcDebtBalanceByYear([d], 2)).toEqual([500_000, 500_000, 500_000]);
   });
 });
 

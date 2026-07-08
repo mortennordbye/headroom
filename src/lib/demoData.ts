@@ -1,4 +1,4 @@
-import type { ExportPayload, BalanceSnapshot, Assets, Pension } from '../context/FinanceContext';
+import type { ExportPayload, BalanceSnapshot, Assets, Debt, Pension } from '../context/FinanceContext';
 import { computeEquityBreakdown } from './equity';
 import { DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from './employerCost';
 
@@ -80,10 +80,16 @@ export function getDemoData(): Partial<ExportPayload> {
     birthYear: 1990,
     retirementAge: 67,
   };
+  const demoDebts: Debt[] = [
+    { id: 'demo-debt-1', name: 'Studielån (Lånekassen)', type: 'student', balance: 284000, rate: 4.9, minPayment: 3200 },
+    { id: 'demo-debt-2', name: 'Kredittkort', type: 'credit_card', balance: 24500, rate: 22.9, minPayment: 1500 },
+    { id: 'demo-debt-3', name: 'Forbrukslån', type: 'consumer', balance: 55000, rate: 12.5, minPayment: 2500 },
+    { id: 'demo-debt-4', name: 'Kredittkort (betales månedlig)', type: 'credit_card', balance: 18000, rate: 0, minPayment: 0, revolving: true },
+  ];
 
   // Build a believable 6-month back-history so demo mode can showcase the balance
   // time machine and the net-worth chart. k=0 is the current month; older months
-  // taper growable balances down and leave the mortgage slightly higher.
+  // taper growable balances down and leave the mortgage and other debts slightly higher.
   const snapshotFor = (k: number): BalanceSnapshot => ({
     housingMode: 'homeowner',
     loan: demoLoan,
@@ -104,6 +110,7 @@ export function getDemoData(): Partial<ExportPayload> {
       otpBalance: Math.round(demoPension.otpBalance * (1 - 0.02 * k)),
       ipsBalance: Math.round(demoPension.ipsBalance * (1 - 0.02 * k)),
     },
+    debts: demoDebts.map(d => (d.revolving ? d : { ...d, balance: d.balance + d.minPayment * k })),
   });
 
   const balanceSnapshots: Record<string, BalanceSnapshot> = {};
@@ -111,7 +118,8 @@ export function getDemoData(): Partial<ExportPayload> {
   for (let k = 0; k <= 5; k++) {
     const snap = snapshotFor(k);
     balanceSnapshots[monthsAgo(k)] = snap;
-    netWorthHistory[monthsAgo(k)] = Math.round(computeEquityBreakdown(snap.assets).totalEquity);
+    const snapDebt = (snap.debts ?? []).reduce((s, d) => s + Math.max(0, d.balance), 0);
+    netWorthHistory[monthsAgo(k)] = Math.round(computeEquityBreakdown(snap.assets).totalEquity - snapDebt);
   }
 
   return {
@@ -141,12 +149,7 @@ export function getDemoData(): Partial<ExportPayload> {
       { id: 'demo-fx-7', name: 'Mat', amount: 6500, type: 'variable' },
     ],
 
-    debts: [
-      { id: 'demo-debt-1', name: 'Studielån (Lånekassen)', type: 'student', balance: 284000, rate: 4.9, minPayment: 3200 },
-      { id: 'demo-debt-2', name: 'Kredittkort', type: 'credit_card', balance: 24500, rate: 22.9, minPayment: 1500 },
-      { id: 'demo-debt-3', name: 'Forbrukslån', type: 'consumer', balance: 55000, rate: 12.5, minPayment: 2500 },
-      { id: 'demo-debt-4', name: 'Kredittkort (betales månedlig)', type: 'credit_card', balance: 18000, rate: 0, minPayment: 0, revolving: true },
-    ],
+    debts: demoDebts,
 
     dailyTransactions: [
       { id: 'demo-tx-1', date: dayThisMonth(3), description: 'Rema 1000', amount: 742, category: 'groceries', categorySource: 'auto' },

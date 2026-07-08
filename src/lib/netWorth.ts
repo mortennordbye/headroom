@@ -10,8 +10,8 @@ const MONTHLY_GROWTH = 1.005; // ~6% annual, for back-projecting leading gaps
  * Build a net-worth series over the given chronological `monthKeys`.
  *
  * `history` supplies recorded anchor values; the LAST month is always anchored
- * to `currentEquity` (unless history already has it). Months without an anchor
- * are filled and tagged `estimated`:
+ * to `currentNetWorth` (unless history already has it). Months without an
+ * anchor are filled and tagged `estimated`:
  *   - between two anchors → linear interpolation,
  *   - before the first anchor → gentle back-projection at ~6%/yr,
  *   - after the last anchor → carry the previous value forward.
@@ -19,13 +19,13 @@ const MONTHLY_GROWTH = 1.005; // ~6% annual, for back-projecting leading gaps
 export function buildNetWorthSeries(
   monthKeys: string[],
   history: Record<string, number>,
-  currentEquity: number,
+  currentNetWorth: number,
 ): NetWorthPoint[] {
   const last = monthKeys.length - 1;
 
-  // Known anchor values per grid index (current month = live equity).
+  // Known anchor values per grid index (current month = live net worth).
   const values: (number | null)[] = monthKeys.map((k, i) => {
-    if (i === last) return history[k] ?? Math.round(currentEquity);
+    if (i === last) return history[k] ?? Math.round(currentNetWorth);
     return history[k] ?? null;
   });
   const anchorIdx = values.flatMap((v, i) => (v !== null ? [i] : []));

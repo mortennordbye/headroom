@@ -141,6 +141,26 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
   };
 }
 
+/**
+ * Total non-mortgage debt remaining at the end of each year, index 0..years
+ * (year 0 = today). Amortizing debts pay down at their minimum payments with
+ * the rollover method (freed minimums accelerate the rest, no extra budget);
+ * revolving balances never amortize and are carried flat. An infeasible plan
+ * (minimums can't outrun interest) carries the last simulated total forward
+ * rather than growing without bound. Mirrors `calcMortgageBalanceByYear` on
+ * the mortgage side, for netting debt out of net-worth projections.
+ */
+export function calcDebtBalanceByYear(debts: Debt[], years: number): number[] {
+  const revolving = debts.reduce((s, d) => (d.revolving ? s + Math.max(0, d.balance) : s), 0);
+  const series = planPayoff(debts, 0, 'avalanche').balanceSeries;
+  const out: number[] = [];
+  for (let y = 0; y <= years; y++) {
+    const amortizing = series[Math.min(y * 12, series.length - 1)]?.total ?? 0;
+    out.push(Math.round(amortizing + revolving));
+  }
+  return out;
+}
+
 /** Human-friendly "X år Y mnd" / "X yr Y mo" for a month count. */
 export function formatMonths(months: number, lang: 'nb' | 'en'): string {
   if (!isFinite(months)) return lang === 'nb' ? 'aldri' : 'never';

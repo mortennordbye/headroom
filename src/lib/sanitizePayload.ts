@@ -127,6 +127,15 @@ export function sanitizePayload<T>(data: T, objectSchemas: NumericObjectSchemas)
             s[key] = coerceBySchema(s[key], schema, 'zero');
           }
         }
+        // Snapshots also carry the month's non-mortgage debts (an array, so the
+        // object-schema loop above skips it) — coerce its items like top-level debts.
+        if (Array.isArray(s.debts)) {
+          s.debts = (s.debts as unknown[]).map((item) =>
+            item && typeof item === 'object' && !Array.isArray(item)
+              ? coerceBySchema(item, ARRAY_ITEM_SCHEMAS.debts, 'zero')
+              : item,
+          );
+        }
         cleaned[month] = s;
       } else {
         cleaned[month] = snap;
