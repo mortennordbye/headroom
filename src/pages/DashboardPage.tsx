@@ -29,6 +29,8 @@ import { buildNetWorthSeries } from '../lib/netWorth';
 import { sumSavings } from '../lib/equity';
 import { sumDiscretionarySpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
+import { categoryMoM } from '../lib/categoryStats';
+import { isCategoryKey } from '../lib/categories';
 
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
@@ -204,34 +206,21 @@ const DashboardPage: React.FC = () => {
     return months;
   }, [incomeSeries, savingsTargetPercent, totalFixedExpenses]);
 
-  // ─── Insight 2: top categories MoM ───
+  // ─── Insight 2: top categories MoM (shared categoryMoM math; localize at render) ───
   const categoryDeltas = useMemo(() => {
     const monthStr = format(currentMonth, 'yyyy-MM');
     const prevMonthStr = format(subMonths(currentMonth, 1), 'yyyy-MM');
-    const groupBy = (predicate: (m: string) => boolean) => {
-      const map = new Map<string, number>();
-      dailyTransactions
-        // Only expenses belong in a spending-by-category breakdown.
-        .filter(tx => predicate(tx.date) && tx.kind !== 'income')
-        .forEach(tx => {
-          const cat = tx.category || t.dashboardPage.other;
-          map.set(cat, (map.get(cat) ?? 0) + tx.amount);
-        });
-      return map;
-    };
-    const cur = groupBy(d => d.startsWith(monthStr));
-    const prev = groupBy(d => d.startsWith(prevMonthStr));
-    const rows = Array.from(cur.entries())
-      .map(([cat, val]) => {
-        const prevVal = prev.get(cat) ?? 0;
-        const deltaPct = prevVal > 0 ? ((val - prevVal) / prevVal) * 100 : null;
-        return { category: cat, value: val, deltaPct };
-      })
-      .sort((a, b) => b.value - a.value)
+    const rows = categoryMoM(dailyTransactions, monthStr, prevMonthStr)
+      .filter(r => r.current > 0)
       .slice(0, 5);
-    const max = rows[0]?.value ?? 1;
-    return rows.map(r => ({ ...r, pctOfMax: (r.value / max) * 100 }));
-  }, [dailyTransactions, currentMonth, t]);
+    const max = rows[0]?.current ?? 1;
+    return rows.map(r => ({
+      category: r.category,
+      value: r.current,
+      deltaPct: r.pct,
+      pctOfMax: (r.current / max) * 100,
+    }));
+  }, [dailyTransactions, currentMonth]);
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
@@ -674,7 +663,7 @@ const DashboardPage: React.FC = () => {
                 const colors = ['var(--warning)', 'var(--accent)', 'var(--pink)', 'var(--positive)', 'var(--text-3)'];
                 return (
                   <div key={i} className="grid items-center gap-2" style={{ gridTemplateColumns: '64px 1fr auto auto' }}>
-                    <span className="truncate" style={{ color: 'var(--text-1)' }}>{row.category}</span>
+                    <span className="truncate" style={{ color: 'var(--text-1)' }}>{isCategoryKey(row.category) ? t.categoryLabels[row.category] : row.category}</span>
                     <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-elev)' }}>
                       <div style={{ width: `${row.pctOfMax}%`, height: '100%', background: colors[i % colors.length], borderRadius: 999 }} />
                     </div>
