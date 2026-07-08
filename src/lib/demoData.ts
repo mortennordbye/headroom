@@ -1,5 +1,6 @@
 import type { ExportPayload, BalanceSnapshot, Assets, Pension } from '../context/FinanceContext';
 import { computeEquityBreakdown } from './equity';
+import { DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from './employerCost';
 
 /**
  * A believable but entirely fictional dataset used by demo mode, so the app can
@@ -120,6 +121,15 @@ export function getDemoData(): Partial<ExportPayload> {
     netWorthHistory,
     balanceSnapshots,
     savingsTargetPercent: 20,
+
+    // Personal-data fields with no demo counterpart: set to empty/default so the
+    // user's real account names, merchant rules and billing rates never render
+    // during a demo (importAll leaves omitted fields untouched).
+    accountLabels: {},
+    categoryRules: [],
+    labelRules: [],
+    employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG,
+    billingConfig: DEFAULT_BILLING_CONFIG,
 
     fixedExpenses: [
       { id: 'demo-fx-1', name: 'Huslån', amount: 16500, type: 'fixed' },

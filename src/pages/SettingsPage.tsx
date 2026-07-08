@@ -204,7 +204,9 @@ export default function SettingsPage() {
       {/* Bento grid */}
       <div data-tour="settings-all" className="grid grid-cols-1 md:grid-cols-12 gap-4">
         {/* ──── Bank sync (span 12) ──── */}
-        <BankSyncCard />
+        {/* Hidden during a demo: "Sync now" would pull the real ledger into the
+            visible demo state, which is exactly what demo mode exists to prevent. */}
+        {!demoMode && <BankSyncCard />}
 
         {/* ──── Custom rules (span 12) ──── */}
         <CategoryRules />
