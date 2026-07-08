@@ -122,6 +122,14 @@ const inflationLatest = db.prepare(
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 30 * ONE_DAY_MS;
+// Upstream-attempt throttle: at most one SSB call per hour, regardless of
+// outcome. Without it, any state that keeps `needsRefresh` true (SSB outage,
+// an API change, or a requested range SSB simply doesn't have) turns EVERY
+// page load into an SSB hit — log spam at best, a block at worst (SSB's
+// limit is 30 req/min/IP). In-memory is fine: one process, and a restart
+// granting one fresh attempt is harmless.
+const SSB_ATTEMPT_COOLDOWN_MS = 60 * 60 * 1000;
+let lastSsbAttemptAt = 0;
 
 function monthCount(fromMonth, toMonth) {
   const [fy, fm] = fromMonth.split('-').map(Number);
@@ -286,7 +294,8 @@ app.get('/api/inflation', async (req, res) => {
   const needsRefresh = cached.length < expectedCount || ageMs > CACHE_TTL_MS;
 
   let stale = false;
-  if (needsRefresh) {
+  if (needsRefresh && Date.now() - lastSsbAttemptAt > SSB_ATTEMPT_COOLDOWN_MS) {
+    lastSsbAttemptAt = Date.now();
     try {
       const points = await fetchCpi(paddedFrom, to);
       const now = new Date().toISOString();
@@ -295,9 +304,13 @@ app.get('/api/inflation', async (req, res) => {
       });
       tx(points);
     } catch (err) {
-      console.warn('[inflation] SSB fetch failed, serving cache:', err.message);
+      console.warn(`[inflation] SSB fetch failed, serving cache (next attempt in ${Math.round(SSB_ATTEMPT_COOLDOWN_MS / 60000)} min):`, err.message);
       stale = true;
     }
+  } else if (needsRefresh) {
+    // Refresh is due but we attempted recently — serve what we have without
+    // touching SSB, flagged stale so the client can show its indicator.
+    stale = true;
   }
 
   const finalRows = inflationGetRange.all(paddedFrom, to);
