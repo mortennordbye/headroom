@@ -85,10 +85,23 @@ function getKeySecret() {
   return fs.readFileSync(MASTER_KEY_PATH, 'utf8');
 }
 
-// Load the PEM, transparently decrypting an encrypted envelope.
+// Load the PEM, transparently decrypting an encrypted envelope. A plaintext
+// key (stored before at-rest encryption, or placed by hand) is re-encrypted in
+// place on first read, so the plaintext branch is import-time tolerance rather
+// than a persistent state. Best-effort: a read-only key file still works, it
+// just stays plaintext.
 function loadPem() {
   const raw = fs.readFileSync(KEY_PATH, 'utf8');
-  if (raw.trimStart().startsWith('-----BEGIN')) return raw; // plaintext (legacy / manual)
+  if (raw.trimStart().startsWith('-----BEGIN')) {
+    try {
+      fs.writeFileSync(KEY_PATH, encryptPem(raw, getKeySecret()), { mode: 0o600 });
+      fs.chmodSync(KEY_PATH, 0o600);
+      console.log('[bank] re-encrypted plaintext key at rest');
+    } catch (err) {
+      console.warn(`[bank] could not re-encrypt plaintext key (${err.message}); continuing with it as-is`);
+    }
+    return raw;
+  }
   return decryptPem(raw, getKeySecret());
 }
 
