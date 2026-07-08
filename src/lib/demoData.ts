@@ -26,7 +26,6 @@ export function getDemoData(): Partial<ExportPayload> {
     unrealizedGain: 62000,
     taxRate: 37.84,
     bsu: 33000,
-    savings: 0, // legacy scalar — superseded by savingsAccounts
     savingsAccounts: [
       { id: 'demo-sav-1', name: 'Sparekonto', balance: 60000 },
       { id: 'demo-sav-2', name: 'Feriekonto', balance: 35000 },

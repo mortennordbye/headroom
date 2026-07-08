@@ -138,7 +138,12 @@ export interface Assets {
   unrealizedGain: number;
   taxRate: number;
   bsu: number;
-  savings: number;               // legacy single savings; superseded by savingsAccounts
+  /**
+   * Legacy single savings, superseded by savingsAccounts. Import-time input
+   * only: applyPayload absorbs it into savingsAccounts and writes 0, so live
+   * state (and every persisted blob after one load) always carries 0.
+   */
+  savings?: number;
   savingsAccounts?: SavingsAccount[];
   houseValue: number;
   houseDebt: number;
@@ -353,6 +358,9 @@ const DEFAULT_ASSETS: Assets = {
   unrealizedGain: 0,
   taxRate: DEFAULT_TAX_RATES.stockTaxRate,
   bsu: 0,
+  // Retired scalar: kept at 0 here because DEFAULT_ASSETS doubles as the
+  // sanitizePayload schema (number-typed keys mark what gets coerced), so an
+  // imported blob with a string "savings" is still coerced before migration.
   savings: 0,
   savingsAccounts: [],
   houseValue: 0,
@@ -693,13 +701,15 @@ const makeId = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
 // Normalise a loaded/imported assets blob into a savings-accounts array. If the
-// array is present it's cleaned (valid id/name/number balance); otherwise the
-// legacy single `savings` scalar is migrated into one account. Returning an array
-// (never undefined) makes `savingsAccounts` the canonical source going forward.
+// array is present it's cleaned (valid id/name/number balance); when it's absent
+// *or empty*, a nonzero legacy `savings` scalar is migrated into one account
+// (empty-array-with-scalar is real in the wild: the pre-1.8 onboarding wrote the
+// scalar next to the default empty array). Returning an array (never undefined)
+// makes `savingsAccounts` the canonical source; the caller zeroes the scalar.
 function migrateSavingsAccounts(a: Assets): SavingsAccount[] {
   const raw: unknown = a.savingsAccounts;
   if (Array.isArray(raw)) {
-    return raw
+    const cleaned = raw
       .filter((x): x is Record<string, unknown> => x != null && typeof x === 'object')
       .map((x) => {
         const bal = x.balance;
@@ -712,9 +722,25 @@ function migrateSavingsAccounts(a: Assets): SavingsAccount[] {
           balance,
         };
       });
+    if (cleaned.length > 0) return cleaned;
   }
   const legacy = typeof a.savings === 'number' && Number.isFinite(a.savings) ? a.savings : 0;
   return legacy > 0 ? [{ id: makeId('sav'), name: 'Sparekonto', balance: legacy }] : [];
+}
+
+// One-time migration of stored balance snapshots, mirroring what applyPayload
+// does to the live assets: give each snapshot's assets the canonical
+// savingsAccounts array and zero the legacy scalar. The client re-saves the
+// whole blob after load, so this self-persists and `sumSavings`' scalar
+// fallback stops being load-bearing for migrated data.
+function migrateSnapshotSavings(snaps: Record<string, BalanceSnapshot>): Record<string, BalanceSnapshot> {
+  const out: Record<string, BalanceSnapshot> = {};
+  for (const [month, snap] of Object.entries(snaps)) {
+    out[month] = snap && snap.assets && typeof snap.assets === 'object'
+      ? { ...snap, assets: { ...snap.assets, savings: 0, savingsAccounts: migrateSavingsAccounts(snap.assets) } }
+      : snap;
+  }
+  return out;
 }
 
 const FinanceSettingsContext = createContext<FinanceSettingsContextType | undefined>(undefined);
@@ -864,7 +890,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.monthlyIncomes !== undefined) setMonthlyIncomes(data.monthlyIncomes); else if (resetMissing) setMonthlyIncomes({});
     if (data.payslips !== undefined) setPayslips(data.payslips); else if (resetMissing) setPayslips({});
     if (data.netWorthHistory !== undefined) setNetWorthHistory(data.netWorthHistory); else if (resetMissing) setNetWorthHistory({});
-    if (data.balanceSnapshots !== undefined) setBalanceSnapshots(data.balanceSnapshots); else if (resetMissing) setBalanceSnapshots({});
+    if (data.balanceSnapshots !== undefined) setBalanceSnapshots(migrateSnapshotSavings(data.balanceSnapshots)); else if (resetMissing) setBalanceSnapshots({});
     if (data.fixedExpenses) setFixedExpenses(data.fixedExpenses); else if (resetMissing) setFixedExpenses(DEFAULT_FIXED_EXPENSES);
     if (data.debts) setDebts(data.debts); else if (resetMissing) setDebts([]);
     if (data.dailyTransactions) setDailyTransactions(dedupeBankTransactions(data.dailyTransactions)); else if (resetMissing) setDailyTransactions([]);
@@ -873,7 +899,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (data.categoryRules !== undefined) setCategoryRules(data.categoryRules); else if (resetMissing) setCategoryRules([]);
     if (data.labelRules !== undefined) setLabelRules(data.labelRules); else if (resetMissing) setLabelRules([]);
     if (data.categoryBudgets !== undefined) setCategoryBudgets(data.categoryBudgets); else if (resetMissing) setCategoryBudgets({});
-    if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets, savingsAccounts: migrateSavingsAccounts(data.assets) }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
+    if (data.assets) setAssets({ ...DEFAULT_ASSETS, ...data.assets, savings: 0, savingsAccounts: migrateSavingsAccounts(data.assets) }); else if (resetMissing) setAssets(DEFAULT_ASSETS);
     if (data.loan) setLoan(data.loan); else if (resetMissing) setLoan(DEFAULT_LOAN);
     if (data.pension) setPension({ ...DEFAULT_PENSION, ...data.pension }); else if (resetMissing) setPension(DEFAULT_PENSION);
     if (data.recurringTemplates !== undefined) setRecurringTemplates(data.recurringTemplates); else if (resetMissing) setRecurringTemplates([]);

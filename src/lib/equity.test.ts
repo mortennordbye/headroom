@@ -59,6 +59,12 @@ describe('computeEquityBreakdown', () => {
     expect(b.totalEquity).toBe(85_000); // only savings set here
   });
 
+  it('returns 0 when neither accounts nor the retired scalar are present', () => {
+    const { savings: _legacy, ...withoutScalar } = assets({});
+    expect(sumSavings(withoutScalar)).toBe(0);
+    expect(computeEquityBreakdown(withoutScalar).totalEquity).toBe(0);
+  });
+
   it('rolls the loss benefit into total equity', () => {
     const flat = computeEquityBreakdown(assets({ portfolio: 100_000 }));
     const withLoss = computeEquityBreakdown(assets({ portfolio: 100_000, unrealizedGain: -10_000, taxRate: 37.84 }));

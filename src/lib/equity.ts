@@ -12,12 +12,14 @@ export interface EquityBreakdown {
 
 // Total cash across savings accounts. Prefers the `savingsAccounts` array; falls
 // back to the legacy single `savings` scalar for pre-migration/older-snapshot
-// data (so historical balance snapshots without the array still value correctly).
+// data. Loaded data is migrated at the applyPayload boundary (live assets and
+// snapshots both), so the fallback is boundary tolerance for not-yet-applied
+// imports rather than a load-bearing path.
 export function sumSavings(a: Assets): number {
   if (Array.isArray(a.savingsAccounts)) {
     return a.savingsAccounts.reduce((s, acc) => s + (Number.isFinite(acc.balance) ? acc.balance : 0), 0);
   }
-  return a.savings;
+  return a.savings ?? 0;
 }
 
 // Single source of truth for turning raw asset inputs into post-tax net equity.
