@@ -40,8 +40,8 @@ Losing that secret means re-uploading the key.
 
 ### Env configuration
 
-- `EB_APP_ID` — application id (**required** — register your own app on
-  enablebanking.com; there is no code default).
+- `EB_APP_ID` — application id (register your own app on enablebanking.com;
+  there is no code default). Overrides the in-app Settings value when present.
 - `EB_REDIRECT` — callback URL; overrides the in-app setting when present.
 - `EB_KEY_SECRET` — at-rest encryption secret (see above).
 - `EB_KEY_PATH` — where the key is stored (default `$DATA_DIR/eb-key.pem`).

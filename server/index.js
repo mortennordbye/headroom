@@ -367,10 +367,14 @@ app.post('/api/bank/key', async (req, res) => {
   }
 });
 
-// Set the redirect (callback) URL — a non-secret setting stored server-side.
+// Set non-secret bank settings stored server-side: the redirect (callback)
+// URL and/or the Enable Banking application ID. Each is applied only when
+// present in the body, so the client can save them independently.
 app.post('/api/bank/config', (req, res) => {
   try {
-    bank.setRedirect(String((req.body && req.body.redirectUrl) || ''));
+    const body = req.body || {};
+    if (body.redirectUrl !== undefined) bank.setRedirect(String(body.redirectUrl || ''));
+    if (body.appId !== undefined) bank.setAppId(String(body.appId || ''));
     res.json({ ok: true, ...bank.getStatus() });
   } catch (err) {
     res.status(400).json({ error: err.message });
