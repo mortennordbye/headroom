@@ -138,8 +138,6 @@ const ForecastPage: React.FC = () => {
   const last = projection[projection.length - 1];
   const first = projection[0];
 
-  void jobs;
-
   return (
     <div className="space-y-6 md:space-y-7">
       {/* Hero header */}

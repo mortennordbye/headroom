@@ -36,6 +36,9 @@ export function amortize(balance: number, annualRatePct: number, monthlyPayment:
     schedule.push(Math.max(0, bal));
   }
   const feasible = bal <= EPS;
+  // Mirror planPayoff: hitting the MAX_MONTHS cap without clearing the balance
+  // means "never pays off" — report Infinity, not a misleading "600 months".
+  if (!feasible) return { months: Infinity, totalInterest: Infinity, feasible, schedule: [] };
   return { months, totalInterest, feasible, schedule };
 }
 
@@ -131,7 +134,9 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
     months: feasible ? month : Infinity,
     totalInterest: interest.reduce((s, i) => s + i, 0),
     feasible,
-    perDebt: active.map((d, i) => ({ id: d.id, payoffMonth: payoffMonth[i], interest: interest[i] })),
+    // payoffMonth 0 marks "never cleared within the cap" — report Infinity for
+    // the same reason as `months` above.
+    perDebt: active.map((d, i) => ({ id: d.id, payoffMonth: payoffMonth[i] === 0 ? Infinity : payoffMonth[i], interest: interest[i] })),
     balanceSeries,
   };
 }

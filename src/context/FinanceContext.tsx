@@ -1779,12 +1779,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setLabelRules([]);
     setCategoryBudgets({});
     setRecurringTemplates([]);
-    setAssets({
-      portfolio: 0, unrealizedGain: 0, taxRate: 37.84,
-      bsu: 0, savings: 0, savingsAccounts: [], houseValue: 0, houseDebt: 0,
-      crypto: 0, cryptoUnrealizedGain: 0, cryptoTaxRate: 22,
-      bufferAccount: 0,
-    });
+    setAssets(DEFAULT_ASSETS);
     setLoan({
       arslonn: 0, eksisterendeGjeld: 0, egenkapital: 0,
       laanebelop: 0, rente: 0, nedbetalingstid: 0, termingebyr: 0,
@@ -1800,11 +1795,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       agentFeePercent: 0, documentFee: 0, otherSaleCosts: 0,
       bridgeMonths: 0, bridgeLoanRate: 0,
     });
-    setPension({
-      otpBalance: 0, otpEmployerPct: 0, otpEmployeePct: 0, otpGrowthRate: 5,
-      ipsBalance: 0, ipsAnnualContribution: 0, ipsGrowthRate: 7,
-      birthYear: 0, retirementAge: 67,
-    });
+    setPension(DEFAULT_PENSION);
     setJobs([]);
     setSalaries([]);
     setBonuses([]);

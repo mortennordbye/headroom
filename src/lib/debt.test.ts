@@ -33,6 +33,15 @@ describe('amortize', () => {
     expect(Number.isFinite(r.months)).toBe(true);
     expect(r.totalInterest).toBeGreaterThan(0);
   });
+
+  it('reports Infinity (like planPayoff), not the cap, when payoff exceeds 50 years', () => {
+    // 100k @ 12% ⇒ 1000 kr/mo interest; 1001 kr/mo shrinks the balance but
+    // needs ~694 months — past the MAX_MONTHS cap.
+    const r = amortize(100_000, 12, 1_001);
+    expect(r.feasible).toBe(false);
+    expect(r.months).toBe(Infinity);
+    expect(r.totalInterest).toBe(Infinity);
+  });
 });
 
 describe('planPayoff', () => {

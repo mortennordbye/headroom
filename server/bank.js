@@ -214,9 +214,17 @@ function readJson(p) {
   }
 }
 
-function writeStore(store) {
+// Atomic write (tmp + rename): a crash mid-write must never leave a truncated
+// store — losing eb-session.json loses every bank connection.
+function writeJsonAtomic(p, data) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(SESSION_PATH, JSON.stringify(store, null, 2));
+  const tmp = `${p}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, p);
+}
+
+function writeStore(store) {
+  writeJsonAtomic(SESSION_PATH, store);
 }
 
 // Read the session store, migrating the legacy single-session shape
@@ -269,10 +277,9 @@ function getRedirect() {
 
 function setRedirect(url) {
   if (!/^https:\/\/.+/.test(url)) throw new Error('redirect URL must be https://');
-  fs.mkdirSync(DATA_DIR, { recursive: true });
   const cfg = readJson(CONFIG_PATH) || {};
   cfg.redirectUrl = url;
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+  writeJsonAtomic(CONFIG_PATH, cfg);
 }
 
 function sessionValid(session, now = Date.now()) {
@@ -458,8 +465,7 @@ async function startLink(bankName, relinkConnectionId) {
     redirect_url: redirectUrl,
     psu_type: 'personal',
   });
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(PENDING_PATH, JSON.stringify({ state, validUntil, aspspName, connectionId, idPrefix }));
+  writeJsonAtomic(PENDING_PATH, { state, validUntil, aspspName, connectionId, idPrefix });
   return { url: auth.url };
 }
 
