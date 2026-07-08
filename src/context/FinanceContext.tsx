@@ -1131,9 +1131,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const flush = () => {
       if (!loaded.current || demoMode || !saveDirty.current || !payloadRef.current) return;
+      // sendBeacon can't set headers, so the optimistic-concurrency rev rides
+      // inside the body; the server reads `_rev` as the X-Data-Rev fallback and
+      // strips it before storing. Without it this flush would be
+      // last-write-wins and could clobber what another tab/device just wrote.
       const ok = navigator.sendBeacon?.(
         '/api/data',
-        new Blob([JSON.stringify(payloadRef.current)], { type: 'application/json' }),
+        new Blob([JSON.stringify({ ...payloadRef.current, _rev: revRef.current })], { type: 'application/json' }),
       );
       if (ok) saveDirty.current = false;
     };

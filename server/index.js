@@ -230,11 +230,18 @@ app.post('/api/data', (req, res) => {
   if (!isValidFinancePayload(req.body)) {
     return res.status(400).json({ error: 'invalid finance payload' });
   }
+  // The pagehide beacon flush can't set headers, so it carries the rev it last
+  // saw as `_rev` in the body. Pull it out (and strip it, so it never persists
+  // into the stored blob) before the concurrency check below.
+  const bodyRev = req.body._rev;
+  delete req.body._rev;
   const stored = getStmt.get('headroom');
-  // Optimistic concurrency: if the client sent the rev it last saw and it no
-  // longer matches, a newer write landed in between — reject so we don't clobber
-  // it. A client that sends no rev (legacy) keeps the old last-write-wins path.
-  const clientRev = req.get('X-Data-Rev');
+  // Optimistic concurrency: if the client sent the rev it last saw (X-Data-Rev
+  // header, or `_rev` in the body for the beacon flush) and it no longer
+  // matches, a newer write landed in between — reject so we don't clobber it.
+  // A request carrying neither (a genuinely old client build) keeps the
+  // last-write-wins path.
+  const clientRev = req.get('X-Data-Rev') ?? (typeof bodyRev === 'number' ? String(bodyRev) : null);
   if (stored && clientRev != null && Number(clientRev) !== stored.rev) {
     return res.status(409).json({
       error: 'stale revision — data changed elsewhere',
