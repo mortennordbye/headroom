@@ -10,7 +10,7 @@
  * (an Assets/Pension key, or a sentinel for the special writers).
  */
 
-export type OnboardingWriter = 'lang' | 'region' | 'income' | 'savingsTarget' | 'asset' | 'pension';
+export type OnboardingWriter = 'lang' | 'region' | 'income' | 'savingsTarget' | 'asset' | 'savingsAccount' | 'pension';
 
 export type OnboardingGroup = 'essentials' | 'wealth' | 'learn';
 
@@ -110,7 +110,9 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     route: '/assets',
     target: 'cash-reserves',
     fields: [
-      { key: 'savings', writer: 'asset', labelKey: 'savings', kind: 'number' },
+      // Savings live in the savingsAccounts array — the legacy `savings` scalar is
+      // ignored whenever the array exists, so writing it would lose the value (1.8).
+      { key: 'savings', writer: 'savingsAccount', labelKey: 'savings', kind: 'number' },
       { key: 'bufferAccount', writer: 'asset', labelKey: 'bufferAccount', kind: 'number' },
       { key: 'bsu', writer: 'asset', labelKey: 'bsu', kind: 'number' },
     ],

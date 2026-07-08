@@ -39,7 +39,7 @@ describe('onboarding topic catalog', () => {
   });
 
   it('every field has a valid writer and non-empty key', () => {
-    const writers = new Set(['lang', 'region', 'income', 'savingsTarget', 'asset', 'pension']);
+    const writers = new Set(['lang', 'region', 'income', 'savingsTarget', 'asset', 'savingsAccount', 'pension']);
     for (const t of ONBOARDING_TOPICS) {
       for (const f of t.fields) {
         expect(writers.has(f.writer)).toBe(true);

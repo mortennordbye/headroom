@@ -253,6 +253,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     currentMonth, effectiveIncome, setMonthlyIncomeForMonth,
     savingsTargetPercent, setSavingsTargetPercent,
     assets, updateAsset, pension, updatePension,
+    addSavingsAccount, updateSavingsAccount,
   } = useFinance();
 
   const monthKey = format(currentMonth, 'yyyy-MM');
@@ -264,6 +265,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
       case 'income': return String(Math.round(effectiveIncome));
       case 'savingsTarget': return String(savingsTargetPercent);
       case 'asset': return String(assets[f.key as keyof Assets] ?? 0);
+      case 'savingsAccount': return String(assets.savingsAccounts?.[0]?.balance ?? 0);
       case 'pension': return String(pension[f.key as keyof Pension] ?? 0);
       default: return '';
     }
@@ -284,6 +286,13 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     if (f.writer === 'income') setMonthlyIncomeForMonth(monthKey, n);
     else if (f.writer === 'savingsTarget') setSavingsTargetPercent(Math.min(100, n));
     else if (f.writer === 'asset') updateAsset(f.key as keyof Assets, n);
+    else if (f.writer === 'savingsAccount') {
+      // Upsert the first savings account — the legacy `savings` scalar is dead
+      // whenever the (always-present) array exists, so it must not be written.
+      const first = assets.savingsAccounts?.[0];
+      if (first) updateSavingsAccount(first.id, { balance: n });
+      else addSavingsAccount(t.onboarding.fields.savings, n);
+    }
     else if (f.writer === 'pension') updatePension(f.key as keyof Pension, n);
   };
 
