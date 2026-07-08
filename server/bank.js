@@ -401,7 +401,12 @@ async function startLink(bankName) {
   const redirectUrl = getRedirect();
   if (!redirectUrl) throw new Error('redirect URL not set (add it in Settings and register it on the EB app)');
   const aspspName = await resolveAspsp(bankName);
-  const existing = readStore().connections.find((c) => c.aspsp === aspspName);
+  const store = readStore();
+  // Reuse the id/prefix of a live connection to this bank, or of a removed one
+  // (tombstoned by removeConnection) — the ledger keeps its rows on disconnect,
+  // so a fresh prefix would re-import the 90-day history as duplicates.
+  const existing = store.connections.find((c) => c.aspsp === aspspName)
+    || (store.removed || []).find((c) => c.aspsp === aspspName);
   const connectionId = existing ? existing.id : crypto.randomUUID();
   const idPrefix = existing ? existing.idPrefix : `${EB_ID_PREFIX}${connectionId.slice(0, 8)}-`;
   const state = crypto.randomUUID();
@@ -477,6 +482,7 @@ async function finishLink(code, state) {
   };
   if (idx >= 0) store.connections[idx] = connection;
   else store.connections.push(connection);
+  if (store.removed) store.removed = store.removed.filter((c) => c.id !== connection.id);
   writeStore(store);
   try {
     fs.unlinkSync(PENDING_PATH);
@@ -486,11 +492,20 @@ async function finishLink(code, state) {
   return { accounts: accounts.length };
 }
 
-/** Disconnect a bank. Its already-imported rows stay in the ledger. */
+/**
+ * Disconnect a bank. Its already-imported rows stay in the ledger, so the
+ * connection's id/prefix is tombstoned for startLink to reuse on a re-add —
+ * a fresh prefix would re-import those rows under new ids (duplicates).
+ */
 function removeConnection(id) {
   const store = readStore();
   const before = store.connections.length;
+  const gone = store.connections.find((c) => c.id === id);
   store.connections = store.connections.filter((c) => c.id !== id);
+  if (gone && gone.aspsp) {
+    store.removed = (store.removed || []).filter((c) => c.aspsp !== gone.aspsp);
+    store.removed.push({ aspsp: gone.aspsp, id: gone.id, idPrefix: gone.idPrefix });
+  }
   writeStore(store);
   return { removed: before - store.connections.length };
 }
