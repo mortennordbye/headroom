@@ -707,7 +707,7 @@ export const translations = {
       bank: {
         title: 'Banksynkronisering',
         desc: 'Hent transaksjoner automatisk fra bankene dine via Enable Banking.',
-        notConfigured: 'Ikke konfigurert. Sett EB_REDIRECT og legg nøkkelfilen i datamappen på serveren.',
+        notConfigured: 'Ikke konfigurert. Sett EB_APP_ID og EB_REDIRECT, og legg nøkkelfilen i datamappen på serveren.',
         notLinked: 'Ingen banker tilkoblet.',
         connect: 'Koble til',
         addBank: 'Legg til bank',
@@ -1678,7 +1678,7 @@ export const translations = {
       bank: {
         title: 'Bank sync',
         desc: 'Automatically import transactions from your banks via Enable Banking.',
-        notConfigured: 'Not configured. Set EB_REDIRECT and place the key file in the server data directory.',
+        notConfigured: 'Not configured. Set EB_APP_ID and EB_REDIRECT, and place the key file in the server data directory.',
         notLinked: 'No banks connected.',
         connect: 'Connect',
         addBank: 'Add bank',

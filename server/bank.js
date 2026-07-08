@@ -7,7 +7,9 @@ const fs = require('fs');
 const path = require('path');
 
 const API_BASE = 'https://api.enablebanking.com';
-const APP_ID = process.env.EB_APP_ID || '11984ea1-6a0e-4555-bd07-d7d33184e667';
+// Required config: every install registers its own Enable Banking application
+// (no shared code default — this repo is self-hosted by several people).
+const APP_ID = process.env.EB_APP_ID || '';
 const COUNTRY = process.env.EB_COUNTRY || 'NO';
 const DAYS = Number(process.env.EB_DAYS || 90);
 
@@ -33,6 +35,7 @@ const EB_ID_PREFIX = 'eb-';
 // --- low-level API client ---------------------------------------------------
 
 function signJwtWith(privateKey) {
+  if (!APP_ID) throw new Error('EB_APP_ID is not set — register an Enable Banking app and set the env var');
   const b64 = (s) => Buffer.from(s).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
   const header = b64(JSON.stringify({ typ: 'JWT', alg: 'RS256', kid: APP_ID }));
@@ -559,7 +562,8 @@ function getStatus() {
     hasKey: keyPresent,
     keyEncrypted: keyIsEncrypted(),
     keySecretSource: keySecretSource(),
-    configured: hasRedirect && keyPresent,
+    hasAppId: Boolean(APP_ID),
+    configured: hasRedirect && keyPresent && Boolean(APP_ID),
   };
   const connections = readStore().connections.map((c) => {
     const expiry = new Date(c.valid_until).getTime();

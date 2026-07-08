@@ -38,9 +38,10 @@ full-volume breach. For stronger protection set **`EB_KEY_SECRET`** (env / mount
 secret, kept *outside* the data) — then a leaked volume is useless without it.
 Losing that secret means re-uploading the key.
 
-### Optional env overrides
+### Env configuration
 
-- `EB_APP_ID` — application id (defaults to the current one).
+- `EB_APP_ID` — application id (**required** — register your own app on
+  enablebanking.com; there is no code default).
 - `EB_REDIRECT` — callback URL; overrides the in-app setting when present.
 - `EB_KEY_SECRET` — at-rest encryption secret (see above).
 - `EB_KEY_PATH` — where the key is stored (default `$DATA_DIR/eb-key.pem`).

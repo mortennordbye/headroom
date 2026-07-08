@@ -58,6 +58,8 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
 
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [providerId, setProviderId] = useState<string>(PROVIDERS[0].id);
+  // Badge text comes from the provider registry, never a hardcoded vendor name.
+  const providerName = PROVIDERS.find(p => p.id === providerId)?.name ?? providerId;
   const [file, setFile] = useState<File | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [singleThumb, setSingleThumb] = useState<string | null>(null);
@@ -166,7 +168,7 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]" style={{ color: 'var(--text-2)' }}>
           <span className="font-semibold text-[var(--text-1)]">{r.employer}</span>
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ color: 'var(--accent)', background: 'var(--accent-bg)' }}>Visma</span>
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ color: 'var(--accent)', background: 'var(--accent-bg)' }}>{providerName}</span>
         </div>
 
         {singleThumb && (
@@ -233,7 +235,7 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
             <span className="font-semibold text-[var(--text-1)]">{rows.length}</span> {im.payslipsFound}
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ color: 'var(--accent)', background: 'var(--accent-bg)' }}>Visma</span>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ color: 'var(--accent)', background: 'var(--accent-bg)' }}>{providerName}</span>
           </div>
           <button
             onClick={() => setRows(rs => rs.map(r => ({ ...r, include: !allOn })))}
