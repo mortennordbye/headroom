@@ -26,6 +26,7 @@ import { lastNMonthKeys } from '../lib/date';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
 import { dedupeBankTransactions } from '../lib/bankDedup';
+import { salaryAt } from '../lib/salary';
 import { stableStringify } from '../lib/stableStringify';
 import { sanitizePayload } from '../lib/sanitizePayload';
 import {
@@ -242,15 +243,12 @@ export function calcActiveGrossAnnual(
   jobs: JobEntry[],
   monthKey: string,
 ): number {
-  const eligible = salaries.filter(s => s.effectiveDate <= monthKey);
-  if (eligible.length === 0) return 0;
-  const latestPerJob = new Map<string, SalaryEntry>();
-  for (const s of eligible) {
-    const cur = latestPerJob.get(s.jobId);
-    if (!cur || s.effectiveDate > cur.effectiveDate) latestPerJob.set(s.jobId, s);
-  }
+  // Latest applicable salary PER job via the shared `salaryAt` selection, then
+  // summed across jobs still active this month.
   let total = 0;
-  for (const [jobId, sal] of latestPerJob) {
+  for (const jobId of new Set(salaries.map(s => s.jobId))) {
+    const sal = salaryAt(monthKey, salaries.filter(s => s.jobId === jobId));
+    if (!sal) continue;
     const job = jobs.find(j => j.id === jobId);
     if (job?.endDate && job.endDate < monthKey) continue; // skip jobs that ended before this month
     total += sal.grossAnnual + (job?.onCallAnnual ?? 0);

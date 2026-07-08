@@ -4,6 +4,7 @@
 // Purely a display layer: the original `description` is preserved for matching
 // and categorization. Pure + unit-tested.
 import type { DailyTransaction } from '../context/FinanceContext';
+import { buildMatchHaystack } from './text';
 
 export interface LabelRule {
   id: string;
@@ -14,7 +15,7 @@ export interface LabelRule {
 /** The label of the first rule whose match is a substring of the tx, else undefined. */
 export function ruleLabelFor(tx: Pick<DailyTransaction, 'merchant' | 'description'>, rules: LabelRule[]): string | undefined {
   if (!rules || !rules.length) return undefined;
-  const hay = ` ${tx.merchant ?? ''} ${tx.description ?? ''} `.toLowerCase();
+  const hay = buildMatchHaystack(tx.merchant, tx.description);
   for (const r of rules) {
     const m = (r.match || '').trim().toLowerCase();
     if (m && hay.includes(m)) return r.label;

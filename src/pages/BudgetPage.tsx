@@ -26,6 +26,7 @@ import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../li
 import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
+import { incomeDiffPct } from '../lib/income';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -142,6 +143,7 @@ const BudgetPage: React.FC = () => {
     dismissIncomeReminder,
     monthlyBudget,
     dailyBudget,
+    totalFixedExpenses,
     fixedExpenses,
     setFixedExpenses,
     debts,
@@ -169,7 +171,6 @@ const BudgetPage: React.FC = () => {
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
 
-  const totalFixedExpenses = fixedExpenses.reduce((sum, item) => sum + item.amount, 0);
   // Informational only — not folded into totalFixedExpenses (which drives budget
   // math); surfaces the monthly minimum debt service alongside fixed costs.
   const totalMonthlyDebtService = debts.reduce((sum, d) => sum + d.minPayment, 0);
@@ -435,7 +436,7 @@ const BudgetPage: React.FC = () => {
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
-  const incomeDiffPct = averageIncome > 0 ? ((effectiveIncome - averageIncome) / averageIncome) * 100 : 0;
+  const incomeDiff = incomeDiffPct(effectiveIncome, averageIncome);
   // Remind the user to set THIS month's income while it's still auto-calculated.
   // Only for the live month; dismissible, but the dismiss is keyed to the month
   // so it returns once a new month begins.
@@ -504,7 +505,7 @@ const BudgetPage: React.FC = () => {
           {t.budgetPage.heroTitlePre}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.budgetPage.heroTitleEm}</em>{t.budgetPage.heroTitlePost}
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
-          {`${t.budgetPage.incomeIntro}${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${formatSignedPct(incomeDiffPct, 1, '')}${t.budgetPage.vsAvgSuffix}` : ''}${t.budgetPage.incomeOutro}`}
+          {`${t.budgetPage.incomeIntro}${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${formatSignedPct(incomeDiff, 1, '')}${t.budgetPage.vsAvgSuffix}` : ''}${t.budgetPage.incomeOutro}`}
         </p>
       </header>
 

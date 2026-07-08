@@ -11,6 +11,7 @@
 import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
 import { isCategoryKey, type CategoryKey } from './categories';
 import { spendByCategory } from './categoryStats';
+import { buildMatchHaystack } from './text';
 
 export type EnvelopeStatus = 'under' | 'near' | 'over';
 
@@ -65,7 +66,7 @@ function statusFor(budgeted: number, actual: number): EnvelopeStatus {
 export function envelopeKeyForTx(tx: DailyTransaction, rec: Pick<Reconciliation, 'matchers' | 'envelopedCategories'>): string | undefined {
   if (tx.kind === 'income') return undefined;
   if (rec.matchers.length) {
-    const hay = ` ${tx.merchant ?? ''} ${tx.description ?? ''} `.toLowerCase();
+    const hay = buildMatchHaystack(tx.merchant, tx.description);
     for (const m of rec.matchers) if (m.match && hay.includes(m.match)) return m.key;
   }
   if (isCategoryKey(tx.category) && rec.envelopedCategories.has(tx.category)) return tx.category;

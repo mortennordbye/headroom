@@ -33,6 +33,7 @@ import { lastNMonthKeys } from '../lib/date';
 import { sumSavings } from '../lib/equity';
 import { sumDiscretionarySpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
+import { incomeDiffPct } from '../lib/income';
 import { categoryMoM } from '../lib/categoryStats';
 import { isCategoryKey } from '../lib/categories';
 
@@ -112,7 +113,7 @@ const DashboardPage: React.FC = () => {
   const budgetUsedPct = Math.min(100, budgetUsedPctRaw);
   const spentPct = Math.min(100 - budgetUsedPct, spentPctRaw);
   const availablePct = Math.max(0, 100 - budgetUsedPct - spentPct);
-  const incomeDiffPct = averageIncome > 0 ? ((effectiveIncome - averageIncome) / averageIncome) * 100 : 0;
+  const incomeDiff = incomeDiffPct(effectiveIncome, averageIncome);
   const incomeDelta = prevMonthIncome > 0 ? ((effectiveIncome - prevMonthIncome) / prevMonthIncome) * 100 : null;
   // The chip compares the context's transfer-netted pair, not totalSpent —
   // totalSpent still counts a transfer's expense leg (see FinanceContext).
@@ -513,8 +514,8 @@ const DashboardPage: React.FC = () => {
             <div className="text-right">
               <div className="text-[24px] font-semibold tabular-nums">{formatCurrency(effectiveIncome)}</div>
               <div className="mt-1">
-                <DeltaChip tone={incomeDiffPct >= 0 ? 'positive' : 'negative'} size="sm">
-                  {formatSignedPct(incomeDiffPct)} vs avg
+                <DeltaChip tone={incomeDiff >= 0 ? 'positive' : 'negative'} size="sm">
+                  {formatSignedPct(incomeDiff)} vs avg
                 </DeltaChip>
               </div>
             </div>
