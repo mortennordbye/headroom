@@ -1,8 +1,9 @@
-import { useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Check, FileText, Loader2, Maximize2, Upload, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { ModalShell } from './ui/ModalShell';
 import { parsePayslip, parsePayslipAmount, PROVIDERS, type ParsedPayslip } from '../lib/payslip';
 
 /** One editable payslip row. Figure fields are strings so any misparse can be
@@ -65,11 +66,10 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
   const [singleThumb, setSingleThumb] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ pageIndex: number; url: string | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Modal trap stays active; the lightbox has its own trap that holds focus, so
-  // Escape there closes the preview first (not the whole modal).
-  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
+  // The shell's trap stays active; the lightbox (own portal, sibling tree) has
+  // its own trap that holds focus, so Escape there closes the preview first
+  // (not the whole modal).
   const lightboxRef = useFocusTrap<HTMLDivElement>(() => setPreview(null), undefined, preview !== null);
-  const titleId = useId();
 
   const single = rows.length === 1;
 
@@ -305,31 +305,14 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
   );
 
   const content = (
-    <div
-      className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className={`w-full sm:w-auto ${phase.kind === 'review' && !single ? 'sm:min-w-[520px] sm:max-w-lg' : 'sm:min-w-[400px] sm:max-w-md'} bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 space-y-5 border border-[var(--border)] max-h-[90vh] overflow-y-auto`}
+    <>
+      <ModalShell
+        title={im.title}
+        onClose={onClose}
+        closeLabel={t.cancel}
+        icon={<FileText size={16} className="text-[var(--accent)]" />}
+        panelClassName={`${phase.kind === 'review' && !single ? 'sm:min-w-[520px] sm:max-w-lg' : 'sm:min-w-[400px] sm:max-w-md'} space-y-5 max-h-[90vh] overflow-y-auto`}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText size={16} className="text-[var(--accent)]" />
-            <h3 id={titleId} className="text-[14px] font-semibold text-[var(--text-1)]">{im.title}</h3>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label={t.cancel}
-            className="p-1 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
         {phase.kind === 'idle' && (
           <>
             <p className="text-[13px] text-[var(--text-2)] leading-relaxed">{im.intro}</p>
@@ -395,10 +378,10 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
         )}
 
         {phase.kind === 'review' && (single ? renderSingle() : renderBatch())}
-      </div>
+      </ModalShell>
 
       {/* Full-size preview lightbox — own focus trap so Escape closes it first */}
-      {preview && (
+      {preview && ReactDOM.createPortal(
         <div
           ref={lightboxRef}
           role="dialog"
@@ -423,10 +406,11 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 
-  return ReactDOM.createPortal(content, document.body);
+  return content;
 }

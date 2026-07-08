@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom';
-import { X, RotateCcw, Camera } from 'lucide-react';
+import { useState } from 'react';
+import { RotateCcw, Camera } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
 import { ProvenanceBadge } from './ui/ProvenanceBadge';
+import { ModalShell } from './ui/ModalShell';
 
 export interface NetWorthPoint {
   monthKey: string;
@@ -32,12 +32,6 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
     Object.fromEntries(series.map(p => [p.monthKey, p.estimated ? '' : String(p.value)]))
   );
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const commit = (monthKey: string, raw: string) => {
     const trimmed = raw.trim();
     if (trimmed === '') { clearNetWorthForMonth(monthKey); return; }
@@ -52,23 +46,21 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
 
   const rows = [...series].reverse(); // newest first
 
-  const content = (
-    <div
-      className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+  return (
+    <ModalShell
+      title={nw.title}
+      onClose={onClose}
+      closeLabel={nw.done}
+      panelClassName="sm:min-w-[420px] sm:max-w-md space-y-4 max-h-[85vh] flex flex-col"
+      footer={
+        <button
+          onClick={onClose}
+          className="shrink-0 w-full py-2.5 rounded-[8px] text-[13px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-opacity"
+        >
+          {nw.done}
+        </button>
+      }
     >
-      <div className="w-full sm:w-auto sm:min-w-[420px] sm:max-w-md bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 space-y-4 border border-[var(--border)] max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between shrink-0">
-          <h3 className="text-[14px] font-semibold text-[var(--text-1)]">{nw.title}</h3>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"
-            aria-label={nw.done}
-          >
-            <X size={16} />
-          </button>
-        </div>
-
         <p className="text-[12px] leading-relaxed shrink-0" style={{ color: 'var(--text-3)' }}>{nw.desc}</p>
 
         <div className="space-y-1.5 overflow-y-auto -mx-1 px-1">
@@ -131,16 +123,6 @@ export default function NetWorthHistoryModal({ series, formatCurrency, onClose }
             );
           })}
         </div>
-
-        <button
-          onClick={onClose}
-          className="shrink-0 w-full py-2.5 rounded-[8px] text-[13px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-opacity"
-        >
-          {nw.done}
-        </button>
-      </div>
-    </div>
+    </ModalShell>
   );
-
-  return ReactDOM.createPortal(content, document.body);
 }

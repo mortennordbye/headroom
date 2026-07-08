@@ -4,3 +4,4 @@ export { DeltaChip } from './DeltaChip';
 export { Sparkline } from './Sparkline';
 export { Button } from './Button';
 export { ProvenanceBadge } from './ProvenanceBadge';
+export { ModalShell } from './ModalShell';
