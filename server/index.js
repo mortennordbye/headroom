@@ -239,7 +239,16 @@ app.post('/api/data', (req, res) => {
       current: JSON.parse(stored.content),
     });
   }
-  const content = JSON.stringify(preserveUserFields(reconcileBankTransactions(req.body)));
+  const merged = preserveUserFields(reconcileBankTransactions(req.body));
+  // Converge the stored blob: reconcile re-adds any stored eb- row missing from
+  // the payload, including legacy bare-id rows the client dropped as twins of a
+  // prefixed row (the client dedupes on load but doesn't record those drops in
+  // deletedBankIds). Drop them again here, or the blob keeps the dupes and the
+  // client/server ping-pong on every save.
+  if (Array.isArray(merged.dailyTransactions)) {
+    merged.dailyTransactions = bank.dropStaleBareTwins(merged.dailyTransactions);
+  }
+  const content = JSON.stringify(merged);
   if (content.length > SIZE_WARN_BYTES) {
     console.warn(`[data] payload is ${(content.length / 1024 / 1024).toFixed(1)} MB — approaching the body limit`);
   }

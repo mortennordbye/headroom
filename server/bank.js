@@ -636,6 +636,7 @@ module.exports = {
   mapEBTransaction,
   mapEBTransactions,
   mergeTransactions,
+  dropStaleBareTwins,
   normalizeAccount,
   // flow
   getAspsps,

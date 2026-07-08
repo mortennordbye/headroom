@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 // The Enable Banking mapping lives in the CommonJS server engine (server/bank.js)
 // so it ships in the production image; it's tested here via Vitest.
-import { mapEBTransaction, mapEBTransactions, mergeTransactions, normalizeAccount } from '../../server/bank.js';
+import { mapEBTransaction, mapEBTransactions, mergeTransactions, dropStaleBareTwins, normalizeAccount } from '../../server/bank.js';
 import type { MappedTransaction } from '../../server/bank';
 
 interface EBTransaction {
@@ -186,5 +186,49 @@ describe('mergeTransactions', () => {
     const stored = mapEBTransactions([tx()]);
     const merged = mergeTransactions(stored, [], ['eb-ref-1']);
     expect(merged).toHaveLength(0);
+  });
+});
+
+// dropStaleBareTwins is the CJS twin of src/lib/bankDedup.ts (the regexes must
+// stay byte-equivalent); these cases mirror bankDedup.test.ts. It runs in the
+// POST /api/data handler so bare rows that reconcileBankTransactions re-adds
+// from the stored blob converge out instead of ping-ponging on every save.
+describe('dropStaleBareTwins', () => {
+  const row = (over: Partial<MappedTransaction>): MappedTransaction => ({
+    id: 'x', date: '2026-06-28', description: 'REMA 1000', amount: 100, kind: 'expense', ...over,
+  });
+
+  it('drops a legacy bare row when a prefixed twin exists, keeping the prefixed one', () => {
+    const out = dropStaleBareTwins([
+      row({ id: 'eb-3605340816', amount: 77.3 }),
+      row({ id: 'eb-e8a81f8a-3605340816', amount: 77.3, account: 'e8a81f8a:acc', bank: 'Bank Norwegian' }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('eb-e8a81f8a-3605340816');
+  });
+
+  it('NEVER merges two different prefixed connections that reuse an entry_reference', () => {
+    const out = dropStaleBareTwins([
+      row({ id: 'eb-aaaa1111-ref-1', account: 'aaaa1111:a' }),
+      row({ id: 'eb-bbbb2222-ref-1', account: 'bbbb2222:b' }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it('rescues a manual category from the dropped bare twin onto its survivor', () => {
+    const out = dropStaleBareTwins([
+      row({ id: 'eb-999', category: 'groceries', categorySource: 'manual' }),
+      row({ id: 'eb-aaaaaaaa-999', account: 'x', category: 'other', categorySource: 'auto' }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('eb-aaaaaaaa-999');
+    expect(out[0].category).toBe('groceries');
+    expect(out[0].categorySource).toBe('manual');
+  });
+
+  it('keeps a legacy bare row that has no prefixed twin, manual rows, and is idempotent', () => {
+    const clean = [row({ id: 'eb-onlylegacy' }), row({ id: 'eb-cccc3333-other', account: 'x' }), row({ id: 'manual-2' })];
+    expect(dropStaleBareTwins(clean)).toHaveLength(3);
+    expect(dropStaleBareTwins(dropStaleBareTwins(clean))).toHaveLength(3);
   });
 });
