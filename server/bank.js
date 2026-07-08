@@ -339,10 +339,22 @@ function mapEBTransaction(tx, opts = {}) {
 
 function mapEBTransactions(txs, opts = {}) {
   const out = [];
+  // Rows without an entry_reference fall back to a date|amount|description id
+  // (stableId), so two genuinely distinct same-day purchases of the same amount
+  // at the same merchant would collide and merge into one row. Suffix repeat
+  // occurrences within the batch; the first keeps the unsuffixed id so it still
+  // matches what earlier syncs stored.
+  const fallbackSeen = new Map();
   for (const tx of txs) {
     if (!opts.includePending && tx.status !== 'BOOK') continue;
     try {
-      out.push(mapEBTransaction(tx, opts));
+      const row = mapEBTransaction(tx, opts);
+      if (!tx.entry_reference) {
+        const n = (fallbackSeen.get(row.id) || 0) + 1;
+        fallbackSeen.set(row.id, n);
+        if (n > 1) row.id = `${row.id}#${n}`;
+      }
+      out.push(row);
     } catch {
       /* skip malformed row rather than let NaN leak into the ledger */
     }

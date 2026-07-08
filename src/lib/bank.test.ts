@@ -120,6 +120,23 @@ describe('mapEBTransactions', () => {
     const rows = mapEBTransactions([tx(), tx({ entry_reference: 'ref-2', transaction_amount: { currency: 'NOK', amount: '' } })]);
     expect(rows.map((r: { id: string }) => r.id)).toEqual(['eb-ref-1']);
   });
+
+  it('keeps two identical same-day no-reference rows as distinct transactions', () => {
+    const twin = tx({ entry_reference: undefined });
+    const rows = mapEBTransactions([twin, twin]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].id).not.toBe(rows[1].id);
+    // The first occurrence keeps the unsuffixed fallback id so it still matches
+    // what earlier syncs stored; re-mapping the same batch yields the same ids.
+    expect(rows[0].id).toBe(mapEBTransaction(twin).id);
+    expect(mapEBTransactions([twin, twin]).map((r: MappedTransaction) => r.id))
+      .toEqual(rows.map((r: MappedTransaction) => r.id));
+  });
+
+  it('does not suffix repeats that carry the same entry_reference', () => {
+    const rows = mapEBTransactions([tx(), tx()]);
+    expect(rows.map((r: MappedTransaction) => r.id)).toEqual(['eb-ref-1', 'eb-ref-1']);
+  });
 });
 
 describe('normalizeAccount', () => {
