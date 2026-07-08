@@ -197,6 +197,40 @@ The volume is the only live copy, so keep a backup — two easy options:
 | Serving | Express (static files) |
 | Containers | Docker, Docker Compose |
 
+## Repository structure
+
+> **Note:** A simplified view of the main folders. Generated/ignored directories (`node_modules/`, `dist/`, `data/`, `backups/`) are omitted.
+
+```
+headroom
+├── server/              # Express API + SQLite persistence
+│   ├── index.js         # API, static SPA serving, host allowlist
+│   ├── bank.js          # Bank-sync integration
+│   ├── ssb.js           # SSB inflation fetch
+│   └── seed.js          # Demo-data seeding
+├── src/
+│   ├── context/         # FinanceContext — single source of app state
+│   ├── lib/             # Pure calc/domain logic + Vitest tests (tax, loan, debt)
+│   ├── pages/           # One component per route (Budget, Dashboard, Assets…)
+│   ├── components/      # Shared UI (modals, charts) + ui/ primitives
+│   ├── hooks/           # Small shared hooks
+│   ├── i18n/            # Translation tables
+│   └── assets/          # Static assets
+├── public/              # PWA manifest and icons
+├── scripts/             # Enable Banking extractor (optional)
+└── Dockerfile
+```
+
+## CI/CD workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| [**CI**](.github/workflows/build.yml) | Push to `main`, PRs, manual | Typecheck, lint, test, then build and push the Docker image to GHCR |
+| [**Dependency Review**](.github/workflows/dependency-review.yml) | PRs | Blocks PRs that introduce known-vulnerable dependencies |
+| [**Scorecard**](.github/workflows/scorecard.yml) | Push to `main`, weekly | OpenSSF supply-chain score published to the Security tab |
+| [**Container Scan**](.github/workflows/container-scan.yml) | Push to `main`, weekly | Trivy scan of the image; findings to the Security tab |
+| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root + `server/`, GitHub Actions) |
+
 ---
 
 <div align="center">
