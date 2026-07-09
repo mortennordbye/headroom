@@ -1,5 +1,12 @@
 # Full historization plan: month-by-month history for every number (2026-07-09)
 
+> **STATUS: ✅ SHIPPED — all phases merged to `main` (PR #31, 2026-07-09).**
+> Phases 1–5 complete and browser-verified (0 console errors); plus supporting features
+> (Dashboard history insights, missing-month markers). Still deferred to `BACKLOG.md`:
+> BudgetPage past-month envelope math (§5.3), and folding the scalar net-worth editor into
+> the History manager. Old-user migration verified (no data loss; current month upgrades to
+> v2 once, older months stay v1). The per-phase ✅ markers below record the detail.
+
 ## 0. Goal
 
 Every financial quantity in the app should have a real month-by-month history that can be
@@ -173,7 +180,7 @@ changes can branch cleanly instead of sniffing fields.
 
 ---
 
-## 3. Phase 1 — Snapshot completeness ✅ FINISHED (staged, pending commit)
+## 3. Phase 1 — Snapshot completeness ✅ FINISHED (shipped, PR #31)
 
 Everything a page needs to render a past month goes into the snapshot.
 
@@ -238,7 +245,7 @@ snapshot is roughly 2 to 4 KB; 10 years of months is under 500 KB against the se
 
 ---
 
-## 4. Phase 2 — History manager: backfill, edit, delete ✅ FINISHED (staged, pending browser smoke)
+## 4. Phase 2 — History manager: backfill, edit, delete ✅ FINISHED (shipped + browser-verified, PR #31)
 
 The single biggest user-facing gap: months from before the app (or missed months) cannot
 be represented at all.
