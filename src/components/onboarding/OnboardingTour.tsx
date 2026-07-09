@@ -3,12 +3,13 @@ import ReactDOM from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
-  ArrowLeft, ArrowRight, Check, X, Sparkles, Compass, Plus,
+  ArrowLeft, ArrowRight, Check, X, Sparkles, Compass, Plus, FileUp,
   Wallet, Coins, PiggyBank, Home, TrendingUp, Bitcoin, Landmark, Briefcase,
   LayoutDashboard, LineChart, Target, CreditCard, Settings as SettingsIcon, Globe,
 } from 'lucide-react';
 import { useFinance, type Assets, type Pension, type Language, type Region, type ExpenseType, type DebtType } from '../../context/FinanceContext';
 import { DEBT_TYPES } from '../../lib/debt';
+import PayslipImportModal from '../PayslipImportModal';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { ProgressBar } from '../ui/ProgressBar';
 import { parseLocaleNumber } from '../../lib/validators';
@@ -55,6 +56,7 @@ function OnboardingHub() {
   const location = useLocation();
   const [flow, setFlow] = useState<Flow | null>(null); // null = welcome (choose a path)
   const [index, setIndex] = useState(0);
+  const [payslipOpen, setPayslipOpen] = useState(false);
   const highlightedEl = useRef<Element | null>(null);
 
   const sequence: OnboardingTopic[] = flow === 'essentials' ? topicsInGroup('essentials') : ONBOARDING_TOPICS;
@@ -122,6 +124,7 @@ function OnboardingHub() {
             onBack={onBack}
             onNext={onNext}
             onClose={completeOnboarding}
+            onImportPayslip={() => setPayslipOpen(true)}
           />
         ) : (
           <div className="p-5 sm:p-6">
@@ -185,10 +188,16 @@ function OnboardingHub() {
     </>
   );
 
+  // While importing a payslip, hand the screen to that modal (its own portal,
+  // z-50) and hide the onboarding sheet (z-60) so it doesn't sit on top. The hub
+  // stays mounted, so closing the import returns to the same step — and StepView
+  // remounts, re-seeding the income field from the value the import just wrote.
+  if (payslipOpen) return <PayslipImportModal onClose={() => setPayslipOpen(false)} />;
+
   return ReactDOM.createPortal(overlay, document.body);
 }
 
-function StepView({ topic, copy, step, total, isLast, onBack, onNext, onClose }: {
+function StepView({ topic, copy, step, total, isLast, onBack, onNext, onClose, onImportPayslip }: {
   topic: OnboardingTopic;
   copy: { title: string; hint: string; body: string };
   step: number;
@@ -197,6 +206,7 @@ function StepView({ topic, copy, step, total, isLast, onBack, onNext, onClose }:
   onBack: () => void;
   onNext: () => void;
   onClose: () => void;
+  onImportPayslip: () => void;
 }) {
   const { t } = useFinance();
   const Icon = TOPIC_ICON[topic.id] ?? Wallet;
@@ -224,6 +234,15 @@ function StepView({ topic, copy, step, total, isLast, onBack, onNext, onClose }:
       <p className="text-[14px] leading-[1.55] mb-4" style={{ color: 'var(--text-2)' }}>{copy.body}</p>
 
       {topic.fields.length > 0 && <FieldsForm key={topic.id} fields={topic.fields} />}
+      {topic.id === 'income' && (
+        <button
+          onClick={onImportPayslip}
+          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[6px] text-[13px] font-semibold border mb-5"
+          style={{ background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--accent)' }}
+        >
+          <FileUp size={15} /> {t.onboarding.orImportPayslip}
+        </button>
+      )}
       {topic.id === 'fixedExpenses' && <FixedExpenseAdder />}
       {topic.id === 'debt' && <DebtAdder />}
 
