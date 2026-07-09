@@ -390,7 +390,15 @@ produce NaN LTV).
 
 ---
 
-## 7. Phase 5 — Data safety, scale, compat
+## 7. Phase 5 — Data safety, scale, compat ✅ VERIFIED
+
+> **Verified:** sanitize depth unchanged after phases 2-4 (they add no persisted snapshot
+> fields — the derived surfaces only *read* snapshots); downgrade safety proven by a new
+> round-trip test (`payloadRegistry.test.ts` "passes unknown/future snapshot fields through
+> verbatim") — snapshots are stored/re-applied as whole objects, never field-projected, so
+> `migrateSnapshotSavings`'s `{...snap}` spread preserves v2 and future fields; demo-coverage
+> partition unaffected (no new top-level payload fields); capture-effect structural-equality
+> skip untouched. Size: rounding-on-capture deliberately skipped (see §3.2 deviation).
 
 - **Sanitize depth**: every new numeric enters through the `balanceSnapshots` block of
   `sanitizePayload.ts` (Phase 1 does this; re-verify after Phases 2 to 4 add fields).
