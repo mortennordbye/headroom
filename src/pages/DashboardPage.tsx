@@ -22,6 +22,7 @@ import {
 import { calcDebtBalanceByYear } from '../lib/debt';
 import GoalsSection from '../components/GoalsSection';
 import InsightBanner from '../components/InsightBanner';
+import HistoryInsights from '../components/HistoryInsights';
 import {
   AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
@@ -305,6 +306,9 @@ const DashboardPage: React.FC = () => {
           {subtitle}
         </p>
       </header>
+
+      {/* History highlights — glanceable payoff from the accumulated snapshots */}
+      <HistoryInsights />
 
       {/* Defaults nudge — market assumptions still untuned. Dismissable for good. */}
       {defaultAssumptions > 0 && !assumptionsNudgeDismissed && (

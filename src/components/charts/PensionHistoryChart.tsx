@@ -4,6 +4,7 @@ import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
 import { pensionSeriesFrom } from '../../lib/snapshotSeries';
+import { fillMonthGaps } from '../../lib/monthGrid';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
@@ -17,10 +18,13 @@ export default function PensionHistoryChart() {
   const dateLocale = lang === 'nb' ? nb : enUS;
 
   const rows = useMemo(() => pensionSeriesFrom(balanceSnapshots), [balanceSnapshots]);
-  const data = useMemo(
-    () => rows.map(r => ({ ...r, month: format(parse(r.month, 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }) })),
-    [rows, dateLocale],
-  );
+  const data = useMemo(() => {
+    // Gap months (otp/ips null) break the lines at unrecorded months.
+    const filled = fillMonthGaps<{ month: string; otp: number | null; ips: number | null }>(
+      rows, r => r.month, k => ({ month: k, otp: null, ips: null }),
+    );
+    return filled.map(r => ({ ...r, month: format(parse(r.month, 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }) }));
+  }, [rows, dateLocale]);
 
   // Need at least two months with any pension balance to show a trend.
   if (rows.length < 2 || rows.every(r => r.otp === 0 && r.ips === 0)) return null;

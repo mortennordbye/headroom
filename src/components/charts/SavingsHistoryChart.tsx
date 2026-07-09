@@ -4,6 +4,7 @@ import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
 import { savingsSeriesFrom } from '../../lib/snapshotSeries';
+import { fillMonthGaps } from '../../lib/monthGrid';
 import ChartTooltip from '../ChartTooltip';
 import { SERIES, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
@@ -18,10 +19,13 @@ export default function SavingsHistoryChart() {
 
   const { rows, accounts } = useMemo(() => savingsSeriesFrom(balanceSnapshots), [balanceSnapshots]);
 
-  const data = useMemo(
-    () => rows.map(r => ({ ...r, month: format(parse(String(r.month), 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }) })),
-    [rows, dateLocale],
-  );
+  const data = useMemo(() => {
+    // Insert gap months (all accounts null) so a skipped month breaks each line.
+    const gap = (k: string): Record<string, number | string | null> =>
+      ({ month: k, ...Object.fromEntries(accounts.map(a => [a.id, null])) });
+    const filled = fillMonthGaps(rows as Array<Record<string, number | string | null>>, r => String(r.month), gap);
+    return filled.map(r => ({ ...r, month: format(parse(String(r.month), 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }) }));
+  }, [rows, accounts, dateLocale]);
 
   if (rows.length < 2 || accounts.length === 0) return null;
 

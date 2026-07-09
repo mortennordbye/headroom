@@ -287,18 +287,19 @@ what was entered, live month unaffected.
 
 ---
 
-## 5. Phase 3 — One time machine everywhere ✅ MOSTLY FINISHED (5.2 deferred)
+## 5. Phase 3 — One time machine everywhere ✅ FINISHED (incl. 5.2)
 
 > **Shipped:** 5.1 stepper state lifted to `FinanceContext` (`historyMonth: string | null`
 > slice; `useBalanceHistory` reads it, same interface), so the picked month carries across
-> Assets/Loan/Pension. 5.3 leaks closed: AssetPage projections use the snapshot's
-> `assumptions` + mortgage rate/term (v1 → live fallback); PensionPage pensionable income
-> resolves at the *viewed* month via `calcActiveGrossAnnual(...,activeKey)`. 5.4 read-only
-> chip already provided by `BalanceHistoryBar` (now globally consistent).
-> **Deferred (5.2 header-picker merge):** the Dashboard/Budget `currentMonth` picker and the
-> balance-page stepper remain two controls (each coherent on its own pages). Unifying them
-> into one header control is presentation polish, not correctness — BACKLOG. The BudgetPage
-> `snapshot.fixedExpenses` past-month envelope math (also 5.3) rides with that merge.
+> Assets/Loan/Pension. 5.2 header-picker merge ✅: the header month control now drives the
+> balance-page time machine directly (steps recorded months, read-only chip with lock +
+> "today"); the per-page `BalanceHistoryBar` was removed (component deleted). 5.3 leaks
+> closed: AssetPage projections use the snapshot's `assumptions` + mortgage rate/term (v1 →
+> live fallback); PensionPage pensionable income resolves at the *viewed* month via
+> `calcActiveGrossAnnual(...,activeKey)`. 5.4 read-only affordance now lives in the header.
+> **Still deferred:** BudgetPage past-month `snapshot.fixedExpenses` envelope math (Budget
+> keeps its own `currentMonth` picker; wiring recorded fixed-expenses into envelope math is a
+> separate change).
 
 **5.1 Lift the stepper state.** ✅ Replace the per-page `useState` in `useBalanceHistory`
 with shared state in `FinanceContext` (a `historyMonth: string | null` slice; null = live).

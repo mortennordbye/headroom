@@ -16,7 +16,6 @@ import { provenanceOf } from '../lib/provenance';
 import { projectPensionWealth } from '../lib/pension';
 import { currentMonthKey } from '../lib/date';
 import { formatAxisInt } from '../lib/format';
-import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
@@ -78,7 +77,6 @@ const PensionPage: React.FC = () => {
 
   return (
     <>
-    <BalanceHistoryBar hist={hist} />
     <div
       className={`space-y-6 md:space-y-7 ${hist.isLive ? '' : 'pointer-events-none select-none'}`}
       style={{ opacity: hist.isLive ? 1 : 0.92 }}

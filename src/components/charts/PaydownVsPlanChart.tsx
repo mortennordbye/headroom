@@ -4,6 +4,7 @@ import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
 import { paydownVsPlan } from '../../lib/paydown';
+import { fillMonthGaps } from '../../lib/monthGrid';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
@@ -23,14 +24,17 @@ export default function PaydownVsPlanChart() {
 
   const result = useMemo(() => paydownVsPlan(balanceSnapshots), [balanceSnapshots]);
 
-  const data = useMemo(
-    () => result.points.map(p => ({
-      month: format(parse(p.monthKey, 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }),
-      actual: Math.round(p.actual),
-      plan: Math.round(p.plan),
-    })),
-    [result, dateLocale],
-  );
+  const data = useMemo(() => {
+    // Expand to a continuous monthly grid so a skipped month shows as a break in
+    // the actual line, not a straight segment across unrecorded data.
+    const recorded = result.points.map(p => ({ key: p.monthKey, actual: Math.round(p.actual) as number | null, plan: p.plan as number | null }));
+    const filled = fillMonthGaps(recorded, r => r.key, k => ({ key: k, actual: null, plan: null }));
+    return filled.map(r => ({
+      month: format(parse(r.key, 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }),
+      actual: r.actual,
+      plan: r.plan,
+    }));
+  }, [result, dateLocale]);
 
   if (result.points.length < 2) return null; // need history to compare
 
@@ -75,8 +79,8 @@ export default function PaydownVsPlanChart() {
             <XAxis dataKey="month" {...AXIS_PROPS} interval="preserveStartEnd" minTickGap={28} />
             <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={52} domain={['auto', 'auto']} />
             <Tooltip content={<ChartTooltip valueFormatter={formatCurrency} labelFormatter={(l) => String(l)} />} />
-            <Line name={c.paydownPlan} type="monotone" dataKey="plan" stroke={CHART.rust} strokeWidth={2} strokeDasharray="5 4" dot={false} />
-            <Line name={c.paydownActual} type="monotone" dataKey="actual" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} />
+            <Line name={c.paydownPlan} type="monotone" dataKey="plan" stroke={CHART.rust} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+            <Line name={c.paydownActual} type="monotone" dataKey="actual" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} connectNulls={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>

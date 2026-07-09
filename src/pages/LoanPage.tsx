@@ -37,7 +37,6 @@ import {
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
-import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
@@ -273,7 +272,6 @@ const LoanPage: React.FC = () => {
 
   return (
     <>
-    <BalanceHistoryBar hist={hist} />
     <div
       className={`space-y-6 md:space-y-7 pb-8 ${hist.isLive ? '' : 'pointer-events-none select-none'}`}
       style={{ opacity: hist.isLive ? 1 : 0.92 }}
