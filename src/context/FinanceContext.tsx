@@ -521,6 +521,10 @@ interface FinanceDataContextType {
   setNetWorthForMonth: (monthKey: string, value: number) => void;
   clearNetWorthForMonth: (monthKey: string) => void;
   balanceSnapshots: Record<string, BalanceSnapshot>;
+  /** Backfill/edit a manual snapshot for a past month (source forced to 'manual'). */
+  setManualSnapshot: (monthKey: string, snapshot: BalanceSnapshot) => void;
+  /** Delete a manual snapshot. Auto snapshots are left alone (they re-capture). */
+  deleteManualSnapshot: (monthKey: string) => void;
   fixedExpenses: FixedExpense[];
   setFixedExpenses: (val: FixedExpense[]) => void;
   debts: Debt[];
@@ -1322,6 +1326,23 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Backfill/edit a manual snapshot for a past month. Forces source:'manual' and
+  // v:2 so it's distinguishable from auto captures and safe to delete later. The
+  // auto-capture effect only ever targets the real current month, so a manual
+  // snapshot for any other month is never overwritten.
+  const setManualSnapshot = useCallback((monthKey: string, snapshot: BalanceSnapshot) => {
+    setBalanceSnapshots(prev => ({ ...prev, [monthKey]: { ...snapshot, source: 'manual', v: 2 } }));
+  }, []);
+
+  const deleteManualSnapshot = useCallback((monthKey: string) => {
+    setBalanceSnapshots(prev => {
+      if (prev[monthKey]?.source !== 'manual') return prev; // never delete auto captures
+      const next = { ...prev };
+      delete next[monthKey];
+      return next;
+    });
+  }, []);
+
   const totalResidual = effectiveIncome - totalFixedExpenses;
   const monthlyBudget = recommendedSpending;
   const daysInMonth = getDaysInMonth(currentMonth);
@@ -1919,6 +1940,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip,
     netWorthHistory, setNetWorthForMonth, clearNetWorthForMonth, balanceSnapshots,
+    setManualSnapshot, deleteManualSnapshot,
     fixedExpenses, setFixedExpenses,
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
@@ -1943,7 +1965,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
-    clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
+    clearNetWorthForMonth, balanceSnapshots, setManualSnapshot, deleteManualSnapshot,
+    fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, accountLabels, setAccountLabel, applyBankSync,
     categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,

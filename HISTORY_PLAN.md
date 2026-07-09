@@ -238,12 +238,24 @@ snapshot is roughly 2 to 4 KB; 10 years of months is under 500 KB against the se
 
 ---
 
-## 4. Phase 2 — History manager: backfill, edit, delete
+## 4. Phase 2 — History manager: backfill, edit, delete ✅ FINISHED (staged, pending browser smoke)
 
 The single biggest user-facing gap: months from before the app (or missed months) cannot
 be represented at all.
 
-**4.1 Promote `NetWorthHistoryModal` into a History manager** (Settings or the Assets
+> **Shipped:** new `HistoryManagerModal` (mounted in Settings → Data management) with the
+> month grid, add/edit/delete of manual snapshots, "add an earlier month" backfill, and the
+> advanced fold defaulting from the nearest recorded month. New tested lib:
+> `src/lib/snapshots.ts` (`nearestSnapshot`, `historyRows`, `buildManualSnapshot` — the last
+> re-applies the house three-slice mirror so a backfilled month can't contradict itself) and
+> `netWorthSeriesFrom` in `netWorth.ts`. Context gained `setManualSnapshot`/`deleteManualSnapshot`.
+> **Deviation:** I built a *separate* `HistoryManagerModal` rather than destructively
+> rewriting `NetWorthHistoryModal`; the scalar net-worth editor still exists on the Dashboard
+> unchanged (its 12-month window not dropped). The manager supersedes it functionally and
+> shows snapshot-derived net worth per month. Folding the scalar editor into the manager (or
+> retiring it) is a follow-up — see BACKLOG.
+
+**4.1 Promote `NetWorthHistoryModal` into a History manager** ✅ (Settings or the Assets
 page). A month-grid list showing every month from the earliest record to now, each row
 marked: recorded (auto), recorded (manual), or missing. Actions per row:
 
@@ -257,7 +269,7 @@ marked: recorded (auto), recorded (manual), or missing. Actions per row:
 - The headline `netWorthHistory` editor stays, but drops its 12-month window and, when a
   month has a snapshot, shows the snapshot-derived net worth as the reference value.
 
-**4.2 Reconcile the two history stores.** `netWorthHistory[month]` and
+**4.2 Reconcile the two history stores.** ✅ `netWorthHistory[month]` and
 "net worth computed from `balanceSnapshots[month]`" can disagree (the scalar is editable).
 Rule: the snapshot is authoritative when it exists; `netWorthHistory` remains the
 lightweight store for months with no snapshot (typically hand-backfilled headline values)
@@ -266,7 +278,7 @@ and for the pre-debt-historization era. Chart precedence: snapshot-derived value
 `src/lib/netWorth.ts` (e.g. `netWorthSeriesFrom(snapshots, history, months)`) and route the
 Dashboard hero series through it so there is exactly one precedence definition.
 
-**4.3 Provenance**: manual snapshots get the existing `ProvenanceBadge` treatment in the
+**4.3 Provenance** ✅: manual snapshots get the existing `ProvenanceBadge` treatment in the
 time machine ("entered by you" vs "recorded"), reusing `src/lib/provenance.ts` patterns.
 
 Verify: gate + unit tests for the precedence selector and the nearest-snapshot defaulting;
