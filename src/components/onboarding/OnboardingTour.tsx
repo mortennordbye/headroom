@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
-  ArrowLeft, ArrowRight, Check, X, Sparkles, Plus, FileUp,
+  ArrowLeft, ArrowRight, Check, X, Sparkles, Plus, FileUp, ChevronDown,
   Wallet, Coins, PiggyBank, Home, TrendingUp, Bitcoin, Landmark, Briefcase,
   LayoutDashboard, LineChart, Target, CreditCard, Settings as SettingsIcon, Globe,
 } from 'lucide-react';
@@ -31,6 +31,27 @@ const TOPIC_ICON: Record<string, typeof Wallet> = {
 const inputCls = 'w-full rounded-[6px] px-3 py-2.5 text-[14px] border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]';
 const inputStyle = { background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' } as const;
 const microLabel = 'text-[11px] font-medium uppercase tracking-wide';
+
+/** A collapsed-by-default section for fields that already have sensible defaults,
+ *  so a step leads with the values you actually need to fill. */
+function Collapsible({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-[6px] border" style={{ borderColor: 'var(--border)' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide"
+        style={{ color: 'var(--text-3)' }}
+      >
+        <span>{label}</span>
+        <ChevronDown size={15} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+      {open && <div className="space-y-3 px-3 pb-3 pt-0.5">{children}</div>}
+    </div>
+  );
+}
 
 /**
  * Guided setup: one merged flow (welcome → every topic in order). It runs as a
@@ -237,6 +258,7 @@ function StepView({ topic, copy, step, total, isLast, canProceed, canSkip, onBac
 
       {topic.fields.length > 0 && <FieldsForm key={topic.id} fields={topic.fields} />}
       {topic.id === 'job' && <JobSalaryAdder />}
+      {topic.id === 'cash' && <SavingsAccountsAdder />}
       {topic.id === 'savingsTarget' && <SavingsTargetControl />}
       {topic.id === 'income' && (
         <button
@@ -290,10 +312,18 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     currentMonth, effectiveIncome, setMonthlyIncomeForMonth,
     savingsTargetPercent, setSavingsTargetPercent,
     assets, updateAsset, pension, updatePension,
-    addSavingsAccount, updateSavingsAccount,
+    growthReturnRate, setGrowthReturnRate, houseGrowthRate, setHouseGrowthRate,
+    cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
   } = useFinance();
 
   const monthKey = format(currentMonth, 'yyyy-MM');
+
+  // Growth-rate settings live outside Assets/Pension, so they need their own map.
+  const growthRates: Record<string, number> = { growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate };
+  const growthSetters: Record<string, (v: number) => void> = {
+    growthReturnRate: setGrowthReturnRate, houseGrowthRate: setHouseGrowthRate,
+    cashGrowthRate: setCashGrowthRate, cryptoGrowthRate: setCryptoGrowthRate,
+  };
 
   const readValue = (f: OnboardingField): string => {
     switch (f.writer) {
@@ -302,8 +332,8 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
       case 'income': return String(Math.round(effectiveIncome));
       case 'savingsTarget': return String(savingsTargetPercent);
       case 'asset': return String(assets[f.key as keyof Assets] ?? 0);
-      case 'savingsAccount': return String(assets.savingsAccounts?.[0]?.balance ?? 0);
       case 'pension': return String(pension[f.key as keyof Pension] ?? 0);
+      case 'growthRate': return String(growthRates[f.key] ?? 0);
       default: return '';
     }
   };
@@ -319,61 +349,65 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     if (f.writer === 'lang') { setLang(raw as Language); return; }
     if (f.writer === 'region') { setRegion(raw as Region); return; }
     const n = parseLocaleNumber(raw);
-    if (isNaN(n) || n < 0) return; // keep the draft, don't push an invalid value
+    if (isNaN(n) || (n < 0 && !f.allowNegative)) return; // keep the draft, don't push an invalid value
     if (f.writer === 'income') setMonthlyIncomeForMonth(monthKey, n);
     else if (f.writer === 'savingsTarget') setSavingsTargetPercent(Math.min(100, n));
     else if (f.writer === 'asset') updateAsset(f.key as keyof Assets, n);
-    else if (f.writer === 'savingsAccount') {
-      // Upsert the first savings account — the legacy `savings` scalar is dead
-      // whenever the (always-present) array exists, so it must not be written.
-      const first = assets.savingsAccounts?.[0];
-      if (first) updateSavingsAccount(first.id, { balance: n });
-      else addSavingsAccount(t.onboarding.fields.savings, n);
-    }
     else if (f.writer === 'pension') updatePension(f.key as keyof Pension, n);
+    else if (f.writer === 'growthRate') growthSetters[f.key]?.(n);
   };
 
   const fieldLabels = t.onboarding.fields;
   const optionLabels = t.onboarding.options;
 
+  const renderField = (f: OnboardingField) => {
+    const labelText = fieldLabels[f.labelKey as keyof typeof fieldLabels];
+    const id = `onb-${f.key}`;
+    return (
+      <div key={f.key} className="space-y-1.5">
+        <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-2)' }}>
+          {labelText}
+        </label>
+        {f.kind === 'select' ? (
+          <select
+            id={id}
+            value={values[f.key] ?? ''}
+            onChange={e => writeField(f, e.target.value)}
+            className="w-full rounded-[6px] px-4 py-3 text-[14px] border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]"
+            style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+          >
+            {(f.options ?? []).map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {optionLabels[opt.labelKey as keyof typeof optionLabels]}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            id={id}
+            type="text"
+            inputMode="decimal"
+            value={values[f.key] ?? ''}
+            onChange={e => writeField(f, e.target.value)}
+            className="w-full rounded-[6px] px-4 py-3 text-[14px] font-mono border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]"
+            style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+          />
+        )}
+      </div>
+    );
+  };
+
+  const primary = fields.filter(f => !f.advanced);
+  const advanced = fields.filter(f => f.advanced);
+
   return (
     <div className="space-y-3 mb-5">
-      {fields.map(f => {
-        const labelText = fieldLabels[f.labelKey as keyof typeof fieldLabels];
-        const id = `onb-${f.key}`;
-        return (
-          <div key={f.key} className="space-y-1.5">
-            <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-2)' }}>
-              {labelText}
-            </label>
-            {f.kind === 'select' ? (
-              <select
-                id={id}
-                value={values[f.key] ?? ''}
-                onChange={e => writeField(f, e.target.value)}
-                className="w-full rounded-[6px] px-4 py-3 text-[14px] border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]"
-                style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
-              >
-                {(f.options ?? []).map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {optionLabels[opt.labelKey as keyof typeof optionLabels]}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id={id}
-                type="text"
-                inputMode="decimal"
-                value={values[f.key] ?? ''}
-                onChange={e => writeField(f, e.target.value)}
-                className="w-full rounded-[6px] px-4 py-3 text-[14px] font-mono border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]"
-                style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
-              />
-            )}
-          </div>
-        );
-      })}
+      {primary.map(renderField)}
+      {advanced.length > 0 && (
+        <Collapsible label={t.onboarding.advancedSettings}>
+          {advanced.map(renderField)}
+        </Collapsible>
+      )}
     </div>
   );
 }
@@ -426,30 +460,30 @@ function JobSalaryAdder() {
         <label className={microLabel} style={{ color: 'var(--text-2)' }}>{o.fields.role}</label>
         <input value={role} onChange={e => setRole(e.target.value)} placeholder={o.rolePlaceholder} className={inputCls} style={inputStyle} />
       </div>
-      <div className="flex gap-2">
-        <div className="flex-1 space-y-1.5">
-          <label className={microLabel} style={{ color: 'var(--text-2)' }}>{o.fields.startMonth}</label>
-          <input value={start} onChange={e => setStart(e.target.value)} placeholder="2026-07" className={`${inputCls} font-mono`} style={inputStyle} />
-        </div>
-        <div className="flex-1 space-y-1.5">
-          <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.salary.endDate}</label>
-          <input value={end} onChange={e => setEnd(e.target.value)} placeholder="2028-06" className={`${inputCls} font-mono`} style={inputStyle} />
-        </div>
+      <div className="space-y-1.5">
+        <label className={microLabel} style={{ color: 'var(--text-2)' }}>{o.fields.startMonth}</label>
+        <input value={start} onChange={e => setStart(e.target.value)} placeholder="2026-07" className={`${inputCls} font-mono`} style={inputStyle} />
       </div>
       <div className="space-y-1.5">
         <label className={microLabel} style={{ color: 'var(--text-2)' }}>{o.fields.grossAnnual}</label>
         <input value={salary} onChange={e => setSalary(e.target.value)} inputMode="decimal" placeholder="0" className={`${inputCls} font-mono`} style={inputStyle} />
       </div>
-      <div className="flex gap-2">
-        <div className="flex-1 space-y-1.5">
-          <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.salary.contractedHours}</label>
-          <input value={hours} onChange={e => setHours(e.target.value)} inputMode="decimal" placeholder="37.5" className={`${inputCls} font-mono`} style={inputStyle} />
+      <Collapsible label={o.advancedSettings}>
+        <div className="space-y-1.5">
+          <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.salary.endDate}</label>
+          <input value={end} onChange={e => setEnd(e.target.value)} placeholder="2028-06" className={`${inputCls} font-mono`} style={inputStyle} />
         </div>
-        <div className="flex-1 space-y-1.5">
-          <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.salary.onCallAnnual}</label>
-          <input value={onCall} onChange={e => setOnCall(e.target.value)} inputMode="decimal" placeholder="0" className={`${inputCls} font-mono`} style={inputStyle} />
+        <div className="flex gap-2">
+          <div className="flex-1 space-y-1.5">
+            <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.salary.contractedHours}</label>
+            <input value={hours} onChange={e => setHours(e.target.value)} inputMode="decimal" placeholder="37.5" className={`${inputCls} font-mono`} style={inputStyle} />
+          </div>
+          <div className="flex-1 space-y-1.5">
+            <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.salary.onCallAnnual}</label>
+            <input value={onCall} onChange={e => setOnCall(e.target.value)} inputMode="decimal" placeholder="0" className={`${inputCls} font-mono`} style={inputStyle} />
+          </div>
         </div>
-      </div>
+      </Collapsible>
       <button onClick={add} disabled={!canAdd} className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[6px] text-[13px] font-semibold disabled:opacity-40" style={{ background: 'var(--forest)', color: 'var(--text)' }}>
         <Plus size={15} /> {o.add}
       </button>
@@ -578,13 +612,15 @@ function FixedExpenseAdder() {
           </select>
         </div>
       </div>
-      <div className="space-y-1.5">
-        <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.trackCategoryLabel}</label>
-        <select value={category} onChange={e => setCategory(e.target.value)} className={inputCls} style={inputStyle}>
-          <option value="">{t.trackCategoryNone}</option>
-          {catOptions.map(c => <option key={c.key} value={c.key}>{t.categoryLabels[c.key]}</option>)}
-        </select>
-      </div>
+      <Collapsible label={t.onboarding.advancedSettings}>
+        <div className="space-y-1.5">
+          <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.trackCategoryLabel}</label>
+          <select value={category} onChange={e => setCategory(e.target.value)} className={inputCls} style={inputStyle}>
+            <option value="">{t.trackCategoryNone}</option>
+            {catOptions.map(c => <option key={c.key} value={c.key}>{t.categoryLabels[c.key]}</option>)}
+          </select>
+        </div>
+      </Collapsible>
       <button onClick={add} disabled={!canAdd} className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[6px] text-[13px] font-semibold disabled:opacity-40" style={{ background: 'var(--forest)', color: 'var(--text)' }}>
         <Plus size={15} /> {t.onboarding.add}
       </button>
@@ -619,6 +655,68 @@ function FixedExpenseAdder() {
                   {catOptions.map(c => <option key={c.key} value={c.key}>{t.categoryLabels[c.key]}</option>)}
                 </select>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Savings accounts (a list) for the cash step — matches the Assets page: add,
+ *  rename, edit balance, remove. Buffer and BSU are the scalar fields alongside. */
+function SavingsAccountsAdder() {
+  const { t, assets, addSavingsAccount, updateSavingsAccount, removeSavingsAccount } = useFinance();
+  const accounts = assets.savingsAccounts ?? [];
+  const [name, setName] = useState('');
+  const [balance, setBalance] = useState('');
+  const [balanceDrafts, setBalanceDrafts] = useState<Record<string, string>>({});
+  const bal = parseLocaleNumber(balance);
+  const canAdd = name.trim() !== '' && !isNaN(bal) && bal >= 0;
+  const add = () => {
+    if (!canAdd) return;
+    addSavingsAccount(name.trim(), bal);
+    setName(''); setBalance('');
+  };
+  const editBalance = (id: string, raw: string) => {
+    setBalanceDrafts(d => ({ ...d, [id]: raw }));
+    const v = parseLocaleNumber(raw);
+    if (!isNaN(v) && v >= 0) updateSavingsAccount(id, { balance: v });
+  };
+  return (
+    <div className="space-y-3">
+      <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.onboarding.fields.savings}</label>
+      <div className="flex gap-2">
+        <div className="flex-1 space-y-1.5">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder={t.onboarding.itemName} className={inputCls} style={inputStyle} />
+        </div>
+        <div className="w-[42%] space-y-1.5">
+          <input value={balance} onChange={e => setBalance(e.target.value)} inputMode="decimal" placeholder={t.onboarding.fields.balance} className={`${inputCls} font-mono`} style={inputStyle} />
+        </div>
+      </div>
+      <button onClick={add} disabled={!canAdd} className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[6px] text-[13px] font-semibold disabled:opacity-40" style={{ background: 'var(--forest)', color: 'var(--text)' }}>
+        <Plus size={15} /> {t.onboarding.add}
+      </button>
+      {accounts.length > 0 && (
+        <div className="space-y-1.5 max-h-[160px] overflow-y-auto pt-1">
+          {accounts.map(a => (
+            <div key={a.id} className="flex items-center gap-1.5 px-2 py-1.5 rounded-[6px]" style={{ background: 'var(--bg-2)' }}>
+              <input
+                value={a.name}
+                onChange={e => updateSavingsAccount(a.id, { name: e.target.value })}
+                aria-label={t.onboarding.itemName}
+                className="flex-1 min-w-0 rounded-[5px] px-2 py-1.5 text-[13px] border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]"
+                style={inputStyle}
+              />
+              <input
+                value={balanceDrafts[a.id] ?? String(a.balance)}
+                onChange={e => editBalance(a.id, e.target.value)}
+                inputMode="decimal"
+                aria-label={t.onboarding.fields.balance}
+                className="w-[92px] rounded-[5px] px-2 py-1.5 text-[13px] font-mono tabular-nums border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]"
+                style={inputStyle}
+              />
+              <button onClick={() => removeSavingsAccount(a.id)} aria-label={t.onboarding.remove} className="shrink-0 p-1 text-[var(--text-3)] hover:text-[var(--negative)]"><X size={14} /></button>
             </div>
           ))}
         </div>

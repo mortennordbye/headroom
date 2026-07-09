@@ -2,31 +2,6 @@
 
 Items deferred from prior work. When an item is finished, remove it.
 
-## Onboarding — wealth-step field parity
-
-Shipped (2026-07): the guided setup is one merged flow (welcome → all topics), with
-required core steps (language, job + salary, income, savings target) that block Next,
-skippable advanced steps (tagged "Valgfritt" with a Hopp over button), and a leave
-confirmation on X/Escape/backdrop. The **job** step (`JobSalaryAdder`) and **fixed
-expense** step (`FixedExpenseAdder`) were brought to field parity with their normal
-Salary/Budget-page forms (job: employer, role, start/end month, gross annual, contracted
-hours, on-call; expense add + inline row edit: name, amount, type, envelope category).
-Debt (`DebtAdder`) was already at parity. All in `src/components/onboarding/OnboardingTour.tsx`.
-
-Remaining:
-
-- **Wealth/asset steps still use simplified single-value inputs.** The `cash`, `home`,
-  `stocks`, `crypto`, and `pension` topics render one scalar per field via the generic
-  `FieldsForm` (writers in `src/lib/onboarding.ts`), so they miss values the Assets/Pension
-  pages expose — e.g. crypto's unrealized gain + tax rate, stocks' tax rate/cost basis,
-  multiple savings accounts, per-asset provenance. **Why deferred**: the user flagged the
-  job and fixed-expense forms specifically; expanding every asset form to full parity is a
-  large surface and the right field subset for onboarding needs a design pass. **What would
-  unblock**: decide which asset fields belong in first-run vs later, then either extend the
-  `OnboardingField`/`FieldsForm` writer set or reuse the asset-page forms. **Where**:
-  `src/lib/onboarding.ts` (topic `fields`), `src/components/onboarding/OnboardingTour.tsx`
-  (`FieldsForm` writer/readValue switches).
-
 ## Payslip importer — follow-ups
 
 Shipped (2026-07): client-side Visma payslip import on the Budget page. PDFs are parsed entirely in-browser (pdf.js, lazy-loaded) and never stored; a single-month PDF opens a detailed editable review, a multi-page archive opens a batch list that fills income history back in time. Per-month figures live in `payslips: Record<month, MonthlyPayslip>` (`src/context/FinanceContext.tsx`), and net pay is written as that month's income override. Parser + tests in `src/lib/payslip/` (`parseVismaPayslip.ts`, `parsePayslipAmount.ts`, provider registry in `index.ts`); browser extraction/render in `extractPdfText.ts`; UI in `src/components/PayslipImportModal.tsx` + `src/pages/BudgetPage.tsx`. Remaining:

@@ -10,7 +10,7 @@
  * (an Assets/Pension key, or a sentinel for the special writers).
  */
 
-export type OnboardingWriter = 'lang' | 'region' | 'income' | 'savingsTarget' | 'asset' | 'savingsAccount' | 'pension';
+export type OnboardingWriter = 'lang' | 'region' | 'income' | 'savingsTarget' | 'asset' | 'pension' | 'growthRate';
 
 export type OnboardingGroup = 'essentials' | 'wealth' | 'learn';
 
@@ -30,6 +30,12 @@ export interface OnboardingField {
   /** Key under `t.onboarding.fields`. */
   labelKey: string;
   kind: 'number' | 'percent' | 'select';
+  /** Allow negative input (e.g. an unrealized loss). Defaults to false. */
+  allowNegative?: boolean;
+  /** A field that already has a sensible default and rarely needs changing (tax
+   *  rates, return assumptions, …). The shell tucks these behind an "advanced"
+   *  toggle so the must-fill values stand alone. */
+  advanced?: boolean;
   /** Present only for `kind: 'select'`. */
   options?: OnboardingFieldOption[];
 }
@@ -130,10 +136,9 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     kind: 'fill',
     route: '/assets',
     target: 'cash-reserves',
+    // Savings accounts (a list) are edited by the custom SavingsAccountsAdder in
+    // the shell; buffer and BSU are plain scalar asset fields.
     fields: [
-      // Savings live in the savingsAccounts array — the legacy `savings` scalar is
-      // ignored whenever the array exists, so writing it would lose the value (1.8).
-      { key: 'savings', writer: 'savingsAccount', labelKey: 'savings', kind: 'number' },
       { key: 'bufferAccount', writer: 'asset', labelKey: 'bufferAccount', kind: 'number' },
       { key: 'bsu', writer: 'asset', labelKey: 'bsu', kind: 'number' },
     ],
@@ -157,7 +162,8 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     target: 'market-positions',
     fields: [
       { key: 'portfolio', writer: 'asset', labelKey: 'portfolio', kind: 'number' },
-      { key: 'unrealizedGain', writer: 'asset', labelKey: 'unrealizedGain', kind: 'number' },
+      { key: 'unrealizedGain', writer: 'asset', labelKey: 'unrealizedGain', kind: 'number', allowNegative: true },
+      { key: 'taxRate', writer: 'asset', labelKey: 'taxRate', kind: 'percent', advanced: true },
     ],
   },
   {
@@ -166,7 +172,11 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     kind: 'fill',
     route: '/assets',
     target: 'crypto',
-    fields: [{ key: 'crypto', writer: 'asset', labelKey: 'crypto', kind: 'number' }],
+    fields: [
+      { key: 'crypto', writer: 'asset', labelKey: 'crypto', kind: 'number' },
+      { key: 'cryptoUnrealizedGain', writer: 'asset', labelKey: 'cryptoUnrealizedGain', kind: 'number', allowNegative: true },
+      { key: 'cryptoTaxRate', writer: 'asset', labelKey: 'cryptoTaxRate', kind: 'percent', advanced: true },
+    ],
   },
   {
     id: 'pension',
@@ -177,6 +187,13 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     fields: [
       { key: 'otpBalance', writer: 'pension', labelKey: 'otpBalance', kind: 'number' },
       { key: 'ipsBalance', writer: 'pension', labelKey: 'ipsBalance', kind: 'number' },
+      { key: 'ipsAnnualContribution', writer: 'pension', labelKey: 'ipsAnnualContribution', kind: 'number', advanced: true },
+      { key: 'otpEmployerPct', writer: 'pension', labelKey: 'otpEmployerPct', kind: 'percent', advanced: true },
+      { key: 'otpEmployeePct', writer: 'pension', labelKey: 'otpEmployeePct', kind: 'percent', advanced: true },
+      { key: 'otpGrowthRate', writer: 'pension', labelKey: 'otpGrowthRate', kind: 'percent', advanced: true },
+      { key: 'ipsGrowthRate', writer: 'pension', labelKey: 'ipsGrowthRate', kind: 'percent', advanced: true },
+      { key: 'birthYear', writer: 'pension', labelKey: 'birthYear', kind: 'number', advanced: true },
+      { key: 'retirementAge', writer: 'pension', labelKey: 'retirementAge', kind: 'number', advanced: true },
     ],
   },
   {
@@ -190,10 +207,15 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
   {
     id: 'growth',
     group: 'wealth',
-    kind: 'learn',
+    kind: 'fill',
     route: '/assets',
     target: 'growth-projection',
-    fields: [],
+    fields: [
+      { key: 'growthReturnRate', writer: 'growthRate', labelKey: 'growthReturnRate', kind: 'percent', advanced: true },
+      { key: 'houseGrowthRate', writer: 'growthRate', labelKey: 'houseGrowthRate', kind: 'percent', advanced: true },
+      { key: 'cashGrowthRate', writer: 'growthRate', labelKey: 'cashGrowthRate', kind: 'percent', advanced: true },
+      { key: 'cryptoGrowthRate', writer: 'growthRate', labelKey: 'cryptoGrowthRate', kind: 'percent', advanced: true },
+    ],
   },
 
   // ── Understand the app ──────────────────────────────────────
