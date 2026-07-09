@@ -57,4 +57,12 @@ describe('paydownVsPlan', () => {
     expect(r.interestPaid).toBeGreaterThan(0);
     expect(Number.isFinite(r.interestPaid)).toBe(true);
   });
+
+  it('guards a NaN rate / balance from a hand-edited snapshot (no NaN in the plan)', () => {
+    const bad = { housingMode: 'homeowner', homeowner: { currentMortgageBalance: 2_000_000, rente: NaN, nedbetalingstid: 25 }, assets: { houseDebt: 2_000_000 } } as unknown as BalanceSnapshot;
+    const next = { housingMode: 'homeowner', homeowner: { currentMortgageBalance: NaN, rente: 5, nedbetalingstid: 25 }, assets: { houseDebt: 1_990_000 } } as unknown as BalanceSnapshot;
+    const r = paydownVsPlan({ '2026-01': bad, '2026-02': next });
+    expect(r.points.every(p => Number.isFinite(p.plan) && Number.isFinite(p.actual))).toBe(true);
+    expect(Number.isFinite(r.aheadBy) && Number.isFinite(r.interestPaid)).toBe(true);
+  });
 });

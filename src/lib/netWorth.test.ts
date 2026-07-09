@@ -65,6 +65,11 @@ describe('netWorthFromSnapshot', () => {
   it('does not NaN on a v1 snapshot missing most asset fields', () => {
     expect(netWorthFromSnapshot(snap({}))).toBe(0);
   });
+
+  it('guards a debt object missing/NaN its balance (no NaN leak to the chart)', () => {
+    const s = snap({ savings: 1000 }, [{} as { balance: number }, { balance: NaN }]);
+    expect(netWorthFromSnapshot(s)).toBe(1000); // bad debts count as 0, not NaN
+  });
 });
 
 describe('netWorthSeriesFrom', () => {

@@ -26,13 +26,17 @@ export default function LtvChart() {
 
   const data = useMemo<LtvRow[]>(() => {
     const round1 = (v: number) => Math.round(v * 10) / 10;
+    // Finite-or-0: `?? 0` catches undefined but not a NaN from hand-edited data,
+    // which would otherwise divide into a NaN LTV point (CLAUDE.md's worst bug class).
+    const finite = (n: number | undefined) => (Number.isFinite(n) ? (n as number) : 0);
 
     // Actual LTV per recorded month.
     const months = Object.keys(balanceSnapshots).sort();
     const actual: LtvRow[] = months.map(mk => {
       const s = balanceSnapshots[mk];
-      const debt = s.homeowner?.currentMortgageBalance ?? s.assets?.houseDebt ?? 0;
-      const value = s.assets?.houseValue ?? 0;
+      const hb = finite(s.homeowner?.currentMortgageBalance);
+      const debt = hb > 0 ? hb : finite(s.assets?.houseDebt);
+      const value = finite(s.assets?.houseValue);
       const ltv = value > 0 ? (debt / value) * 100 : 0;
       return {
         label: format(parse(mk, 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }),

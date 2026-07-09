@@ -9,6 +9,11 @@ export interface NetWorthPoint {
 
 const MONTHLY_GROWTH = 1.005; // ~6% annual, for back-projecting leading gaps
 
+/** A finite number or 0 — the app's guard against undefined/NaN reaching a chart
+ *  (CLAUDE.md's worst bug class). Sanitize coerces stored values, but a debt
+ *  object *missing* its `balance` key slips past that, so guard at the read. */
+const finite = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0);
+
 /**
  * Net worth derived from a snapshot: post-tax equity (the one true equity
  * function) minus that month's non-mortgage debts. Matches the Dashboard
@@ -17,7 +22,7 @@ const MONTHLY_GROWTH = 1.005; // ~6% annual, for back-projecting leading gaps
  */
 export function netWorthFromSnapshot(snap: BalanceSnapshot): number {
   const equity = computeEquityBreakdown(snap.assets).totalEquity;
-  const debt = (snap.debts ?? []).reduce((s, d) => s + Math.max(0, d.balance), 0);
+  const debt = (snap.debts ?? []).reduce((s, d) => s + Math.max(0, finite(d.balance)), 0);
   return Math.round(equity - debt);
 }
 

@@ -40,19 +40,23 @@ const monthIndex = (key: string): number => {
   return y * 12 + (m - 1);
 };
 
+/** A finite number or 0 — guards undefined/NaN out of the money math (CLAUDE.md's
+ *  worst bug class) before it can reach the chart. */
+const finite = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0);
+
 /** The month's mortgage balance. Homeowner mode carries it on `homeowner`; the
  *  three-slice mirror keeps `assets.houseDebt` in lockstep, so it's the fallback. */
 function mortgageBalance(snap: BalanceSnapshot): number {
-  const hb = snap.homeowner?.currentMortgageBalance;
-  if (typeof hb === 'number' && hb > 0) return hb;
-  return Math.max(0, snap.assets?.houseDebt ?? 0);
+  const hb = finite(snap.homeowner?.currentMortgageBalance);
+  if (hb > 0) return hb;
+  return Math.max(0, finite(snap.assets?.houseDebt));
 }
 
 function mortgageRate(snap: BalanceSnapshot): number {
-  return (snap.housingMode === 'homeowner' ? snap.homeowner?.rente : snap.loan?.rente) ?? 0;
+  return finite(snap.housingMode === 'homeowner' ? snap.homeowner?.rente : snap.loan?.rente);
 }
 function mortgageTerm(snap: BalanceSnapshot): number {
-  return (snap.housingMode === 'homeowner' ? snap.homeowner?.nedbetalingstid : snap.loan?.nedbetalingstid) ?? 0;
+  return finite(snap.housingMode === 'homeowner' ? snap.homeowner?.nedbetalingstid : snap.loan?.nedbetalingstid);
 }
 
 /** Plan balance after `k` monthly payments of `payment` at `monthlyRate`. */
