@@ -158,6 +158,48 @@ describe('sanitizePayload', () => {
     expect(snapDebt.name).toBe('Lån');
   });
 
+  it('coerces the v2 snapshot fields (fixedExpenses, assumptions, categoryBudgets)', () => {
+    const out = sanitizePayload(
+      {
+        balanceSnapshots: {
+          '2026-06': {
+            v: 2,
+            source: 'auto',
+            fixedExpenses: [{ id: 'fx1', name: 'Mat', amount: '6 500', type: 'variable' }],
+            assumptions: { savingsTargetPercent: '20', growthReturnRate: 'bad', houseGrowthRate: 3 },
+            categoryBudgets: { groceries: '4 000', transport: 'nope' },
+          },
+        },
+      } as Record<string, unknown>,
+      SCHEMAS,
+    );
+    const snap = (out.balanceSnapshots as Record<string, Record<string, unknown>>)['2026-06'];
+    expect((snap.fixedExpenses as Record<string, unknown>[])[0].amount).toBe(6500);
+    const assumptions = snap.assumptions as Record<string, unknown>;
+    expect(assumptions.savingsTargetPercent).toBe(20);
+    expect(assumptions.growthReturnRate).toBe(0); // garbage → 0 (no downstream merge)
+    expect(assumptions.houseGrowthRate).toBe(3);
+    const budgets = snap.categoryBudgets as Record<string, unknown>;
+    expect(budgets.groceries).toBe(4000);
+    expect(budgets.transport).toBeUndefined(); // unparseable record entry dropped
+    expect(snap.v).toBe(2);
+    expect(snap.source).toBe('auto');
+  });
+
+  it('leaves a v1 snapshot (no new fields) untouched', () => {
+    const v1 = {
+      balanceSnapshots: {
+        '2026-05': {
+          assets: { portfolio: 5000, houseValue: 3000000 },
+          loan: { laanebelop: 2000000, gyldigTil: '2026-12-31' },
+          housingMode: 'first_buyer',
+        },
+      },
+    };
+    const out = sanitizePayload({ ...v1 } as Record<string, unknown>, SCHEMAS);
+    expect(out.balanceSnapshots).toEqual(v1.balanceSnapshots);
+  });
+
   it('leaves unrelated fields and clean data untouched', () => {
     const clean = { income: 50000, lang: 'nb', region: 'no', fixedExpenses: [{ id: 'a', amount: 100 }] };
     expect(sanitizePayload({ ...clean } as Record<string, unknown>, SCHEMAS)).toEqual(clean);

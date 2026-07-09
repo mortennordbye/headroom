@@ -31,6 +31,23 @@ export function sumSavings(a: Assets): number {
 // *benefit* (negative `taxOnGain`, raises net value) — realizing a loss is
 // deductible (e.g. an ASK/aksjekonto loss offsets share-income tax at the same
 // rate). Both are contingent-on-selling, so treating them symmetrically is fair.
+export interface EquityPoint {
+  monthKey: string;
+  breakdown: EquityBreakdown;
+}
+
+/**
+ * Per-recorded-month equity breakdown, sorted oldest → newest. Derived from the
+ * snapshots through the same `computeEquityBreakdown` the live page uses, so the
+ * egenkapital history can never drift from the live figure (HISTORY_PLAN §6.1).
+ * Typed structurally (only `assets` is read) to stay decoupled from BalanceSnapshot.
+ */
+export function equitySeriesFrom(snapshots: Record<string, { assets: Assets }>): EquityPoint[] {
+  return Object.keys(snapshots)
+    .sort()
+    .map(monthKey => ({ monthKey, breakdown: computeEquityBreakdown(snapshots[monthKey].assets) }));
+}
+
 export function computeEquityBreakdown(a: Assets): EquityBreakdown {
   // Old balance snapshots are stored verbatim and may predate a field
   // (cryptoUnrealizedGain, bufferAccount, ...); guard each with ?? 0 so a

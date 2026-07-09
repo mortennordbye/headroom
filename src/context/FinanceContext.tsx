@@ -340,7 +340,6 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   { id: '5', name: 'Trening',         amount: 500,   type: 'subscription' },
   { id: '6', name: 'Mobil',           amount: 400,   type: 'subscription' },
   { id: '7', name: 'Mat',             amount: 5000,  type: 'variable'     },
-  { id: '8', name: 'Sparing',         amount: 5000,  type: 'fixed'        },
 ];
 
 // Data-based default assumptions. These are the researched starting points users
@@ -456,6 +455,10 @@ interface FinanceSettingsContextType {
   setCustomCurrencyRate: (rate: number) => void;
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
+  /** The balance-page time machine's selected month ('yyyy-MM'), or null = live.
+   *  Shared across Assets/Loan/Pension so the chosen month carries between them. */
+  historyMonth: string | null;
+  setHistoryMonth: (month: string | null) => void;
   savingsTargetPercent: number;
   setSavingsTargetPercent: (val: number) => void;
   growthReturnRate: number;
@@ -522,6 +525,10 @@ interface FinanceDataContextType {
   setNetWorthForMonth: (monthKey: string, value: number) => void;
   clearNetWorthForMonth: (monthKey: string) => void;
   balanceSnapshots: Record<string, BalanceSnapshot>;
+  /** Backfill/edit a manual snapshot for a past month (source forced to 'manual'). */
+  setManualSnapshot: (monthKey: string, snapshot: BalanceSnapshot) => void;
+  /** Delete a manual snapshot. Auto snapshots are left alone (they re-capture). */
+  deleteManualSnapshot: (monthKey: string) => void;
   fixedExpenses: FixedExpense[];
   setFixedExpenses: (val: FixedExpense[]) => void;
   debts: Debt[];
@@ -657,6 +664,25 @@ export interface BalanceSnapshot {
    *  debt historization — those months render equity-only, matching what
    *  `netWorthHistory` recorded at the time. */
   debts?: Debt[];
+  /** Snapshot shape version. Absent = v1 (pre-completeness; only the fields
+   *  above). v2 adds the optional fields below. New fields stay optional and
+   *  guarded at read time so a v1 month never NaN-poisons a reader. */
+  v?: number;
+  /** Fixed-expense envelopes/budget composition as of that month, so historical
+   *  budget-vs-actual uses the amounts that were in force then, not today's. */
+  fixedExpenses?: FixedExpense[];
+  /** Forward assumptions as of that month, so history-mode projections use the
+   *  rates that were set then instead of the live ones. */
+  assumptions?: {
+    savingsTargetPercent: number;
+    growthReturnRate: number;
+    houseGrowthRate: number;
+  };
+  /** Per-category budgets as of that month. */
+  categoryBudgets?: Partial<Record<CategoryKey, number>>;
+  /** How the snapshot was recorded: 'auto' (the capture effect) or 'manual'
+   *  (the backfill editor, Phase 2). Absent = 'auto'. */
+  source?: 'auto' | 'manual';
 }
 
 export interface ExportPayload {
@@ -764,6 +790,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const n = new Date();
     return new Date(n.getFullYear(), n.getMonth(), 1);
   });
+
+  // Shared balance-page time-machine month (null = live). View state, not
+  // persisted (like currentMonth). Lifted out of useBalanceHistory so the
+  // selected month carries across Assets/Loan/Pension.
+  const [historyMonth, setHistoryMonth] = useState<string | null>(null);
 
   const [income, setIncome] = useState<number>(55000);
   const [monthlyIncomes, setMonthlyIncomes] = useState<Record<string, number>>({});
@@ -1304,6 +1335,23 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Backfill/edit a manual snapshot for a past month. Forces source:'manual' and
+  // v:2 so it's distinguishable from auto captures and safe to delete later. The
+  // auto-capture effect only ever targets the real current month, so a manual
+  // snapshot for any other month is never overwritten.
+  const setManualSnapshot = useCallback((monthKey: string, snapshot: BalanceSnapshot) => {
+    setBalanceSnapshots(prev => ({ ...prev, [monthKey]: { ...snapshot, source: 'manual', v: 2 } }));
+  }, []);
+
+  const deleteManualSnapshot = useCallback((monthKey: string) => {
+    setBalanceSnapshots(prev => {
+      if (prev[monthKey]?.source !== 'manual') return prev; // never delete auto captures
+      const next = { ...prev };
+      delete next[monthKey];
+      return next;
+    });
+  }, []);
+
   const totalResidual = effectiveIncome - totalFixedExpenses;
   const monthlyBudget = recommendedSpending;
   const daysInMonth = getDaysInMonth(currentMonth);
@@ -1460,7 +1508,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded.current) return;
     const nowKey = format(new Date(), 'yyyy-MM');
-    const snap: BalanceSnapshot = { assets, loan, pension, homeowner, transition, housingMode, debts };
+    const snap: BalanceSnapshot = {
+      assets, loan, pension, homeowner, transition, housingMode, debts,
+      v: 2,
+      fixedExpenses,
+      assumptions: { savingsTargetPercent, growthReturnRate, houseGrowthRate },
+      categoryBudgets,
+      source: 'auto',
+    };
     // Skip the rewrite when the stored snapshot is structurally identical —
     // the slices get fresh identities on every load/adopt, and rewriting the
     // entry anyway would dirty the data on a plain open (3.2).
@@ -1469,7 +1524,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         ? prev
         : { ...prev, [nowKey]: snap }
     ));
-  }, [assets, loan, pension, homeowner, transition, housingMode, debts]);
+  }, [assets, loan, pension, homeowner, transition, housingMode, debts,
+      fixedExpenses, savingsTargetPercent, growthReturnRate, houseGrowthRate, categoryBudgets]);
 
   // The current home's value and mortgage are one real quantity stored in three
   // slices (assets drives net worth; homeowner drives LTV/payment; transition
@@ -1862,6 +1918,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     lang, setLang, t, displayCurrency, setDisplayCurrency, nokToUsd, setNokToUsd,
     customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
     currentMonth, setCurrentMonth,
+    historyMonth, setHistoryMonth,
     savingsTargetPercent, setSavingsTargetPercent,
     growthReturnRate, setGrowthReturnRate, houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
@@ -1877,7 +1934,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded,
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
-    currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
+    currentMonth, historyMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
     cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
@@ -1893,6 +1950,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip,
     netWorthHistory, setNetWorthForMonth, clearNetWorthForMonth, balanceSnapshots,
+    setManualSnapshot, deleteManualSnapshot,
     fixedExpenses, setFixedExpenses,
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
@@ -1917,7 +1975,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
-    clearNetWorthForMonth, balanceSnapshots, fixedExpenses, debts, dailyTransactions,
+    clearNetWorthForMonth, balanceSnapshots, setManualSnapshot, deleteManualSnapshot,
+    fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, accountLabels, setAccountLabel, applyBankSync,
     categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,

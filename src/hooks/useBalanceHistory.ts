@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { format } from 'date-fns';
 import { useFinance, type BalanceSnapshot } from '../context/FinanceContext';
 
@@ -26,7 +26,7 @@ export interface BalanceHistory {
  * land on an empty month and see misleading data.
  */
 export function useBalanceHistory(): BalanceHistory {
-  const { balanceSnapshots } = useFinance();
+  const { balanceSnapshots, historyMonth, setHistoryMonth } = useFinance();
   const nowKey = format(new Date(), 'yyyy-MM');
 
   const monthKeys = useMemo(() => {
@@ -35,10 +35,11 @@ export function useBalanceHistory(): BalanceHistory {
     return Array.from(keys).sort();
   }, [balanceSnapshots, nowKey]);
 
-  const [activeKey, setActiveKey] = useState(nowKey);
-
-  const rawIdx = monthKeys.indexOf(activeKey);
-  const idx = rawIdx === -1 ? monthKeys.length - 1 : rawIdx; // clamp if the key vanished
+  // The active month comes from the shared context slice (null = live), so a
+  // month picked on one balance page carries to the others. Clamp a vanished or
+  // never-recorded key back to live so we never land on an empty month.
+  const rawIdx = historyMonth ? monthKeys.indexOf(historyMonth) : -1;
+  const idx = rawIdx === -1 ? monthKeys.length - 1 : rawIdx;
   const key = monthKeys[idx];
   const isLive = key === nowKey;
 
@@ -50,8 +51,11 @@ export function useBalanceHistory(): BalanceHistory {
     hasHistory: monthKeys.length > 1,
     canPrev: idx > 0,
     canNext: idx < monthKeys.length - 1,
-    goPrev: () => setActiveKey(monthKeys[Math.max(0, idx - 1)]),
-    goNext: () => setActiveKey(monthKeys[Math.min(monthKeys.length - 1, idx + 1)]),
-    goLive: () => setActiveKey(nowKey),
+    goPrev: () => setHistoryMonth(monthKeys[Math.max(0, idx - 1)]),
+    goNext: () => {
+      const nextKey = monthKeys[Math.min(monthKeys.length - 1, idx + 1)];
+      setHistoryMonth(nextKey === nowKey ? null : nextKey);
+    },
+    goLive: () => setHistoryMonth(null),
   };
 }
