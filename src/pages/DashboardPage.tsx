@@ -22,13 +22,14 @@ import {
 import { calcDebtBalanceByYear } from '../lib/debt';
 import GoalsSection from '../components/GoalsSection';
 import InsightBanner from '../components/InsightBanner';
+import HistoryInsights from '../components/HistoryInsights';
 import {
   AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
-import { buildNetWorthSeries } from '../lib/netWorth';
+import { netWorthSeriesFrom } from '../lib/netWorth';
 import { lastNMonthKeys } from '../lib/date';
 import { sumSavings } from '../lib/equity';
 import { sumDiscretionarySpent } from '../lib/spentTotals';
@@ -73,6 +74,7 @@ const DashboardPage: React.FC = () => {
     houseEquity,
     assets,
     netWorthHistory,
+    balanceSnapshots,
     savingsTargetPercent,
     growthReturnRate,
     houseGrowthRate,
@@ -145,9 +147,9 @@ const DashboardPage: React.FC = () => {
   // next to. Estimated points turn real as monthly snapshots accumulate.
   const { netWorthSeries, isEstimated } = useMemo(() => {
     const monthKeys = lastNMonthKeys(new Date(), 12);
-    const series = buildNetWorthSeries(monthKeys, netWorthHistory, netWorth);
+    const series = netWorthSeriesFrom(balanceSnapshots, netWorthHistory, monthKeys, netWorth);
     return { netWorthSeries: series, isEstimated: series.some(p => p.estimated) };
-  }, [netWorthHistory, netWorth]);
+  }, [balanceSnapshots, netWorthHistory, netWorth]);
 
   // Month-over-month change in NET EQUITY (from the series above), for the hero
   // card chip and subtitle. Previously these showed income MoM — an honest but
@@ -304,6 +306,9 @@ const DashboardPage: React.FC = () => {
           {subtitle}
         </p>
       </header>
+
+      {/* History highlights — glanceable payoff from the accumulated snapshots */}
+      <HistoryInsights />
 
       {/* Defaults nudge — market assumptions still untuned. Dismissable for good. */}
       {defaultAssumptions > 0 && !assumptionsNudgeDismissed && (
