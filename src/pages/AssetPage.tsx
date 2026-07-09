@@ -57,6 +57,7 @@ const NetWorthCompositionChart = lazy(() => import('../components/charts/NetWort
 const AllocationDonut = lazy(() => import('../components/charts/AllocationDonut'));
 const LiquidLockedBar = lazy(() => import('../components/charts/LiquidLockedBar'));
 const DebtPayoffChart = lazy(() => import('../components/charts/DebtPayoffChart'));
+const SavingsHistoryChart = lazy(() => import('../components/charts/SavingsHistoryChart'));
 
 const AssetPage: React.FC = () => {
   const {
@@ -519,6 +520,9 @@ const AssetPage: React.FC = () => {
         </div>
         <EquityHistoryTable />
       </div>
+
+      {/* Per-account savings history (renders only when ≥2 months recorded) */}
+      <Suspense fallback={null}><SavingsHistoryChart /></Suspense>
 
       {/* Growth Projection */}
       <div data-tour="growth-projection" className={`${card} p-5 md:p-7 space-y-5`}>

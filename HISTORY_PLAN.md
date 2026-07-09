@@ -336,7 +336,7 @@ month is shown; edit attempts impossible; return-to-live restores editing.
 
 ---
 
-## 6. Phase 4 — Derived history surfaces (the visible payoff) ✅ 6.1–6.3 SHIPPED, 6.4/6.5 deferred
+## 6. Phase 4 — Derived history surfaces (the visible payoff) ✅ ALL SHIPPED (6.1–6.5)
 
 All computed from snapshots + timelines through shared lib functions; nothing stored twice.
 
@@ -345,9 +345,11 @@ All computed from snapshots + timelines through shared lib functions; nothing st
 > LtvChart now prepends actual LTV per recorded month (solid) with the projection continuing
 > from the latest actual (dashed); house-value line skipped (dual-axis clutter). 6.1
 > `equitySeriesFrom` (`equity.ts` + tests) + `EquityHistoryTable` on AssetPage (per-month
-> buckets + MoM total delta). Demo's 6 snapshot months feed all three. **Deferred to BACKLOG:**
-> 6.4 non-mortgage debt payoff-vs-plan and 6.5 savings/pension trend charts — same pattern as
-> what shipped, additional chart surfaces.
+> buckets + MoM total delta). 6.4 `debtPaydownVsPlan` (`debt.ts` + tests) +
+> `DebtPaydownVsPlanChart` in DebtSection (actual debt vs the minimums-only payoff plan). 6.5
+> `savingsSeriesFrom`/`pensionSeriesFrom` (`snapshotSeries.ts` + tests) + `SavingsHistoryChart`
+> (per-account, AssetPage) and `PensionHistoryChart` (OTP/IPS, PensionPage). Demo's 6 snapshot
+> months feed all of them; all browser-verified, 0 console errors, finite-guarded.
 
 **6.1 Egenkapital** ✅: `NetWorthCompositionChart` already charts composition over time. Add
 on AssetPage: per-bucket month-over-month and 12-month deltas (stocks/house/crypto/cash),
@@ -375,10 +377,10 @@ LoanPage:
   `src/lib/paydown.ts`, unit-tested (ahead, behind, exactly-on, single-snapshot, and
   missing-months cases).
 
-**6.4 Non-mortgage debt payoff**: same pattern against `planPayoff`: per-debt actual
+**6.4 Non-mortgage debt payoff** ✅: same pattern against `planPayoff`: per-debt actual
 balance from `snapshot.debts` vs the plan curve, surfaced in DebtSection.
 
-**6.5 Savings and pension trends**: per-account savings history (snapshot
+**6.5 Savings and pension trends** ✅: per-account savings history (snapshot
 `savingsAccounts` rows match by `id`) as a small multi-line chart on AssetPage;
 OTP/IPS balance history on PensionPage next to the projection so "projected vs actually
 grew" is visible.

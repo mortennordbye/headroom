@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, lazy, Suspense } from 'react';
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -20,6 +20,8 @@ import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
+
+const PensionHistoryChart = lazy(() => import('../components/charts/PensionHistoryChart'));
 
 const PensionPage: React.FC = () => {
   const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct } = useFinance();
@@ -167,6 +169,9 @@ const PensionPage: React.FC = () => {
           </>
         )}
       </Card>
+
+      {/* Actual OTP/IPS balance history (renders only when ≥2 months recorded) */}
+      <Suspense fallback={null}><PensionHistoryChart /></Suspense>
 
       {/* Settings — OTP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
