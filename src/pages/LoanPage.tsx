@@ -37,7 +37,6 @@ import {
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
-import BalanceHistoryBar from '../components/BalanceHistoryBar';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
@@ -61,6 +60,7 @@ const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const LtvChart = lazy(() => import('../components/charts/LtvChart'));
+const PaydownVsPlanChart = lazy(() => import('../components/charts/PaydownVsPlanChart'));
 
 const LoanPage: React.FC = () => {
   const {
@@ -272,7 +272,6 @@ const LoanPage: React.FC = () => {
 
   return (
     <>
-    <BalanceHistoryBar hist={hist} />
     <div
       className={`space-y-6 md:space-y-7 pb-8 ${hist.isLive ? '' : 'pointer-events-none select-none'}`}
       style={{ opacity: hist.isLive ? 1 : 0.92 }}
@@ -605,6 +604,9 @@ const LoanPage: React.FC = () => {
               <Suspense fallback={<div className="h-full w-full" />}><LtvChart /></Suspense>
             </div>
           </div>
+
+          {/* Nedbetaling: plan vs. faktisk (renders only when ≥2 months recorded) */}
+          <Suspense fallback={null}><PaydownVsPlanChart /></Suspense>
         </>
       )}
 

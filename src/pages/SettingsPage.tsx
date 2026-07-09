@@ -25,6 +25,7 @@ import {
   Check,
   Minus,
   ArrowRight,
+  History,
 } from 'lucide-react';
 import {
   useFinance,
@@ -45,6 +46,7 @@ import { provenanceOf } from '../lib/provenance';
 import { parseLocaleNumber } from '../lib/validators';
 import { BankSyncCard } from '../components/BankSyncCard';
 import { CategoryRules } from '../components/CategoryRules';
+import HistoryManagerModal from '../components/HistoryManagerModal';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
 
@@ -117,6 +119,7 @@ export default function SettingsPage() {
 
   // Reset state
   const [resetState, setResetState] = useState<'idle' | 'confirm' | 'done'>('idle');
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const handleReset = () => {
     resetAll();
@@ -598,7 +601,12 @@ export default function SettingsPage() {
                 {t.settings.dataDesc}
               </p>
             </div>
-            <DeltaChip tone="accent">JSON</DeltaChip>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" leadingIcon={<History />} onClick={() => setHistoryOpen(true)}>
+                {t.historyManager.open}
+              </Button>
+              <DeltaChip tone="accent">JSON</DeltaChip>
+            </div>
           </div>
 
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -828,6 +836,8 @@ export default function SettingsPage() {
           </div>
         </Card>
       </div>
+
+      {historyOpen && <HistoryManagerModal onClose={() => setHistoryOpen(false)} />}
     </div>
   );
 }

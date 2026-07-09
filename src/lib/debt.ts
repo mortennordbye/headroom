@@ -2,10 +2,13 @@
 // (avalanche / snowball with a shared extra-payment budget). Pure functions so
 // they can be unit-tested and reused by the UI without React.
 
-import type { Debt, DebtType } from '../context/FinanceContext';
+import type { Debt, DebtType, BalanceSnapshot } from '../context/FinanceContext';
 
 const MAX_MONTHS = 600; // 50 years — anything beyond this counts as "never pays off"
 const EPS = 0.005;      // treat sub-øre balances as zero
+
+/** Finite-or-0: keeps a hand-edited undefined/NaN balance out of the money math. */
+const finite = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0);
 
 export interface AmortizationResult {
   months: number;         // months to reach zero (0 if already clear)
@@ -159,6 +162,69 @@ export function calcDebtBalanceByYear(debts: Debt[], years: number): number[] {
     out.push(Math.round(amortizing + revolving));
   }
   return out;
+}
+
+// ── Non-mortgage debt payoff: plan vs actual (HISTORY_PLAN §6.4) ─────────────
+// Mirrors the mortgage `paydownVsPlan`, against `planPayoff` instead of an
+// amortization schedule. Plan = the minimums-only rollover from the earliest
+// recorded debts; actual = the recorded total each month. All from snapshots.
+
+export interface DebtPaydownPoint {
+  monthKey: string;
+  /** Recorded non-revolving debt total that month. */
+  actual: number;
+  /** Where the minimums-only payoff plan says the total should be. */
+  plan: number;
+}
+
+export interface DebtPaydownVsPlan {
+  points: DebtPaydownPoint[];
+  anchorMonth: string | null;
+  /** plan − actual at the latest recorded month. >0 = ahead (less debt than plan). */
+  aheadBy: number;
+  /** Anchor total − latest actual: how much debt was actually cleared to date. */
+  principalPaid: number;
+}
+
+const monthIndex = (key: string): number => {
+  const [y, m] = key.split('-').map(Number);
+  return y * 12 + (m - 1);
+};
+
+/** That month's non-revolving debt total (revolving cards never amortize, so they
+ *  are excluded — matching `planPayoff`). Finite-guarded. */
+function activeDebtTotal(debts: Debt[] | undefined): number {
+  return (debts ?? []).reduce((s, d) => (d.revolving ? s : s + Math.max(0, finite(d.balance))), 0);
+}
+
+export function debtPaydownVsPlan(
+  snapshots: Record<string, BalanceSnapshot>,
+  strategy: PayoffStrategy = 'avalanche',
+): DebtPaydownVsPlan {
+  const empty: DebtPaydownVsPlan = { points: [], anchorMonth: null, aheadBy: 0, principalPaid: 0 };
+  const months = Object.keys(snapshots).sort();
+  const anchorMonth = months.find(m => activeDebtTotal(snapshots[m].debts) > EPS) ?? null;
+  if (!anchorMonth) return empty;
+
+  const anchorIdx = monthIndex(anchorMonth);
+  const series = planPayoff(snapshots[anchorMonth].debts ?? [], 0, strategy).balanceSeries;
+  const planAt = (k: number) => series[Math.min(Math.max(0, k), series.length - 1)]?.total ?? 0;
+
+  const points: DebtPaydownPoint[] = months
+    .filter(m => monthIndex(m) >= anchorIdx)
+    .map(m => ({
+      monthKey: m,
+      actual: activeDebtTotal(snapshots[m].debts),
+      plan: Math.round(planAt(monthIndex(m) - anchorIdx)),
+    }));
+
+  const latest = points[points.length - 1];
+  return {
+    points,
+    anchorMonth,
+    aheadBy: latest.plan - latest.actual,
+    principalPaid: activeDebtTotal(snapshots[anchorMonth].debts) - latest.actual,
+  };
 }
 
 /** Human-friendly "X år Y mnd" / "X yr Y mo" for a month count. */

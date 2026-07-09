@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths, sumDebtByType, calcDebtBalanceByYear } from './debt';
-import type { Debt } from '../context/FinanceContext';
+import { amortize, planPayoff, formatMonths, sumDebtByType, calcDebtBalanceByYear, debtPaydownVsPlan } from './debt';
+import type { Debt, BalanceSnapshot } from '../context/FinanceContext';
 
 const debt = (over: Partial<Debt> = {}): Debt => ({
   id: 'd1',
@@ -157,5 +157,49 @@ describe('sumDebtByType', () => {
     expect(sumDebtByType(debts, 'consumer')).toBe(80_000);
     expect(sumDebtByType(debts, 'credit_card')).toBe(0);
     expect(sumDebtByType([], 'student')).toBe(0);
+  });
+});
+
+describe('debtPaydownVsPlan', () => {
+  const snap = (debts: Debt[]): BalanceSnapshot => ({ debts } as unknown as BalanceSnapshot);
+
+  it('returns empty when no month has non-revolving debt', () => {
+    const r = debtPaydownVsPlan({ '2026-01': snap([debt({ balance: 0 })]) });
+    expect(r.anchorMonth).toBeNull();
+    expect(r.points).toEqual([]);
+  });
+
+  it('anchors at the first month with debt and tracks plan vs actual', () => {
+    const r = debtPaydownVsPlan({
+      '2026-01': snap([debt({ balance: 100_000 })]),
+      '2026-02': snap([debt({ balance: 96_500 })]),
+    });
+    expect(r.anchorMonth).toBe('2026-01');
+    expect(r.points).toHaveLength(2);
+    expect(r.points[0].plan).toBe(100_000); // k=0 → anchor total
+    expect(r.points[0].actual).toBe(100_000);
+    expect(r.principalPaid).toBe(100_000 - 96_500);
+  });
+
+  it('reports ahead when the actual balance is below the minimums-only plan', () => {
+    const planned = debtPaydownVsPlan({
+      '2026-01': snap([debt({ balance: 100_000 })]),
+      '2026-02': snap([debt({ balance: 100_000 })]),
+    });
+    const planMonth2 = planned.points[1].plan;
+    const r = debtPaydownVsPlan({
+      '2026-01': snap([debt({ balance: 100_000 })]),
+      '2026-02': snap([debt({ balance: planMonth2 - 4_000 })]),
+    });
+    expect(r.aheadBy).toBeCloseTo(4_000, 0);
+  });
+
+  it('excludes revolving cards and guards a NaN balance', () => {
+    const r = debtPaydownVsPlan({
+      '2026-01': snap([debt({ id: 'a', balance: 50_000 }), debt({ id: 'r', balance: 20_000, revolving: true })]),
+      '2026-02': snap([debt({ id: 'a', balance: NaN }), debt({ id: 'r', balance: 20_000, revolving: true })]),
+    });
+    expect(r.points[0].actual).toBe(50_000); // revolving excluded
+    expect(r.points.every(p => Number.isFinite(p.actual) && Number.isFinite(p.plan))).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeEquityBreakdown, sumSavings } from './equity';
+import { computeEquityBreakdown, sumSavings, equitySeriesFrom } from './equity';
 import type { Assets } from '../context/FinanceContext';
 
 const assets = (over: Partial<Assets> = {}): Assets => ({
@@ -81,5 +81,21 @@ describe('computeEquityBreakdown', () => {
     const flat = computeEquityBreakdown(assets({ portfolio: 100_000 }));
     const withLoss = computeEquityBreakdown(assets({ portfolio: 100_000, unrealizedGain: -10_000, taxRate: 37.84 }));
     expect(withLoss.totalEquity).toBeCloseTo(flat.totalEquity + 3784, 0);
+  });
+});
+
+describe('equitySeriesFrom', () => {
+  it('yields one breakdown per month, sorted oldest → newest', () => {
+    const series = equitySeriesFrom({
+      '2026-03': { assets: assets({ savings: 300 }) },
+      '2026-01': { assets: assets({ savings: 100 }) },
+      '2026-02': { assets: assets({ savings: 200 }) },
+    });
+    expect(series.map(p => p.monthKey)).toEqual(['2026-01', '2026-02', '2026-03']);
+    expect(series.map(p => p.breakdown.totalEquity)).toEqual([100, 200, 300]);
+  });
+
+  it('is empty for no snapshots', () => {
+    expect(equitySeriesFrom({})).toEqual([]);
   });
 });

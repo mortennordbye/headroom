@@ -89,6 +89,11 @@ const canonicalSnapshot: BalanceSnapshot = {
   loan: canonicalLoan, pension: canonicalPension, homeowner: canonicalHomeowner,
   transition: canonicalTransition, housingMode: 'homeowner',
   debts: [{ id: 'snap-debt-1', name: 'D', type: 'consumer', balance: 5000, rate: 10, minPayment: 500 }],
+  v: 2,
+  source: 'auto',
+  fixedExpenses: [{ id: 'snap-fx-1', name: 'Huslån', amount: 16500, type: 'fixed' }],
+  assumptions: { savingsTargetPercent: 20, growthReturnRate: 7, houseGrowthRate: 3 },
+  categoryBudgets: { groceries: 4000 },
 };
 const canonicalTx: DailyTransaction[] = [
   { id: 'tx-1', date: '2026-01-05', description: 'A', amount: 100, category: 'groceries', categorySource: 'auto' },
@@ -278,6 +283,20 @@ describe('payloadRegistry — special-case reads preserved', () => {
     expect(roundTrip({ region: 'generic' }, false).region).toBe('generic');
     // an invalid region is ignored (field never set)
     expect('region' in roundTrip({ region: 'xx' as 'no' }, false)).toBe(false);
+  });
+
+  // HISTORY_PLAN §7 downgrade safety: snapshots are stored/re-applied as whole
+  // objects (never field-projected), so a field a *newer* client added survives a
+  // round-trip through an older reader. Simulate that with an unknown future field.
+  it('passes unknown/future snapshot fields through verbatim (downgrade safety)', () => {
+    const future = { ...canonicalSnapshot, v: 99, futureField: { nested: 1 } } as unknown as BalanceSnapshot;
+    const state = roundTrip({ balanceSnapshots: { '2026-01': future } }, false);
+    const out = (state.balanceSnapshots as Record<string, Record<string, unknown>>)['2026-01'];
+    expect(out.v).toBe(99);
+    expect(out.futureField).toEqual({ nested: 1 });
+    // v2 fields survive too.
+    expect(out.assumptions).toEqual(canonicalSnapshot.assumptions);
+    expect(out.fixedExpenses).toEqual(canonicalSnapshot.fixedExpenses);
   });
 });
 

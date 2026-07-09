@@ -8,6 +8,7 @@ import ChartTooltip from './ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { amortize, planPayoff, formatMonths, DEBT_TYPES, type PayoffStrategy } from '../lib/debt';
 import { parseLocaleNumber } from '../lib/validators';
+import DebtPaydownVsPlanChart from './charts/DebtPaydownVsPlanChart';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -194,6 +195,9 @@ export default function DebtSection() {
                 </ResponsiveContainer>
               </div>
             )}
+
+            {/* Plan-vs-actual against recorded snapshots (renders only when ≥2 months) */}
+            <DebtPaydownVsPlanChart />
           </div>
         </>
       )}

@@ -493,13 +493,6 @@ const BudgetPage: React.FC = () => {
               → {t.today}
             </button>
           )}
-          <button
-            onClick={() => setPayslipOpen(true)}
-            className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-[4px] transition-colors"
-            style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
-          >
-            <FileUp size={12} /> {t.salary.importPayslip.button}
-          </button>
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           {t.budgetPage.heroTitlePre}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.budgetPage.heroTitleEm}</em>{t.budgetPage.heroTitlePost}
@@ -576,6 +569,13 @@ const BudgetPage: React.FC = () => {
                   </span>
                 </>
               )}
+              <button
+                onClick={() => setPayslipOpen(true)}
+                className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded transition-colors"
+                style={{ color: 'var(--accent)', background: 'var(--accent-bg)' }}
+              >
+                <FileUp size={11} /> {t.salary.importPayslip.button}
+              </button>
             </div>
           )}
           editable
