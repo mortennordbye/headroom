@@ -5,7 +5,6 @@ import { Plus, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { useFinance, type BalanceSnapshot } from '../context/FinanceContext';
 import { ModalShell } from './ui/ModalShell';
 import { NumberRow } from './ui/NumberRow';
-import { ProvenanceBadge } from './ui/ProvenanceBadge';
 import { netWorthFromSnapshot } from '../lib/netWorth';
 import {
   nearestSnapshot,
@@ -16,6 +15,31 @@ import {
 
 interface HistoryManagerModalProps {
   onClose: () => void;
+}
+
+/** Row status pill: distinguishes the live month, an auto-recorded snapshot, a
+ *  manual (entered-by-you) snapshot, and a missing month — each with a distinct
+ *  tone. Deliberately not `ProvenanceBadge`: "recorded" is real data, not a
+ *  "default you haven't changed", and live must read differently from manual. */
+function StatePill({ state, hm, liveLabel }: {
+  state: 'live' | 'auto' | 'manual' | 'missing';
+  hm: { recorded: string; entered: string; missing: string };
+  liveLabel: string;
+}) {
+  const tone = {
+    live: { label: liveLabel, bg: 'var(--violet-bg)', color: 'var(--violet)' },
+    auto: { label: hm.recorded, bg: 'var(--accent-bg)', color: 'var(--accent)' },
+    manual: { label: hm.entered, bg: 'var(--positive-bg)', color: 'var(--positive)' },
+    missing: { label: hm.missing, bg: 'var(--surface-5)', color: 'var(--text-3)' },
+  }[state];
+  return (
+    <span
+      className="inline-flex items-center rounded-[4px] font-semibold h-[18px] px-[7px] text-[10px] shrink-0"
+      style={{ background: tone.bg, color: tone.color }}
+    >
+      {tone.label}
+    </span>
+  );
 }
 
 /** The initial balances for the editor: the existing snapshot, else the nearest
@@ -117,9 +141,7 @@ export default function HistoryManagerModal({ onClose }: HistoryManagerModalProp
                 <span className="text-[12px] font-medium capitalize" style={{ color: 'var(--text-2)' }}>{monthLabel(row.monthKey)}</span>
               </div>
               <div className="flex-1 min-w-0 flex items-center gap-2">
-                {isCurrent
-                  ? <ProvenanceBadge kind="custom" className="!bg-[var(--violet-bg)] !text-[var(--violet)]" />
-                  : <ProvenanceBadge kind={row.state === 'manual' ? 'custom' : row.state === 'auto' ? 'default' : 'estimate'} />}
+                <StatePill state={isCurrent ? 'live' : row.state} hm={hm} liveLabel={t.netWorthEditor.live} />
                 <span className="text-[12px] font-mono" style={{ color: ref === null ? 'var(--text-3)' : 'var(--text-1)' }}>
                   {ref === null ? '—' : formatCurrency(ref)}
                 </span>
