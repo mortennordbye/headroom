@@ -43,6 +43,9 @@ export interface OnboardingTopic {
   route: string;
   /** `data-tour` value of the section to highlight, or null for no highlight. */
   target: string | null;
+  /** When true, the shell blocks Next until the step is satisfied (the merged
+   *  flow forces the core inputs; everything else is skippable). */
+  required?: boolean;
   fields: OnboardingField[];
 }
 
@@ -72,10 +75,24 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     kind: 'fill',
     route: '/budget',
     target: null,
+    required: true,
     fields: [
       { key: 'lang', writer: 'lang', labelKey: 'language', kind: 'select', options: LANG_OPTIONS },
       { key: 'region', writer: 'region', labelKey: 'region', kind: 'select', options: REGION_OPTIONS },
     ],
+  },
+  {
+    // Required: the current job + yearly gross salary. A "learn"-shaped topic
+    // (custom form in JobSalaryAdder) placed before income so the income step
+    // shows the net figure derived from this salary. Gated as required in the
+    // shell — Next stays disabled until a current job with a salary exists.
+    id: 'job',
+    group: 'essentials',
+    kind: 'learn',
+    route: '/salary',
+    target: 'salary-overview',
+    required: true,
+    fields: [],
   },
   {
     id: 'income',
@@ -83,15 +100,19 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     kind: 'fill',
     route: '/budget',
     target: 'income',
+    required: true,
     fields: [{ key: 'income', writer: 'income', labelKey: 'income', kind: 'number' }],
   },
   {
+    // The savings target renders a custom control (percent OR kr) in the shell,
+    // so it carries no declarative field — hence "learn"-shaped with no fields.
     id: 'savingsTarget',
     group: 'essentials',
-    kind: 'fill',
+    kind: 'learn',
     route: '/budget',
     target: 'budget-plan',
-    fields: [{ key: 'savingsTarget', writer: 'savingsTarget', labelKey: 'savingsTarget', kind: 'percent' }],
+    required: true,
+    fields: [],
   },
   {
     id: 'fixedExpenses',

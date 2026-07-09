@@ -340,7 +340,6 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   { id: '5', name: 'Trening',         amount: 500,   type: 'subscription' },
   { id: '6', name: 'Mobil',           amount: 400,   type: 'subscription' },
   { id: '7', name: 'Mat',             amount: 5000,  type: 'variable'     },
-  { id: '8', name: 'Sparing',         amount: 5000,  type: 'fixed'        },
 ];
 
 // Data-based default assumptions. These are the researched starting points users
