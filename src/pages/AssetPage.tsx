@@ -28,6 +28,7 @@ import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
 import EditModal, { type ModalField } from '../components/EditModal';
 import { EquityCompositionBar } from '../components/EquityCompositionBar';
+import EquityHistoryTable from '../components/EquityHistoryTable';
 import DebtSection from '../components/DebtSection';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
@@ -516,6 +517,7 @@ const AssetPage: React.FC = () => {
         <div className="h-[260px] md:h-[300px] w-full">
           <Suspense fallback={<div className="h-full w-full" />}><NetWorthCompositionChart /></Suspense>
         </div>
+        <EquityHistoryTable />
       </div>
 
       {/* Growth Projection */}

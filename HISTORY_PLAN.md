@@ -336,23 +336,32 @@ month is shown; edit attempts impossible; return-to-live restores editing.
 
 ---
 
-## 6. Phase 4 — Derived history surfaces (the visible payoff)
+## 6. Phase 4 — Derived history surfaces (the visible payoff) ✅ 6.1–6.3 SHIPPED, 6.4/6.5 deferred
 
 All computed from snapshots + timelines through shared lib functions; nothing stored twice.
 
-**6.1 Egenkapital**: `NetWorthCompositionChart` already charts composition over time. Add
+> **Shipped:** 6.3 nedbetaling plan-vs-actual (`src/lib/paydown.ts` + tests;
+> `PaydownVsPlanChart` on LoanPage, ahead/behind readout + principal/interest paid). 6.2
+> LtvChart now prepends actual LTV per recorded month (solid) with the projection continuing
+> from the latest actual (dashed); house-value line skipped (dual-axis clutter). 6.1
+> `equitySeriesFrom` (`equity.ts` + tests) + `EquityHistoryTable` on AssetPage (per-month
+> buckets + MoM total delta). Demo's 6 snapshot months feed all three. **Deferred to BACKLOG:**
+> 6.4 non-mortgage debt payoff-vs-plan and 6.5 savings/pension trend charts — same pattern as
+> what shipped, additional chart surfaces.
+
+**6.1 Egenkapital** ✅: `NetWorthCompositionChart` already charts composition over time. Add
 on AssetPage: per-bucket month-over-month and 12-month deltas (stocks/house/crypto/cash),
 and a small history table of `computeEquityBreakdown` per recorded month. Lib:
 `equitySeriesFrom(snapshots)` in `src/lib/equity.ts`, tested.
 
-**6.2 Bolig**: extend `LtvChart` to prepend **actual** history: for each recorded month,
+**6.2 Bolig** ✅ (house-value line skipped): extend `LtvChart` to prepend **actual** history: for each recorded month,
 LTV = snapshot `houseDebt / houseValue`; the projection continues from the latest actual
 point instead of always starting at "now". Solid line for actuals, dashed for projection
 (the app's existing estimated-vs-actual visual language). Add a house-value history line
 (snapshot `houseValue` over months) so appreciation assumptions can be sanity-checked
 against reality.
 
-**6.3 Nedbetaling (mortgage, the headline feature)**: a new "plan vs actual" module on
+**6.3 Nedbetaling (mortgage, the headline feature)** ✅: a new "plan vs actual" module on
 LoanPage:
 
 - Plan: `calcAmortizationSchedule` anchored at the *earliest recorded* mortgage balance

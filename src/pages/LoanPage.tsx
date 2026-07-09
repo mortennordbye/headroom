@@ -61,6 +61,7 @@ const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const LtvChart = lazy(() => import('../components/charts/LtvChart'));
+const PaydownVsPlanChart = lazy(() => import('../components/charts/PaydownVsPlanChart'));
 
 const LoanPage: React.FC = () => {
   const {
@@ -605,6 +606,9 @@ const LoanPage: React.FC = () => {
               <Suspense fallback={<div className="h-full w-full" />}><LtvChart /></Suspense>
             </div>
           </div>
+
+          {/* Nedbetaling: plan vs. faktisk (renders only when ≥2 months recorded) */}
+          <Suspense fallback={null}><PaydownVsPlanChart /></Suspense>
         </>
       )}
 
