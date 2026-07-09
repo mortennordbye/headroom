@@ -38,9 +38,13 @@ const PensionPage: React.FC = () => {
   // (not inside the memo) so the value recomputes if the month rolls over during
   // a long-lived session.
   const today = currentMonthKey();
+  // In history mode, resolve pensionable income at the *viewed* month from the
+  // salary/job timeline (salaries are timelined, so this is the correct historical
+  // read), not today's salary — closes the live-salary leak (HISTORY_PLAN §5.3c).
+  const asOfMonth = hist.isLive ? today : hist.activeKey;
   const pensionableIncome = useMemo(
-    () => calcActiveGrossAnnual(salaries, jobs, today),
-    [salaries, jobs, today],
+    () => calcActiveGrossAnnual(salaries, jobs, asOfMonth),
+    [salaries, jobs, asOfMonth],
   );
 
   const otpAnnualContribution = pensionableIncome * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;

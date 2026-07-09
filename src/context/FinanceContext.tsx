@@ -455,6 +455,10 @@ interface FinanceSettingsContextType {
   setCustomCurrencyRate: (rate: number) => void;
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
+  /** The balance-page time machine's selected month ('yyyy-MM'), or null = live.
+   *  Shared across Assets/Loan/Pension so the chosen month carries between them. */
+  historyMonth: string | null;
+  setHistoryMonth: (month: string | null) => void;
   savingsTargetPercent: number;
   setSavingsTargetPercent: (val: number) => void;
   growthReturnRate: number;
@@ -786,6 +790,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const n = new Date();
     return new Date(n.getFullYear(), n.getMonth(), 1);
   });
+
+  // Shared balance-page time-machine month (null = live). View state, not
+  // persisted (like currentMonth). Lifted out of useBalanceHistory so the
+  // selected month carries across Assets/Loan/Pension.
+  const [historyMonth, setHistoryMonth] = useState<string | null>(null);
 
   const [income, setIncome] = useState<number>(55000);
   const [monthlyIncomes, setMonthlyIncomes] = useState<Record<string, number>>({});
@@ -1909,6 +1918,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     lang, setLang, t, displayCurrency, setDisplayCurrency, nokToUsd, setNokToUsd,
     customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
     currentMonth, setCurrentMonth,
+    historyMonth, setHistoryMonth,
     savingsTargetPercent, setSavingsTargetPercent,
     growthReturnRate, setGrowthReturnRate, houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
@@ -1924,7 +1934,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded,
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
-    currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
+    currentMonth, historyMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
     cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,

@@ -92,6 +92,19 @@ const AssetPage: React.FC = () => {
   // Snapshots from before debt historization have no `debts`; those months render
   // equity-only, matching what netWorthHistory recorded at the time.
   const debts = hist.isLive ? liveDebts : hist.snapshot?.debts ?? NO_DEBTS;
+  // Forward assumptions in history mode come from the month's snapshot (v2), so a
+  // past-month projection reflects what was assumed then, not today's rates. v1
+  // snapshots (no `assumptions`) fall back to live — the documented `?? live`
+  // guard; cash/crypto rates are global preferences and stay live either way.
+  const snapAssumptions = hist.snapshot?.assumptions;
+  const projGrowthReturn = snapAssumptions?.growthReturnRate ?? growthReturnRate;
+  const projHouseGrowth = snapAssumptions?.houseGrowthRate ?? houseGrowthRate;
+  const projMortgageRate = hist.snapshot
+    ? (hist.snapshot.housingMode === 'homeowner' ? hist.snapshot.homeowner?.rente : hist.snapshot.loan?.rente) ?? mortgageRate
+    : mortgageRate;
+  const projMortgageTerm = hist.snapshot
+    ? (hist.snapshot.housingMode === 'homeowner' ? hist.snapshot.homeowner?.nedbetalingstid : hist.snapshot.loan?.nedbetalingstid) ?? mortgageTermYears
+    : mortgageTermYears;
   const totalDebt = debts.reduce((s, d) => s + Math.max(0, d.balance), 0);
   const studentDebt = sumDebtByType(debts, 'student');
   const { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity } = useMemo(
@@ -158,20 +171,20 @@ const AssetPage: React.FC = () => {
     const annualSavings = Math.max(0, recommendedInvestment * 12);
   const cashStart = sumSavings(assets) + assets.bsu + assets.bufferAccount;
   const houseByYear = useMemo(
-    () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15),
-    [assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears]
+    () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm, 15),
+    [assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm]
   );
   const debtByYear = useMemo(() => calcDebtBalanceByYear(debts, 15), [debts]);
   const projectionData = useMemo(
     () => calcNetWorthProjectionByBucket(
       { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity },
       annualSavings,
-      { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate },
+      { stocks: projGrowthReturn, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: projHouseGrowth },
       15,
       houseByYear,
       debtByYear,
     ),
-    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, houseByYear, debtByYear]
+    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, projGrowthReturn, cryptoGrowthRate, cashGrowthRate, projHouseGrowth, houseByYear, debtByYear]
   );
 
   const editRate = (label: string, current: number, onCommit: (v: number) => void) => {
@@ -194,8 +207,8 @@ const AssetPage: React.FC = () => {
   const lockedWealth = houseEquity + pensionTotal;
   const projectionStartYear = new Date().getFullYear();
   const mortgageBalances = useMemo(
-    () => calcMortgageBalanceByYear(assets.houseDebt, mortgageRate, mortgageTermYears, 15),
-    [assets.houseDebt, mortgageRate, mortgageTermYears],
+    () => calcMortgageBalanceByYear(assets.houseDebt, projMortgageRate, projMortgageTerm, 15),
+    [assets.houseDebt, projMortgageRate, projMortgageTerm],
   );
   return (
     <>
