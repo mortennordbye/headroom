@@ -390,6 +390,25 @@ produce NaN LTV).
 
 ---
 
+## 7b. Browser verification (2026-07-09) ✅
+
+Full end-to-end browser pass against a throwaway Docker instance (isolated volume,
+demo data), 0 console errors throughout:
+- **History manager**: month grid, add/edit/save/delete, "add earlier month" backfill,
+  live net-worth preview recompute, advanced-fold assumptions. Row badges corrected to
+  Live / Recorded / Entered-by-you / Not-recorded (was reusing ProvenanceBadge, which read
+  "Default" for real recorded months — fixed in a follow-up commit).
+- **Nedbetaling plan-vs-actual**: readout (ahead/behind, principal, interest) + chart; math
+  cross-checked against the demo's 8 000/mo paydown vs the plan's ~4 660/mo principal.
+- **Egenkapital table**: buckets sum to total, MoM deltas; equity (1 744 239) vs History
+  manager net worth (1 362 739) differ by exactly the demo non-mortgage debt (381 500) ✓.
+- **LtvChart**: actual (solid) + projected (dashed) series both render.
+- **Time machine**: month picked on Assets carries to Loan, both read-only ✓.
+- **Dashboard hero** 1 362 739 kr == snapshot-derived net worth (precedence selector holds).
+- **Write path**: POST→GET round-trip of a v2 manual snapshot persists the house three-slice
+  mirror, assumptions and fixed expenses (Docker volume; host-sandbox SQLite block was the
+  earlier false alarm).
+
 ## 7. Phase 5 — Data safety, scale, compat ✅ VERIFIED
 
 > **Verified:** sanitize depth unchanged after phases 2-4 (they add no persisted snapshot
