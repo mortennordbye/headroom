@@ -1,4 +1,14 @@
+<div align="center">
+
 # Headroom
+
+### Budgets · Assets · Investments · Loan modeling
+
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vite.dev/) [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/) [![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+
+[![CI](https://github.com/mortennordbye/headroom/actions/workflows/build.yml/badge.svg)](https://github.com/mortennordbye/headroom/actions/workflows/build.yml) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mortennordbye/headroom/badge)](https://scorecard.dev/viewer/?uri=github.com/mortennordbye/headroom)
+
+[![License](https://img.shields.io/github/license/mortennordbye/headroom?style=flat-square)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/commits/main) [![Issues](https://img.shields.io/github/issues/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/issues) [![Stars](https://img.shields.io/github/stars/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/stargazers)
 
 A self-hosted personal finance tracker. Track monthly budgets, manage assets and investments, model housing loans, and get smart spending recommendations. All data is stored server-side in a SQLite database via Docker — zero browser storage. Norwegian is natively supported.
 
@@ -7,6 +17,8 @@ A self-hosted personal finance tracker. Track monthly budgets, manage assets and
 | ![Dashboard](screenshots/dashboard.png) | ![Budget](screenshots/budget.png) |
 
 ![Net worth](screenshots/assets.png)
+
+</div>
 
 ## Features
 
@@ -184,3 +196,55 @@ The volume is the only live copy, so keep a backup — two easy options:
 | Database | SQLite (better-sqlite3) |
 | Serving | Express (static files) |
 | Containers | Docker, Docker Compose |
+
+## Repository structure
+
+> **Note:** A simplified view of the main folders. Generated/ignored directories (`node_modules/`, `dist/`, `data/`, `backups/`) are omitted.
+
+```
+headroom
+├── server/              # Express API + SQLite persistence
+│   ├── index.js         # API, static SPA serving, host allowlist
+│   ├── bank.js          # Bank-sync integration
+│   ├── ssb.js           # SSB inflation fetch
+│   └── seed.js          # Demo-data seeding
+├── src/
+│   ├── context/         # FinanceContext — single source of app state
+│   ├── lib/             # Pure calc/domain logic + Vitest tests (tax, loan, debt)
+│   ├── pages/           # One component per route (Budget, Dashboard, Assets…)
+│   ├── components/      # Shared UI (modals, charts) + ui/ primitives
+│   ├── hooks/           # Small shared hooks
+│   ├── i18n/            # Translation tables
+│   └── assets/          # Static assets
+├── public/              # PWA manifest and icons
+├── scripts/             # Enable Banking extractor (optional)
+└── Dockerfile
+```
+
+## CI/CD workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| [**CI**](.github/workflows/build.yml) | Push to `main`, PRs, manual | Typecheck, lint, test, then build and push the Docker image to GHCR |
+| [**Dependency Review**](.github/workflows/dependency-review.yml) | PRs | Blocks PRs that introduce known-vulnerable dependencies |
+| [**Scorecard**](.github/workflows/scorecard.yml) | Push to `main`, weekly | OpenSSF supply-chain score published to the Security tab |
+| [**Container Scan**](.github/workflows/container-scan.yml) | Push to `main`, weekly | Trivy scan of the image; findings to the Security tab |
+| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root + `server/`, GitHub Actions) |
+
+---
+
+<div align="center">
+
+### ⭐ Star this repo if you find it useful ⭐
+
+<a href="https://www.star-history.com/#mortennordbye/headroom&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=mortennordbye/headroom&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=mortennordbye/headroom&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=mortennordbye/headroom&type=Date" width="600" />
+  </picture>
+</a>
+
+Made by [Morten Nordbye](https://nordbye.it/)
+
+</div>

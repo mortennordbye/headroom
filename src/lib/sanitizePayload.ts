@@ -144,6 +144,27 @@ export function sanitizePayload<T>(data: T, objectSchemas: NumericObjectSchemas)
               : item,
           );
         }
+        // v2 snapshot fields: the month's fixed-expense envelopes, forward
+        // assumptions and category budgets. Same 'zero' policy as the rest of the
+        // snapshot (no downstream default merge) so a hand-edited value can't NaN
+        // a historical envelope/projection.
+        if (Array.isArray(s.fixedExpenses)) {
+          s.fixedExpenses = (s.fixedExpenses as unknown[]).map((item) =>
+            item && typeof item === 'object' && !Array.isArray(item)
+              ? coerceBySchema(item, ARRAY_ITEM_SCHEMAS.fixedExpenses, 'zero')
+              : item,
+          );
+        }
+        if (s.assumptions && typeof s.assumptions === 'object' && !Array.isArray(s.assumptions)) {
+          s.assumptions = coerceBySchema(
+            s.assumptions,
+            { savingsTargetPercent: 0, growthReturnRate: 0, houseGrowthRate: 0 },
+            'zero',
+          );
+        }
+        if (s.categoryBudgets && typeof s.categoryBudgets === 'object' && !Array.isArray(s.categoryBudgets)) {
+          s.categoryBudgets = coerceNumberRecord(s.categoryBudgets);
+        }
         cleaned[month] = s;
       } else {
         cleaned[month] = snap;
