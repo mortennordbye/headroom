@@ -656,6 +656,25 @@ export interface BalanceSnapshot {
    *  debt historization — those months render equity-only, matching what
    *  `netWorthHistory` recorded at the time. */
   debts?: Debt[];
+  /** Snapshot shape version. Absent = v1 (pre-completeness; only the fields
+   *  above). v2 adds the optional fields below. New fields stay optional and
+   *  guarded at read time so a v1 month never NaN-poisons a reader. */
+  v?: number;
+  /** Fixed-expense envelopes/budget composition as of that month, so historical
+   *  budget-vs-actual uses the amounts that were in force then, not today's. */
+  fixedExpenses?: FixedExpense[];
+  /** Forward assumptions as of that month, so history-mode projections use the
+   *  rates that were set then instead of the live ones. */
+  assumptions?: {
+    savingsTargetPercent: number;
+    growthReturnRate: number;
+    houseGrowthRate: number;
+  };
+  /** Per-category budgets as of that month. */
+  categoryBudgets?: Partial<Record<CategoryKey, number>>;
+  /** How the snapshot was recorded: 'auto' (the capture effect) or 'manual'
+   *  (the backfill editor, Phase 2). Absent = 'auto'. */
+  source?: 'auto' | 'manual';
 }
 
 export interface ExportPayload {
@@ -1459,7 +1478,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded.current) return;
     const nowKey = format(new Date(), 'yyyy-MM');
-    const snap: BalanceSnapshot = { assets, loan, pension, homeowner, transition, housingMode, debts };
+    const snap: BalanceSnapshot = {
+      assets, loan, pension, homeowner, transition, housingMode, debts,
+      v: 2,
+      fixedExpenses,
+      assumptions: { savingsTargetPercent, growthReturnRate, houseGrowthRate },
+      categoryBudgets,
+      source: 'auto',
+    };
     // Skip the rewrite when the stored snapshot is structurally identical —
     // the slices get fresh identities on every load/adopt, and rewriting the
     // entry anyway would dirty the data on a plain open (3.2).
@@ -1468,7 +1494,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         ? prev
         : { ...prev, [nowKey]: snap }
     ));
-  }, [assets, loan, pension, homeowner, transition, housingMode, debts]);
+  }, [assets, loan, pension, homeowner, transition, housingMode, debts,
+      fixedExpenses, savingsTargetPercent, growthReturnRate, houseGrowthRate, categoryBudgets]);
 
   // The current home's value and mortgage are one real quantity stored in three
   // slices (assets drives net worth; homeowner drives LTV/payment; transition

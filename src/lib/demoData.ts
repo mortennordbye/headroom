@@ -86,11 +86,34 @@ export function getDemoData(): Partial<ExportPayload> {
     { id: 'demo-debt-3', name: 'Forbrukslån', type: 'consumer', balance: 55000, rate: 12.5, minPayment: 2500 },
     { id: 'demo-debt-4', name: 'Kredittkort (betales månedlig)', type: 'credit_card', balance: 18000, rate: 0, minPayment: 0, revolving: true },
   ];
+  const demoFixedExpenses: ExportPayload['fixedExpenses'] = [
+    { id: 'demo-fx-1', name: 'Huslån', amount: 16500, type: 'fixed' },
+    { id: 'demo-fx-2', name: 'Felleskostnader', amount: 3400, type: 'fixed' },
+    { id: 'demo-fx-3', name: 'Strøm', amount: 1300, type: 'fixed' },
+    { id: 'demo-fx-4', name: 'Forsikring', amount: 650, type: 'insurance' },
+    { id: 'demo-fx-5', name: 'Mobil/Internett', amount: 800, type: 'subscription' },
+    { id: 'demo-fx-6', name: 'Trening', amount: 500, type: 'subscription' },
+    { id: 'demo-fx-7', name: 'Mat', amount: 6500, type: 'variable' },
+  ];
+  const demoCategoryBudgets: ExportPayload['categoryBudgets'] = {
+    groceries: 4000,   // 742 spent — comfortably under
+    transport: 800,    // 850 spent — just over
+    dining: 700,       // 640 spent — under
+    entertainment: 500, // 609 spent — over
+    health: 500,       // 310 spent — under
+  };
+  // Forward assumptions in force during the demo history (constant across months).
+  const demoAssumptions = { savingsTargetPercent: 20, growthReturnRate: 7, houseGrowthRate: 3 };
 
   // Build a believable 6-month back-history so demo mode can showcase the balance
   // time machine and the net-worth chart. k=0 is the current month; older months
   // taper growable balances down and leave the mortgage and other debts slightly higher.
   const snapshotFor = (k: number): BalanceSnapshot => ({
+    v: 2,
+    source: 'auto',
+    fixedExpenses: demoFixedExpenses,
+    assumptions: demoAssumptions,
+    categoryBudgets: demoCategoryBudgets,
     housingMode: 'homeowner',
     loan: demoLoan,
     transition: demoTransition,
@@ -139,15 +162,7 @@ export function getDemoData(): Partial<ExportPayload> {
     employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG,
     billingConfig: DEFAULT_BILLING_CONFIG,
 
-    fixedExpenses: [
-      { id: 'demo-fx-1', name: 'Huslån', amount: 16500, type: 'fixed' },
-      { id: 'demo-fx-2', name: 'Felleskostnader', amount: 3400, type: 'fixed' },
-      { id: 'demo-fx-3', name: 'Strøm', amount: 1300, type: 'fixed' },
-      { id: 'demo-fx-4', name: 'Forsikring', amount: 650, type: 'insurance' },
-      { id: 'demo-fx-5', name: 'Mobil/Internett', amount: 800, type: 'subscription' },
-      { id: 'demo-fx-6', name: 'Trening', amount: 500, type: 'subscription' },
-      { id: 'demo-fx-7', name: 'Mat', amount: 6500, type: 'variable' },
-    ],
+    fixedExpenses: demoFixedExpenses,
 
     debts: demoDebts,
 
@@ -160,13 +175,7 @@ export function getDemoData(): Partial<ExportPayload> {
       { id: 'demo-tx-6', date: dayThisMonth(18), description: 'Apotek', amount: 310, category: 'health', categorySource: 'auto' },
     ],
 
-    categoryBudgets: {
-      groceries: 4000,   // 742 spent — comfortably under
-      transport: 800,    // 850 spent — just over
-      dining: 700,       // 640 spent — under
-      entertainment: 500, // 609 spent — over
-      health: 500,       // 310 spent — under
-    },
+    categoryBudgets: demoCategoryBudgets,
 
     recurringTemplates: [
       { id: 'demo-rt-1', description: 'Kaffe', amount: 49, category: 'dining' },

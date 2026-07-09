@@ -89,6 +89,11 @@ const canonicalSnapshot: BalanceSnapshot = {
   loan: canonicalLoan, pension: canonicalPension, homeowner: canonicalHomeowner,
   transition: canonicalTransition, housingMode: 'homeowner',
   debts: [{ id: 'snap-debt-1', name: 'D', type: 'consumer', balance: 5000, rate: 10, minPayment: 500 }],
+  v: 2,
+  source: 'auto',
+  fixedExpenses: [{ id: 'snap-fx-1', name: 'Huslån', amount: 16500, type: 'fixed' }],
+  assumptions: { savingsTargetPercent: 20, growthReturnRate: 7, houseGrowthRate: 3 },
+  categoryBudgets: { groceries: 4000 },
 };
 const canonicalTx: DailyTransaction[] = [
   { id: 'tx-1', date: '2026-01-05', description: 'A', amount: 100, category: 'groceries', categorySource: 'auto' },
