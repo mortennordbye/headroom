@@ -1,5 +1,11 @@
 # Headroom, maths & value-population audit (2026-07-07)
 
+> **Status (2026-07-09): effectively complete.** Every 🔴/🟡 finding and all of sections
+> 1–4, 6 and 8 are ✅ FINISHED. Sections 5.6/5.7 were re-verified against `main` and closed
+> out. Genuinely remaining, all intentional: `deletedBankIds` pruning (§5.7, BACKLOG-tracked
+> as provably unsafe), the bank twin-dedup shims (§5.6/§7, kept until the blob converges), the
+> `SalaryPage.trailingHourly` extraction (§5.1, do when next touched), and §8.8 (won't-do).
+
 Full pass over how every number is computed and how values flow into charts, tables and tiles,
 motivated by the app being shared (friends now self-host their own instances, each
 single-user). Covered:
@@ -338,40 +344,47 @@ of CHART values). CSS contexts where `var()` would already work: `FunBudget`,
 `GoalsSection.tsx:195`, `EditModal`, `NetWorthHistoryModal`, `CategoryBreakdown.tsx:29`,
 `DashboardPage.tsx:566` `#0E1310`, plus recurring `rgba(255,255,255,0.0x)` backgrounds.
 
-**5.6 🟢 Duplication worth one extraction each.**
-- Padded-lowercase haystack built identically in `categorize.ts`, `envelopes.ts`,
-  `labelRules.ts` (the word-boundary padding trick is documented in only one).
-- Twin-dedup logic maintained twice: `src/lib/bankDedup.ts:13-14` (TS) and
-  `server/bank.js:339-340` (`dropStaleBareTwins`, CJS); the regexes must stay
-  byte-equivalent. Also the `BARE` regex misclassifies a legacy ref that happens to start
-  with 8 hex chars + `-` as prefixed.
-- "Latest salary ≤ month" selection in both `src/lib/salary.ts:4-8` (`salaryAt`) and
-  `FinanceContext.tsx:238-243` (`calcActiveGrossAnnual`).
-- `SummaryTile`/`NumberRow`/`SliderRow` copy-pasted across `PensionPage.tsx:253-358`,
-  `EmployerCostPage.tsx:221-313`, ForecastPage, plus two more `SummaryTile` variants at
-  `SalaryPage.tsx:1316` and `LoanPage.tsx:945` (five total); `formatAxisInt` defined in
-  PensionPage, ForecastPage, and inline in AssetPage.
-- `BudgetPage.tsx:171` recomputes `totalFixedExpenses` locally; the context already exports
-  the identical memo (`FinanceContext.tsx:1160-1162`). Same for `incomeDiffPct`
-  (`BudgetPage.tsx:435` = `DashboardPage.tsx:89`).
+**5.6 🟢 Duplication worth one extraction each.** (all closed except the two shims below)
+- ✅ FINISHED (verified on main 2026-07-09) Match haystack: `categorize.ts` and `labelRules.ts`
+  now share `buildMatchHaystack` (`src/lib/text.ts`). `envelopes.ts` keeps a distinct
+  single-name padded haystack (matches a fixed-expense name, not a merchant+description tx),
+  which is a different input, not the same code.
+- Twin-dedup logic maintained twice: `src/lib/bankDedup.ts` (TS) and `server/bank.js`
+  (`dropStaleBareTwins`, CJS); the regexes must stay byte-equivalent. **Kept by design** —
+  the retirement plan (§7) shrinks this only after 2.3 converges the stored blob. The `BARE`
+  misclassification is tracked in `BACKLOG.md` as provably unsafe to disambiguate.
+- ✅ FINISHED (verified on main 2026-07-09) "Latest salary ≤ month" selection: `calcActiveGrossAnnual`
+  (`FinanceContext.tsx`) now calls the shared `salaryAt` (`src/lib/salary.ts`).
+- ✅ FINISHED (verified on main 2026-07-09) The shared cases are extracted to
+  `src/components/ui/` (`NumberRow`, `SummaryTile`, `SliderRow`, used by Pension/EmployerCost)
+  and `formatAxisInt` to `src/lib/format.ts` (all pages import it). The remaining page-local
+  `SummaryTile`s (ForecastPage now-vs-then, LoanPage value+accent, SalaryPage value+sub+chip)
+  are genuinely different prop shapes — see §8.8: a shared slot would be a bigger abstraction
+  than the duplication it removes.
+- ✅ FINISHED (verified on main 2026-07-09) `BudgetPage` consumes the context `totalFixedExpenses`
+  memo and the shared `incomeDiffPct` (`src/lib/income.ts`, also used by DashboardPage).
 
-**5.7 🟢 Small hygiene items.** (four fixed in f43420f, marked below)
+**5.7 🟢 Small hygiene items.** (four fixed in f43420f; the rest verified done on
+2026-07-09 — only `deletedBankIds`, BACKLOG-tracked as unsafe to prune, remains open)
 - ✅ FINISHED (f43420f) `debt.ts:30-39` `amortize` reports the 600-month cap as
   `months=600, feasible=false` while `planPayoff` uses `Infinity`. Mirrored, incl.
   `perDebt[].payoffMonth`.
-- `validators.ts` `isPositiveNumber` accepts 0 (misleading name); `parseLocaleNumber`
-  rejects thousands-space while `coerceNumber` accepts it (two locale grammars).
-- `calculations.ts` `HomeownerStatus.equityPercent` is actually "% of original loan repaid";
-  rename before someone uses it as equity.
+- ✅ FINISHED (verified on main 2026-07-09) `validators.ts` `isPositiveNumber` renamed
+  `isNonNegativeNumber` (name now matches the accepts-0 behavior); the `parseLocaleNumber`
+  vs `coerceNumber` split is documented as deliberate in `validators.ts:35-40`.
+- ✅ FINISHED (verified on main 2026-07-09) `calculations.ts` `HomeownerStatus.equityPercent`
+  renamed `originalLoanRepaidPercent`, with a comment noting it is not home equity.
 - ✅ FINISHED (f43420f) `ForecastPage.tsx:141` leftover `void jobs;` removed.
-- `SettingsPage.tsx:98-100` currency inputs (`usdRateInput`/`customRateInput`) are seeded
-  once from context and never resync after a JSON import or demo toggle; `RangeRow` in the
-  same file shows the resync-effect pattern to copy.
-- `currentMonthKey()` inside `useMemo` with no time dep pins "current" across a month
-  boundary in a long-lived session (`PensionPage.tsx:38-41`, `ForecastPage.tsx:25-37`,
-  `EmployerCostPage.tsx:24-27`; cosmetic).
-- `deletedBankIds` grows unboundedly (`FinanceContext.tsx:751,823`); prune ids no longer
-  present in the stored blob.
+- ✅ FINISHED (verified on main 2026-07-09) `SettingsPage.tsx` currency inputs now resync via
+  `useEffect` on `nokToUsd`/`customCurrencyCode`/`customCurrencyRate` (lines 105-109), so a
+  JSON import or demo toggle updates the fields.
+- ✅ FINISHED (verified on main 2026-07-09) `currentMonthKey()` moved out of `useMemo` into
+  render scope in all three pages (`PensionPage.tsx:40`, `ForecastPage.tsx:24`,
+  `EmployerCostPage.tsx:30`), each with a comment on the month-rollover rationale and `today`
+  in the dependent memos' dep arrays.
+- `deletedBankIds` grows unboundedly (`FinanceContext.tsx`); still open, but tracked in
+  `BACKLOG.md` where it is documented as provably unsafe to prune (a dropped id absent from
+  the blob would let the server's reconcile resurrect the deleted row).
 - ✅ FINISHED (f43420f) `resetAll` re-hardcodes `37.84/22/5/7/67`; now uses
   `DEFAULT_ASSETS`/`DEFAULT_PENSION` (loan/homeowner/transition keep zero literals — their
   DEFAULT_* constants hold non-zero example values, wrong for a wipe).
@@ -549,8 +562,8 @@ shape; leave them.
 `DashboardPage.tsx:331,421,446,496` (abs variant at :261). Fix: `formatSignedPct(v, digits
 = 1)` in a new `src/lib/format.ts`; makes null → em-dash handling consistent.
 
-**8.8 🟢 Editable label/value row triplicated.** *(Assessed 2026-07-08, recommend dropping:
-beyond the wrapper classes the rows share almost nothing — LoanRow carries its own
+**8.8 ✅ WON'T DO (decision recorded 2026-07-08) Editable label/value row triplicated.**
+*(Beyond the wrapper classes the rows share almost nothing — LoanRow carries its own
 highlight/calculated colour logic + notes, SavingsAccountRow uses real buttons for a11y —
 so a slot component would be a bigger abstraction than the duplication it removes.)*
 `AssetPage.tsx:598-621` (AssetRow), `:624-673` (SavingsAccountRow),
