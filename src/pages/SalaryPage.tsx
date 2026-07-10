@@ -39,6 +39,7 @@ import type { Translations } from '../i18n/translations';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
+import { PaydayField } from '../components/PaydayField';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
@@ -1145,6 +1146,14 @@ const SalaryPage: React.FC = () => {
           onDelete: () => confirmDelete(j.employer, () => removeJob(j.id)),
         }))}
       />
+
+      {/* Payday — the day the paycheck lands; drives the Budget income reminder */}
+      <div className="flex flex-wrap items-center gap-3">
+        <PaydayField />
+        <span className="text-[12px] max-w-md" style={{ color: 'var(--text-3)' }}>
+          {t.settings.paydayDesc}
+        </span>
+      </div>
 
       {/* Job filter tabs */}
       {jobs.length > 0 && (() => {
