@@ -369,10 +369,13 @@ const Layout: React.FC = () => {
       {/* First-run guided setup (renders only when active; portals to body) */}
       <OnboardingTour />
 
-      {/* Edit the viewed (read-only) month straight from a balance page */}
+      {/* Edit the picked (read-only) month straight from a balance page. Uses the
+          picked month, not the snapped `activeKey`, so a gap/pre-earliest view
+          records the month the user actually selected (pre-filled from the nearest
+          snapshot) rather than editing the older month whose data is on screen. */}
       {editMonthOpen && (
         <HistoryManagerModal
-          initialMonth={hist.activeKey}
+          initialMonth={viewKey}
           onClose={() => setEditMonthOpen(false)}
         />
       )}

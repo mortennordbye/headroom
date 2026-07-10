@@ -30,8 +30,15 @@ describe('snapToRecordedMonth', () => {
     expect(snapToRecordedMonth(recorded, '2025-11', now)).toEqual({ activeKey: '2026-01', isLive: false });
   });
 
-  it('degrades to the live key when nothing is recorded', () => {
-    expect(snapToRecordedMonth([], '2026-03', now)).toEqual({ activeKey: now, isLive: false });
+  it('degrades to live when nothing is recorded (a past view can only show live)', () => {
+    expect(snapToRecordedMonth([], '2026-03', now)).toEqual({ activeKey: now, isLive: true });
+  });
+
+  it('treats snapping to the current month as live, not read-only history', () => {
+    // Only the current month has a snapshot (the common case): viewing an earlier
+    // month has nothing older to show, so it degrades to live rather than showing
+    // today's data read-only under a past label.
+    expect(snapToRecordedMonth([now], '2026-03', now)).toEqual({ activeKey: now, isLive: true });
   });
 
   it('does not assume the input array is sorted', () => {
