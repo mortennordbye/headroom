@@ -939,14 +939,6 @@ const SalaryPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Payday — the day the paycheck lands; drives the Budget income reminder */}
-      <div className="flex flex-wrap items-center gap-3">
-        <PaydayField />
-        <span className="text-[12px] max-w-md" style={{ color: 'var(--text-3)' }}>
-          {t.settings.paydayDesc}
-        </span>
-      </div>
-
       {/* One box: each job is a lane with its events on a timeline spine */}
       {(() => {
         // Salary/hours are YYYY-MM, bonus/overtime YYYY-MM-DD — pad for a shared sort key.
@@ -1123,12 +1115,13 @@ const SalaryPage: React.FC = () => {
 
         return (
           <div className={`${card} p-5 md:p-7 space-y-4`}>
-            <div className="flex items-center justify-between gap-3 pb-4 border-b border-[var(--border)]">
+            <div className="flex items-center justify-between gap-3 pb-4 border-b border-[var(--border)] flex-wrap">
               <div className="flex items-center gap-2 min-w-0">
                 <TrendingUp size={14} className="text-[var(--text-2)]" />
                 <h3 className={sectionLabel}>{t.salary.salaryAndJobs}</h3>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <PaydayField variant="inline" />
                 <button
                   onClick={() => openJobModal()}
                   className="inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-[12px] font-semibold border border-[var(--border)] text-[var(--text-2)] hover:text-[var(--text-1)] hover:border-[var(--text-3)] transition-colors"
@@ -1350,26 +1343,33 @@ interface NextReviewCardProps {
 }
 
 const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency }) => {
-  const [proposed, setProposed] = useState<string>('');
-  const proposedNum = (() => {
-    const n = parseLocaleNumber(proposed);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  })();
+  const [mode, setMode] = useState<'kr' | 'pct'>('kr');
+  const [draft, setDraft] = useState<string>('');
 
-  const proposedPct = proposedNum != null && ctx.lastRaise.grossAnnual > 0
-    ? ((proposedNum / ctx.lastRaise.grossAnnual) - 1) * 100
-    : null;
-  const realVsSince = proposedPct != null && ctx.cpiSincePct != null
-    ? proposedPct - ctx.cpiSincePct
-    : null;
-  const realVsRolling = proposedPct != null && ctx.cpiRolling12Pct != null
-    ? proposedPct - ctx.cpiRolling12Pct
-    : null;
+  const base = ctx.lastRaise.grossAnnual;
+  // Reference inflation for the "real raise" verdict: prefer CPI since the last
+  // raise; fall back to the rolling 12-month rate when the baseline is too new.
+  const refCpi = ctx.cpiSincePct ?? ctx.cpiRolling12Pct;
+  const floor = refCpi != null ? base * (1 + refCpi / 100) : null;
 
+  const raw = parseLocaleNumber(draft);
+  const hasInput = draft.trim() !== '' && Number.isFinite(raw);
+  let newSalary: number | null = null;
+  let pct: number | null = null;
+  if (hasInput) {
+    if (mode === 'pct') { pct = raw; newSalary = Math.round(base * (1 + raw / 100)); }
+    else { newSalary = Math.round(raw); pct = base > 0 ? ((raw / base) - 1) * 100 : null; }
+  }
+  const real = pct != null && refCpi != null ? pct - refCpi : null;
+  const overFloor = newSalary != null && floor != null ? Math.round(newSalary - floor) : null;
   const fmtPct = formatSignedPct;
-  const gapColor = (v: number | null) => v == null
-    ? 'var(--text-2)'
-    : v >= 0 ? 'var(--positive)' : 'var(--warning)';
+
+  // Gauge maps real-raise percentage points onto a fixed [-4, +6] pp track.
+  const DMIN = -4, DMAX = 6;
+  const toX = (v: number) => ((Math.max(DMIN, Math.min(DMAX, v)) - DMIN) / (DMAX - DMIN)) * 100;
+  const loseW = toX(0);              // real < 0 → losing ground
+  const keepW = toX(1) - toX(0);     // 0..1pp → break-even band
+  const verdictColor = real == null ? 'var(--text-2)' : real >= 0 ? 'var(--positive)' : 'var(--negative)';
 
   return (
     <div className={`${card} p-5 md:p-7 space-y-5`}>
@@ -1379,87 +1379,101 @@ const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency 
       </div>
       <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.nextReviewDesc}</p>
 
-      {/* Metric grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        <SummaryTile
-          label={t.salary.lastRaiseLabel}
-          value={formatCurrency(ctx.lastRaise.grossAnnual)}
-          sub={`${({
-            initial: t.salary.changeTypeInitial,
-            raise: t.salary.changeTypeRaise,
-            promotion: t.salary.changeTypePromotion,
-            job_change: t.salary.changeTypeJobChange,
-            adjustment: t.salary.changeTypeAdjustment,
-          } as Record<string, string>)[ctx.lastRaise.changeType] ?? ''} · ${ctx.lastRaise.effectiveDate}`}
-        />
-        <SummaryTile
-          label={t.salary.timeSinceLabel}
-          value={`${ctx.monthsSince} ${t.salary.monthsAgo}`}
-          sub={ctx.lastRaise.effectiveDate}
-        />
-        <SummaryTile
-          label={t.salary.cpiSinceLabel}
-          value={fmtPct(ctx.cpiSincePct)}
-          sub={ctx.cpiAsOf ? `${t.salaryPage.asOf} ${ctx.cpiAsOf}` : ''}
-          color={ctx.cpiSincePct != null ? 'var(--accent)' : undefined}
-        />
-        <SummaryTile
-          label={t.salary.cpiRolling12Label}
-          value={fmtPct(ctx.cpiRolling12Pct)}
-          sub={ctx.cpiAsOf ?? ''}
-          color={ctx.cpiRolling12Pct != null ? 'var(--accent)' : undefined}
-        />
+      {/* Offer input with kr / % toggle */}
+      <div className="space-y-2">
+        <div className={sectionLabel}>{t.salary.proposedSalaryLabel}</div>
+        <div className="flex flex-wrap items-stretch gap-2">
+          <div className="flex rounded-[6px] border border-[var(--border)] overflow-hidden shrink-0">
+            {([['kr', t.salary.offerModeKr], ['pct', t.salary.offerModePct]] as ['kr' | 'pct', string][]).map(([m, lbl]) => (
+              <button key={m} type="button" onClick={() => setMode(m)}
+                className="px-3 text-[12px] font-semibold transition-colors"
+                style={{ background: mode === m ? 'var(--accent-bg)' : 'transparent', color: mode === m ? 'var(--accent)' : 'var(--text-2)' }}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-stretch flex-1 min-w-[180px]">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              placeholder={t.salary.proposedSalaryHint}
+              className="flex-1 min-w-0 h-10 px-3 rounded-l-lg bg-[var(--bg-elev)] border border-r-0 border-[var(--border)] text-[14px] font-mono tabular-nums text-[var(--text-1)] placeholder:text-[var(--text-3)] focus:outline-none focus:border-[var(--accent)]"
+            />
+            <span className="flex items-center px-4 rounded-r-lg border border-l-0 border-[var(--border)] bg-[var(--bg-raised)] font-mono text-[13px]" style={{ color: 'var(--text-3)' }}>
+              {mode === 'kr' ? 'kr' : '%'}
+            </span>
+          </div>
+        </div>
+        {hasInput && newSalary != null && (
+          <p className="text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>
+            {mode === 'pct'
+              ? `= ${formatCurrency(newSalary)}`
+              : `= ${fmtPct(pct)}`}
+          </p>
+        )}
       </div>
 
-      {/* Inflation-only target */}
-      {ctx.inflationOnlySalary != null && (
-        <div className="flex flex-wrap items-baseline gap-3 pt-1">
-          <div className={sectionLabel}>{t.salary.inflationOnlyTarget}</div>
-          <div className="text-[20px] md:text-[22px] font-semibold font-mono tabular-nums" style={{ color: 'var(--violet)' }}>
-            {formatCurrency(Math.round(ctx.inflationOnlySalary))}
+      {/* Verdict */}
+      <div className="flex items-center gap-4 px-4 py-4 rounded-[10px] border"
+        style={{ borderColor: real != null ? 'var(--accent-line)' : 'var(--border)', background: real != null ? 'var(--accent-bg)' : 'transparent' }}>
+        {real != null ? (<>
+          <div className="text-[28px] md:text-[30px] font-semibold font-mono tabular-nums shrink-0" style={{ color: verdictColor }}>
+            {fmtPct(real, 1, 'pp')}
           </div>
-          <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {t.salary.inflationOnlyTargetDesc}
+          <div className="text-[13px] min-w-0" style={{ color: 'var(--text-1)' }}>
+            <span className="font-mono font-semibold">{t.salary.realRaiseAfterInflation}</span>
+            <div className="text-[12px] mt-0.5" style={{ color: 'var(--text-2)' }}>
+              {`${fmtPct(pct)} − ${fmtPct(refCpi)} ${t.salaryPage.cpi}`}
+              {overFloor != null && `. ${formatCurrency(Math.abs(overFloor))} ${overFloor >= 0 ? t.salary.overFloor : t.salary.underFloor}`}
+            </div>
+          </div>
+        </>) : (
+          <div className="text-[13px]" style={{ color: 'var(--text-3)' }}>
+            {refCpi == null ? t.salary.inflationOffline : t.salary.proposedSalaryHint}
+          </div>
+        )}
+      </div>
+
+      {/* Gauge */}
+      {refCpi != null && (
+        <div className="space-y-1.5">
+          <div className="relative h-3.5 rounded-full overflow-hidden border border-[var(--border)]" style={{ background: 'var(--bg-raised)' }}>
+            <div className="absolute inset-y-0 left-0" style={{ width: `${loseW}%`, background: 'color-mix(in srgb, var(--negative) 30%, transparent)' }} />
+            <div className="absolute inset-y-0" style={{ left: `${loseW}%`, width: `${keepW}%`, background: 'color-mix(in srgb, var(--warning) 28%, transparent)' }} />
+            <div className="absolute inset-y-0 right-0" style={{ left: `${loseW + keepW}%`, background: 'color-mix(in srgb, var(--positive) 30%, transparent)' }} />
+            {real != null && (
+              <div className="absolute -inset-y-1 w-[3px]" style={{ left: `calc(${toX(real)}% - 1.5px)`, background: 'var(--text-1)', boxShadow: '0 0 0 2px var(--bg-card)' }} />
+            )}
+          </div>
+          <div className="flex justify-between text-[10px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
+            <span>{t.salary.gaugeLose}</span>
+            <span>{t.salary.gaugeKeep}</span>
+            <span>{t.salary.gaugeReal} ▸</span>
           </div>
         </div>
       )}
 
-      {/* Calculator */}
-      <div className="pt-4 border-t border-[var(--border)] space-y-3">
-        <label className="block">
-          <div className={sectionLabel}>{t.salary.proposedSalaryLabel}</div>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={proposed}
-            onChange={e => setProposed(e.target.value)}
-            placeholder={t.salary.proposedSalaryHint}
-            className="mt-2 w-full md:w-72 h-10 px-3 rounded-lg bg-[var(--bg-elev)] border border-[var(--border)] text-[14px] font-mono tabular-nums text-[var(--text-1)] placeholder:text-[var(--text-3)] focus:outline-none focus:border-[var(--accent)]"
-          />
-        </label>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-          <SummaryTile
-            label={t.salary.proposedIncreaseLabel}
-            value={fmtPct(proposedPct)}
-            sub={proposedNum != null
-              ? `${formatCurrency(Math.round(proposedNum - ctx.lastRaise.grossAnnual))}`
-              : ''}
-            color={proposedPct != null ? (proposedPct >= 0 ? 'var(--positive)' : 'var(--negative)') : undefined}
-          />
-          <SummaryTile
-            label={t.salary.realRaiseSinceLabel}
-            value={formatSignedPct(realVsSince, 1, 'pp')}
-            sub={ctx.cpiSincePct != null ? `${t.salaryPage.cpi} ${fmtPct(ctx.cpiSincePct)}` : ''}
-            color={gapColor(realVsSince)}
-          />
-          <SummaryTile
-            label={t.salary.realRaiseRollingLabel}
-            value={formatSignedPct(realVsRolling, 1, 'pp')}
-            sub={ctx.cpiRolling12Pct != null ? `${t.salaryPage.cpi} ${fmtPct(ctx.cpiRolling12Pct)}` : ''}
-            color={gapColor(realVsRolling)}
-          />
-        </div>
+      {/* Reference tiles */}
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
+        <SummaryTile
+          label={t.salary.lastRaiseLabel}
+          value={formatCurrency(base)}
+          sub={`${ctx.lastRaise.effectiveDate} · ${ctx.monthsSince} ${t.salary.monthsAgo}`}
+        />
+        <SummaryTile
+          label={t.salary.inflationFloor}
+          value={floor != null ? formatCurrency(Math.round(floor)) : '—'}
+          sub={refCpi != null ? `${t.salaryPage.cpi} ${fmtPct(refCpi)}` : ''}
+          color={floor != null ? 'var(--warning)' : undefined}
+        />
+        <SummaryTile
+          label={t.salary.proposedIncreaseLabel}
+          value={fmtPct(pct)}
+          sub={newSalary != null ? formatCurrency(Math.round(newSalary - base)) : ''}
+          color={pct != null ? (pct >= 0 ? 'var(--positive)' : 'var(--negative)') : undefined}
+        />
       </div>
     </div>
   );
