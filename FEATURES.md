@@ -307,10 +307,10 @@ optionally `g`-prefixed route jumps. Where: `src/components/Layout.tsx`.
     totalFixedExpenses)` counts discretionary subscriptions but ignores variable essentials
     (groceries), so "months covered" can mislead both ways. Let the user mark essential lines
     or include median variable spend.
-61. **Fixed expenses are typed but never totaled by type.** Each carries
-    `fixed | variable | subscription | insurance` with a coloured dot, but there is no
-    "subscriptions cost you X kr/mo" summary (`src/pages/BudgetPage.tsx`). Add per-type
-    totals above the list.
+61. **Fixed expenses totaled by type ✅ SHIPPED** — `fixedExpenseTotalsByType` (pure,
+    unit-tested in `src/lib/fixedExpenseTotals.ts`) sums the monthly amount per type; the
+    Budget fixed-expense colour key now shows each present type's total ("subscriptions cost
+    you X kr/mo") instead of a bare label list. (`src/pages/BudgetPage.tsx`.)
 
 ### Self-hosting
 62. **Blob/DB size not surfaced.** The server warns at 2 MB in the log only; the Settings

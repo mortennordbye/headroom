@@ -35,6 +35,7 @@ import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeSta
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
 import { monthlyCashflow } from '../lib/monthlyCashflow';
 import { savingsRateStatus } from '../lib/savingsRate';
+import { fixedExpenseTotalsByType } from '../lib/fixedExpenseTotals';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -776,11 +777,14 @@ const BudgetPage: React.FC = () => {
               ))}
             </div>
           )}
+          {/* Per-type totals double as the colour key — only types with a cost
+              this month appear (e.g. "subscriptions cost you X kr/mo"). */}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {(Object.keys(EXPENSE_TYPE_COLOR) as ExpenseType[]).map(ty => (
-              <span key={ty} className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-                <span className="w-[7px] h-[7px] rounded-[2px]" style={{ background: EXPENSE_TYPE_COLOR[ty] }} />
-                {t.expenseType[ty]}
+            {fixedExpenseTotalsByType(viewFixedExpenses).map(({ type, total }) => (
+              <span key={type} className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
+                <span className="w-[7px] h-[7px] rounded-[2px]" style={{ background: EXPENSE_TYPE_COLOR[type] }} />
+                {t.expenseType[type]}
+                <span className="font-mono font-medium text-[var(--text-1)]">{formatCurrency(total)}</span>
               </span>
             ))}
           </div>
