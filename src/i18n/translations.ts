@@ -749,6 +749,7 @@ export const translations = {
       resetConfirm: 'Ja, slett alt',
       resetCancel: 'Avbryt',
       resetDone: 'Alle data ble tilbakestilt.',
+      backupNote: 'En sikkerhetskopi av dine nåværende data lastes ned først, slik at du kan gjenopprette ved å importere filen igjen.',
       summary: {
         exportScope: 'Alt dette tas med',
         importScope: 'Dette blir importert',
@@ -1905,6 +1906,7 @@ export const translations = {
       resetConfirm: 'Yes, delete everything',
       resetCancel: 'Cancel',
       resetDone: 'All data has been reset.',
+      backupNote: 'A backup of your current data is downloaded first, so you can restore it by importing the file again.',
       summary: {
         exportScope: 'Everything included',
         importScope: 'What will be imported',

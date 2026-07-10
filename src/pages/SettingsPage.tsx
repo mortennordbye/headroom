@@ -50,8 +50,6 @@ import HistoryManagerModal from '../components/HistoryManagerModal';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
 
-const APP_VERSION = '3.0.0';
-
 export default function SettingsPage() {
   const {
     t,
@@ -117,18 +115,30 @@ export default function SettingsPage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Build identity for the About card. Fetched from the server so the version
+  // has a single source (package.json) and the CI-stamped commit SHA is shown.
+  const [appVersion, setAppVersion] = useState<{ version: string; sha: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/version')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled && d?.version) setAppVersion(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const versionLabel = appVersion
+    ? appVersion.version + (appVersion.sha && appVersion.sha !== 'dev' ? ` · ${appVersion.sha.slice(0, 7)}` : '')
+    : '…';
+
   // Reset state
   const [resetState, setResetState] = useState<'idle' | 'confirm' | 'done'>('idle');
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const handleReset = () => {
-    resetAll();
-    setResetState('done');
-    setTimeout(() => setResetState('idle'), 2500);
-  };
-
-  // ───── Export ─────
-  const handleExport = () => {
+  // Build the current app state as an importable export payload, and download it
+  // as a JSON file. Shared by the manual export and the automatic safety backup
+  // taken before a destructive import/reset (which the existing import flow can
+  // restore). Demo state is never persisted, so it's never backed up.
+  const downloadSnapshot = (filename: string) => {
     const payload: ExportPayload & { _version: number; _exportedAt: string } = {
       _version: 1,
       _exportedAt: new Date().toISOString(),
@@ -139,10 +149,27 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `headroom-export-${format(new Date(), 'yyyy-MM-dd')}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  // Auto-save a timestamped copy of the current data right before a destructive
+  // op overwrites it, so a mis-clicked import/reset is recoverable.
+  const backupBeforeDestructive = () => {
+    if (demoMode) return;
+    downloadSnapshot(`headroom-backup-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.json`);
+  };
+
+  const handleReset = () => {
+    backupBeforeDestructive();
+    resetAll();
+    setResetState('done');
+    setTimeout(() => setResetState('idle'), 2500);
+  };
+
+  // ───── Export ─────
+  const handleExport = () => downloadSnapshot(`headroom-export-${format(new Date(), 'yyyy-MM-dd')}.json`);
 
   // ───── Import ─────
   const validateAndPreview = (raw: string) => {
@@ -184,6 +211,7 @@ export default function SettingsPage() {
 
   const confirmImport = () => {
     if (!importPreview) return;
+    backupBeforeDestructive();
     importAll(importPreview);
     setImportState('done');
     setImportPreview(null);
@@ -738,6 +766,11 @@ export default function SettingsPage() {
                     <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                     <span>{t.settings.replaceWarning}</span>
                   </div>
+                  {!demoMode && (
+                    <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>
+                      {t.settings.backupNote}
+                    </p>
+                  )}
                   <div className="flex gap-2">
                     <Button variant="danger" size="md" leadingIcon={<Trash2 />} onClick={confirmImport}>
                       {t.settings.replaceConfirm}
@@ -823,6 +856,11 @@ export default function SettingsPage() {
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <span>{t.settings.resetWarning}</span>
               </div>
+              {!demoMode && (
+                <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>
+                  {t.settings.backupNote}
+                </p>
+              )}
               <div className="flex gap-2">
                 <Button variant="danger" size="md" leadingIcon={<Trash2 />} onClick={handleReset}>
                   {t.settings.resetConfirm}
@@ -855,7 +893,7 @@ export default function SettingsPage() {
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
-              <DeltaChip tone="muted">{t.settings.version}: {APP_VERSION}</DeltaChip>
+              <DeltaChip tone="muted">{t.settings.version}: {versionLabel}</DeltaChip>
               <DeltaChip tone="muted">{t.settings.storage}: SQLite</DeltaChip>
             </div>
           </div>
