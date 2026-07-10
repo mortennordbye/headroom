@@ -642,19 +642,23 @@ function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, ic
       className={`flex justify-between items-center group py-3.5 border-b border-[var(--border)] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
       onClick={onEdit}
     >
-      <span className={`text-[13px] font-medium flex items-center gap-1.5 transition-colors ${onEdit ? 'text-[var(--text-1)] group-hover:text-[var(--positive)]' : 'text-[var(--text-2)]'}`}>
+      <span className={`text-[13px] font-medium flex items-center gap-1.5 ${onEdit ? 'text-[var(--text-1)]' : 'text-[var(--text-2)]'}`}>
         {icon}
         {label}
         {badge}
       </span>
       <div className="flex items-center gap-2">
-        <span className={`text-[13px] font-mono font-medium transition-colors ${isNegative ? 'text-[var(--negative)]' : onEdit ? 'text-[var(--text-1)] group-hover:opacity-70' : 'text-[var(--text-2)]'}`}>
-          {isNegative ? '−' : ''}{formatCurrency(value)}{suffix}
-        </span>
         {onEdit ? (
-          <Edit2 size={13} className="text-[var(--text-2)] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0" />
+          <span className="inline-flex items-center gap-2 rounded-[6px] border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1.5 group-hover:border-[var(--brass-dim)] group-hover:bg-[var(--bg-elev)] transition-colors">
+            <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${isNegative ? 'text-[var(--negative)]' : 'text-[var(--text-1)]'}`}>
+              {isNegative ? '−' : ''}{formatCurrency(value)}{suffix}
+            </span>
+            <Edit2 size={12} className="text-[var(--text-3)] shrink-0" />
+          </span>
         ) : (
-          <span className="w-[13px] shrink-0" />
+          <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${isNegative ? 'text-[var(--negative)]' : 'text-[var(--text-2)]'}`}>
+            {isNegative ? '−' : ''}{formatCurrency(value)}{suffix}
+          </span>
         )}
       </div>
     </div>
@@ -680,7 +684,7 @@ function SavingsAccountRow({
       <button
         type="button"
         onClick={onEdit}
-        className="text-[13px] font-medium text-[var(--text-1)] group-hover:text-[var(--positive)] transition-colors truncate text-left mr-4 flex-1 min-w-0"
+        className="text-[13px] font-medium text-[var(--text-1)] truncate text-left mr-4 flex-1 min-w-0"
       >
         {account.name}
       </button>
@@ -688,17 +692,11 @@ function SavingsAccountRow({
         <button
           type="button"
           onClick={onEdit}
-          className="text-[13px] font-mono font-medium text-[var(--text-1)] group-hover:opacity-70 transition-opacity"
-        >
-          {formatCurrency(account.balance)}
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
           aria-label={`edit ${account.name}`}
-          className="text-[var(--text-2)] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0"
+          className="inline-flex items-center gap-2 rounded-[6px] border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1.5 group-hover:border-[var(--brass-dim)] group-hover:bg-[var(--bg-elev)] transition-colors"
         >
-          <Edit2 size={13} />
+          <span className="text-[13px] font-mono font-medium text-[var(--text-1)] whitespace-nowrap">{formatCurrency(account.balance)}</span>
+          <Edit2 size={12} className="text-[var(--text-3)] shrink-0" />
         </button>
         <button
           type="button"
