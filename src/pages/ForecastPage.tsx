@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react';
 import {
   AreaChart, Area, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { TrendingUp, Wallet, Activity } from 'lucide-react';
+import { TrendingUp, Wallet, Activity, Flame } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
+import { ProgressBar } from '../components/ui/ProgressBar';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { calcMonthlyPayment } from '../lib/calculations';
@@ -17,7 +18,7 @@ const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const ForecastPage: React.FC = () => {
-  const { t, totalEquity, salaries, jobs, loan, income, housingMode, homeowner, formatCurrency, region, customTaxRatePct, pension } = useFinance();
+  const { t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner, formatCurrency, region, customTaxRatePct, pension } = useFinance();
 
   // Current month in render scope so the memos below recompute if the month
   // rolls over during a long-lived session.
@@ -131,6 +132,25 @@ const ForecastPage: React.FC = () => {
   const last = projection[projection.length - 1];
   const first = projection[0];
 
+  // Financial independence (4% rule): FI number = 25× annual essential spend.
+  // The FI year is the first projected year whose real (today's-kroner) net worth
+  // clears that number, so it stays comparable to today's expenses. Only shown
+  // when there are essential expenses to anchor the target on.
+  const fire = useMemo(() => {
+    const annualEssential = totalFixedExpenses * 12;
+    const fiNumber = 25 * annualEssential;
+    if (fiNumber <= 0) return null;
+    const progressPct = Math.max(0, Math.min(100, (totalEquity / fiNumber) * 100));
+    const hit = projection.find((p) => p.netWorthReal >= fiNumber);
+    return {
+      annualEssential,
+      fiNumber,
+      progressPct,
+      fiYear: hit ? hit.yearLabel : null,
+      yearsToFi: hit ? hit.yearIndex : null,
+    };
+  }, [totalFixedExpenses, totalEquity, projection]);
+
   return (
     <div className="space-y-6 md:space-y-7">
       {/* Hero header */}
@@ -204,6 +224,49 @@ const ForecastPage: React.FC = () => {
           color="var(--violet)"
         />
       </div>
+
+      {/* Financial independence (FIRE) tile */}
+      {fire && (
+        <div className={`${card} p-5 md:p-7 space-y-4`}>
+          <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+            <Flame size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+            <h3 className={sectionLabel}>{t.forecast.fireTitle}</h3>
+          </div>
+          <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.fireDesc}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+            <FireStat
+              label={t.forecast.fireNumber}
+              value={formatCurrency(Math.round(fire.fiNumber))}
+              sub={`${formatCurrency(Math.round(fire.annualEssential))} ${t.forecast.fireEssential}`}
+            />
+            <FireStat
+              label={t.forecast.fireProgress}
+              value={`${fire.progressPct.toFixed(0)}%`}
+              sub={formatCurrency(Math.round(totalEquity))}
+              color="var(--accent)"
+            />
+            <FireStat
+              label={t.forecast.fireYear}
+              value={fire.fiYear == null
+                ? t.forecast.fireBeyond.replace('{years}', String(years))
+                : fire.yearsToFi === 0
+                  ? t.forecast.fireReached
+                  : String(fire.fiYear)}
+              sub={fire.fiYear != null && fire.yearsToFi != null && fire.yearsToFi > 0
+                ? `${fire.yearsToFi} ${t.forecastPage.yearSuffix}`
+                : undefined}
+              color="var(--violet)"
+            />
+          </div>
+          <div>
+            <div className="flex justify-between text-[11px] mb-1.5" style={{ color: 'var(--text-2)' }}>
+              <span>{t.forecast.fireProgress}</span>
+              <span className="font-mono font-medium text-[var(--text-1)]">{fire.progressPct.toFixed(0)}%</span>
+            </div>
+            <ProgressBar pct={fire.progressPct} color="var(--accent)" />
+          </div>
+        </div>
+      )}
 
       {/* Net worth projection chart */}
       <div className={`${card} p-5 md:p-7 space-y-4`}>
@@ -306,6 +369,14 @@ const SliderInput: React.FC<SliderInputProps> = ({ label, value, onChange, min, 
       className="w-full h-2 rounded-full appearance-none cursor-pointer accent-[var(--accent)]"
       style={{ background: 'color-mix(in srgb, var(--text-3) 18%, transparent)' }}
     />
+  </div>
+);
+
+const FireStat: React.FC<{ label: string; value: string; sub?: string; color?: string }> = ({ label, value, sub, color }) => (
+  <div className="rounded-[8px] p-4 border bg-[var(--bg-raised)] border-[var(--border)]">
+    <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)] mb-1">{label}</div>
+    <div className="text-[18px] md:text-[20px] font-mono font-semibold leading-tight [overflow-wrap:anywhere]" style={{ color: color ?? 'var(--text-1)' }}>{value}</div>
+    {sub && <div className="text-[10px] font-mono mt-1" style={{ color: 'var(--text-3)' }}>{sub}</div>}
   </div>
 );
 

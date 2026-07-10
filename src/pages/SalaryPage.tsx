@@ -40,7 +40,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
-import { calcTaxByRegion } from '../lib/norwegianTax';
+import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
 import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
@@ -696,6 +696,12 @@ const SalaryPage: React.FC = () => {
   const currentJob = activeSalary ? jobsById.get(activeSalary.jobId) : undefined;
   const currentOnCallAnnual = currentJob?.onCallAnnual ?? 0;
 
+  // Marginal rate on the next krone — the "is the extra shift worth it" number.
+  // Norwegian model only; in generic mode the marginal rate is just the flat rate.
+  const marginalRate = !isGeneric && current
+    ? calcMarginalTaxRate(current.totalAnnual, pension.ipsAnnualContribution)
+    : null;
+
   const yoyChip = yoy ? yoy.salary - yoy.cpi : null;
   const chipColor = yoyChip != null && yoyChip >= 0 ? 'var(--positive)' : 'var(--negative)';
   const chipBg = yoyChip != null && yoyChip >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
@@ -793,9 +799,18 @@ const SalaryPage: React.FC = () => {
       {/* Tax breakdown + money flow */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
         <div className={`${card} p-5 md:p-7`}>
-          <div className="pb-4 mb-2 border-b border-[var(--border)]">
-            <h3 className={sectionLabel}>{t.charts.taxBreakdownTitle}</h3>
-            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.taxBreakdownSub}</p>
+          <div className="flex items-start justify-between gap-3 pb-4 mb-2 border-b border-[var(--border)]">
+            <div>
+              <h3 className={sectionLabel}>{t.charts.taxBreakdownTitle}</h3>
+              <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.taxBreakdownSub}</p>
+            </div>
+            {marginalRate != null && (
+              <div className="text-right shrink-0" title={t.salaryPage.marginalTitle}>
+                <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{t.salaryPage.marginalRate}</div>
+                <div className="text-[18px] font-mono font-semibold leading-tight" style={{ color: 'var(--warning)' }}>{marginalRate.toFixed(0)}%</div>
+                <div className="text-[9px]" style={{ color: 'var(--text-3)' }}>{t.salaryPage.marginalHint}</div>
+              </div>
+            )}
           </div>
           <div className="h-[260px] w-full">
             <Suspense fallback={<div className="h-full w-full" />}><TaxBreakdownChart /></Suspense>

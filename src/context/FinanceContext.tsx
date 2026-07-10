@@ -478,6 +478,11 @@ interface FinanceSettingsContextType {
    *  last dismissed it for, so it reappears once a new month begins. */
   incomeReminderDismissedMonth: string;
   dismissIncomeReminder: (monthKey: string) => void;
+  /** Day of month (1–31) the user's salary lands; 0 = unset. On the current
+   *  month, the income reminder and savings-rate warning stay quiet until this
+   *  day, so the month isn't judged before the paycheck has arrived. */
+  payday: number;
+  setPayday: (day: number) => void;
   formatCurrency: (val: number) => string;
   formatCurrencyShort: (val: number) => string;
   restoreGrowthRateDefaults: () => void;
@@ -734,6 +739,7 @@ export interface ExportPayload {
   onboardingCompleted?: boolean;
   assumptionsNudgeDismissed?: boolean;
   incomeReminderDismissedMonth?: string;
+  payday?: number;
 }
 
 export interface DailyDataEntry {
@@ -839,6 +845,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
   const [assumptionsNudgeDismissed, setAssumptionsNudgeDismissed] = useState(false);
   const [incomeReminderDismissedMonth, setIncomeReminderDismissedMonth] = useState('');
+  const [payday, setPayday] = useState<number>(0);
   const [demoMode, setDemoMode] = useState(false);
   // First-run guided setup. `onboardingCompleted` is the persisted flag;
   // `onboardingActive` (not persisted) is whether the tour overlay is showing.
@@ -899,14 +906,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth,
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, payday,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth]);
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, payday]);
 
   // The one place that applies a loaded/imported blob → app state (§4.2), with
   // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
@@ -939,7 +946,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       customTaxRatePct: setCustomTaxRatePct, employerCostConfig: setEmployerCostConfig,
       billingConfig: setBillingConfig, hiddenNavItems: setHiddenNavItems,
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
-      incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
+      incomeReminderDismissedMonth: setIncomeReminderDismissedMonth, payday: setPayday,
     };
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
@@ -1915,6 +1922,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
+    payday, setPayday,
     formatCurrency, formatCurrencyShort,
     restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
     demoMode, toggleDemoMode,
@@ -1927,6 +1935,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
+    payday, setPayday,
     formatCurrency, formatCurrencyShort, restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
     demoMode, toggleDemoMode,
     onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,

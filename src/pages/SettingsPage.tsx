@@ -65,6 +65,8 @@ export default function SettingsPage() {
     setCustomCurrencyRate,
     savingsTargetPercent,
     setSavingsTargetPercent,
+    payday,
+    setPayday,
     growthReturnRate,
     setGrowthReturnRate,
     houseGrowthRate,
@@ -529,6 +531,15 @@ export default function SettingsPage() {
               suffix="%"
             />
             <RangeRow
+              label={t.settings.payday}
+              value={payday}
+              onChange={(v) => setPayday(Math.min(31, Math.round(v)))}
+              min={0}
+              max={31}
+              step={1}
+              suffix={t.settings.paydaySuffix}
+            />
+            <RangeRow
               label={t.settings.growthReturnRate}
               value={growthReturnRate}
               onChange={setGrowthReturnRate}
@@ -570,6 +581,9 @@ export default function SettingsPage() {
             />
           </div>
           <p className="mt-4 text-[12px]" style={{ color: 'var(--text-3)' }}>
+            {t.settings.paydayDesc}
+          </p>
+          <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
             {t.settings.growthRatesDesc}
           </p>
         </Card>

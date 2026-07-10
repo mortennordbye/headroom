@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf, lastNMonthKeys } from './date';
+import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf, lastNMonthKeys, isBeforePayday } from './date';
 
 describe('monthKeyFromDate', () => {
   it('formats a date as a local yyyy-MM key with zero-padding', () => {
@@ -67,5 +67,35 @@ describe('yearOf', () => {
 
   it('extracts the year from a full date key', () => {
     expect(yearOf('2024-12-31')).toBe(2024);
+  });
+});
+
+describe('isBeforePayday', () => {
+  const jul = (d: number) => new Date(2026, 6, d); // July 2026
+
+  it('is false when payday is unset (0 or negative)', () => {
+    expect(isBeforePayday(0, jul(1), jul(10))).toBe(false);
+    expect(isBeforePayday(-5, jul(1), jul(10))).toBe(false);
+  });
+
+  it('is true before payday in the current month', () => {
+    expect(isBeforePayday(25, jul(1), jul(10))).toBe(true);
+  });
+
+  it('is false on payday and after', () => {
+    expect(isBeforePayday(25, jul(1), jul(25))).toBe(false);
+    expect(isBeforePayday(25, jul(1), jul(31))).toBe(false);
+  });
+
+  it('never suppresses a past or future month', () => {
+    expect(isBeforePayday(25, new Date(2026, 5, 1), jul(10))).toBe(false); // June viewed
+    expect(isBeforePayday(25, new Date(2026, 7, 1), jul(10))).toBe(false); // August viewed
+  });
+
+  it('clamps a payday past the month length to the last day', () => {
+    // Feb 2026 has 28 days; payday 31 → effective payday is the 28th.
+    const feb = (d: number) => new Date(2026, 1, d);
+    expect(isBeforePayday(31, feb(1), feb(27))).toBe(true);
+    expect(isBeforePayday(31, feb(1), feb(28))).toBe(false);
   });
 });

@@ -64,7 +64,7 @@ function coerceNumberRecord(obj: unknown): Record<string, number> {
 const TOP_LEVEL_NUMERIC = [
   'income', 'savingsTargetPercent', 'growthReturnRate', 'houseGrowthRate',
   'cashGrowthRate', 'cryptoGrowthRate', 'nokToUsd', 'customCurrencyRate',
-  'customTaxRatePct',
+  'customTaxRatePct', 'payday',
 ] as const;
 
 const NUMBER_RECORDS = ['monthlyIncomes', 'netWorthHistory', 'categoryBudgets'] as const;

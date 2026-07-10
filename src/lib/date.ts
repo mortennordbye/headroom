@@ -52,3 +52,19 @@ export function lastNMonthKeys(anchor: Date, n: number): string[] {
   const end = monthKeyFromDate(anchor);
   return Array.from({ length: n }, (_, i) => addMonthsKey(end, i - (n - 1)));
 }
+
+/**
+ * Whether the viewed month is the current month and today falls before payday —
+ * i.e. the paycheck hasn't landed yet, so "this month looks incomplete" nudges
+ * are premature. `payday` is a day-of-month (1–31); 0 (or less) means unset and
+ * never suppresses. A payday past the month's length (e.g. 31 in February) lands
+ * on the last day. Only the live (current) month is gated; past/future aren't.
+ */
+export function isBeforePayday(payday: number, viewedMonth: Date, today: Date): boolean {
+  if (payday < 1) return false;
+  if (viewedMonth.getFullYear() !== today.getFullYear() || viewedMonth.getMonth() !== today.getMonth()) {
+    return false;
+  }
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  return today.getDate() < Math.min(payday, daysInMonth);
+}

@@ -15,6 +15,7 @@ import {
   Square,
   ListChecks,
   Repeat,
+  TrendingDown,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
@@ -32,6 +33,9 @@ import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
+import { monthlyCashflow } from '../lib/monthlyCashflow';
+import { savingsRateStatus } from '../lib/savingsRate';
+import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
 import { incomeDiffPct } from '../lib/income';
@@ -174,10 +178,21 @@ const BudgetPage: React.FC = () => {
     accountFilter,
     setAccountFilter,
     internalTransferIds,
+    nonTransferTransactions,
+    savingsTargetPercent,
+    payday,
     labelRules,
     formatCurrency,
     formatCurrencyShort,
   } = useFinance();
+
+  // Trailing savings-rate health — flag when the last few months' rate has slipped
+  // under the target (same inputs as SavingsRateChart so the banner and line agree).
+  const savingsWarning = useMemo(() => {
+    const months = lastNMonthKeys(currentMonth, 12);
+    const rows = monthlyCashflow(months, nonTransferTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses);
+    return savingsRateStatus(rows, savingsTargetPercent);
+  }, [currentMonth, nonTransferTransactions, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsTargetPercent]);
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -443,6 +458,10 @@ const BudgetPage: React.FC = () => {
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
+  // Before payday on the current month, the paycheck hasn't landed — so nudges
+  // that judge the month as incomplete (set-your-income, low savings rate) are
+  // premature. See isBeforePayday for the exact rule.
+  const beforePayday = isBeforePayday(payday, currentMonth, today);
   // Fixed-expense config is read-only when viewing a past month: the list shows
   // that month's recorded expenses (viewFixedExpenses), which editing live config
   // can't change. Transactions/income stay editable — they're dated timeline data.
@@ -452,7 +471,7 @@ const BudgetPage: React.FC = () => {
   // Only for the live month; dismissible, but the dismiss is keyed to the month
   // so it returns once a new month begins.
   const showIncomeReminder =
-    isCurrentMonth && !isMonthlyIncomeOverridden && incomeReminderDismissedMonth !== monthKey;
+    isCurrentMonth && !isMonthlyIncomeOverridden && incomeReminderDismissedMonth !== monthKey && !beforePayday;
 
   // Ledger honors the account filter (transfers stay visible but marked, so the
   // log remains a faithful record of what moved).
@@ -884,6 +903,21 @@ const BudgetPage: React.FC = () => {
             <h2 className={sectionLabel}>{t.charts.savingsRateTitle}</h2>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.savingsRateSub}</p>
           </div>
+          {savingsWarning && savingsWarning.belowTarget && savingsWarning.months >= 2 && !beforePayday && (
+            <div
+              className="flex items-start gap-2 mb-3 px-3 py-2 rounded-[6px] text-[12px] leading-snug"
+              style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
+              role="status"
+            >
+              <TrendingDown size={14} strokeWidth={2} className="shrink-0 mt-px" />
+              <span>
+                {t.budgetPage.savingsRateWarning
+                  .replace('{months}', String(savingsWarning.months))
+                  .replace('{rate}', String(savingsWarning.trailingRate))
+                  .replace('{target}', String(Math.round(savingsTargetPercent)))}
+              </span>
+            </div>
+          )}
           <div className="flex-1 min-h-[240px] w-full">
             <Suspense fallback={<div className="h-full w-full" />}><SavingsRateChart /></Suspense>
           </div>
