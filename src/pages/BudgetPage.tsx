@@ -11,6 +11,9 @@ import {
   X,
   ArrowLeftRight,
   Search,
+  CheckSquare,
+  Square,
+  ListChecks,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
@@ -172,6 +175,9 @@ const BudgetPage: React.FC = () => {
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -472,6 +478,31 @@ const BudgetPage: React.FC = () => {
   const searchCount = query
     ? ledgerDays.reduce((n, day) => n + day.transactions.filter(rowMatch).length, 0)
     : 0;
+
+  // --- Bulk select / recategorize / delete ---
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const exitSelect = () => { setSelectMode(false); setSelected(new Set()); };
+  const bulkSetCategory = () => openModal({
+    title: t.budgetPage.bulkCategoryTitle,
+    fields: [{ key: 'category', label: t.category, type: 'select', value: '', options: categoryOptions }],
+    onSave: (vals) => {
+      const cat = vals.category.trim();
+      setDailyTransactions(dailyTransactions.map(tx => selected.has(tx.id)
+        ? { ...tx, category: cat || undefined, categorySource: cat ? 'manual' : undefined }
+        : tx));
+      closeModal();
+      exitSelect();
+    },
+  });
+  const confirmBulkDelete = () => {
+    setDailyTransactions(dailyTransactions.filter(tx => !selected.has(tx.id)));
+    setBulkDeleteOpen(false);
+    exitSelect();
+  };
 
   // Account scope, as a compact dropdown placed next to the analysis it filters.
   // Default is "all accounts"; only shown when there's more than one account.
@@ -857,6 +888,16 @@ const BudgetPage: React.FC = () => {
           <div className="flex items-center gap-2">
             {logOpen && totalSpentThisMonth > 0 && (
               <button
+                onClick={() => selectMode ? exitSelect() : setSelectMode(true)}
+                aria-pressed={selectMode}
+                className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors px-2 py-1 rounded-lg hover:bg-[var(--bg-elev)] ${selectMode ? 'text-[var(--accent)]' : 'text-[var(--text-2)] hover:text-[var(--text-1)]'}`}
+              >
+                <ListChecks size={13} />
+                <span className="hidden sm:inline">{selectMode ? t.budgetPage.selectDone : t.budgetPage.selectButton}</span>
+              </button>
+            )}
+            {logOpen && totalSpentThisMonth > 0 && (
+              <button
                 onClick={exportCSV}
                 className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors px-2 py-1 rounded-lg hover:bg-[var(--bg-elev)]"
               >
@@ -935,8 +976,14 @@ const BudgetPage: React.FC = () => {
                   {day.transactions.filter(rowMatch).map((tx) => {
                     const coveredBy = envelopeNameFor(tx);
                     const isTransfer = internalTransferIds.has(tx.id);
+                    const isSelected = selected.has(tx.id);
                     return (
-                    <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isTransfer ? 'opacity-60' : ''}`}>
+                    <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer ? 'opacity-60' : ''}`}>
+                      {selectMode && (
+                        <button type="button" onClick={() => toggleSelect(tx.id)} aria-label={txDisplayName(tx, labelRules)} aria-pressed={isSelected} className="text-[var(--accent)] shrink-0">
+                          {isSelected ? <CheckSquare size={13} /> : <Square size={13} className="text-[var(--text-3)]" />}
+                        </button>
+                      )}
                       {tx.category && (
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                       )}
@@ -1000,8 +1047,14 @@ const BudgetPage: React.FC = () => {
                       {day.transactions.filter(rowMatch).map((tx) => {
                         const coveredBy = envelopeNameFor(tx);
                         const isTransfer = internalTransferIds.has(tx.id);
+                        const isSelected = selected.has(tx.id);
                         return (
-                        <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isTransfer ? 'opacity-60' : ''}`}>
+                        <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer ? 'opacity-60' : ''}`}>
+                          {selectMode && (
+                            <button type="button" onClick={() => toggleSelect(tx.id)} aria-label={txDisplayName(tx, labelRules)} aria-pressed={isSelected} className="text-[var(--accent)] shrink-0">
+                              {isSelected ? <CheckSquare size={14} /> : <Square size={14} className="text-[var(--text-3)]" />}
+                            </button>
+                          )}
                           {tx.category && (
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                           )}
@@ -1073,6 +1126,48 @@ const BudgetPage: React.FC = () => {
         </div>
         </>)}
       </div>
+
+      {/* Bulk-action bar — floats while rows are selected */}
+      {selectMode && selected.size > 0 && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 bottom-20 md:bottom-6 z-40 flex items-center gap-1 px-2 py-1.5 rounded-full border shadow-lg"
+          style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
+        >
+          <span className="text-[12px] font-semibold px-2 text-[var(--text-1)]">
+            {t.budgetPage.bulkSelected.replace('{count}', selected.size.toString())}
+          </span>
+          <button
+            onClick={bulkSetCategory}
+            className="text-[12px] font-medium px-2.5 py-1 rounded-full text-[var(--accent)] hover:bg-[var(--accent-bg)] transition-colors"
+          >
+            {t.budgetPage.bulkSetCategory}
+          </button>
+          <button
+            onClick={() => setBulkDeleteOpen(true)}
+            className="text-[12px] font-medium px-2.5 py-1 rounded-full text-[var(--negative)] hover:bg-[var(--negative-bg)] transition-colors"
+          >
+            {t.budgetPage.bulkDelete}
+          </button>
+          <button
+            onClick={exitSelect}
+            aria-label={t.budgetPage.bulkClear}
+            className="p-1.5 rounded-full text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {bulkDeleteOpen && (
+        <ConfirmModal
+          title={t.confirmDelete}
+          message={t.budgetPage.confirmBulkDeleteMsg.replace('{count}', selected.size.toString())}
+          confirmLabel={t.delete}
+          cancelLabel={t.cancel}
+          onConfirm={confirmBulkDelete}
+          onCancel={() => setBulkDeleteOpen(false)}
+        />
+      )}
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
       {pendingDelete && (
