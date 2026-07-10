@@ -1038,7 +1038,7 @@ const SalaryPage: React.FC = () => {
                       <div className="text-[10px] font-mono font-semibold pt-2 pb-0.5" style={{ color: 'var(--text-3)' }}>{ev.year}</div>
                     )}
                     <div className="relative flex items-start justify-between gap-3 py-2 group">
-                      <span className="absolute left-[3px] top-[13px] w-2 h-2 rounded-full" style={{ background: ev.accent, boxShadow: '0 0 0 2px var(--bg-card)' }} />
+                      <span className="absolute left-[-21px] top-[13px] w-2 h-2 rounded-full" style={{ background: ev.accent, boxShadow: '0 0 0 2px var(--bg-card)' }} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap text-[13px] text-[var(--text-1)]">
                           <span className="font-medium">{ev.title}</span>
@@ -1104,15 +1104,22 @@ const SalaryPage: React.FC = () => {
 
         return (
           <div className={`${card} p-5 md:p-7 space-y-4`}>
-            <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-3 pb-4 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2 min-w-0">
                 <TrendingUp size={14} className="text-[var(--text-2)]" />
                 <h3 className={sectionLabel}>{t.salary.salaryAndJobs}</h3>
               </div>
-              <RecordEventButton
-                label={t.salary.recordEvent}
-                onClick={() => (jobs.length === 0 ? openJobModal() : openRecordEvent())}
-              />
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => openJobModal()}
+                  className="inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-[12px] font-semibold border border-[var(--border)] text-[var(--text-2)] hover:text-[var(--text-1)] hover:border-[var(--text-3)] transition-colors"
+                >
+                  <Briefcase size={13} /> {t.salary.addJob}
+                </button>
+                {jobs.length > 0 && (
+                  <RecordEventButton label={t.salary.recordEvent} onClick={() => openRecordEvent()} />
+                )}
+              </div>
             </div>
 
             {jobs.length === 0 && (

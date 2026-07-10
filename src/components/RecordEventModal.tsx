@@ -381,7 +381,7 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
 
         {!editing && onNewJob && (
           <button type="button" onClick={() => { onClose(); onNewJob(); }}
-            className="text-[12px] font-semibold text-[var(--accent)] hover:opacity-80 transition-opacity">
+            className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-[6px] text-[12px] font-semibold border border-[var(--border)] text-[var(--text-2)] hover:text-[var(--text-1)] hover:border-[var(--text-3)] transition-colors">
             ＋ {t.salary.addJob}
           </button>
         )}
