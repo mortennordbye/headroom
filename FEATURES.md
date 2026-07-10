@@ -155,14 +155,12 @@ per bucket. Bear/base/bull bands (return ±3pp) around the long-range projection
 the chart overstating certainty. Where: `src/lib/calculations.ts`,
 `src/pages/DashboardPage.tsx`, `src/pages/AssetPage.tsx`.
 
-### 24. Goal completion ETA from actual pace
-A goal knows its `remaining` and deadline (`GoalsSection.monthsUntil`), and the app computes
-recommended monthly savings, but nothing says "at your current pace you reach this by
-<date>" or "you're 4 months behind". Add a projected-completion ETA and a kr/mo-to-make-it
-suggestion.
-HISTORY_PLAN: unblocked — Phases 1-2 shipped; "actual pace" can now come from the snapshot
-history of the goal's source balance (`savingsSeriesFrom` / snapshot deltas), not from the
-recommended-savings figure.
+### 24. Goal completion ETA from actual pace ✅ SHIPPED
+`goalPace` (pure, unit-tested in `src/lib/goalPace.ts`) measures the recent monthly pace of a
+goal's source balance across the trailing months of snapshot history (real month gaps) and
+projects when the target is reached, whether that's ahead of or behind the deadline, and the
+kr/mo needed to make it. Each source-tracked goal card with ≥2 recorded months shows the ETA
+line. (`src/components/GoalsSection.tsx`.)
 
 ### 25. Financial-independence (FIRE) tile ✅ SHIPPED
 A FI card on Forecast: the 25× annual-essential-spend target (from `totalFixedExpenses`),

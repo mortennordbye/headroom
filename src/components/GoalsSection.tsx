@@ -3,7 +3,9 @@ import { Target, Plus, Edit2, Trash2 } from 'lucide-react';
 import { useFinance, type Goal, type GoalSource, type Assets } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
-import { sumSavings } from '../lib/equity';
+import { sumSavings, computeEquityBreakdown } from '../lib/equity';
+import { goalPace, type GoalSourcePoint } from '../lib/goalPace';
+import { currentMonthKey, addMonthsKey } from '../lib/date';
 import { ProgressBar } from './ui/ProgressBar';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
@@ -22,6 +24,27 @@ function currentValueFor(goal: Goal, ctx: { assets: Assets; totalEquity: number 
     case 'manual':
     default: return goal.manualCurrent ?? 0;
   }
+}
+
+// The goal's source balance across recorded months, for pace/ETA. Manual goals
+// have no tracked source, so they get no series (and no ETA).
+function goalSourceSeries(goal: Goal, snapshots: Record<string, { assets: Assets }>): GoalSourcePoint[] {
+  if (goal.source === 'manual') return [];
+  const out: GoalSourcePoint[] = [];
+  for (const monthKey of Object.keys(snapshots)) {
+    const a = snapshots[monthKey].assets;
+    let value: number | null = null;
+    switch (goal.source) {
+      case 'bsu': value = a.bsu; break;
+      case 'portfolio': value = a.portfolio; break;
+      case 'bufferAccount': value = a.bufferAccount; break;
+      case 'savings': value = sumSavings(a); break;
+      case 'savingsAccount': value = a.savingsAccounts?.find(s => s.id === goal.savingsAccountId)?.balance ?? null; break;
+      case 'totalEquity': value = computeEquityBreakdown(a).totalEquity; break;
+    }
+    if (value != null && Number.isFinite(value)) out.push({ monthKey, value });
+  }
+  return out;
 }
 
 // The account-picker options are encoded as `sa:<id>` in the source <select> so
@@ -61,7 +84,7 @@ interface ConfirmConfig {
 }
 
 const GoalsSection: React.FC = () => {
-  const { t, goals, addGoal, updateGoal, removeGoal, assets, netWorth, formatCurrency } = useFinance();
+  const { t, goals, addGoal, updateGoal, removeGoal, assets, netWorth, formatCurrency, balanceSnapshots } = useFinance();
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [confirm, setConfirm] = useState<ConfirmConfig | null>(null);
 
@@ -176,6 +199,10 @@ const GoalsSection: React.FC = () => {
               months < 0 ? t.goals.overdue :
               `${months} ${t.goals.monthsLeft}`;
             const barColor = isComplete ? 'var(--positive)' : (months !== null && months < 0) ? 'var(--negative)' : 'var(--accent)';
+            // Actual-pace ETA: only for source-tracked goals with ≥2 recorded
+            // months (manual goals and no-history goals get no projection).
+            const srcSeries = goalSourceSeries(g, balanceSnapshots);
+            const pace = !isComplete && srcSeries.length >= 2 ? goalPace(srcSeries, remaining, months) : null;
             return (
               <div key={g.id} className="space-y-2 group">
                 <div className="flex items-baseline justify-between gap-3">
@@ -209,6 +236,30 @@ const GoalsSection: React.FC = () => {
                     {formatCurrency(g.target)}
                   </span>
                 </div>
+                {pace && (
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    {pace.monthsToTarget != null ? (
+                      <span>
+                        {pace.monthsToTarget === 0
+                          ? t.goals.completed
+                          : `${t.goals.pace}: ${t.goals.paceEta.replace('{date}', addMonthsKey(currentMonthKey(), pace.monthsToTarget))}`}
+                      </span>
+                    ) : (
+                      <span>{t.goals.paceStalled}</span>
+                    )}
+                    {pace.monthsAheadOrBehind != null && (
+                      <span style={{ color: pace.onTrack ? 'var(--positive)' : 'var(--warning)' }}>
+                        {(pace.monthsAheadOrBehind >= 0 ? t.goals.paceAhead : t.goals.paceBehind)
+                          .replace('{n}', String(Math.abs(pace.monthsAheadOrBehind)))}
+                      </span>
+                    )}
+                    {pace.monthsToTarget == null && pace.requiredMonthly != null && (
+                      <span style={{ color: 'var(--warning)' }}>
+                        {t.goals.paceNeed.replace('{amount}', formatCurrency(Math.round(pace.requiredMonthly)))}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
