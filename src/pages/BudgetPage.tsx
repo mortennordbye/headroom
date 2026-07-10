@@ -27,6 +27,7 @@ import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance, type TransactionTemplate, type ExpenseType, type DailyTransaction } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
+import EditTransactionModal from '../components/EditTransactionModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
@@ -173,9 +174,7 @@ const BudgetPage: React.FC = () => {
     accountFilter,
     setAccountFilter,
     internalTransferIds,
-    addCategoryRule,
     labelRules,
-    addLabelRule,
     formatCurrency,
     formatCurrencyShort,
   } = useFinance();
@@ -343,60 +342,9 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  const editDailyTransaction = (id: string, description: string, amount: number, category?: string, kind?: 'income' | 'expense', merchant?: string) => {
-    // A fixed expense already mapped to this transaction (by its match pattern),
-    // so the "Map to fixed expense" select can pre-select it.
-    const hay = ` ${merchant ?? ''} ${description ?? ''} `.toLowerCase();
-    const prevMapped = fixedExpenses.find(e => (e.match ?? '').trim() && hay.includes((e.match as string).trim().toLowerCase()));
-    const expenseOptions = [
-      { value: '', label: t.budgetPage.mapToFixedExpenseNone },
-      ...fixedExpenses.map(e => ({ value: e.id, label: e.name })),
-    ];
-    openModal({
-      title: description,
-      fields: [
-        { key: 'description', label: t.editDescription, type: 'text', value: description },
-        { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
-        { key: 'category', label: t.category, type: 'select', value: category ?? '', options: categoryOptions },
-        kindField(kind === 'income' ? 'income' : 'expense'),
-        { key: 'mapExpense', label: t.budgetPage.mapToFixedExpense, type: 'select', value: prevMapped?.id ?? '', options: expenseOptions, hint: t.budgetPage.mapToFixedExpenseHint },
-        { key: 'rememberRule', label: t.budgetPage.rememberRule, type: 'checkbox', value: 'false', hint: t.budgetPage.rememberRuleHint },
-        { key: 'ruleMatch', label: t.budgetPage.ruleMatch, type: 'text', value: merchant || description },
-      ],
-      onSave: (vals) => {
-        const newAmount = parsePositiveNumber(vals.amount);
-        if (vals.description.trim() && newAmount !== null) {
-          setDailyTransactions(dailyTransactions.map(tx => tx.id === id
-            ? { ...tx, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, categorySource: vals.category.trim() ? 'manual' : undefined, kind: vals.kind === 'income' ? 'income' : 'expense' }
-            : tx
-          ));
-          // Remember: create rules so matching rows (past + future) inherit only
-          // what you actually changed here — the category and/or the custom name.
-          if (vals.rememberRule === 'true' && vals.ruleMatch.trim()) {
-            const newCat = vals.category.trim();
-            if (isCategoryKey(newCat) && newCat !== (category ?? '')) addCategoryRule(vals.ruleMatch.trim(), newCat as CategoryKey);
-            const newName = vals.description.trim();
-            if (newName && newName !== description) addLabelRule(vals.ruleMatch.trim(), newName);
-          }
-          // Map to a fixed expense: set the chosen expense's match pattern (and
-          // clear a previous mapping) so only these transactions draw it down.
-          const newMap = vals.mapExpense;
-          const prevMap = prevMapped?.id ?? '';
-          if (newMap !== prevMap && vals.ruleMatch.trim()) {
-            const pattern = vals.ruleMatch.trim();
-            setFixedExpenses(fixedExpenses.map(e => {
-              if (e.id === newMap) return { ...e, match: pattern };
-              if (e.id === prevMap) return { ...e, match: undefined };
-              return e;
-            }));
-          }
-          closeModal();
-        } else {
-          setModal(prev => prev ? { ...prev, error: !vals.description.trim() ? t.editDescription + t.validation.requiredSuffix : t.editAmount + t.validation.positiveAmountSuffix } : null);
-        }
-      },
-    });
-  };
+  // Editing a transaction is delegated to the shared EditTransactionModal so the
+  // Budget ledger and the Dashboard recent list behave identically.
+  const [editingTx, setEditingTx] = useState<DailyTransaction | null>(null);
 
   // Routine deletes use undo (not a confirm): remove immediately and offer a
   // brief window to bring the item back via the toast.
@@ -910,7 +858,7 @@ const BudgetPage: React.FC = () => {
             <span className={sectionLabel}>{t.spendingByCategory}</span>
             {accountFilterSelect}
           </div>
-          <CategoryBreakdown onEditTransaction={(tx) => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} />
+          <CategoryBreakdown onEditTransaction={(tx) => setEditingTx(tx)} />
 
           {/* Multi-month spending trend by category */}
           <div className={`${sectionLabel} pt-5 pb-3 border-t border-[var(--border)]`}>
@@ -1071,7 +1019,7 @@ const BudgetPage: React.FC = () => {
                       <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                       {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
-                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
+                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => setEditingTx(tx)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
                         <Edit2 size={11} />
                       </button>
                       <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
@@ -1145,7 +1093,7 @@ const BudgetPage: React.FC = () => {
                           {tx.category && (
                             <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{isCategoryKey(tx.category) ? t.categoryLabels[tx.category] : tx.category}</span>
                           )}
-                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
+                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => setEditingTx(tx)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
                             <Edit2 size={12} />
                           </button>
                           <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
@@ -1261,6 +1209,7 @@ const BudgetPage: React.FC = () => {
       )}
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
+      {editingTx && <EditTransactionModal tx={editingTx} onClose={() => setEditingTx(null)} />}
       {pendingDelete && (
         <ConfirmModal
           title={t.confirmDelete}
