@@ -2,10 +2,21 @@
 
 > **STATUS: ✅ SHIPPED — all phases merged to `main` (PR #31, 2026-07-09).**
 > Phases 1–5 complete and browser-verified (0 console errors); plus supporting features
-> (Dashboard history insights, missing-month markers). Still deferred to `BACKLOG.md`:
-> BudgetPage past-month envelope math (§5.3), and folding the scalar net-worth editor into
-> the History manager. Old-user migration verified (no data loss; current month upgrades to
-> v2 once, older months stay v1). The per-phase ✅ markers below record the detail.
+> (Dashboard history insights, missing-month markers). Old-user migration verified (no data
+> loss; current month upgrades to v2 once, older months stay v1). The per-phase ✅ markers
+> below record the detail.
+>
+> **Follow-up ✅ SHIPPED (2026-07-10) — single shared month.** The two remaining deferred
+> items are done, via a full month-model unification: `historyMonth` was retired and the whole
+> app now tracks one `currentMonth`. `useBalanceHistory` snaps that shared month to the nearest
+> recorded snapshot (`snapToRecordedMonth` in `src/lib/snapshots.ts`, unit-tested); the one
+> header picker drives every money page (balance pages show a read-only lock + "as of {month}"
+> when snapped to an earlier recording). §5.3 BudgetPage past-month envelope math now reads
+> `snapshot.fixedExpenses` (via `viewFixedExpenses` in `FinanceContext`), with read-only
+> fixed-expense editors and a recorded/not-recorded marker. The scalar net-worth editor was
+> folded into `HistoryManagerModal` (inline headline field for snapshot-less months) and the
+> standalone `NetWorthHistoryModal` deleted; the Dashboard "Edit history" button opens the
+> manager. Browser-verified in demo mode, 0 console errors.
 
 ## 0. Goal
 
@@ -259,8 +270,11 @@ be represented at all.
 > **Deviation:** I built a *separate* `HistoryManagerModal` rather than destructively
 > rewriting `NetWorthHistoryModal`; the scalar net-worth editor still exists on the Dashboard
 > unchanged (its 12-month window not dropped). The manager supersedes it functionally and
-> shows snapshot-derived net worth per month. Folding the scalar editor into the manager (or
-> retiring it) is a follow-up — see BACKLOG.
+> shows snapshot-derived net worth per month.
+> **Follow-up ✅ (2026-07-10):** the scalar editor is now folded in — `HistoryManagerModal`
+> rows without a snapshot expose an inline headline-net-worth field (writes `netWorthHistory`);
+> the standalone `NetWorthHistoryModal` was deleted and the Dashboard "Edit history" button
+> opens the manager. The rolling-12-month cap is gone (the manager backfills any month).
 
 **4.1 Promote `NetWorthHistoryModal` into a History manager** ✅ (Settings or the Assets
 page). A month-grid list showing every month from the earliest record to now, each row
@@ -304,9 +318,9 @@ what was entered, live month unaffected.
 > closed: AssetPage projections use the snapshot's `assumptions` + mortgage rate/term (v1 →
 > live fallback); PensionPage pensionable income resolves at the *viewed* month via
 > `calcActiveGrossAnnual(...,activeKey)`. 5.4 read-only affordance now lives in the header.
-> **Still deferred:** BudgetPage past-month `snapshot.fixedExpenses` envelope math (Budget
-> keeps its own `currentMonth` picker; wiring recorded fixed-expenses into envelope math is a
-> separate change).
+> **Follow-up ✅ (2026-07-10):** BudgetPage past-month envelope math now uses
+> `snapshot.fixedExpenses` — see the single-shared-month follow-up in the STATUS banner. The
+> Budget/Dashboard `currentMonth` and the balance-page month are now the same slice.
 
 **5.1 Lift the stepper state.** ✅ Replace the per-page `useState` in `useBalanceHistory`
 with shared state in `FinanceContext` (a `historyMonth: string | null` slice; null = live).

@@ -22,7 +22,7 @@ import type { LabelRule } from '../lib/labelRules';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
-import { lastNMonthKeys } from '../lib/date';
+import { lastNMonthKeys, currentMonthKey } from '../lib/date';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
 import { dedupeBankTransactions } from '../lib/bankDedup';
@@ -455,10 +455,6 @@ interface FinanceSettingsContextType {
   setCustomCurrencyRate: (rate: number) => void;
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
-  /** The balance-page time machine's selected month ('yyyy-MM'), or null = live.
-   *  Shared across Assets/Loan/Pension so the chosen month carries between them. */
-  historyMonth: string | null;
-  setHistoryMonth: (month: string | null) => void;
   savingsTargetPercent: number;
   setSavingsTargetPercent: (val: number) => void;
   growthReturnRate: number;
@@ -636,6 +632,12 @@ interface FinanceDerivedContextType {
   mortgageTermYears: number;
   totalResidual: number;
   totalFixedExpenses: number;
+  /** Fixed expenses for the selected month: live config, or the recorded
+   *  snapshot's expenses when viewing a past month (read-only). */
+  viewFixedExpenses: FixedExpense[];
+  /** True when `viewFixedExpenses` came from a past month's snapshot rather than
+   *  live config — Budget shows a "recorded" vs "not recorded" cue accordingly. */
+  fixedExpensesFromSnapshot: boolean;
   monthlyBudget: number;
   dailyBudget: number;
   dailyData: DailyDataEntry[];
@@ -790,11 +792,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const n = new Date();
     return new Date(n.getFullYear(), n.getMonth(), 1);
   });
-
-  // Shared balance-page time-machine month (null = live). View state, not
-  // persisted (like currentMonth). Lifted out of useBalanceHistory so the
-  // selected month carries across Assets/Loan/Pension.
-  const [historyMonth, setHistoryMonth] = useState<string | null>(null);
 
   const [income, setIncome] = useState<number>(55000);
   const [monthlyIncomes, setMonthlyIncomes] = useState<Record<string, number>>({});
@@ -1217,13 +1214,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // --- Calculations ---
 
-  const totalFixedExpenses = useMemo(() =>
-    fixedExpenses.reduce((sum, item) => sum + item.amount, 0),
-  [fixedExpenses]);
-
   const monthKey = format(currentMonth, 'yyyy-MM');
   const prevMonthKey = format(subMonths(currentMonth, 1), 'yyyy-MM');
   const prevMonthIncome = monthlyIncomes[prevMonthKey] ?? 0;
+
+  // The fixed expenses to *view* for the selected month. Live config for the
+  // current (and future) month; for a past month with a recorded snapshot, that
+  // month's captured expenses, so budget/envelope math reflects what was actually
+  // fixed then rather than today's amounts. Editors always mutate live
+  // `fixedExpenses`; this is read-only view data (see BudgetPage's read-only gate).
+  const fixedExpensesFromSnapshot = monthKey < currentMonthKey()
+    && balanceSnapshots[monthKey]?.fixedExpenses !== undefined;
+  const viewFixedExpenses = fixedExpensesFromSnapshot
+    ? balanceSnapshots[monthKey].fixedExpenses!
+    : fixedExpenses;
+
+  const totalFixedExpenses = useMemo(() =>
+    viewFixedExpenses.reduce((sum, item) => sum + item.amount, 0),
+  [viewFixedExpenses]);
 
   // Derived monthly net income from the salary system (latest applicable salary + on-call → tax → net).
   // Falls back to the legacy static `income` when no salaries have been entered.
@@ -1375,8 +1383,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // envelope down instead of hitting the daily budget a second time. Single source
   // of truth shared with the budget UI and charts (src/lib/envelopes.ts).
   const reconciliation = useMemo(
-    () => reconcile(fixedExpenses, dailyTransactions, monthKey),
-    [fixedExpenses, dailyTransactions, monthKey],
+    () => reconcile(viewFixedExpenses, dailyTransactions, monthKey),
+    [viewFixedExpenses, dailyTransactions, monthKey],
   );
 
   // Money moved between two of the user's own connected accounts double-counts
@@ -1400,8 +1408,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [nonTransferTransactions, fixedExpenses, prevMonthKey],
   );
   const currentMonthSpending = useMemo(
-    () => discretionarySpendForMonth(nonTransferTransactions, fixedExpenses, monthKey),
-    [nonTransferTransactions, fixedExpenses, monthKey],
+    () => discretionarySpendForMonth(nonTransferTransactions, viewFixedExpenses, monthKey),
+    [nonTransferTransactions, viewFixedExpenses, monthKey],
   );
 
   // Per-account view (Budget page only, not persisted). Accounts are grouped by
@@ -1918,7 +1926,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     lang, setLang, t, displayCurrency, setDisplayCurrency, nokToUsd, setNokToUsd,
     customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
     currentMonth, setCurrentMonth,
-    historyMonth, setHistoryMonth,
     savingsTargetPercent, setSavingsTargetPercent,
     growthReturnRate, setGrowthReturnRate, houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
@@ -1934,7 +1941,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded,
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
-    currentMonth, historyMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
+    currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
     cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
@@ -1998,14 +2005,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
-    totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,
+    totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
+    monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   }), [
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
-    totalResidual, totalFixedExpenses, monthlyBudget, dailyBudget, dailyData, reconciliation,
+    totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
+    monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   ]);
 

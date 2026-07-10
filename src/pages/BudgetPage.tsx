@@ -145,6 +145,8 @@ const BudgetPage: React.FC = () => {
     dailyBudget,
     totalFixedExpenses,
     fixedExpenses,
+    viewFixedExpenses,
+    fixedExpensesFromSnapshot,
     setFixedExpenses,
     debts,
     dailyData,
@@ -174,8 +176,9 @@ const BudgetPage: React.FC = () => {
   // Informational only — not folded into totalFixedExpenses (which drives budget
   // math); surfaces the monthly minimum debt service alongside fixed costs.
   const totalMonthlyDebtService = debts.reduce((sum, d) => sum + d.minPayment, 0);
-  // Sort biggest-first so the distribution reads as a clean ranking.
-  const sortedExpenses = [...fixedExpenses].sort((a, b) => b.amount - a.amount);
+  // Sort biggest-first so the distribution reads as a clean ranking. Uses the
+  // month's recorded expenses when time-travelling (see viewFixedExpenses).
+  const sortedExpenses = [...viewFixedExpenses].sort((a, b) => b.amount - a.amount);
 
   // --- Validation helpers ---
   const parsePositiveNumber = (val: string): number | null => {
@@ -436,6 +439,10 @@ const BudgetPage: React.FC = () => {
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
+  // Fixed-expense config is read-only when viewing a past month: the list shows
+  // that month's recorded expenses (viewFixedExpenses), which editing live config
+  // can't change. Transactions/income stay editable — they're dated timeline data.
+  const expensesReadOnly = isPast;
   const incomeDiff = incomeDiffPct(effectiveIncome, averageIncome);
   // Remind the user to set THIS month's income while it's still auto-calculated.
   // Only for the live month; dismissible, but the dismiss is keyed to the month
@@ -627,15 +634,22 @@ const BudgetPage: React.FC = () => {
         <div data-tour="fixed-expenses" className={`lg:col-span-1 ${card} p-5 md:p-7 space-y-5`}>
           <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
             <h2 className={sectionLabel}>{t.fixedCosts}</h2>
-            <button
-              onClick={addFixedExpense}
-              aria-label={`${t.add} — ${t.fixedCosts}`}
-              className="text-[var(--accent)] hover:opacity-70 transition-opacity"
-            >
-              <PlusCircle size={18} strokeWidth={2} />
-            </button>
+            {!expensesReadOnly && (
+              <button
+                onClick={addFixedExpense}
+                aria-label={`${t.add} — ${t.fixedCosts}`}
+                className="text-[var(--accent)] hover:opacity-70 transition-opacity"
+              >
+                <PlusCircle size={18} strokeWidth={2} />
+              </button>
+            )}
           </div>
-          {linkSuggestions.length > 0 && (
+          {expensesReadOnly && (
+            <p className="text-[11px] leading-snug" style={{ color: 'var(--text-3)' }}>
+              {fixedExpensesFromSnapshot ? t.fixedExpensesRecorded : t.fixedExpensesNotRecorded}
+            </p>
+          )}
+          {!expensesReadOnly && linkSuggestions.length > 0 && (
             <div className="rounded-[6px] border border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[var(--warning-bg)] p-3 space-y-2.5">
               <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-1)]">
                 <Wallet size={13} className="text-[var(--warning)]" />
@@ -676,7 +690,7 @@ const BudgetPage: React.FC = () => {
             ))}
           </div>
           <div className="space-y-0">
-            {fixedExpenses.map((expense) => {
+            {viewFixedExpenses.map((expense) => {
               // Envelope reconciliation, shown only for a linked expense that has
               // real spend this month (keeps the list quiet for non-syncers). When
               // several expenses share a category, the shared bar renders once,
@@ -686,31 +700,46 @@ const BudgetPage: React.FC = () => {
               return (
               <div key={expense.id} className="py-3 border-b border-[var(--border)] last:border-0">
                 <div className="flex items-center justify-between group">
-                  <button
-                    type="button"
-                    aria-label={`${t.edit} — ${expense.name}`}
-                    className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
-                    onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category)}
-                  >
-                    <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
-                    <span className="truncate">{expense.name}</span>
-                  </button>
-                  <div className="flex items-center gap-3">
+                  {expensesReadOnly ? (
+                    <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] min-w-0">
+                      <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
+                      <span className="truncate">{expense.name}</span>
+                    </span>
+                  ) : (
                     <button
                       type="button"
                       aria-label={`${t.edit} — ${expense.name}`}
-                      className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
+                      className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
                       onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category)}
                     >
-                      {formatCurrency(expense.amount)}
+                      <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
+                      <span className="truncate">{expense.name}</span>
                     </button>
-                    <button
-                      onClick={() => removeFixedExpense(expense.id, expense.name)}
-                      aria-label={`${t.delete} — ${expense.name}`}
-                      className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                  )}
+                  <div className="flex items-center gap-3">
+                    {expensesReadOnly ? (
+                      <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">
+                        {formatCurrency(expense.amount)}
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          aria-label={`${t.edit} — ${expense.name}`}
+                          className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
+                          onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category)}
+                        >
+                          {formatCurrency(expense.amount)}
+                        </button>
+                        <button
+                          onClick={() => removeFixedExpense(expense.id, expense.name)}
+                          aria-label={`${t.delete} — ${expense.name}`}
+                          className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
                 {showEnvelope && <EnvelopeBar envelope={envelope} formatCurrency={formatCurrency} labels={{ left: t.envelopeLeft, over: t.envelopeOver }} />}

@@ -1,10 +1,44 @@
 import { describe, it, expect } from 'vitest';
-import { nearestSnapshot, historyRows, buildManualSnapshot, type SnapshotBalances } from './snapshots';
+import { nearestSnapshot, historyRows, buildManualSnapshot, snapToRecordedMonth, type SnapshotBalances } from './snapshots';
 import { netWorthFromSnapshot } from './netWorth';
 import type { BalanceSnapshot } from '../context/FinanceContext';
 
 const mk = (source: 'auto' | 'manual' = 'auto'): BalanceSnapshot =>
   ({ source, assets: {} } as unknown as BalanceSnapshot);
+
+describe('snapToRecordedMonth', () => {
+  const recorded = ['2026-01', '2026-03', '2026-06'];
+  const now = '2026-07';
+
+  it('treats the current month as live', () => {
+    expect(snapToRecordedMonth(recorded, now, now)).toEqual({ activeKey: now, isLive: true });
+  });
+
+  it('treats a future month as live (no future balances to protect)', () => {
+    expect(snapToRecordedMonth(recorded, '2026-09', now)).toEqual({ activeKey: now, isLive: true });
+  });
+
+  it('snaps a past month with an exact snapshot to itself, read-only', () => {
+    expect(snapToRecordedMonth(recorded, '2026-03', now)).toEqual({ activeKey: '2026-03', isLive: false });
+  });
+
+  it('snaps a past gap month to the latest recorded month at or before it', () => {
+    expect(snapToRecordedMonth(recorded, '2026-05', now)).toEqual({ activeKey: '2026-03', isLive: false });
+  });
+
+  it('falls back to the earliest recorded month when nothing is that early', () => {
+    expect(snapToRecordedMonth(recorded, '2025-11', now)).toEqual({ activeKey: '2026-01', isLive: false });
+  });
+
+  it('degrades to the live key when nothing is recorded', () => {
+    expect(snapToRecordedMonth([], '2026-03', now)).toEqual({ activeKey: now, isLive: false });
+  });
+
+  it('does not assume the input array is sorted', () => {
+    expect(snapToRecordedMonth(['2026-06', '2026-01', '2026-03'], '2026-04', now))
+      .toEqual({ activeKey: '2026-03', isLive: false });
+  });
+});
 
 describe('nearestSnapshot', () => {
   const snaps = { '2026-01': mk(), '2026-03': mk('manual'), '2026-06': mk() };

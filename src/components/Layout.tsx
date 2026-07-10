@@ -11,7 +11,6 @@ import {
   X,
   HelpCircle,
   Lock,
-  History,
 } from 'lucide-react';
 import { format, parse, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
@@ -41,17 +40,22 @@ const Layout: React.FC = () => {
 
   const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
 
-  // The month picker only rules month-scoped pages (budget & dashboard).
-  // Everywhere else shows a static "as of today" marker, and settings hides it entirely.
+  // One shared month control. Budget & Dashboard are always month-scoped; balance
+  // pages ride the same picker but only once there's recorded history to travel to
+  // (else just the static "today" marker). Settings hides it entirely.
   const isMonthScoped = MONTH_SCOPED_ROUTES.includes(location.pathname);
-  // Balance pages drive the time machine from this same header control, but only
-  // once there's history to step through (else just the static "today" marker).
-  const isBalanceScoped = BALANCE_SCOPED_ROUTES.includes(location.pathname) && hist.hasHistory;
+  const isBalanceRoute = BALANCE_SCOPED_ROUTES.includes(location.pathname);
+  const showPicker = isMonthScoped || (isBalanceRoute && hist.hasHistory);
   const hideTimeMarker = HIDE_TIME_MARKER_ROUTES.includes(location.pathname);
 
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
+  const viewKey = format(currentMonth, 'yyyy-MM');
+  // Balance pages are read-only for any non-current month, and snap the picked
+  // month to the nearest recorded snapshot — surface both cues in the chip.
+  const balanceReadOnly = isBalanceRoute && !hist.isLive;
+  const snappedToEarlier = balanceReadOnly && hist.activeKey !== viewKey;
   const statusColor = isCurrentMonth
     ? 'var(--positive)'
     : isPast
@@ -113,7 +117,7 @@ const Layout: React.FC = () => {
           >
             <HelpCircle size={16} strokeWidth={2} />
           </button>
-          {isMonthScoped ? (
+          {showPicker ? (
             <>
               <div
                 className="flex items-center gap-1 rounded-[6px] border p-1 transition-colors"
@@ -121,7 +125,7 @@ const Layout: React.FC = () => {
                   background: statusBg,
                   borderColor: isCurrentMonth ? 'color-mix(in srgb, var(--positive) 35%, transparent)' : 'var(--border)',
                 }}
-                title={statusLabel}
+                title={balanceReadOnly ? t.timeMachine.readOnly : statusLabel}
               >
                 <button
                   onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
@@ -134,11 +138,15 @@ const Layout: React.FC = () => {
                   <ChevronLeft size={15} strokeWidth={2} />
                 </button>
                 <div className="flex items-center gap-1.5 px-2 min-w-[104px] justify-center">
-                  <span
-                    className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: statusColor }}
-                    aria-hidden
-                  />
+                  {balanceReadOnly ? (
+                    <Lock size={12} strokeWidth={2} style={{ color: statusColor }} aria-hidden />
+                  ) : (
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ background: statusColor }}
+                      aria-hidden
+                    />
+                  )}
                   <span className="text-[13px] font-semibold tabular-nums">
                     {format(currentMonth, 'MMM yyyy', { locale: dateLocale })}
                   </span>
@@ -154,6 +162,15 @@ const Layout: React.FC = () => {
                   <ChevronRight size={15} strokeWidth={2} />
                 </button>
               </div>
+              {snappedToEarlier && (
+                <span
+                  className="hidden sm:inline text-[11px] font-medium tabular-nums whitespace-nowrap"
+                  style={{ color: 'var(--text-3)' }}
+                  title={t.timeMachine.readOnly}
+                >
+                  {t.timeMachine.asOf} {format(parse(hist.activeKey, 'yyyy-MM', new Date()), 'MMM yyyy', { locale: dateLocale })}
+                </span>
+              )}
               {!isCurrentMonth && (
                 <button
                   onClick={() => setCurrentMonth(startOfMonth(today))}
@@ -162,58 +179,6 @@ const Layout: React.FC = () => {
                   onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 22%, transparent)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-bg)'; }}
                   title={t.today}
-                >
-                  {t.today}
-                </button>
-              )}
-            </>
-          ) : isBalanceScoped ? (
-            <>
-              <div
-                className="flex items-center gap-1 rounded-[6px] border p-1 transition-colors"
-                style={{
-                  background: hist.isLive ? 'var(--positive-bg)' : 'var(--violet-bg)',
-                  borderColor: hist.isLive
-                    ? 'color-mix(in srgb, var(--positive) 35%, transparent)'
-                    : 'color-mix(in srgb, var(--violet) 35%, transparent)',
-                }}
-                title={hist.isLive ? t.timeMachine.liveLabel : t.timeMachine.readOnly}
-              >
-                <button
-                  onClick={hist.goPrev}
-                  disabled={!hist.canPrev}
-                  aria-label={t.timeMachine.prevSnapshot}
-                  className="grid place-items-center w-7 h-7 rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-default"
-                  style={{ color: 'var(--text-2)' }}
-                >
-                  <ChevronLeft size={15} strokeWidth={2} />
-                </button>
-                <div className="flex items-center gap-1.5 px-2 min-w-[104px] justify-center">
-                  {hist.isLive
-                    ? <History size={12} strokeWidth={2} style={{ color: 'var(--positive)' }} aria-hidden />
-                    : <Lock size={12} strokeWidth={2} style={{ color: 'var(--violet)' }} aria-hidden />}
-                  <span className="text-[13px] font-semibold tabular-nums capitalize">
-                    {hist.isLive
-                      ? t.timeMachine.liveLabel
-                      : format(parse(hist.activeKey, 'yyyy-MM', new Date()), 'MMM yyyy', { locale: dateLocale })}
-                  </span>
-                </div>
-                <button
-                  onClick={hist.goNext}
-                  disabled={!hist.canNext}
-                  aria-label={t.timeMachine.nextSnapshot}
-                  className="grid place-items-center w-7 h-7 rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-default"
-                  style={{ color: 'var(--text-2)' }}
-                >
-                  <ChevronRight size={15} strokeWidth={2} />
-                </button>
-              </div>
-              {!hist.isLive && (
-                <button
-                  onClick={hist.goLive}
-                  className="hidden sm:inline-flex items-center px-3 h-8 rounded-[6px] text-[12px] font-semibold transition-colors"
-                  style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
-                  title={t.timeMachine.backToToday}
                 >
                   {t.today}
                 </button>

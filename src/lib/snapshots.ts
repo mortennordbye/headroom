@@ -20,6 +20,28 @@ export function nearestSnapshot(
   return newer ? snapshots[newer] : null;
 }
 
+/**
+ * Map the single shared month to the balance snapshot a balance page should show.
+ * The whole app tracks one freely-picked month; balance pages can't render a month
+ * that was never recorded, so:
+ *   - current or future month → live (editable current state); `isLive: true`.
+ *   - past month → the latest recorded snapshot at or before it, else (nothing
+ *     recorded that early) the earliest recorded month, so we never fall back to
+ *     live data under a past-month label. `isLive: false`.
+ * With no recorded months at all, a past view degrades to the live month key.
+ */
+export function snapToRecordedMonth(
+  recordedKeys: string[],
+  viewKey: string,
+  nowKey: string,
+): { activeKey: string; isLive: boolean } {
+  if (viewKey >= nowKey) return { activeKey: nowKey, isLive: true };
+  const sorted = [...recordedKeys].sort();
+  const atOrBefore = sorted.filter(k => k <= viewKey);
+  if (atOrBefore.length) return { activeKey: atOrBefore[atOrBefore.length - 1], isLive: false };
+  return { activeKey: sorted[0] ?? nowKey, isLive: false };
+}
+
 /** The balances a person can realistically reconstruct for a past month. */
 export interface SnapshotBalances {
   savingsAccounts: SavingsAccount[];
