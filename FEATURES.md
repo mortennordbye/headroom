@@ -20,36 +20,26 @@ its snapshot spine is the prerequisite for items 12, 15, 18, 24, 25 and 26, whic
 
 ## Big
 
-### 1. Transaction search
-There is no way to find a transaction by name, merchant or amount anywhere in the app; the
-only narrowing tools are the category drill-down and the account pill. With bank sync pulling
-in dozens of rows a month this is the largest daily-use gap.
-Where: `src/pages/BudgetPage.tsx` (ledger), `src/pages/DashboardPage.tsx` (recent list).
-Sketch: a text/amount filter box above the ledger, matching merchant + description + label,
-reusing `buildMatchHaystack` from `src/lib/text.ts`.
+### 1. Transaction search ✅ SHIPPED
+Free-text filter above the Daily Tracker ledger, matching merchant + description + display
+label + amount (via `buildMatchHaystack`). Non-matching days collapse away; a match count and
+empty state give feedback. (`src/pages/BudgetPage.tsx`.)
 
-### 2. Bulk select / bulk recategorize / bulk delete
-Every transaction is edited or deleted one modal at a time (`editDailyTransaction` /
-`removeDailyTransaction`). Cleaning up a mis-synced or mis-categorized batch is painful.
-Where: `src/pages/BudgetPage.tsx`.
-Sketch: checkbox multi-select on ledger rows with a floating action bar (set category, set
-label, delete). Pairs naturally with search (item 1): filter, select all, fix.
+### 2. Bulk select / bulk recategorize / bulk delete ✅ SHIPPED
+A "Select" toggle turns ledger chips into checkboxes; selected rows raise a floating action
+bar to set a category on all of them or delete them in one confirm. Composes with search
+(item 1): filter, select, fix. (`src/pages/BudgetPage.tsx`.)
 
-### 3. Recurring-transaction detection
-The app already links transactions to fixed expenses via per-transaction "map to fixed
-expense" and guesses envelopes via `suggestEnvelopeLinks`, but nothing notices that the same
-merchant hits every month and suggests creating a fixed expense / envelope from it.
-Where: `src/lib/envelopes.ts`, `src/lib/transfers.ts` (pattern precedent),
-`src/pages/BudgetPage.tsx` (nudge UI, like the existing collision-detector nudge).
-Sketch: detect same-merchant, similar-amount, ~monthly cadence over the last 3+ months and
-offer one-tap "make this a fixed expense".
+### 3. Recurring-transaction detection ✅ SHIPPED
+`src/lib/recurring.ts` (pure, unit-tested) groups expense rows by normalized merchant and
+surfaces any charging a similar amount across 3+ of the last 4 months that isn't already a
+fixed expense. A nudge in the Fixed Expenses card offers one-tap "make fixed expense" (created
+as a pattern envelope so it draws down instead of double-counting).
 
-### 4. Multi-arch Docker image (arm64)
-The publish workflow has no `platforms:` key, so `ghcr.io/...:latest` is amd64-only, and
-`better-sqlite3` is a native addon so there is no fallback. A friend on a Raspberry Pi can't
-run the prebuilt image at all, and Apple-Silicon Docker runs it under emulation.
-Where: `.github/workflows/build.yml` (buildx is already set up).
-Sketch: `platforms: linux/amd64,linux/arm64` on the build-push step.
+### 4. Multi-arch Docker image (arm64) ✅ SHIPPED
+`.github/workflows/build.yml` now builds `linux/amd64,linux/arm64` with a QEMU setup step;
+`better-sqlite3` compiles from source per-arch in the Dockerfile, so Raspberry Pi and
+Apple-Silicon self-hosters get a native prebuilt image.
 
 ---
 
@@ -57,44 +47,37 @@ Sketch: `platforms: linux/amd64,linux/arm64` on the build-push step.
 
 ### Daily use
 
-### 5. Quick-add for today's expense
-The Daily Tracker is collapsed by default (`logOpen` starts `false` in
-`src/pages/BudgetPage.tsx`), so logging today's coffee means expand, scroll to today, click
-the row's `+`. Add a persistent "quick add (today)" button (mobile FAB), or default the
-current month's log open.
+### 5. Quick-add for today's expense ✅ SHIPPED
+A mobile floating "+" opens the add-transaction modal dated today, shown only on the current
+month and hidden while selecting rows. (`src/pages/BudgetPage.tsx`.)
 
-### 6. Remember last-used values in the add-transaction modal
-`addDailyTransaction` (`src/pages/BudgetPage.tsx`) always resets kind to `expense` with a
-blank category. Remembering the last-used category/kind (session-local is fine) removes the
-most repetitive taps in the app.
+### 6. Remember last-used values in the add-transaction modal ✅ SHIPPED
+The add-transaction modal reuses the last category/kind used this session (module-scoped, not
+persisted); a template prefill still takes precedence. (`src/pages/BudgetPage.tsx`.)
 
-### 7. Select-on-focus in edit modals
-`EditModal` (`src/components/EditModal.tsx`) focuses the first field but does not select its
-prefilled text, so every amount edit starts with manually clearing the old value. The inline
-`EditablePill` in `src/components/SmartRecommendations.tsx` already calls `.select()`; do the
-same on the modal's initial-focus input.
+### 7. Select-on-focus in edit modals ✅ SHIPPED (already present)
+`useFocusTrap` already calls `target.select()` on the modal's initial-focus input (added in
+the 2026-07-04 audit remediation), so amount edits start with the value selected. No change
+needed; the FEATURES.md note was stale.
 
-### 8. Back button closes modals on mobile
-Open modals aren't tied to browser history (`src/components/ui/ModalShell.tsx`), so the
-hardware/browser Back button navigates the app away instead of dismissing the dialog. Push a
-history entry on open, close on `popstate`. One fix in ModalShell covers every modal.
+### 8. Back button closes modals on mobile ✅ SHIPPED
+`ModalShell` pushes a history entry on open and closes on `popstate`, so the browser/hardware
+Back button dismisses the dialog instead of navigating away. Closing by any other path
+consumes the pushed entry (unless the router navigated meanwhile). One fix covers every modal.
 
-### 9. Undo instead of (or alongside) confirm for routine deletes
-Transaction/expense deletion shows a `ConfirmModal` each time but offers no recovery after.
-A toast-with-undo (hold the deleted row in memory for ~10s before committing) is both lighter
-for cleanup sessions and safer. Where: `src/pages/BudgetPage.tsx`, a small shared toast in
-`src/components/ui/`.
+### 9. Undo instead of (or alongside) confirm for routine deletes ✅ SHIPPED
+Deleting a ledger transaction removes it immediately and shows an ~8s undo toast (shared
+`src/components/ui/UndoToast.tsx`) instead of a confirm. Fixed expenses keep their confirm.
 
-### 10. Consistent delete protection
-Savings-account rows (`src/pages/AssetPage.tsx`, `removeSavingsAccount`) and payslips
-(`src/pages/BudgetPage.tsx`, `removePayslip`) delete instantly with no confirm, while fixed
-expenses, transactions, goals and debts all confirm. Align on one pattern (ideally item 9's
-undo) everywhere.
+### 10. Consistent delete protection ✅ SHIPPED
+Payslips (routine, month-keyed) now use the undo toast like transactions; savings accounts
+(structural, goal-referenceable) now confirm like fixed expenses / goals / debts.
+(`src/pages/BudgetPage.tsx`, `src/pages/AssetPage.tsx`.)
 
-### 11. Clickable Dashboard "Recent Transactions"
-The rows are plain divs (`src/pages/DashboardPage.tsx`), so fixing a wrong category means
-leaving for the Budget page and finding the row again. Wire the same edit modal the Budget
-ledger uses.
+### 11. Clickable Dashboard "Recent Transactions" ✅ SHIPPED
+The transaction editor was extracted into a shared `EditTransactionModal` (used by the Budget
+ledger and the Dashboard recent list, whose rows are now buttons). Fixing a wrong category no
+longer means leaving for the Budget page.
 
 ### 12. Month in the URL
 The selected month lives only in app state, so a refresh or shared link always lands on the

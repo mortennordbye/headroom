@@ -453,11 +453,14 @@ app.post('/api/bank/sync', async (_req, res) => {
 const DIST = path.join(__dirname, 'dist');
 if (fs.existsSync(DIST)) {
   app.use(express.static(DIST));
-  // A missing hashed asset (e.g. a stale chunk after redeploy) must 404, not
+  // A missing hashed chunk (e.g. a stale reference after redeploy) must 404, not
   // fall through to the SPA handler — returning index.html (text/html) for a
-  // /assets/*.js request triggers a MIME error and a blank screen instead of a
-  // catchable "chunk failed to load".
-  app.get(/^\/assets\//, (_req, res) => res.sendStatus(404));
+  // /static/*.js request triggers a MIME error and a blank screen instead of a
+  // catchable "chunk failed to load". Build output now lives under /static; the
+  // legacy /assets/ branch stays so a client still holding the pre-migration
+  // index.html gets a clean 404 for its old chunks. Both require a filename with
+  // an extension, so the /assets client route (the Formue page) is unaffected.
+  app.get(/^\/(?:static|assets)\/.+\.[^/]+$/, (_req, res) => res.sendStatus(404));
   // SPA fallback. Regex route (not the bare '*' string) for Express 5 /
   // path-to-regexp v8 compatibility; matches any unhandled GET.
   app.get(/.*/, (req, res) => res.sendFile(path.join(DIST, 'index.html')));

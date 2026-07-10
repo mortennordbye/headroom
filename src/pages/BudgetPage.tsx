@@ -1,4 +1,4 @@
-import React, { useState, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import {
   PlusCircle,
   Trash2,
@@ -10,20 +10,28 @@ import {
   Wallet,
   X,
   ArrowLeftRight,
+  Search,
+  CheckSquare,
+  Square,
+  ListChecks,
+  Repeat,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
 import { accountGroupKey } from '../lib/account';
 import { txDisplayName } from '../lib/labelRules';
+import { buildMatchHaystack } from '../lib/text';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance, type TransactionTemplate, type ExpenseType, type DailyTransaction } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
+import EditTransactionModal from '../components/EditTransactionModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
+import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
 import { incomeDiffPct } from '../lib/income';
@@ -34,6 +42,7 @@ import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
 import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
 import ConfirmModal from '../components/ConfirmModal';
+import { UndoToast } from '../components/ui/UndoToast';
 import { StatCard } from '../components/ui/StatCard';
 
 // Recharts (~150 KB gz) is lazy-loaded so it stays off the first-paint critical
@@ -118,8 +127,14 @@ interface ModalConfig {
   error?: string;
 }
 
+// Session-local memory of the last category/kind used when adding a transaction,
+// so repeated manual entries don't reset to a blank expense every time. Module
+// scope keeps it across route changes within a session; intentionally not
+// persisted (resets on reload).
+let lastAddDefaults: { category: string; kind: 'income' | 'expense' } = { category: '', kind: 'expense' };
+
 interface PendingDelete {
-  type: 'expense' | 'transaction';
+  type: 'expense';
   id: string;
   name: string;
 }
@@ -131,6 +146,7 @@ const BudgetPage: React.FC = () => {
     currentMonth,
     monthlyIncomes,
     payslips,
+    setPayslip,
     removePayslip,
     setMonthlyIncomeForMonth,
     setCurrentMonth,
@@ -158,9 +174,7 @@ const BudgetPage: React.FC = () => {
     accountFilter,
     setAccountFilter,
     internalTransferIds,
-    addCategoryRule,
     labelRules,
-    addLabelRule,
     formatCurrency,
     formatCurrencyShort,
   } = useFinance();
@@ -169,6 +183,15 @@ const BudgetPage: React.FC = () => {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [undo, setUndo] = useState<{ message: string; onUndo: () => void } | null>(null);
+  // Latest transactions, so a queued undo re-adds a row to current state rather
+  // than the (stale) array captured when the delete happened.
+  const txRef = useRef(dailyTransactions);
+  useEffect(() => { txRef.current = dailyTransactions; });
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -272,11 +295,7 @@ const BudgetPage: React.FC = () => {
 
   const confirmDelete = () => {
     if (!pendingDelete) return;
-    if (pendingDelete.type === 'expense') {
-      setFixedExpenses(fixedExpenses.filter(e => e.id !== pendingDelete.id));
-    } else {
-      setDailyTransactions(dailyTransactions.filter(t => t.id !== pendingDelete.id));
-    }
+    setFixedExpenses(fixedExpenses.filter(e => e.id !== pendingDelete.id));
     setPendingDelete(null);
   };
 
@@ -289,17 +308,23 @@ const BudgetPage: React.FC = () => {
 
   // --- Daily Transactions ---
   const addDailyTransaction = (dateStr: string, prefill?: Partial<TransactionTemplate>) => {
+    // Plain "add" reuses the last category/kind (session-local); a template
+    // prefill takes precedence over the remembered defaults.
+    const defaultCategory = prefill?.category ?? lastAddDefaults.category;
+    const defaultKind = prefill ? 'expense' : lastAddDefaults.kind;
     openModal({
       title: format(new Date(dateStr + 'T00:00:00'), 'dd.MM.yyyy'),
       fields: [
         { key: 'description', label: t.transactionDetails, type: 'text', value: prefill?.description ?? '', placeholder: t.budgetPage.transactionPlaceholder },
         { key: 'amount', label: t.impact, type: 'number', value: prefill?.amount?.toString() ?? '', placeholder: '0' },
-        { key: 'category', label: t.category, type: 'select', value: prefill?.category ?? '', options: categoryOptions },
-        kindField('expense'),
+        { key: 'category', label: t.category, type: 'select', value: defaultCategory, options: categoryOptions },
+        kindField(defaultKind),
       ],
       onSave: (vals) => {
         const amount = parsePositiveNumber(vals.amount);
         if (vals.description.trim() && amount !== null) {
+          const kind = vals.kind === 'income' ? 'income' : 'expense';
+          lastAddDefaults = { category: vals.category.trim(), kind };
           setDailyTransactions([...dailyTransactions, {
             id: crypto.randomUUID(),
             date: dateStr,
@@ -307,7 +332,7 @@ const BudgetPage: React.FC = () => {
             amount,
             category: vals.category.trim() || undefined,
             categorySource: vals.category.trim() ? 'manual' : undefined,
-            kind: vals.kind === 'income' ? 'income' : 'expense',
+            kind,
           }]);
           closeModal();
         } else {
@@ -317,63 +342,29 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  const editDailyTransaction = (id: string, description: string, amount: number, category?: string, kind?: 'income' | 'expense', merchant?: string) => {
-    // A fixed expense already mapped to this transaction (by its match pattern),
-    // so the "Map to fixed expense" select can pre-select it.
-    const hay = ` ${merchant ?? ''} ${description ?? ''} `.toLowerCase();
-    const prevMapped = fixedExpenses.find(e => (e.match ?? '').trim() && hay.includes((e.match as string).trim().toLowerCase()));
-    const expenseOptions = [
-      { value: '', label: t.budgetPage.mapToFixedExpenseNone },
-      ...fixedExpenses.map(e => ({ value: e.id, label: e.name })),
-    ];
-    openModal({
-      title: description,
-      fields: [
-        { key: 'description', label: t.editDescription, type: 'text', value: description },
-        { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
-        { key: 'category', label: t.category, type: 'select', value: category ?? '', options: categoryOptions },
-        kindField(kind === 'income' ? 'income' : 'expense'),
-        { key: 'mapExpense', label: t.budgetPage.mapToFixedExpense, type: 'select', value: prevMapped?.id ?? '', options: expenseOptions, hint: t.budgetPage.mapToFixedExpenseHint },
-        { key: 'rememberRule', label: t.budgetPage.rememberRule, type: 'checkbox', value: 'false', hint: t.budgetPage.rememberRuleHint },
-        { key: 'ruleMatch', label: t.budgetPage.ruleMatch, type: 'text', value: merchant || description },
-      ],
-      onSave: (vals) => {
-        const newAmount = parsePositiveNumber(vals.amount);
-        if (vals.description.trim() && newAmount !== null) {
-          setDailyTransactions(dailyTransactions.map(tx => tx.id === id
-            ? { ...tx, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, categorySource: vals.category.trim() ? 'manual' : undefined, kind: vals.kind === 'income' ? 'income' : 'expense' }
-            : tx
-          ));
-          // Remember: create rules so matching rows (past + future) inherit only
-          // what you actually changed here — the category and/or the custom name.
-          if (vals.rememberRule === 'true' && vals.ruleMatch.trim()) {
-            const newCat = vals.category.trim();
-            if (isCategoryKey(newCat) && newCat !== (category ?? '')) addCategoryRule(vals.ruleMatch.trim(), newCat as CategoryKey);
-            const newName = vals.description.trim();
-            if (newName && newName !== description) addLabelRule(vals.ruleMatch.trim(), newName);
-          }
-          // Map to a fixed expense: set the chosen expense's match pattern (and
-          // clear a previous mapping) so only these transactions draw it down.
-          const newMap = vals.mapExpense;
-          const prevMap = prevMapped?.id ?? '';
-          if (newMap !== prevMap && vals.ruleMatch.trim()) {
-            const pattern = vals.ruleMatch.trim();
-            setFixedExpenses(fixedExpenses.map(e => {
-              if (e.id === newMap) return { ...e, match: pattern };
-              if (e.id === prevMap) return { ...e, match: undefined };
-              return e;
-            }));
-          }
-          closeModal();
-        } else {
-          setModal(prev => prev ? { ...prev, error: !vals.description.trim() ? t.editDescription + t.validation.requiredSuffix : t.editAmount + t.validation.positiveAmountSuffix } : null);
-        }
-      },
+  // Editing a transaction is delegated to the shared EditTransactionModal so the
+  // Budget ledger and the Dashboard recent list behave identically.
+  const [editingTx, setEditingTx] = useState<DailyTransaction | null>(null);
+
+  // Routine deletes use undo (not a confirm): remove immediately and offer a
+  // brief window to bring the item back via the toast.
+  const removeDailyTransaction = (id: string) => {
+    const tx = dailyTransactions.find(t => t.id === id);
+    if (!tx) return;
+    setDailyTransactions(dailyTransactions.filter(t => t.id !== id));
+    setUndo({
+      message: t.budgetPage.txDeleted,
+      onUndo: () => { setDailyTransactions([...txRef.current, tx]); setUndo(null); },
     });
   };
-
-  const removeDailyTransaction = (id: string, description: string) => {
-    setPendingDelete({ type: 'transaction', id, name: description });
+  const removePayslipWithUndo = (key: string) => {
+    const data = payslips[key];
+    if (!data) return;
+    removePayslip(key);
+    setUndo({
+      message: t.budgetPage.payslipRemoved,
+      onUndo: () => { setPayslip(key, data); setUndo(null); },
+    });
   };
 
   // --- CSV Export ---
@@ -436,6 +427,19 @@ const BudgetPage: React.FC = () => {
   );
   const linkExpenseToCategory = (expenseId: string, category: string) =>
     setFixedExpenses(fixedExpenses.map(e => e.id === expenseId ? { ...e, category: isCategoryKey(category) ? category : undefined } : e));
+
+  // Recurring-payment detector: a merchant charging a steady amount ~monthly that
+  // isn't yet a fixed expense. One tap creates a matching fixed expense (as a
+  // pattern envelope, so it draws down instead of double-counting). Session-dismissable.
+  const [dismissedRecurring, setDismissedRecurring] = useState<Set<string>>(new Set());
+  const recurringSuggestions = useMemo(
+    () => detectRecurring(dailyTransactions, fixedExpenses, monthKey).filter(s => !dismissedRecurring.has(s.key)),
+    [dailyTransactions, fixedExpenses, monthKey, dismissedRecurring],
+  );
+  const makeFixedFromRecurring = (s: RecurringSuggestion) => {
+    setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: s.label, amount: s.amount, type: 'fixed', category: s.category, match: s.key }]);
+    setDismissedRecurring(prev => new Set(prev).add(s.key));
+  };
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
@@ -454,6 +458,46 @@ const BudgetPage: React.FC = () => {
   // log remains a faithful record of what moved).
   const accountMatch = (tx: DailyTransaction) =>
     accountFilter == null || accountGroupKey(tx, accountLabels) === accountFilter;
+
+  // Free-text ledger search over merchant + description + display label + amount.
+  // Empty query matches everything; otherwise a case-insensitive substring test.
+  const query = search.trim().toLowerCase();
+  const searchMatch = (tx: DailyTransaction) => {
+    if (!query) return true;
+    const hay = `${buildMatchHaystack(tx.merchant, tx.description)}${txDisplayName(tx, labelRules).toLowerCase()} ${tx.amount} `;
+    return hay.includes(query);
+  };
+  const rowMatch = (tx: DailyTransaction) => accountMatch(tx) && searchMatch(tx);
+  // When searching, drop days with no matching rows so results read as a list.
+  const ledgerDays = query ? dailyData.filter(day => day.transactions.some(rowMatch)) : dailyData;
+  const searchCount = query
+    ? ledgerDays.reduce((n, day) => n + day.transactions.filter(rowMatch).length, 0)
+    : 0;
+
+  // --- Bulk select / recategorize / delete ---
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const exitSelect = () => { setSelectMode(false); setSelected(new Set()); };
+  const bulkSetCategory = () => openModal({
+    title: t.budgetPage.bulkCategoryTitle,
+    fields: [{ key: 'category', label: t.category, type: 'select', value: '', options: categoryOptions }],
+    onSave: (vals) => {
+      const cat = vals.category.trim();
+      setDailyTransactions(dailyTransactions.map(tx => selected.has(tx.id)
+        ? { ...tx, category: cat || undefined, categorySource: cat ? 'manual' : undefined }
+        : tx));
+      closeModal();
+      exitSelect();
+    },
+  });
+  const confirmBulkDelete = () => {
+    setDailyTransactions(dailyTransactions.filter(tx => !selected.has(tx.id)));
+    setBulkDeleteOpen(false);
+    exitSelect();
+  };
 
   // Account scope, as a compact dropdown placed next to the analysis it filters.
   // Default is "all accounts"; only shown when there's more than one account.
@@ -602,7 +646,7 @@ const BudgetPage: React.FC = () => {
               <h3 className="text-[13px] font-semibold text-[var(--text-1)]">{t.salary.importPayslip.savedTitle}</h3>
             </div>
             <button
-              onClick={() => removePayslip(monthKey)}
+              onClick={() => removePayslipWithUndo(monthKey)}
               className="text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--negative)] transition-colors"
             >
               {t.salary.importPayslip.remove}
@@ -672,6 +716,38 @@ const BudgetPage: React.FC = () => {
                     </button>
                     <button
                       onClick={() => setDismissedLinks(prev => new Set(prev).add(s.expenseId))}
+                      className="px-2 py-1 rounded-[4px] text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
+                    >
+                      {t.envelopeSuggestDismiss}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!expensesReadOnly && recurringSuggestions.length > 0 && (
+            <div className="rounded-[6px] border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[var(--accent-bg)] p-3 space-y-2.5">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-1)]">
+                <Repeat size={13} className="text-[var(--accent)]" />
+                {t.recurringSuggestTitle}
+              </div>
+              {recurringSuggestions.slice(0, 4).map(s => (
+                <div key={s.key} className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] leading-snug text-[var(--text-2)] min-w-0">
+                    {t.recurringSuggestText
+                      .replace('{name}', s.label)
+                      .replace('{amount}', formatCurrency(s.amount))
+                      .replace('{months}', s.months.toString())}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => makeFixedFromRecurring(s)}
+                      className="px-2.5 py-1 rounded-[4px] text-[11px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-opacity"
+                    >
+                      {t.recurringSuggestAction}
+                    </button>
+                    <button
+                      onClick={() => setDismissedRecurring(prev => new Set(prev).add(s.key))}
                       className="px-2 py-1 rounded-[4px] text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
                     >
                       {t.envelopeSuggestDismiss}
@@ -782,7 +858,7 @@ const BudgetPage: React.FC = () => {
             <span className={sectionLabel}>{t.spendingByCategory}</span>
             {accountFilterSelect}
           </div>
-          <CategoryBreakdown onEditTransaction={(tx) => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} />
+          <CategoryBreakdown onEditTransaction={(tx) => setEditingTx(tx)} />
 
           {/* Multi-month spending trend by category */}
           <div className={`${sectionLabel} pt-5 pb-3 border-t border-[var(--border)]`}>
@@ -839,6 +915,16 @@ const BudgetPage: React.FC = () => {
           <div className="flex items-center gap-2">
             {logOpen && totalSpentThisMonth > 0 && (
               <button
+                onClick={() => selectMode ? exitSelect() : setSelectMode(true)}
+                aria-pressed={selectMode}
+                className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors px-2 py-1 rounded-lg hover:bg-[var(--bg-elev)] ${selectMode ? 'text-[var(--accent)]' : 'text-[var(--text-2)] hover:text-[var(--text-1)]'}`}
+              >
+                <ListChecks size={13} />
+                <span className="hidden sm:inline">{selectMode ? t.budgetPage.selectDone : t.budgetPage.selectButton}</span>
+              </button>
+            )}
+            {logOpen && totalSpentThisMonth > 0 && (
+              <button
                 onClick={exportCSV}
                 className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors px-2 py-1 rounded-lg hover:bg-[var(--bg-elev)]"
               >
@@ -850,9 +936,46 @@ const BudgetPage: React.FC = () => {
         </div>
 
         {logOpen && (<>
+        {/* Search */}
+        <div className="px-4 py-3 md:px-7 md:py-4 border-b border-[var(--border)]">
+          <div className="relative max-w-sm">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-3)] pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t.budgetPage.searchPlaceholder}
+              aria-label={t.budgetPage.searchLabel}
+              className="w-full h-8 pl-8 pr-8 rounded-[6px] text-[13px] border"
+              style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label={t.budgetPage.searchClear}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {query && (
+            <p className="mt-2 text-[11px] text-[var(--text-3)]">
+              {t.budgetPage.searchResults.replace('{count}', searchCount.toString())}
+            </p>
+          )}
+        </div>
+
+        {query && ledgerDays.length === 0 && (
+          <div className="px-4 py-8 md:px-7 text-center text-[13px]" style={{ color: 'var(--text-3)' }}>
+            {t.budgetPage.searchNoResults}
+          </div>
+        )}
+
         {/* Mobile */}
         <div className="md:hidden divide-y divide-[var(--border)]">
-          {dailyData.map((day) => (
+          {ledgerDays.map((day) => (
             <div key={day.dateStr} className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -875,13 +998,19 @@ const BudgetPage: React.FC = () => {
                 </div>
               </div>
 
-              {day.transactions.filter(accountMatch).length > 0 && (
+              {day.transactions.filter(rowMatch).length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {day.transactions.filter(accountMatch).map((tx) => {
+                  {day.transactions.filter(rowMatch).map((tx) => {
                     const coveredBy = envelopeNameFor(tx);
                     const isTransfer = internalTransferIds.has(tx.id);
+                    const isSelected = selected.has(tx.id);
                     return (
-                    <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border border-[var(--border)] px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isTransfer ? 'opacity-60' : ''}`}>
+                    <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer ? 'opacity-60' : ''}`}>
+                      {selectMode && (
+                        <button type="button" onClick={() => toggleSelect(tx.id)} aria-label={txDisplayName(tx, labelRules)} aria-pressed={isSelected} className="text-[var(--accent)] shrink-0">
+                          {isSelected ? <CheckSquare size={13} /> : <Square size={13} className="text-[var(--text-3)]" />}
+                        </button>
+                      )}
                       {tx.category && (
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                       )}
@@ -890,10 +1019,10 @@ const BudgetPage: React.FC = () => {
                       <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                       {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
-                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
+                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => setEditingTx(tx)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
                         <Edit2 size={11} />
                       </button>
-                      <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
+                      <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
                         <Trash2 size={11} />
                       </button>
                     </span>
@@ -902,13 +1031,15 @@ const BudgetPage: React.FC = () => {
                 </div>
               )}
 
-              <button
-                onClick={() => addDailyTransaction(day.dateStr)}
-                className="flex items-center gap-1 text-[var(--accent)] text-[12px] font-medium"
-              >
-                <PlusCircle size={13} strokeWidth={2} />
-                <span>{t.budgetPage.addShort}</span>
-              </button>
+              {!query && (
+                <button
+                  onClick={() => addDailyTransaction(day.dateStr)}
+                  className="flex items-center gap-1 text-[var(--accent)] text-[12px] font-medium"
+                >
+                  <PlusCircle size={13} strokeWidth={2} />
+                  <span>{t.budgetPage.addShort}</span>
+                </button>
+              )}
             </div>
           ))}
 
@@ -932,7 +1063,7 @@ const BudgetPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {dailyData.map((day) => (
+              {ledgerDays.map((day) => (
                 <tr key={day.dateStr} className="hover:bg-[var(--bg-raised)] transition-colors group">
                   <td className="px-7 py-4">
                     <div className="font-mono font-medium text-[13px] text-[var(--text-1)]">{format(day.date, 'dd.MM.yyyy')}</div>
@@ -940,11 +1071,17 @@ const BudgetPage: React.FC = () => {
                   </td>
                   <td className="px-7 py-4">
                     <div className="flex flex-wrap gap-2">
-                      {day.transactions.filter(accountMatch).map((tx) => {
+                      {day.transactions.filter(rowMatch).map((tx) => {
                         const coveredBy = envelopeNameFor(tx);
                         const isTransfer = internalTransferIds.has(tx.id);
+                        const isSelected = selected.has(tx.id);
                         return (
-                        <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isTransfer ? 'opacity-60' : ''}`}>
+                        <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer ? 'opacity-60' : ''}`}>
+                          {selectMode && (
+                            <button type="button" onClick={() => toggleSelect(tx.id)} aria-label={txDisplayName(tx, labelRules)} aria-pressed={isSelected} className="text-[var(--accent)] shrink-0">
+                              {isSelected ? <CheckSquare size={14} /> : <Square size={14} className="text-[var(--text-3)]" />}
+                            </button>
+                          )}
                           {tx.category && (
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor(tx.category) }} />
                           )}
@@ -956,22 +1093,24 @@ const BudgetPage: React.FC = () => {
                           {tx.category && (
                             <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{isCategoryKey(tx.category) ? t.categoryLabels[tx.category] : tx.category}</span>
                           )}
-                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
+                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => setEditingTx(tx)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
                             <Edit2 size={12} />
                           </button>
-                          <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
+                          <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
                             <Trash2 size={12} />
                           </button>
                         </span>
                         );
                       })}
-                      <button
-                        onClick={() => addDailyTransaction(day.dateStr)}
-                        aria-label={t.add}
-                        className="text-[var(--accent)] hover:opacity-70 p-1 transition-opacity"
-                      >
-                        <PlusCircle size={18} strokeWidth={2} />
-                      </button>
+                      {!query && (
+                        <button
+                          onClick={() => addDailyTransaction(day.dateStr)}
+                          aria-label={t.add}
+                          className="text-[var(--accent)] hover:opacity-70 p-1 transition-opacity"
+                        >
+                          <PlusCircle size={18} strokeWidth={2} />
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="px-7 py-4 text-[13px] font-mono font-medium text-right">
@@ -1015,11 +1154,66 @@ const BudgetPage: React.FC = () => {
         </>)}
       </div>
 
+      {/* Quick-add FAB (mobile, current month): log today's spend without
+          expanding and scrolling the tracker. Hidden while selecting rows. */}
+      {isCurrentMonth && !selectMode && (
+        <button
+          onClick={() => addDailyTransaction(format(today, 'yyyy-MM-dd'))}
+          aria-label={t.budgetPage.quickAddToday}
+          className="md:hidden fixed right-4 bottom-20 z-30 flex items-center justify-center w-14 h-14 rounded-full shadow-lg bg-[var(--forest)] hover:bg-[var(--forest-dim)] text-[var(--text)] transition-colors"
+        >
+          <PlusCircle size={24} strokeWidth={2} />
+        </button>
+      )}
+
+      {/* Bulk-action bar — floats while rows are selected */}
+      {selectMode && selected.size > 0 && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 bottom-20 md:bottom-6 z-40 flex items-center gap-1 px-2 py-1.5 rounded-full border shadow-lg"
+          style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
+        >
+          <span className="text-[12px] font-semibold px-2 text-[var(--text-1)]">
+            {t.budgetPage.bulkSelected.replace('{count}', selected.size.toString())}
+          </span>
+          <button
+            onClick={bulkSetCategory}
+            className="text-[12px] font-medium px-2.5 py-1 rounded-full text-[var(--accent)] hover:bg-[var(--accent-bg)] transition-colors"
+          >
+            {t.budgetPage.bulkSetCategory}
+          </button>
+          <button
+            onClick={() => setBulkDeleteOpen(true)}
+            className="text-[12px] font-medium px-2.5 py-1 rounded-full text-[var(--negative)] hover:bg-[var(--negative-bg)] transition-colors"
+          >
+            {t.budgetPage.bulkDelete}
+          </button>
+          <button
+            onClick={exitSelect}
+            aria-label={t.budgetPage.bulkClear}
+            className="p-1.5 rounded-full text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {bulkDeleteOpen && (
+        <ConfirmModal
+          title={t.confirmDelete}
+          message={t.budgetPage.confirmBulkDeleteMsg.replace('{count}', selected.size.toString())}
+          confirmLabel={t.delete}
+          cancelLabel={t.cancel}
+          onConfirm={confirmBulkDelete}
+          onCancel={() => setBulkDeleteOpen(false)}
+        />
+      )}
+
       {modal && <EditModal {...modal} onCancel={closeModal} />}
+      {editingTx && <EditTransactionModal tx={editingTx} onClose={() => setEditingTx(null)} />}
       {pendingDelete && (
         <ConfirmModal
           title={t.confirmDelete}
-          message={pendingDelete.type === 'expense' ? t.confirmDeleteExpenseMsg : t.confirmDeleteTransactionMsg}
+          message={t.confirmDeleteExpenseMsg}
           confirmLabel={t.delete}
           cancelLabel={t.cancel}
           onConfirm={confirmDelete}
@@ -1027,6 +1221,15 @@ const BudgetPage: React.FC = () => {
         />
       )}
       {payslipOpen && <PayslipImportModal onClose={() => setPayslipOpen(false)} />}
+      {undo && (
+        <UndoToast
+          message={undo.message}
+          undoLabel={t.budgetPage.undo}
+          dismissLabel={t.dismiss}
+          onUndo={undo.onUndo}
+          onDismiss={() => setUndo(null)}
+        />
+      )}
     </div>
   );
 };

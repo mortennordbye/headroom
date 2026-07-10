@@ -6,7 +6,8 @@ import {
 import { Link } from 'react-router-dom';
 import { format, parse, format as fmtDate, subMonths } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
-import { useFinance, DEFAULT_GROWTH_RATES, DEFAULT_TAX_RATES } from '../context/FinanceContext';
+import { useFinance, DEFAULT_GROWTH_RATES, DEFAULT_TAX_RATES, type DailyTransaction } from '../context/FinanceContext';
+import EditTransactionModal from '../components/EditTransactionModal';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
@@ -185,6 +186,7 @@ const DashboardPage: React.FC = () => {
   type FilterMode = 'all' | 'income' | 'expense';
   const [filter, setFilter] = useState<FilterMode>('all');
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [editingTx, setEditingTx] = useState<DailyTransaction | null>(null);
   const recentTransactions = useMemo(() => {
     const monthStr = format(currentMonth, 'yyyy-MM');
     let list = [...dailyTransactions]
@@ -889,9 +891,12 @@ const DashboardPage: React.FC = () => {
                 const date = new Date(tx.date + 'T00:00:00');
                 const isIncome = tx.kind === 'income';
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={tx.id}
-                    className="px-6 py-3.5 grid items-center gap-3 border-b last:border-0 transition-colors hover:bg-[var(--surface-1)]"
+                    onClick={() => setEditingTx(tx)}
+                    aria-label={`${t.edit} — ${txDisplayName(tx, labelRules)}`}
+                    className="w-full text-left px-6 py-3.5 grid items-center gap-3 border-b last:border-0 transition-colors hover:bg-[var(--surface-1)] cursor-pointer"
                     style={{
                       gridTemplateColumns: '44px 1fr auto auto',
                       borderColor: 'var(--border)',
@@ -918,7 +923,7 @@ const DashboardPage: React.FC = () => {
                     <span className="text-[14px] font-semibold tabular-nums shrink-0" style={{ color: isIncome ? 'var(--positive)' : 'var(--negative)' }}>
                       {isIncome ? '+' : '−'}{formatCurrency(tx.amount)}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -929,6 +934,7 @@ const DashboardPage: React.FC = () => {
       {historyOpen && (
         <HistoryManagerModal onClose={() => setHistoryOpen(false)} />
       )}
+      {editingTx && <EditTransactionModal tx={editingTx} onClose={() => setEditingTx(null)} />}
     </div>
   );
 };
