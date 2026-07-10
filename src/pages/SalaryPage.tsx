@@ -90,7 +90,7 @@ const SalaryPage: React.FC = () => {
     hoursSnapshots, removeHoursSnapshot,
     inflation, inflationStale,
     wageStats,
-    region, customTaxRatePct, pension,
+    region, customTaxRatePct, pension, annualMortgageInterest,
   } = useFinance();
   const isGeneric = region === 'generic';
 
@@ -555,8 +555,8 @@ const SalaryPage: React.FC = () => {
           value={current ? formatCurrency(current.totalAnnual) : '—'}
           sub={current ? (
             currentOnCallAnnual > 0
-              ? `${formatCurrency(current.grossAnnual)} ${t.salaryPage.baseSuffix} + ${formatCurrency(currentOnCallAnnual)} ${t.salary.onCallShort} · ${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly)} ${t.salaryPage.netPerMonth}`
-              : `${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netMonthly)} ${t.salaryPage.netPerMonth}`
+              ? `${formatCurrency(current.grossAnnual)} ${t.salaryPage.baseSuffix} + ${formatCurrency(currentOnCallAnnual)} ${t.salary.onCallShort} · ${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netMonthly)} ${t.salaryPage.netPerMonth}`
+              : `${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netMonthly)} ${t.salaryPage.netPerMonth}`
           ) : ''}
           chip={(() => {
             if (!current) return undefined;

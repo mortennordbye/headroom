@@ -8,7 +8,7 @@ import {
   format,
   subMonths
 } from 'date-fns';
-import { calcRecommendations } from '../lib/calculations';
+import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculations';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
@@ -633,6 +633,7 @@ interface FinanceDerivedContextType {
   studentDebt: number;
   mortgageRate: number;
   mortgageTermYears: number;
+  annualMortgageInterest: number;
   totalResidual: number;
   totalFixedExpenses: number;
   /** Fixed expenses for the selected month: live config, or the recorded
@@ -1238,15 +1239,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     viewFixedExpenses.reduce((sum, item) => sum + item.amount, 0),
   [viewFixedExpenses]);
 
-  // Derived monthly net income from the salary system (latest applicable salary + on-call → tax → net).
-  // Falls back to the legacy static `income` when no salaries have been entered.
+  // Year-one mortgage interest (rentefradrag): reduces alminnelig inntekt at 22%,
+  // so it's fed into every income-tax calc as an interest deduction. Balance/rate/
+  // term follow the active housing mode, matching `mortgageRate`/`mortgageTermYears`.
+  const annualMortgageInterest = useMemo(() => {
+    const balance = housingMode === 'homeowner' ? homeowner.currentMortgageBalance : loan.laanebelop;
+    const rate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
+    const term = housingMode === 'homeowner' ? homeowner.nedbetalingstid : loan.nedbetalingstid;
+    if (!(balance > 0) || !(rate > 0) || !(term > 0)) return 0;
+    return calcAmortizationSchedule(balance, rate, term)[0]?.interestPaid ?? 0;
+  }, [housingMode, homeowner.currentMortgageBalance, homeowner.rente, homeowner.nedbetalingstid, loan.laanebelop, loan.rente, loan.nedbetalingstid]);
+
   // Net monthly income derived from the salary system for an arbitrary month
   // (falls back to the legacy static `income` when no salaries exist).
   const derivedNetMonthlyFor = useCallback((mKey: string): number => {
     if (salaries.length === 0) return income;
     const totalAnnual = calcActiveGrossAnnual(salaries, jobs, mKey);
     if (totalAnnual === 0) return income;
-    const baseNetAnnual = calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution).netAnnual;
+    const baseNetAnnual = calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
     // Bonus/overtime entries opted into the budget: fold this month's opted-in
     // gross into the annual gross (so it's taxed at the marginal rate) and deliver
     // the after-tax value in the month it lands, not smeared across the year.
@@ -1254,9 +1264,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       bonuses.reduce((s, b) => (b.includeInBudget && b.date.startsWith(mKey) ? s + b.amount : s), 0) +
       overtime.reduce((s, o) => (o.includeInBudget && o.date.startsWith(mKey) ? s + o.amount : s), 0);
     if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
-    const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution).netAnnual;
+    const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
     return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));
-  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime]);
+  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest]);
 
   const derivedMonthlyIncome = useMemo(
     () => derivedNetMonthlyFor(monthKey),
@@ -1995,7 +2005,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
+    totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
@@ -2003,7 +2013,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears,
+    totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,

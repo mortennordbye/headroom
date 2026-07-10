@@ -51,12 +51,12 @@ function SankeyNode({ x, y, width, height, index, payload, containerWidth }: Nod
  */
 export default function MoneyFlowSankey() {
   const {
-    t, region, grossAnnualIncome, customTaxRatePct, pension,
+    t, region, grossAnnualIncome, customTaxRatePct, pension, annualMortgageInterest,
     totalFixedExpenses, recommendedInvestment, formatCurrency,
   } = useFinance();
 
   const data = useMemo(() => {
-    const b = calcTaxByRegion(grossAnnualIncome, region, customTaxRatePct, pension.ipsAnnualContribution);
+    const b = calcTaxByRegion(grossAnnualIncome, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest);
     const grossM = grossAnnualIncome / 12;
     const taxM = b.totalTax / 12;
     const netM = b.netMonthly;
@@ -97,7 +97,7 @@ export default function MoneyFlowSankey() {
     const nodes = usedIdx.map(i => allNodes[i]);
     const links = rawLinks.map(l => ({ ...l, source: remap.get(l.source)!, target: remap.get(l.target)! }));
     return { nodes, links, grossM };
-  }, [region, grossAnnualIncome, customTaxRatePct, pension.ipsAnnualContribution, totalFixedExpenses, recommendedInvestment, t]);
+  }, [region, grossAnnualIncome, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, totalFixedExpenses, recommendedInvestment, t]);
 
   if (!(data.grossM > 0)) {
     return (
