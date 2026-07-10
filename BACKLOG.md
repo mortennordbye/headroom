@@ -2,6 +2,21 @@
 
 Items deferred from prior work. When an item is finished, remove it.
 
+## Scenario bands on the other projection charts
+
+Shipped (2026-07): bear/base/bull uncertainty bands (return ±3pp) on the **Forecast**
+net-worth chart — the long-range single-line projection that most overstates certainty.
+Pure engine `src/lib/scenarioBands.ts` (`netWorthBands`, unit-tested); rendered as a range
+Area behind the nominal/real lines (`src/pages/ForecastPage.tsx`).
+
+Remaining: the Assets "Growth projection" chart and the Dashboard net-worth projection were
+**not** banded. Both are *stacked* area charts (per-bucket / composition), so a total-only
+bear/bull band would sit hidden behind the opaque stacked fills — showing it there needs a
+design decision (e.g. an unstacked "total" overlay line with a band, or a toggle), not a
+drop-in. **What would unblock**: agree the visual treatment for a band on a stacked chart.
+**Where**: `src/pages/AssetPage.tsx` (`calcNetWorthProjectionByBucket` chart, ~line 567),
+`src/pages/DashboardPage.tsx` projection chart, `src/lib/scenarioBands.ts` (reusable).
+
 ## Payslip importer — follow-ups
 
 Shipped (2026-07): client-side Visma payslip import on the Budget page. PDFs are parsed entirely in-browser (pdf.js, lazy-loaded) and never stored; a single-month PDF opens a detailed editable review, a multi-page archive opens a batch list that fills income history back in time. Per-month figures live in `payslips: Record<month, MonthlyPayslip>` (`src/context/FinanceContext.tsx`), and net pay is written as that month's income override. Parser + tests in `src/lib/payslip/` (`parseVismaPayslip.ts`, `parsePayslipAmount.ts`, provider registry in `index.ts`); browser extraction/render in `extractPdfText.ts`; UI in `src/components/PayslipImportModal.tsx` + `src/pages/BudgetPage.tsx`. Remaining:

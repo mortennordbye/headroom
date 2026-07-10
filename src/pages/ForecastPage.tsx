@@ -2,12 +2,14 @@ import React, { useMemo, useState } from 'react';
 import {
   AreaChart, Area, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { TrendingUp, Wallet, Activity, Flame } from 'lucide-react';
+import { TrendingUp, Wallet, Activity, Flame, Scale } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
+import { prepayVsInvest } from '../lib/prepayVsInvest';
+import { netWorthBands } from '../lib/scenarioBands';
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { currentMonthKey, addMonthsKey } from '../lib/date';
@@ -93,6 +95,7 @@ const ForecastPage: React.FC = () => {
   const [returnOverride, setReturnPct] = useState<number | null>(null);
   const [inflationOverride, setInflationPct] = useState<number | null>(null);
   const [years, setYears] = useState(15);
+  const [extraMonthly, setExtraMonthly] = useState(5000);
   const raisePct = raiseOverride ?? raiseSeed;
   const savingsPct = savingsOverride ?? savingsSeed;
   const returnPct = returnOverride ?? growthReturnRate;
@@ -165,6 +168,19 @@ const ForecastPage: React.FC = () => {
   const last = projection[projection.length - 1];
   const first = projection[0];
 
+  // Bear/base/bull bands (return ±3pp) so the projection doesn't read as a
+  // single certain line. Contributions are the same across scenarios (they
+  // depend on income/savings, not the return), so the band base equals the
+  // netWorth line and only the growth rate varies.
+  const BAND_DELTA_PP = 3;
+  const chartData = useMemo(() => {
+    const bands = netWorthBands(totalEquity, projection.map(p => p.contribution), returnPct, BAND_DELTA_PP, years);
+    return projection.map((p, i) => ({
+      ...p,
+      band: [bands[i]?.bear ?? p.netWorth, bands[i]?.bull ?? p.netWorth] as [number, number],
+    }));
+  }, [projection, totalEquity, returnPct, years]);
+
   // Financial independence (4% rule): FI number = 25× annual essential spend.
   // The FI year is the first projected year whose real (today's-kroner) net worth
   // clears that number, so it stays comparable to today's expenses. Only shown
@@ -183,6 +199,16 @@ const ForecastPage: React.FC = () => {
       yearsToFi: hit ? hit.yearIndex : null,
     };
   }, [totalFixedExpenses, totalEquity, projection]);
+
+  // Prepay mortgage vs invest: the extra krone earns the after-tax mortgage rate
+  // if it pays down deductible debt, or the expected return if invested. The
+  // deduction rate is 22% (alminnelig inntekt) in Norway, or the user's flat
+  // rate in generic mode. Only shown when there's actually a mortgage to prepay.
+  const prepay = useMemo(() => {
+    if (startingMortgage <= 0) return null;
+    const deductionRate = region === 'no' ? 22 : customTaxRatePct;
+    return prepayVsInvest(extraMonthly, mortgageRatePct, returnPct, years, deductionRate);
+  }, [startingMortgage, region, customTaxRatePct, extraMonthly, mortgageRatePct, returnPct, years]);
 
   return (
     <div className="space-y-6 md:space-y-7">
@@ -301,6 +327,45 @@ const ForecastPage: React.FC = () => {
         </div>
       )}
 
+      {/* Prepay vs invest */}
+      {prepay && (
+        <div className={`${card} p-5 md:p-7 space-y-4`}>
+          <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+            <Scale size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+            <h3 className={sectionLabel}>{t.forecast.prepayTitle}</h3>
+          </div>
+          <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.prepayDesc}</p>
+          <div className="max-w-xs">
+            <SliderInput label={t.forecast.prepayExtra} value={extraMonthly} onChange={setExtraMonthly} min={0} max={20000} step={500} suffix=" kr" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+            <FireStat
+              label={t.forecast.prepayLegPrepay}
+              value={formatCurrency(Math.round(prepay.prepayFutureValue))}
+              sub={`${prepay.afterTaxMortgageRatePct.toFixed(1)}% · ${t.forecast.prepayAfterTaxRateSub}`}
+              color={prepay.winner === 'prepay' ? 'var(--positive)' : undefined}
+            />
+            <FireStat
+              label={t.forecast.prepayLegInvest}
+              value={formatCurrency(Math.round(prepay.investFutureValue))}
+              sub={`${returnPct}% · ${t.forecast.prepayReturnSub}`}
+              color={prepay.winner === 'invest' ? 'var(--accent)' : undefined}
+            />
+          </div>
+          <div
+            className="text-[13px] font-semibold"
+            style={{ color: prepay.winner === 'prepay' ? 'var(--positive)' : prepay.winner === 'invest' ? 'var(--accent)' : 'var(--text-2)' }}
+          >
+            {(prepay.winner === 'prepay' ? t.forecast.prepayWinsPrepay
+              : prepay.winner === 'invest' ? t.forecast.prepayWinsInvest
+              : t.forecast.prepayTie)
+              .replace('{amount}', formatCurrency(Math.round(prepay.advantage)))
+              .replace('{years}', String(years))}
+          </div>
+          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.forecast.prepayNote}</p>
+        </div>
+      )}
+
       {/* Net worth projection chart */}
       <div className={`${card} p-5 md:p-7 space-y-4`}>
         <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
@@ -310,7 +375,7 @@ const ForecastPage: React.FC = () => {
         <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.forecastChartDesc}</p>
         <div className="h-[320px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={projection} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.12} />
@@ -329,6 +394,8 @@ const ForecastPage: React.FC = () => {
                 cursor={{ stroke: 'var(--text-3)', strokeWidth: 1, strokeDasharray: '3 3' }}
               />
               <ReferenceLine y={first.netWorth} stroke="var(--text-3)" strokeDasharray="2 4" />
+              {/* Uncertainty band (bear↔bull), drawn first so the lines sit on top. */}
+              <Area type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={false} activeDot={false} legendType="none" />
               <Area type="monotone" dataKey="netWorth" name={t.forecastPage.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#forecastGradient)" />
               <Area type="monotone" dataKey="netWorthReal" name={t.forecastPage.todaysKroner} stroke="var(--violet)" strokeWidth={2} strokeDasharray="5 3" fill="url(#forecastRealGradient)" />
             </AreaChart>
@@ -337,6 +404,7 @@ const ForecastPage: React.FC = () => {
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{t.forecastPage.nominal}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />{t.forecastPage.todaysKroner}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)', opacity: 0.25 }} />{t.forecastPage.band}</div>
         </div>
       </div>
 

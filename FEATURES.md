@@ -90,10 +90,12 @@ shared `historyMonth` slice, the header month picker now drives the balance-page
 machine on Assets/Loan/Pension (read-only, carries across pages), and the per-page
 `BalanceHistoryBar` was removed. (Salary is still always-live; not in scope.)
 
-### 14. Real empty state for salary sub-entries with no job
-Adding a bonus/overtime/hours entry before any job exists opens an `EditModal` whose only
-field is a disabled hint (`src/pages/SalaryPage.tsx`), which reads as a broken form. Replace
-with an inline "add a job first" CTA that opens the add-job modal.
+### 14. Real empty state for salary sub-entries with no job ✅ OBSOLETE
+Resolved by the type-first record-event modal (PR #40): the "Record event" button only
+renders when `jobs.length > 0` (`src/pages/SalaryPage.tsx`), the empty state shows a plain
+"no entries" line + the Add job button, and the record modal itself carries an inline
+"+ Add job" action (`src/components/RecordEventModal.tsx`). The old disabled-hint EditModal
+form no longer exists, so there's nothing left to fix here.
 
 ### Money insight & what-ifs
 
@@ -103,12 +105,12 @@ twice — with and without a fixed extra monthly payment — and returns months 
 A slider on the shared amortization accordion (first-buyer and homeowner) surfaces "time saved
 / interest saved / new payoff time". (`src/pages/LoanPage.tsx`.)
 
-### 16. Give `recurringTemplates` its UI
-`TransactionTemplate` and `recurringTemplates` are fully typed, persisted and exported
-(`src/context/FinanceContext.tsx`, `src/lib/exportSummary.ts`), and `addDailyTransaction`
-already accepts a template prefill, but no UI creates or applies templates. A "saved
-templates" quick-pick in the add-transaction modal would serve recurring manual entries
-(rent split, cash allowance).
+### 16. Give `recurringTemplates` its UI ✅ SHIPPED
+The add-transaction modal now shows a "saved templates" quick-pick: click a chip to prefill
+the form, delete one with its ×, and a "save as template" checkbox creates a template from
+the current entry. `EditModal` gained an optional `header` slot for the chip row; the modal
+reads/writes the already-persisted `recurringTemplates` via a ref so it can refresh its chip
+list in place. (`src/pages/BudgetPage.tsx`, `src/components/EditModal.tsx`.)
 
 ### 17. Marginal tax rate readout ✅ SHIPPED
 `calcMarginalTaxRate` (pure, unit-tested in `src/lib/norwegianTax.ts`) takes a finite
@@ -116,19 +118,19 @@ difference of `totalTax` so it captures the trinnskatt bracket, the 22% alminnel
 minstefradrag phase-in) and trygdeavgift at once. Shown as a "next krone" readout beside the
 tax-breakdown chart on SalaryPage (Norwegian region only).
 
-### 18. BSU cap tracking
-`assets.bsu` is a bare scalar summed into cash; nothing tracks the 27 500 kr/yr contribution
-cap, the 300 000 kr lifetime cap, or the age-34 cutoff. A BSU tile showing remaining room
-this year and lifetime would make the account actionable.
-Where: `src/context/FinanceContext.tsx` (`Assets.bsu`), Assets page.
-HISTORY_PLAN: unblocked — Phase 1 shipped, so `balanceSnapshots` now carries per-month BSU
-balances; "contributed this year" can be derived from the snapshot deltas rather than asked for.
+### 18. BSU cap tracking ✅ SHIPPED
+`bsuStatus` (pure, unit-tested in `src/lib/bsu.ts`) derives "contributed this year" from the
+BSU balance change since the start of the year (snapshot deltas) and reports room left
+against the 27 500 kr/yr and 300 000 kr lifetime caps. A tile under the BSU row on Assets
+shows both with progress bars. The age-34 cutoff is left unmodeled (no birthdate is tied to
+the account). (`src/pages/AssetPage.tsx`.)
 
-### 19. Restskatt early warning
-Each imported payslip stores that month's withheld tax (`MonthlyPayslip.tax`) and
-`calcNorwegianTax(gross).totalTax` computes the expected annual liability, but nothing
-compares them. A "withheld vs expected" tile could flag a likely restskatt (or refund)
-months before skatteoppgjøret.
+### 19. Restskatt early warning ✅ SHIPPED
+`restskattEstimate` (pure, unit-tested in `src/lib/restskatt.ts`) sums this year's withheld
+tax from the payslips, projects the annual gross linearly, and compares the projected
+withholding to the expected liability (via a caller-supplied tax fn carrying region +
+deductions). A Salary tile flags a likely restskatt or refund past a materiality threshold,
+with a note on the June/December withholding it doesn't model. (`src/pages/SalaryPage.tsx`.)
 
 ### 20. Feriepenger month modeling
 `monthlyCashflow` applies a flat income to every month, so the June feriepenger spike and
@@ -142,27 +144,26 @@ futures can't be held side by side (rate +2pp vs job change vs prepay). Persist 
 and add a two-scenario compare (two projection lines plus a delta tile).
 Where: `src/pages/ForecastPage.tsx`.
 
-### 22. "Prepay mortgage vs invest" comparison
-The app computes interest saved from extra debt payments (`DebtSection.interestSaved`) and
-expected investment return (`ForecastPage.returnPct`) separately but never contrasts them,
-despite this being the most common spare-krone question in Norway (deductible interest).
-Sketch: a tile comparing "extra 5 000 kr/mo: prepay saves X (after 22% deduction) vs
-invest at Y% over N years".
+### 22. "Prepay mortgage vs invest" comparison ✅ SHIPPED
+`prepayVsInvest` (pure, unit-tested in `src/lib/prepayVsInvest.ts`) grows a fixed extra
+monthly amount to a future value at two rates: the mortgage's after-tax rate (nominal ×
+(1 − 22% deduction)) if it prepays deductible debt, or the expected return if invested.
+A Forecast card with an extra-per-month slider surfaces both future values, the effective
+rates, and which side wins by how much over the horizon. (`src/pages/ForecastPage.tsx`.)
 
-### 23. Scenario bands on projections
-Every net-worth projection (`calcNetWorthProjectionByBucket`) draws one deterministic line
-per bucket. Bear/base/bull bands (return ±3pp) around the long-range projection would stop
-the chart overstating certainty. Where: `src/lib/calculations.ts`,
-`src/pages/DashboardPage.tsx`, `src/pages/AssetPage.tsx`.
+### 23. Scenario bands on projections ✅ SHIPPED (Forecast; Assets/Dashboard deferred)
+`netWorthBands` (pure, unit-tested in `src/lib/scenarioBands.ts`) re-runs the projection's
+compounding at the base return and at ±3pp to produce bear/base/bull totals. Rendered as a
+range band behind the Forecast net-worth line so the long-range projection no longer reads
+as a single certain line. (`src/pages/ForecastPage.tsx`.) The Assets/Dashboard charts are
+stacked, where a band doesn't drop in cleanly — deferred to `BACKLOG.md`.
 
-### 24. Goal completion ETA from actual pace
-A goal knows its `remaining` and deadline (`GoalsSection.monthsUntil`), and the app computes
-recommended monthly savings, but nothing says "at your current pace you reach this by
-<date>" or "you're 4 months behind". Add a projected-completion ETA and a kr/mo-to-make-it
-suggestion.
-HISTORY_PLAN: unblocked — Phases 1-2 shipped; "actual pace" can now come from the snapshot
-history of the goal's source balance (`savingsSeriesFrom` / snapshot deltas), not from the
-recommended-savings figure.
+### 24. Goal completion ETA from actual pace ✅ SHIPPED
+`goalPace` (pure, unit-tested in `src/lib/goalPace.ts`) measures the recent monthly pace of a
+goal's source balance across the trailing months of snapshot history (real month gaps) and
+projects when the target is reached, whether that's ahead of or behind the deadline, and the
+kr/mo needed to make it. Each source-tracked goal card with ≥2 recorded months shows the ETA
+line. (`src/components/GoalsSection.tsx`.)
 
 ### 25. Financial-independence (FIRE) tile ✅ SHIPPED
 A FI card on Forecast: the 25× annual-essential-spend target (from `totalFixedExpenses`),
@@ -308,15 +309,16 @@ optionally `g`-prefixed route jumps. Where: `src/components/Layout.tsx`.
     totalFixedExpenses)` counts discretionary subscriptions but ignores variable essentials
     (groceries), so "months covered" can mislead both ways. Let the user mark essential lines
     or include median variable spend.
-61. **Fixed expenses are typed but never totaled by type.** Each carries
-    `fixed | variable | subscription | insurance` with a coloured dot, but there is no
-    "subscriptions cost you X kr/mo" summary (`src/pages/BudgetPage.tsx`). Add per-type
-    totals above the list.
+61. **Fixed expenses totaled by type ✅ SHIPPED** — `fixedExpenseTotalsByType` (pure,
+    unit-tested in `src/lib/fixedExpenseTotals.ts`) sums the monthly amount per type; the
+    Budget fixed-expense colour key now shows each present type's total ("subscriptions cost
+    you X kr/mo") instead of a bare label list. (`src/pages/BudgetPage.tsx`.)
 
 ### Self-hosting
-62. **Blob/DB size not surfaced.** The server warns at 2 MB in the log only; the Settings
-    About card shows a static "Storage: SQLite" chip. Show live blob bytes plus record
-    counts (already computed by `summarizeExport`).
+62. **Blob/DB size surfaced ✅ SHIPPED** — the Settings About card now shows the live blob
+    size (`formatBytes` on the persisted JSON, unit-tested in `src/lib/format.ts`) and the
+    record count (`totalRecords`) alongside the SQLite chip, so a self-hoster can watch the
+    blob grow toward the server's 2 MB warning. (`src/pages/SettingsPage.tsx`.)
 63. **Export stamps `_version: 1` but import never checks it.** `validateAndPreview`
     (`src/pages/SettingsPage.tsx`) ignores the field, so a future format change would import
     silently. Gate on `_version` and warn on newer-than-supported files.

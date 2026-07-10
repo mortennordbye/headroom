@@ -37,8 +37,10 @@ import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
+import { bsuStatus } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
 import { formatAxisInt } from '../lib/format';
+import { ProgressBar } from '../components/ui/ProgressBar';
 
 interface ModalConfig {
   title: string;
@@ -84,6 +86,7 @@ const AssetPage: React.FC = () => {
     mortgageTermYears,
     restoreAssetTaxDefaults,
     restoreGrowthRateDefaults,
+    balanceSnapshots,
   } = useFinance();
 
   // Time machine: when viewing a past month, render that month's snapshot (read-only).
@@ -176,6 +179,12 @@ const AssetPage: React.FC = () => {
     const savingsAccounts = assets.savingsAccounts ?? [];
     const annualSavings = Math.max(0, recommendedInvestment * 12);
   const cashStart = sumSavings(assets) + assets.bsu + assets.bufferAccount;
+  // BSU room against the annual + lifetime caps, from the live balance and the
+  // snapshot history (only shown live; history mode is read-only/dimmed).
+  const bsu = useMemo(
+    () => bsuStatus(liveAssets.bsu, balanceSnapshots, new Date().getFullYear()),
+    [liveAssets.bsu, balanceSnapshots],
+  );
   const houseByYear = useMemo(
     () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm, 15),
     [assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm]
@@ -354,6 +363,29 @@ const AssetPage: React.FC = () => {
                 onEdit={() => openAssetEdit(t.bsu, assets.bsu, 'bsu')}
                 formatCurrency={formatCurrency}
               />
+              {hist.isLive && bsu.balance > 0 && (
+                <div className="rounded-[6px] bg-[var(--bg-raised)] border border-[var(--border)] p-3 mt-1 mb-1 space-y-2.5">
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-1">
+                      <span style={{ color: 'var(--text-2)' }}>{t.assetPage.bsuAnnualRoom}</span>
+                      <span className="font-mono font-medium" style={{ color: bsu.atAnnualCap ? 'var(--positive)' : 'var(--text-1)' }}>
+                        {formatCurrency(bsu.annualRoomLeft)} {t.assetPage.bsuRoomLeft}
+                      </span>
+                    </div>
+                    <ProgressBar pct={Math.min(100, (bsu.contributedThisYear / bsu.annualCap) * 100)} square color={bsu.atAnnualCap ? 'var(--positive)' : 'var(--accent)'} />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-1">
+                      <span style={{ color: 'var(--text-2)' }}>{t.assetPage.bsuLifetimeRoom}</span>
+                      <span className="font-mono font-medium" style={{ color: bsu.atLifetimeCap ? 'var(--positive)' : 'var(--text-1)' }}>
+                        {formatCurrency(bsu.lifetimeRoomLeft)} {t.assetPage.bsuRoomLeft}
+                      </span>
+                    </div>
+                    <ProgressBar pct={Math.min(100, (bsu.balance / bsu.lifetimeCap) * 100)} square color={bsu.atLifetimeCap ? 'var(--positive)' : 'var(--violet)'} />
+                  </div>
+                  <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{t.assetPage.bsuNote}</p>
+                </div>
+              )}
               {savingsAccounts.map(acc => (
                 <SavingsAccountRow
                   key={acc.id}

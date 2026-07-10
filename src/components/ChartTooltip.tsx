@@ -35,7 +35,10 @@ export default function ChartTooltip({
   hideLabel,
 }: ChartTooltipProps) {
   const { formatCurrency } = useFinance();
-  if (!active || !payload?.length) return null;
+  // Range series (e.g. scenario bands) carry a [low, high] array value that
+  // isn't a single figure to show — drop them so they don't render a NaN row.
+  const entries = payload?.filter((p) => !Array.isArray(p.value)) ?? [];
+  if (!active || entries.length === 0) return null;
   const fmt = valueFormatter ?? ((v: number) => formatCurrency(v));
 
   return (
@@ -49,7 +52,7 @@ export default function ChartTooltip({
         </div>
       )}
       <div className="flex flex-col gap-1">
-        {payload.map((p: TooltipEntry, i: number) => (
+        {entries.map((p: TooltipEntry, i: number) => (
           <div key={i} className="flex items-center gap-2 text-[12px]">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color || p.fill || 'var(--text-3)' }} />
             {p.name != null && p.name !== '' && (

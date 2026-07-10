@@ -35,6 +35,7 @@ import {
   DEFAULT_TAX_RATES,
 } from '../context/FinanceContext';
 import { summarizeExport, totalRecords, type SummaryItem } from '../lib/exportSummary';
+import { formatBytes } from '../lib/format';
 import { NAV_ITEMS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
@@ -94,6 +95,9 @@ export default function SettingsPage() {
   // Snapshot of the app's current persisted state — drives the export breakdown
   // and the "current → incoming" comparison shown in the import preview.
   const currentPayload = buildPayload();
+  // Live blob size — the same JSON the server persists as one row (it warns at
+  // 2 MB); surfaced so a self-hoster can watch it grow.
+  const blobBytes = new Blob([JSON.stringify(currentPayload)]).size;
 
   // Currency editor local state (uncommitted text inputs)
   const [usdRateInput, setUsdRateInput] = useState(String(nokToUsd));
@@ -894,7 +898,8 @@ export default function SettingsPage() {
             </div>
             <div className="flex gap-2 flex-wrap">
               <DeltaChip tone="muted">{t.settings.version}: {versionLabel}</DeltaChip>
-              <DeltaChip tone="muted">{t.settings.storage}: SQLite</DeltaChip>
+              <DeltaChip tone="muted">{t.settings.storage}: SQLite · {formatBytes(blobBytes)}</DeltaChip>
+              <DeltaChip tone="muted">{totalRecords(currentPayload)} {t.settings.summary.records}</DeltaChip>
             </div>
           </div>
         </Card>
