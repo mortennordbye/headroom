@@ -1,13 +1,13 @@
-import React, { useMemo, useState, lazy, Suspense } from 'react';
+import React, { useMemo, useState, useRef, useEffect, lazy, Suspense } from 'react';
 import {
   TrendingUp,
   Briefcase,
   Gift,
   Clock,
-  Timer,
   Edit2,
   Trash2,
   Plus,
+  ChevronDown,
 } from 'lucide-react';
 import {
   BarChart,
@@ -40,6 +40,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { PaydayField } from '../components/PaydayField';
+import SalaryEventModal from '../components/SalaryEventModal';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
@@ -97,6 +98,7 @@ const SalaryPage: React.FC = () => {
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [confirm, setConfirm] = useState<ConfirmConfig | null>(null);
   const [activeJobFilter, setActiveJobFilter] = useState<string>('all');
+  const [salaryEvent, setSalaryEvent] = useState<{ existing?: SalaryEntry; prefillChangeType?: SalaryChangeType } | null>(null);
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -474,68 +476,8 @@ const SalaryPage: React.FC = () => {
     });
   };
 
-  const openSalaryModal = (existing?: SalaryEntry) => {
-    if (jobs.length === 0) {
-      openModal({
-        title: t.salary.addSalary,
-        fields: [{ key: 'msg', label: t.salary.noJobsHint, type: 'text', value: '' }],
-        onSave: () => closeModal(),
-      });
-      return;
-    }
-    const changeTypes: { value: SalaryChangeType; label: string }[] = [
-      { value: 'initial', label: t.salary.changeTypeInitial },
-      { value: 'raise', label: t.salary.changeTypeRaise },
-      { value: 'promotion', label: t.salary.changeTypePromotion },
-      { value: 'job_change', label: t.salary.changeTypeJobChange },
-      { value: 'adjustment', label: t.salary.changeTypeAdjustment },
-    ];
-    openModal({
-      title: existing ? t.salary.salaries : t.salary.addSalary,
-      fields: [
-        {
-          key: 'jobId',
-          label: t.salary.job,
-          type: 'select',
-          value: existing?.jobId ?? jobs[jobs.length - 1].id,
-          options: jobs.map(j => ({ value: j.id, label: `${j.employer} — ${j.role}` })),
-        },
-        { key: 'effectiveDate', label: t.salary.effectiveDate, type: 'text', value: existing?.effectiveDate ?? '', placeholder: '2024-04' },
-        { key: 'grossAnnual', label: t.salary.grossAnnual, type: 'number', value: (existing?.grossAnnual ?? 0).toString() },
-        {
-          key: 'changeType',
-          label: t.salary.changeType,
-          type: 'select',
-          value: existing?.changeType ?? 'raise',
-          options: changeTypes,
-        },
-        { key: 'notes', label: t.salary.notes, type: 'text', value: existing?.notes ?? '' },
-      ],
-      onSave: (vals) => {
-        if (!isValidYearMonth(vals.effectiveDate)) {
-          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateMonth });
-          return;
-        }
-        if (!isNonNegativeNumber(vals.grossAnnual)) {
-          setModal(prev => prev && { ...prev, error: t.salaryPage.errSalaryPositive });
-          return;
-        }
-        const payload = {
-          jobId: vals.jobId,
-          effectiveDate: vals.effectiveDate,
-          grossAnnual: parseLocaleNumber(vals.grossAnnual),
-          changeType: vals.changeType as SalaryChangeType,
-          notes: vals.notes.trim() || undefined,
-        };
-        if (existing) {
-          updateSalary(existing.id, payload);
-        } else {
-          addSalary(payload);
-        }
-        closeModal();
-      },
-    });
-  };
+  const openSalaryEventModal = (existing?: SalaryEntry, prefillChangeType?: SalaryChangeType) =>
+    setSalaryEvent({ existing, prefillChangeType });
 
   const defaultJobIdForNewEntry = (): string =>
     activeJobFilter !== 'all' ? activeJobFilter : (jobs[jobs.length - 1]?.id ?? '');
@@ -1155,8 +1097,8 @@ const SalaryPage: React.FC = () => {
         </span>
       </div>
 
-      {/* Job filter tabs */}
-      {jobs.length > 0 && (() => {
+      {/* Job filter tabs — only meaningful with more than one job */}
+      {jobs.length > 1 && (() => {
         const tabs: { id: string; label: string }[] = [
           { id: 'all', label: t.salary.allJobs },
           ...[...jobs]
@@ -1188,7 +1130,7 @@ const SalaryPage: React.FC = () => {
         );
       })()}
 
-      {/* Filtered entry lists */}
+      {/* Merged, reverse-chronological history of every salary event */}
       {(() => {
         const showAll = activeJobFilter === 'all';
         const matchesFilter = (jobId: string | undefined) => showAll || jobId === activeJobFilter;
@@ -1200,127 +1142,136 @@ const SalaryPage: React.FC = () => {
         };
         const jobSuffix = (jobId: string | undefined) =>
           showAll ? ` · ${jobLabel(jobId)}` : '';
+        // Salary/hours are YYYY-MM, bonus/overtime YYYY-MM-DD — pad for a shared sort key.
+        const norm = (d: string) => (d.length === 7 ? `${d}-01` : d);
+
+        const salaryTypeLabel = (ct: SalaryChangeType) => ({
+          initial: t.salary.changeTypeInitial,
+          raise: t.salary.changeTypeRaise,
+          promotion: t.salary.changeTypePromotion,
+          job_change: t.salary.changeTypeJobChange,
+          adjustment: t.salary.changeTypeAdjustment,
+        } as Record<SalaryChangeType, string>)[ct];
+        const bonusTypeLabel = (bt: BonusType) => ({
+          annual: t.salary.bonusTypeAnnual,
+          performance: t.salary.bonusTypePerformance,
+          signing: t.salary.bonusTypeSigning,
+          holiday_pay: t.salary.bonusTypeHolidayPay,
+          profit_share: t.salary.bonusTypeProfitShare,
+          other: t.salary.bonusTypeOther,
+        } as Record<BonusType, string>)[bt];
+        const salaryChip = (id: string): React.ReactNode => {
+          const chipData = salaryChipsById.get(id);
+          if (!chipData) return undefined;
+          const { pct, gap } = chipData;
+          const pctColor = pct >= 0 ? 'var(--positive)' : 'var(--negative)';
+          const pctBg = pct >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
+          return (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap"
+              style={{ color: pctColor, background: pctBg }}
+              title={gap != null ? `${formatSignedPct(gap, 1, 'pp')} ${t.salary.vsCpi}` : undefined}
+            >
+              {formatSignedPct(pct)}
+              {gap != null && (
+                <span style={{ color: gap >= 0 ? 'var(--positive)' : 'var(--warning)', opacity: 0.85 }}>
+                  ({formatSignedPct(gap, 1, '')} {t.salary.vsCpi})
+                </span>
+              )}
+            </span>
+          );
+        };
+
+        type FeedItem = EntryItem & { sortKey: string };
+        const items: FeedItem[] = [];
+        sortedSalaries.filter(s => matchesFilter(s.jobId)).forEach(s => items.push({
+          id: s.id,
+          sortKey: norm(s.effectiveDate),
+          accent: CHANGE_TYPE_COLOR[s.changeType],
+          primary: `${formatCurrency(s.grossAnnual)} · ${salaryTypeLabel(s.changeType)}`,
+          secondary: `${s.effectiveDate}${jobSuffix(s.jobId)}${s.notes ? ` · ${s.notes}` : ''}`,
+          chip: salaryChip(s.id),
+          onEdit: () => openSalaryEventModal(s),
+          onDelete: () => confirmDelete(s.effectiveDate, () => removeSalary(s.id)),
+        }));
+        bonuses.filter(b => matchesFilter(b.jobId)).forEach(b => items.push({
+          id: b.id,
+          sortKey: norm(b.date),
+          accent: 'var(--teal)',
+          primary: `${formatCurrency(b.amount)} · ${bonusTypeLabel(b.type)}`,
+          secondary: `${b.date}${jobSuffix(b.jobId)}${b.notes ? ` · ${b.notes}` : ''}`,
+          onEdit: () => openBonusModal(b),
+          onDelete: () => confirmDelete(b.date, () => removeBonus(b.id)),
+        }));
+        overtime.filter(o => matchesFilter(o.jobId)).forEach(o => items.push({
+          id: o.id,
+          sortKey: norm(o.date),
+          accent: 'var(--slate)',
+          primary: `${o.hours}t · ${formatCurrency(o.amount)}`,
+          secondary: `${o.date}${jobSuffix(o.jobId)}${o.notes ? ` · ${o.notes}` : ''}`,
+          onEdit: () => openOvertimeModal(o),
+          onDelete: () => confirmDelete(o.date, () => removeOvertime(o.id)),
+        }));
+        hoursSnapshots.filter(h => matchesFilter(h.jobId)).forEach(h => items.push({
+          id: h.id,
+          sortKey: norm(h.periodMonth),
+          accent: 'var(--text-dim)',
+          primary: `${h.actualHoursPerWeek}${t.common.hoursPerWeekUnit}`,
+          secondary: `${h.periodMonth}${jobSuffix(h.jobId)}${h.notes ? ` · ${h.notes}` : ''}`,
+          onEdit: () => openHoursModal(h),
+          onDelete: () => confirmDelete(h.periodMonth, () => removeHoursSnapshot(h.id)),
+        }));
+        items.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+
+        const menuItems = jobs.length === 0 ? [] : [
+          { label: t.salary.changeTypeRaise, onClick: () => openSalaryEventModal(undefined, 'raise') },
+          { label: t.salary.changeTypePromotion, onClick: () => openSalaryEventModal(undefined, 'promotion') },
+          { label: t.salary.changeTypeAdjustment, onClick: () => openSalaryEventModal(undefined, 'adjustment') },
+          { label: t.salary.bonuses, onClick: () => openBonusModal(), divider: true },
+          { label: t.salary.overtime, onClick: () => openOvertimeModal() },
+          { label: t.salary.hoursChange, onClick: () => openHoursModal() },
+          { label: t.salary.addJob, onClick: () => openJobModal(), divider: true },
+        ];
 
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-            <EntryList
-              title={t.salary.salaries}
-              icon={<TrendingUp size={14} className="text-[var(--text-2)]" />}
-              onAdd={() => openSalaryModal()}
-              empty={t.salary.noEntries}
-        editLabel={t.edit}
-        deleteLabel={t.delete}
-              items={[...sortedSalaries]
-                .filter(s => matchesFilter(s.jobId))
-                .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))
-                .map(s => {
-                  const typeLabel = ({
-                    initial: t.salary.changeTypeInitial,
-                    raise: t.salary.changeTypeRaise,
-                    promotion: t.salary.changeTypePromotion,
-                    job_change: t.salary.changeTypeJobChange,
-                    adjustment: t.salary.changeTypeAdjustment,
-                  } as Record<SalaryChangeType, string>)[s.changeType];
-                  const chipData = salaryChipsById.get(s.id);
-                  const chip = chipData ? (() => {
-                    const { pct, gap } = chipData;
-                    const pctColor = pct >= 0 ? 'var(--positive)' : 'var(--negative)';
-                    const pctBg = pct >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
-                    return (
-                      <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap"
-                        style={{ color: pctColor, background: pctBg }}
-                        title={gap != null ? `${formatSignedPct(gap, 1, 'pp')} ${t.salary.vsCpi}` : undefined}
-                      >
-                        {formatSignedPct(pct)}
-                        {gap != null && (
-                          <span style={{ color: gap >= 0 ? 'var(--positive)' : 'var(--warning)', opacity: 0.85 }}>
-                            ({formatSignedPct(gap, 1, '')} {t.salary.vsCpi})
-                          </span>
-                        )}
-                      </span>
-                    );
-                  })() : undefined;
-                  return {
-                    id: s.id,
-                    primary: `${formatCurrency(s.grossAnnual)} · ${typeLabel}`,
-                    secondary: `${s.effectiveDate}${jobSuffix(s.jobId)}${s.notes ? ` · ${s.notes}` : ''}`,
-                    chip,
-                    onEdit: () => openSalaryModal(s),
-                    onDelete: () => confirmDelete(s.effectiveDate, () => removeSalary(s.id)),
-                  };
-                })}
-            />
-            <EntryList
-              title={t.salary.bonuses}
-              icon={<Gift size={14} className="text-[var(--text-2)]" />}
-              onAdd={() => openBonusModal()}
-              empty={t.salary.noEntries}
-        editLabel={t.edit}
-        deleteLabel={t.delete}
-              items={[...bonuses]
-                .filter(b => matchesFilter(b.jobId))
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .map(b => {
-                  const typeLabel = ({
-                    annual: t.salary.bonusTypeAnnual,
-                    performance: t.salary.bonusTypePerformance,
-                    signing: t.salary.bonusTypeSigning,
-                    holiday_pay: t.salary.bonusTypeHolidayPay,
-                    profit_share: t.salary.bonusTypeProfitShare,
-                    other: t.salary.bonusTypeOther,
-                  } as Record<BonusType, string>)[b.type];
-                  return {
-                    id: b.id,
-                    primary: `${formatCurrency(b.amount)} · ${typeLabel}`,
-                    secondary: `${b.date}${jobSuffix(b.jobId)}${b.notes ? ` · ${b.notes}` : ''}`,
-                    onEdit: () => openBonusModal(b),
-                    onDelete: () => confirmDelete(b.date, () => removeBonus(b.id)),
-                  };
-                })}
-            />
-            <EntryList
-              title={t.salary.overtime}
-              icon={<Timer size={14} className="text-[var(--text-2)]" />}
-              onAdd={() => openOvertimeModal()}
-              empty={t.salary.noEntries}
-        editLabel={t.edit}
-        deleteLabel={t.delete}
-              items={[...overtime]
-                .filter(o => matchesFilter(o.jobId))
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .map(o => ({
-                  id: o.id,
-                  primary: `${o.hours}t · ${formatCurrency(o.amount)}`,
-                  secondary: `${o.date}${jobSuffix(o.jobId)}${o.notes ? ` · ${o.notes}` : ''}`,
-                  onEdit: () => openOvertimeModal(o),
-                  onDelete: () => confirmDelete(o.date, () => removeOvertime(o.id)),
-                }))}
-            />
-            <EntryList
-              title={t.salary.hoursSnapshots}
-              icon={<Clock size={14} className="text-[var(--text-2)]" />}
-              onAdd={() => openHoursModal()}
-              empty={t.salary.noEntries}
-        editLabel={t.edit}
-        deleteLabel={t.delete}
-              items={[...hoursSnapshots]
-                .filter(h => matchesFilter(h.jobId))
-                .sort((a, b) => b.periodMonth.localeCompare(a.periodMonth))
-                .map(h => ({
-                  id: h.id,
-                  primary: `${h.actualHoursPerWeek}${t.common.hoursPerWeekUnit}`,
-                  secondary: `${h.periodMonth}${jobSuffix(h.jobId)}${h.notes ? ` · ${h.notes}` : ''}`,
-                  onEdit: () => openHoursModal(h),
-                  onDelete: () => confirmDelete(h.periodMonth, () => removeHoursSnapshot(h.id)),
-                }))}
-            />
-          </div>
+          <EntryList
+            title={t.salary.history}
+            icon={<TrendingUp size={14} className="text-[var(--text-2)]" />}
+            empty={t.salary.noEntries}
+            editLabel={t.edit}
+            deleteLabel={t.delete}
+            items={items}
+            headerAction={
+              jobs.length === 0
+                ? (
+                  <RecordEventButton label={t.salary.recordEvent} onClick={() => openJobModal()} />
+                ) : (
+                  <RecordEventMenu label={t.salary.recordEvent} items={menuItems} />
+                )
+            }
+          />
         );
       })()}
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
       {confirm && <ConfirmModal {...confirm} onCancel={closeConfirm} />}
+      {salaryEvent && (
+        <SalaryEventModal
+          existing={salaryEvent.existing}
+          prefillChangeType={salaryEvent.prefillChangeType}
+          jobs={jobs}
+          salaries={salaries}
+          defaultJobId={defaultJobIdForNewEntry()}
+          t={t}
+          formatCurrency={formatCurrency}
+          onSubmit={(payload, existingId) => {
+            if (existingId) updateSalary(existingId, payload);
+            else addSalary(payload);
+            setSalaryEvent(null);
+          }}
+          onClose={() => setSalaryEvent(null)}
+        />
+      )}
     </div>
   );
 };
@@ -1351,6 +1302,7 @@ interface EntryItem {
   primary: string;
   secondary: string;
   chip?: React.ReactNode;
+  accent?: string;        // optional leading dot colour (merged history feed)
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -1358,26 +1310,29 @@ interface EntryItem {
 interface EntryListProps {
   title: string;
   icon: React.ReactNode;
-  onAdd: () => void;
+  onAdd?: () => void;            // renders a "+ <title>" add button when set
+  headerAction?: React.ReactNode; // custom header control (takes precedence over onAdd)
   empty: string;
   items: EntryItem[];
   editLabel: string;
   deleteLabel: string;
 }
 
-const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, empty, items, editLabel, deleteLabel }) => (
+const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, headerAction, empty, items, editLabel, deleteLabel }) => (
   <div className={`${card} p-5 md:p-7 space-y-4`}>
     <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
       <div className="flex items-center gap-2">
         {icon}
         <h3 className={sectionLabel}>{title}</h3>
       </div>
-      <button
-        onClick={onAdd}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
-      >
-        <Plus size={12} /> {title.split(' ')[0]}
-      </button>
+      {headerAction ?? (onAdd && (
+        <button
+          onClick={onAdd}
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
+        >
+          <Plus size={12} /> {title.split(' ')[0]}
+        </button>
+      ))}
     </div>
     {items.length === 0 ? (
       <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{empty}</p>
@@ -1387,6 +1342,9 @@ const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, empty, items,
           <div key={item.id} className="flex items-center justify-between py-2.5 border-b border-[var(--border)] last:border-0 group">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 min-w-0">
+                {item.accent && (
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: item.accent }} />
+                )}
                 <div className="text-[13px] font-medium text-[var(--text-1)] font-mono tabular-nums truncate">{item.primary}</div>
                 {item.chip}
               </div>
@@ -1406,6 +1364,65 @@ const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, empty, items,
     )}
   </div>
 );
+
+// ── Record-event menu (single Add entry point for the history feed) ──
+
+const RecordEventButton: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => (
+  <button
+    onClick={onClick}
+    className="inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-[12px] font-semibold border transition-colors"
+    style={{ background: 'var(--accent-bg)', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 35%, transparent)' }}
+  >
+    <Plus size={13} /> {label}
+  </button>
+);
+
+interface RecordEventMenuItem { label: string; onClick: () => void; divider?: boolean }
+
+const RecordEventMenu: React.FC<{ label: string; items: RecordEventMenuItem[] }> = ({ label, items }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-[12px] font-semibold border transition-colors"
+        style={{ background: 'var(--accent-bg)', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 35%, transparent)' }}
+      >
+        <Plus size={13} /> {label} <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 mt-1 z-20 min-w-[190px] rounded-[8px] border border-[var(--border)] bg-[var(--bg-card)] shadow-lg py-1"
+        >
+          {items.map((it, i) => (
+            <div key={i}>
+              {it.divider && <div className="my-1 border-t border-[var(--border)]" />}
+              <button
+                role="menuitem"
+                onClick={() => { setOpen(false); it.onClick(); }}
+                className="w-full text-left px-3 py-2 text-[13px] text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"
+              >
+                {it.label}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ── Real Hourly Rate inline SVG chart ──────────────────────────────
 

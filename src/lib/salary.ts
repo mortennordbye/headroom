@@ -20,6 +20,39 @@ export function salaryAt(month: string, salaries: SalaryEntry[]): SalaryEntry | 
   return eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b));
 }
 
+/** How a salary-change amount is entered when recording a raise/adjustment. */
+export type SalaryEntryMode = 'percent' | 'kr' | 'total';
+
+/**
+ * The new gross annual for a salary change, given the entry mode and the prior
+ * salary it builds on. `percent` grows `prevGross` by `amount`%, `kr` adds
+ * `amount` kroner, `total` uses `amount` verbatim. Rounded to whole kroner.
+ * `prevGross` is ignored in `total` mode (used when there is no prior salary).
+ */
+export function computeNewGross(mode: SalaryEntryMode, amount: number, prevGross: number): number {
+  if (mode === 'total') return Math.round(amount);
+  if (mode === 'kr') return Math.round(prevGross + amount);
+  return Math.round(prevGross * (1 + amount / 100));
+}
+
+/**
+ * The salary entry a raise builds on: the latest one for a job strictly before
+ * `month`, ignoring `excludeId` (the entry being edited). Null when the job has
+ * no earlier salary — i.e. this is its first (initial) entry.
+ */
+export function priorSalaryForJob(
+  salaries: SalaryEntry[],
+  jobId: string,
+  month: string,
+  excludeId?: string,
+): SalaryEntry | null {
+  const earlier = salaries.filter(
+    s => s.jobId === jobId && s.id !== excludeId && s.effectiveDate < month,
+  );
+  if (earlier.length === 0) return null;
+  return earlier.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b));
+}
+
 /**
  * Most recent hours snapshot at the given month; falls back to the contracted
  * hours of the active salary's job, then to a 37.5h default.
