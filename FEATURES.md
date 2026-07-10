@@ -116,13 +116,12 @@ difference of `totalTax` so it captures the trinnskatt bracket, the 22% alminnel
 minstefradrag phase-in) and trygdeavgift at once. Shown as a "next krone" readout beside the
 tax-breakdown chart on SalaryPage (Norwegian region only).
 
-### 18. BSU cap tracking
-`assets.bsu` is a bare scalar summed into cash; nothing tracks the 27 500 kr/yr contribution
-cap, the 300 000 kr lifetime cap, or the age-34 cutoff. A BSU tile showing remaining room
-this year and lifetime would make the account actionable.
-Where: `src/context/FinanceContext.tsx` (`Assets.bsu`), Assets page.
-HISTORY_PLAN: unblocked — Phase 1 shipped, so `balanceSnapshots` now carries per-month BSU
-balances; "contributed this year" can be derived from the snapshot deltas rather than asked for.
+### 18. BSU cap tracking ✅ SHIPPED
+`bsuStatus` (pure, unit-tested in `src/lib/bsu.ts`) derives "contributed this year" from the
+BSU balance change since the start of the year (snapshot deltas) and reports room left
+against the 27 500 kr/yr and 300 000 kr lifetime caps. A tile under the BSU row on Assets
+shows both with progress bars. The age-34 cutoff is left unmodeled (no birthdate is tied to
+the account). (`src/pages/AssetPage.tsx`.)
 
 ### 19. Restskatt early warning ✅ SHIPPED
 `restskattEstimate` (pure, unit-tested in `src/lib/restskatt.ts`) sums this year's withheld

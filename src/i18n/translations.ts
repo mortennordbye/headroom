@@ -1073,6 +1073,10 @@ export const translations = {
       projectionNotePost: '/år fra budsjettet) går til aksjer. Endre ratene i Innstillinger.',
       addSavingsAccount: 'Legg til sparekonto',
       accountName: 'Kontonavn',
+      bsuAnnualRoom: 'Årets ramme',
+      bsuLifetimeRoom: 'Livstidsramme',
+      bsuRoomLeft: 'igjen',
+      bsuNote: 'BSU: 27 500 kr/år, 300 000 kr totalt. «Innbetalt i år» er anslått fra endring i saldo.',
     },
     loanPage: {
       autoBadge: 'auto',
@@ -2299,6 +2303,10 @@ export const translations = {
       projectionNotePost: '/yr from your budget) flow into stocks. Adjust the rates in Settings.',
       addSavingsAccount: 'Add savings account',
       accountName: 'Account name',
+      bsuAnnualRoom: 'This year’s room',
+      bsuLifetimeRoom: 'Lifetime room',
+      bsuRoomLeft: 'left',
+      bsuNote: 'BSU: 27,500 kr/yr, 300,000 kr lifetime. “Contributed this year” is estimated from the balance change.',
     },
     loanPage: {
       autoBadge: 'auto',
