@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from './salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob } from './salary';
 import type { SalaryEntry, JobEntry, HoursSnapshot } from '../context/FinanceContext';
 
 const sal = (id: string, effectiveDate: string, grossAnnual: number, jobId = 'j1'): SalaryEntry => ({
@@ -89,5 +89,54 @@ describe('hoursAt', () => {
   it('applies unassigned snapshots to whichever job is active', () => {
     const twoJobs = [job('j1', 37.5), job('j2', 20)];
     expect(hoursAt('2025-09', snaps, twoJobs, sal('b', '2025-05', 500000, 'j2'))).toBe(32);
+  });
+});
+
+describe('computeNewGross', () => {
+  it('grows the prior salary by a percentage', () => {
+    expect(computeNewGross('percent', 5, 678571)).toBe(712500); // 678571 * 1.05 = 712499.55 → 712500
+  });
+
+  it('adds kroner to the prior salary', () => {
+    expect(computeNewGross('kr', 30000, 678571)).toBe(708571);
+  });
+
+  it('uses the amount verbatim in total mode and ignores prevGross', () => {
+    expect(computeNewGross('total', 712500, 999999)).toBe(712500);
+  });
+
+  it('rounds to whole kroner', () => {
+    expect(computeNewGross('percent', 3.3, 500000)).toBe(516500);
+    expect(computeNewGross('total', 500000.7, 0)).toBe(500001);
+  });
+
+  it('handles a zero base without dividing or NaN', () => {
+    expect(computeNewGross('percent', 5, 0)).toBe(0);
+    expect(computeNewGross('kr', 5000, 0)).toBe(5000);
+  });
+});
+
+describe('priorSalaryForJob', () => {
+  const list = [
+    sal('a', '2023-01', 600000, 'j1'),
+    sal('b', '2024-01', 650000, 'j1'),
+    sal('c', '2024-01', 400000, 'j2'),
+  ];
+
+  it('returns the latest same-job salary strictly before the month', () => {
+    expect(priorSalaryForJob(list, 'j1', '2025-01')?.grossAnnual).toBe(650000);
+  });
+
+  it('is strictly-before: a same-month entry is not the prior', () => {
+    expect(priorSalaryForJob(list, 'j1', '2024-01')?.grossAnnual).toBe(600000);
+  });
+
+  it('excludes the entry being edited', () => {
+    expect(priorSalaryForJob(list, 'j1', '2025-01', 'b')?.grossAnnual).toBe(600000);
+  });
+
+  it('ignores other jobs and returns null when none earlier', () => {
+    expect(priorSalaryForJob(list, 'j2', '2024-01')).toBeNull();
+    expect(priorSalaryForJob(list, 'j1', '2022-01')).toBeNull();
   });
 });
