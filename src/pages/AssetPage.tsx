@@ -27,6 +27,7 @@ import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
 import EditModal, { type ModalField } from '../components/EditModal';
+import ConfirmModal from '../components/ConfirmModal';
 import { EquityCompositionBar } from '../components/EquityCompositionBar';
 import EquityHistoryTable from '../components/EquityHistoryTable';
 import DebtSection from '../components/DebtSection';
@@ -121,6 +122,10 @@ const AssetPage: React.FC = () => {
     const [modal, setModal] = useState<ModalConfig | null>(null);
     const openModal = (config: ModalConfig) => setModal(config);
     const closeModal = () => setModal(null);
+    // Savings accounts are structural (goals can source from them), so deletion
+    // confirms — matching fixed expenses, goals and debts — rather than deleting
+    // instantly.
+    const [pendingSavingsDelete, setPendingSavingsDelete] = useState<string | null>(null);
 
     // `allowNegative` is for unrealized gain/loss fields: a loss is a legitimate
     // negative value (it carries a deductible latent tax benefit). All other
@@ -355,7 +360,7 @@ const AssetPage: React.FC = () => {
                   account={acc}
                   formatCurrency={formatCurrency}
                   onEdit={() => editSavingsAccount(acc)}
-                  onRemove={() => removeSavingsAccount(acc.id)}
+                  onRemove={() => setPendingSavingsDelete(acc.id)}
                   removeLabel={`${t.delete} — ${acc.name}`}
                 />
               ))}
@@ -605,6 +610,16 @@ const AssetPage: React.FC = () => {
       </div>
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
+      {pendingSavingsDelete && (
+        <ConfirmModal
+          title={t.confirmDelete}
+          message={t.confirmDeleteSavingsMsg}
+          confirmLabel={t.delete}
+          cancelLabel={t.cancel}
+          onConfirm={() => { removeSavingsAccount(pendingSavingsDelete); setPendingSavingsDelete(null); }}
+          onCancel={() => setPendingSavingsDelete(null)}
+        />
+      )}
     </div>
     </>
   );

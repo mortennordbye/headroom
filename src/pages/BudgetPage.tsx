@@ -1,4 +1,4 @@
-import React, { useState, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import {
   PlusCircle,
   Trash2,
@@ -145,6 +145,7 @@ const BudgetPage: React.FC = () => {
     currentMonth,
     monthlyIncomes,
     payslips,
+    setPayslip,
     removePayslip,
     setMonthlyIncomeForMonth,
     setCurrentMonth,
@@ -187,7 +188,11 @@ const BudgetPage: React.FC = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [undoTx, setUndoTx] = useState<DailyTransaction | null>(null);
+  const [undo, setUndo] = useState<{ message: string; onUndo: () => void } | null>(null);
+  // Latest transactions, so a queued undo re-adds a row to current state rather
+  // than the (stale) array captured when the delete happened.
+  const txRef = useRef(dailyTransactions);
+  useEffect(() => { txRef.current = dailyTransactions; });
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -393,17 +398,25 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  // Routine deletes use undo (not a confirm): remove the row immediately and
-  // offer a brief window to bring it back via the toast.
+  // Routine deletes use undo (not a confirm): remove immediately and offer a
+  // brief window to bring the item back via the toast.
   const removeDailyTransaction = (id: string) => {
     const tx = dailyTransactions.find(t => t.id === id);
     if (!tx) return;
     setDailyTransactions(dailyTransactions.filter(t => t.id !== id));
-    setUndoTx(tx);
+    setUndo({
+      message: t.budgetPage.txDeleted,
+      onUndo: () => { setDailyTransactions([...txRef.current, tx]); setUndo(null); },
+    });
   };
-  const undoDelete = () => {
-    if (undoTx) setDailyTransactions([...dailyTransactions, undoTx]);
-    setUndoTx(null);
+  const removePayslipWithUndo = (key: string) => {
+    const data = payslips[key];
+    if (!data) return;
+    removePayslip(key);
+    setUndo({
+      message: t.budgetPage.payslipRemoved,
+      onUndo: () => { setPayslip(key, data); setUndo(null); },
+    });
   };
 
   // --- CSV Export ---
@@ -685,7 +698,7 @@ const BudgetPage: React.FC = () => {
               <h3 className="text-[13px] font-semibold text-[var(--text-1)]">{t.salary.importPayslip.savedTitle}</h3>
             </div>
             <button
-              onClick={() => removePayslip(monthKey)}
+              onClick={() => removePayslipWithUndo(monthKey)}
               className="text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--negative)] transition-colors"
             >
               {t.salary.importPayslip.remove}
@@ -1259,13 +1272,13 @@ const BudgetPage: React.FC = () => {
         />
       )}
       {payslipOpen && <PayslipImportModal onClose={() => setPayslipOpen(false)} />}
-      {undoTx && (
+      {undo && (
         <UndoToast
-          message={t.budgetPage.txDeleted}
+          message={undo.message}
           undoLabel={t.budgetPage.undo}
           dismissLabel={t.dismiss}
-          onUndo={undoDelete}
-          onDismiss={() => setUndoTx(null)}
+          onUndo={undo.onUndo}
+          onDismiss={() => setUndo(null)}
         />
       )}
     </div>
