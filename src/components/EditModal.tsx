@@ -1,4 +1,4 @@
-import { useState, useRef, useId, type Ref } from 'react';
+import { useState, useRef, useId, type Ref, type ReactNode } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { ModalShell } from './ui/ModalShell';
 
@@ -26,9 +26,11 @@ interface EditModalProps {
   cancelLabel?: string;
   saveLabel?: string;
   error?: string;
+  /** Optional content rendered above the fields (e.g. a quick-pick chip row). */
+  header?: ReactNode;
 }
 
-export default function EditModal({ title, fields, onSave, onCancel, cancelLabel, saveLabel, error }: EditModalProps) {
+export default function EditModal({ title, fields, onSave, onCancel, cancelLabel, saveLabel, error, header }: EditModalProps) {
   const { t } = useFinance();
   const [values, setValues] = useState<Record<string, string>>(
     () => Object.fromEntries(fields.map(f => [f.key, f.value]))
@@ -70,6 +72,7 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
       }
     >
         <div className="space-y-3">
+          {header}
           {fields.map((field, idx) => field.type === 'checkbox' ? (
             <div key={field.key} className="space-y-1.5">
               <label htmlFor={fieldId(field.key)} className="flex items-center gap-2 cursor-pointer">

@@ -103,12 +103,12 @@ twice — with and without a fixed extra monthly payment — and returns months 
 A slider on the shared amortization accordion (first-buyer and homeowner) surfaces "time saved
 / interest saved / new payoff time". (`src/pages/LoanPage.tsx`.)
 
-### 16. Give `recurringTemplates` its UI
-`TransactionTemplate` and `recurringTemplates` are fully typed, persisted and exported
-(`src/context/FinanceContext.tsx`, `src/lib/exportSummary.ts`), and `addDailyTransaction`
-already accepts a template prefill, but no UI creates or applies templates. A "saved
-templates" quick-pick in the add-transaction modal would serve recurring manual entries
-(rent split, cash allowance).
+### 16. Give `recurringTemplates` its UI ✅ SHIPPED
+The add-transaction modal now shows a "saved templates" quick-pick: click a chip to prefill
+the form, delete one with its ×, and a "save as template" checkbox creates a template from
+the current entry. `EditModal` gained an optional `header` slot for the chip row; the modal
+reads/writes the already-persisted `recurringTemplates` via a ref so it can refresh its chip
+list in place. (`src/pages/BudgetPage.tsx`, `src/components/EditModal.tsx`.)
 
 ### 17. Marginal tax rate readout ✅ SHIPPED
 `calcMarginalTaxRate` (pure, unit-tested in `src/lib/norwegianTax.ts`) takes a finite

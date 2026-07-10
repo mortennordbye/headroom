@@ -130,6 +130,7 @@ interface ModalConfig {
   fields: ModalField[];
   onSave: (values: Record<string, string>) => void;
   error?: string;
+  header?: React.ReactNode;
 }
 
 // Session-local memory of the last category/kind used when adding a transaction,
@@ -174,6 +175,8 @@ const BudgetPage: React.FC = () => {
     reconciliation,
     dailyTransactions,
     setDailyTransactions,
+    recurringTemplates,
+    setRecurringTemplates,
     accountLabels,
     accountGroups,
     accountFilter,
@@ -208,6 +211,10 @@ const BudgetPage: React.FC = () => {
   // than the (stale) array captured when the delete happened.
   const txRef = useRef(dailyTransactions);
   useEffect(() => { txRef.current = dailyTransactions; });
+  // Latest templates, kept in a ref so the add-transaction modal (a captured
+  // closure) can create/delete templates and re-open with a fresh chip list.
+  const templatesRef = useRef(recurringTemplates);
+  useEffect(() => { templatesRef.current = recurringTemplates; });
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -328,13 +335,50 @@ const BudgetPage: React.FC = () => {
     // prefill takes precedence over the remembered defaults.
     const defaultCategory = prefill?.category ?? lastAddDefaults.category;
     const defaultKind = prefill ? 'expense' : lastAddDefaults.kind;
+    const templates = templatesRef.current;
+    // Quick-pick chips for saved templates (rent split, cash allowance, …):
+    // apply one to prefill the form, or delete it with the ×. The ref is bumped
+    // synchronously on delete so the re-opened modal drops the removed chip.
+    const templateHeader = templates.length > 0 ? (
+      <div className="space-y-1.5">
+        <div className="text-[11px] font-medium text-[var(--text-2)] uppercase tracking-wide">{t.budgetPage.savedTemplates}</div>
+        <div className="flex flex-wrap gap-1.5">
+          {templates.map(tpl => (
+            <span key={tpl.id} className="inline-flex items-center rounded-[4px] border border-[var(--border)] overflow-hidden">
+              <button
+                type="button"
+                onClick={() => addDailyTransaction(dateStr, tpl)}
+                className="px-2 py-1 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-raised)] transition-colors"
+              >
+                {tpl.description} · {formatCurrency(tpl.amount)}
+              </button>
+              <button
+                type="button"
+                aria-label={`${t.delete} — ${tpl.description}`}
+                onClick={() => {
+                  const next = templatesRef.current.filter(x => x.id !== tpl.id);
+                  templatesRef.current = next;
+                  setRecurringTemplates(next);
+                  addDailyTransaction(dateStr, prefill);
+                }}
+                className="px-1.5 py-1 text-[var(--text-3)] hover:text-[var(--negative)] border-l border-[var(--border)] transition-colors"
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+    ) : undefined;
     openModal({
       title: format(new Date(dateStr + 'T00:00:00'), 'dd.MM.yyyy'),
+      header: templateHeader,
       fields: [
         { key: 'description', label: t.transactionDetails, type: 'text', value: prefill?.description ?? '', placeholder: t.budgetPage.transactionPlaceholder },
         { key: 'amount', label: t.impact, type: 'number', value: prefill?.amount?.toString() ?? '', placeholder: '0' },
         { key: 'category', label: t.category, type: 'select', value: defaultCategory, options: categoryOptions },
         kindField(defaultKind),
+        { key: 'saveTemplate', label: t.budgetPage.saveAsTemplate, type: 'checkbox', value: 'false', hint: t.budgetPage.saveAsTemplateHint },
       ],
       onSave: (vals) => {
         const amount = parsePositiveNumber(vals.amount);
@@ -350,6 +394,16 @@ const BudgetPage: React.FC = () => {
             categorySource: vals.category.trim() ? 'manual' : undefined,
             kind,
           }]);
+          if (vals.saveTemplate === 'true') {
+            const next = [...templatesRef.current, {
+              id: crypto.randomUUID(),
+              description: vals.description.trim(),
+              amount,
+              category: vals.category.trim() || undefined,
+            }];
+            templatesRef.current = next;
+            setRecurringTemplates(next);
+          }
           closeModal();
         } else {
           setModal(prev => prev ? { ...prev, error: !vals.description.trim() ? t.transactionDetails + t.validation.requiredSuffix : t.impact + t.validation.positiveAmountSuffix } : null);
