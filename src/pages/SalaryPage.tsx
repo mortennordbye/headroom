@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect, lazy, Suspense } from 'react';
+import React, { useMemo, useState, lazy, Suspense } from 'react';
 import {
   TrendingUp,
   Briefcase,
@@ -7,7 +7,6 @@ import {
   Edit2,
   Trash2,
   Plus,
-  ChevronDown,
 } from 'lucide-react';
 import {
   BarChart,
@@ -40,13 +39,13 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { PaydayField } from '../components/PaydayField';
-import SalaryEventModal from '../components/SalaryEventModal';
+import RecordEventModal, { type RecordEditTarget, type RecordType } from '../components/RecordEventModal';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
 import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
-import { isValidYearMonth, isValidYearMonthDay, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
+import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -85,10 +84,10 @@ const SalaryPage: React.FC = () => {
     t,
     formatCurrency,
     jobs, addJob, updateJob, removeJob,
-    salaries, addSalary, updateSalary, removeSalary,
-    bonuses, addBonus, updateBonus, removeBonus,
-    overtime, addOvertime, updateOvertime, removeOvertime,
-    hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
+    salaries, addSalary, removeSalary,
+    bonuses, removeBonus,
+    overtime, removeOvertime,
+    hoursSnapshots, removeHoursSnapshot,
     inflation, inflationStale,
     wageStats,
     region, customTaxRatePct, pension,
@@ -97,8 +96,7 @@ const SalaryPage: React.FC = () => {
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [confirm, setConfirm] = useState<ConfirmConfig | null>(null);
-  const [activeJobFilter, setActiveJobFilter] = useState<string>('all');
-  const [salaryEvent, setSalaryEvent] = useState<{ existing?: SalaryEntry; prefillChangeType?: SalaryChangeType } | null>(null);
+  const [recordEvent, setRecordEvent] = useState<{ target?: RecordEditTarget; initialType?: RecordType } | null>(null);
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -476,149 +474,8 @@ const SalaryPage: React.FC = () => {
     });
   };
 
-  const openSalaryEventModal = (existing?: SalaryEntry, prefillChangeType?: SalaryChangeType) =>
-    setSalaryEvent({ existing, prefillChangeType });
-
-  const defaultJobIdForNewEntry = (): string =>
-    activeJobFilter !== 'all' ? activeJobFilter : (jobs[jobs.length - 1]?.id ?? '');
-  const jobSelectOptions = () => jobs.map(j => ({ value: j.id, label: `${j.employer} — ${j.role}` }));
-  const budgetToggleOptions = () => [
-    { value: 'no', label: t.salary.includeInBudgetNo },
-    { value: 'yes', label: t.salary.includeInBudgetYes },
-  ];
-
-  const openBonusModal = (existing?: BonusEntry) => {
-    if (jobs.length === 0) {
-      openModal({
-        title: t.salary.addBonus,
-        fields: [{ key: 'msg', label: t.salary.noJobsHint, type: 'text', value: '' }],
-        onSave: () => closeModal(),
-      });
-      return;
-    }
-    const bonusTypes: { value: BonusType; label: string }[] = [
-      { value: 'annual', label: t.salary.bonusTypeAnnual },
-      { value: 'performance', label: t.salary.bonusTypePerformance },
-      { value: 'signing', label: t.salary.bonusTypeSigning },
-      { value: 'holiday_pay', label: t.salary.bonusTypeHolidayPay },
-      { value: 'profit_share', label: t.salary.bonusTypeProfitShare },
-      { value: 'other', label: t.salary.bonusTypeOther },
-    ];
-    openModal({
-      title: existing ? t.salary.bonuses : t.salary.addBonus,
-      fields: [
-        { key: 'jobId', label: t.salary.job, type: 'select', value: existing?.jobId ?? defaultJobIdForNewEntry(), options: jobSelectOptions() },
-        { key: 'date', label: t.salary.bonusDate, type: 'text', value: existing?.date ?? '', placeholder: '2024-06-15' },
-        { key: 'amount', label: t.salary.bonusAmount, type: 'number', value: (existing?.amount ?? 0).toString() },
-        { key: 'type', label: t.salary.bonusType, type: 'select', value: existing?.type ?? 'annual', options: bonusTypes },
-        { key: 'includeInBudget', label: t.salary.includeInBudget, type: 'select', value: existing?.includeInBudget ? 'yes' : 'no', options: budgetToggleOptions() },
-        { key: 'notes', label: t.salary.notes, type: 'text', value: existing?.notes ?? '' },
-      ],
-      onSave: (vals) => {
-        if (!isValidYearMonthDay(vals.date)) {
-          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateDay });
-          return;
-        }
-        if (!isNonNegativeNumber(vals.amount)) {
-          setModal(prev => prev && { ...prev, error: t.salaryPage.errAmountPositive });
-          return;
-        }
-        const payload = {
-          jobId: vals.jobId || undefined,
-          date: vals.date,
-          amount: parseLocaleNumber(vals.amount),
-          type: vals.type as BonusType,
-          includeInBudget: vals.includeInBudget === 'yes' || undefined,
-          notes: vals.notes.trim() || undefined,
-        };
-        if (existing) updateBonus(existing.id, payload);
-        else addBonus(payload);
-        closeModal();
-      },
-    });
-  };
-
-  const openOvertimeModal = (existing?: OvertimeEntry) => {
-    if (jobs.length === 0) {
-      openModal({
-        title: t.salary.addOvertime,
-        fields: [{ key: 'msg', label: t.salary.noJobsHint, type: 'text', value: '' }],
-        onSave: () => closeModal(),
-      });
-      return;
-    }
-    openModal({
-      title: existing ? t.salary.overtime : t.salary.addOvertime,
-      fields: [
-        { key: 'jobId', label: t.salary.job, type: 'select', value: existing?.jobId ?? defaultJobIdForNewEntry(), options: jobSelectOptions() },
-        { key: 'date', label: t.salary.overtimeDate, type: 'text', value: existing?.date ?? '', placeholder: '2024-06-15' },
-        { key: 'hours', label: t.salary.overtimeHours, type: 'number', value: (existing?.hours ?? 0).toString() },
-        { key: 'amount', label: t.salary.overtimeAmount, type: 'number', value: (existing?.amount ?? 0).toString() },
-        { key: 'includeInBudget', label: t.salary.includeInBudget, type: 'select', value: existing?.includeInBudget ? 'yes' : 'no', options: budgetToggleOptions() },
-        { key: 'notes', label: t.salary.notes, type: 'text', value: existing?.notes ?? '' },
-      ],
-      onSave: (vals) => {
-        if (!isValidYearMonthDay(vals.date)) {
-          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidDateDay });
-          return;
-        }
-        if (!isNonNegativeNumber(vals.hours) || !isNonNegativeNumber(vals.amount)) {
-          setModal(prev => prev && { ...prev, error: t.salaryPage.errHoursAmountPositive });
-          return;
-        }
-        const payload = {
-          jobId: vals.jobId || undefined,
-          date: vals.date,
-          hours: parseLocaleNumber(vals.hours),
-          amount: parseLocaleNumber(vals.amount),
-          includeInBudget: vals.includeInBudget === 'yes' || undefined,
-          notes: vals.notes.trim() || undefined,
-        };
-        if (existing) updateOvertime(existing.id, payload);
-        else addOvertime(payload);
-        closeModal();
-      },
-    });
-  };
-
-  const openHoursModal = (existing?: HoursSnapshot) => {
-    if (jobs.length === 0) {
-      openModal({
-        title: t.salary.addHoursSnapshot,
-        fields: [{ key: 'msg', label: t.salary.noJobsHint, type: 'text', value: '' }],
-        onSave: () => closeModal(),
-      });
-      return;
-    }
-    openModal({
-      title: existing ? t.salary.hoursSnapshots : t.salary.addHoursSnapshot,
-      fields: [
-        { key: 'jobId', label: t.salary.job, type: 'select', value: existing?.jobId ?? defaultJobIdForNewEntry(), options: jobSelectOptions() },
-        { key: 'periodMonth', label: t.salary.periodMonth, type: 'text', value: existing?.periodMonth ?? '', placeholder: '2024-06' },
-        { key: 'actualHoursPerWeek', label: t.salary.actualHours, type: 'number', value: (existing?.actualHoursPerWeek ?? 37.5).toString() },
-        { key: 'notes', label: t.salary.notes, type: 'text', value: existing?.notes ?? '' },
-      ],
-      onSave: (vals) => {
-        if (!isValidYearMonth(vals.periodMonth)) {
-          setModal(prev => prev && { ...prev, error: t.salaryPage.errInvalidMonth });
-          return;
-        }
-        if (!isNonNegativeNumber(vals.actualHoursPerWeek)) {
-          setModal(prev => prev && { ...prev, error: t.salaryPage.errHoursPositiveShort });
-          return;
-        }
-        const payload = {
-          jobId: vals.jobId || undefined,
-          periodMonth: vals.periodMonth,
-          actualHoursPerWeek: parseLocaleNumber(vals.actualHoursPerWeek),
-          notes: vals.notes.trim() || undefined,
-        };
-        if (existing) updateHoursSnapshot(existing.id, payload);
-        else addHoursSnapshot(payload);
-        closeModal();
-      },
-    });
-  };
+  const openRecordEvent = (target?: RecordEditTarget, initialType?: RecordType) =>
+    setRecordEvent({ target, initialType });
 
   const confirmDelete = (label: string, onConfirm: () => void) => {
     openConfirm({
@@ -1071,21 +928,10 @@ const SalaryPage: React.FC = () => {
         </span>
       </div>
 
-      {/* One box: jobs pinned on top, then the chronological salary history */}
+      {/* One box: each job is a lane with its events on a timeline spine */}
       {(() => {
-        const showAll = activeJobFilter === 'all';
-        const matchesFilter = (jobId: string | undefined) => showAll || jobId === activeJobFilter;
-        const jobLabel = (jobId: string | undefined): string => {
-          if (!jobId) return t.salary.unassigned;
-          const j = jobsById.get(jobId);
-          if (!j) return t.salary.unassigned;
-          return j.role ? `${j.employer} — ${j.role}` : j.employer;
-        };
-        const jobSuffix = (jobId: string | undefined) =>
-          showAll ? ` · ${jobLabel(jobId)}` : '';
         // Salary/hours are YYYY-MM, bonus/overtime YYYY-MM-DD — pad for a shared sort key.
         const norm = (d: string) => (d.length === 7 ? `${d}-01` : d);
-
         const salaryTypeLabel = (ct: SalaryChangeType) => ({
           initial: t.salary.changeTypeInitial,
           raise: t.salary.changeTypeRaise,
@@ -1123,159 +969,176 @@ const SalaryPage: React.FC = () => {
           );
         };
 
-        // Jobs are pinned at the top of the card, not folded into the timeline.
-        const jobItems: EntryItem[] = jobs.map(j => ({
-          id: j.id,
-          accent: CHANGE_TYPE_COLOR.job_change,
-          primary: `${j.employer} — ${j.role}`,
-          secondary: `${j.startDate} → ${j.endDate ?? t.salaryPage.now} · ${j.contractedHoursPerWeek}${t.common.hoursPerWeekUnit}`,
-          chip: j.onCallAnnual && j.onCallAnnual > 0 ? (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold font-mono tabular-nums shrink-0"
-              style={{ color: 'var(--positive)', background: 'var(--positive-bg)' }}
-              title={t.salary.onCallAnnual}
-            >
-              {t.salary.onCallLabel} {formatCurrency(j.onCallAnnual)}/{t.salaryPage.yearAbbr}
-            </span>
-          ) : undefined,
-          onEdit: () => openJobModal(j),
-          onDelete: () => confirmDelete(j.employer, () => removeJob(j.id)),
-        }));
-
-        type FeedItem = EntryItem & { sortKey: string };
-        const items: FeedItem[] = [];
-        sortedSalaries.filter(s => matchesFilter(s.jobId)).forEach(s => items.push({
-          id: s.id,
-          sortKey: norm(s.effectiveDate),
-          accent: CHANGE_TYPE_COLOR[s.changeType],
-          primary: `${formatCurrency(s.grossAnnual)} · ${salaryTypeLabel(s.changeType)}`,
-          secondary: `${s.effectiveDate}${jobSuffix(s.jobId)}${s.notes ? ` · ${s.notes}` : ''}`,
-          chip: salaryChip(s.id),
-          onEdit: () => openSalaryEventModal(s),
+        const salaryEv = (s: SalaryEntry): TimelineEvent => ({
+          id: s.id, sortKey: norm(s.effectiveDate), year: s.effectiveDate.slice(0, 4),
+          accent: CHANGE_TYPE_COLOR[s.changeType], title: salaryTypeLabel(s.changeType),
+          chip: salaryChip(s.id), date: s.effectiveDate, notes: s.notes,
+          amount: formatCurrency(s.grossAnnual),
+          onEdit: () => openRecordEvent({ kind: 'salary', entry: s }),
           onDelete: () => confirmDelete(s.effectiveDate, () => removeSalary(s.id)),
-        }));
-        bonuses.filter(b => matchesFilter(b.jobId)).forEach(b => items.push({
-          id: b.id,
-          sortKey: norm(b.date),
-          accent: 'var(--teal)',
-          primary: `${formatCurrency(b.amount)} · ${bonusTypeLabel(b.type)}`,
-          secondary: `${b.date}${jobSuffix(b.jobId)}${b.notes ? ` · ${b.notes}` : ''}`,
-          onEdit: () => openBonusModal(b),
+        });
+        const bonusEv = (b: BonusEntry): TimelineEvent => ({
+          id: b.id, sortKey: norm(b.date), year: b.date.slice(0, 4), accent: 'var(--teal)',
+          title: bonusTypeLabel(b.type), date: b.date, notes: b.notes,
+          amount: formatCurrency(b.amount),
+          onEdit: () => openRecordEvent({ kind: 'bonus', entry: b }),
           onDelete: () => confirmDelete(b.date, () => removeBonus(b.id)),
-        }));
-        overtime.filter(o => matchesFilter(o.jobId)).forEach(o => items.push({
-          id: o.id,
-          sortKey: norm(o.date),
-          accent: 'var(--slate)',
-          primary: `${o.hours}t · ${formatCurrency(o.amount)}`,
-          secondary: `${o.date}${jobSuffix(o.jobId)}${o.notes ? ` · ${o.notes}` : ''}`,
-          onEdit: () => openOvertimeModal(o),
+        });
+        const overtimeEv = (o: OvertimeEntry): TimelineEvent => ({
+          id: o.id, sortKey: norm(o.date), year: o.date.slice(0, 4), accent: 'var(--slate)',
+          title: `${t.salary.overtime} · ${o.hours} t`, date: o.date, notes: o.notes,
+          amount: formatCurrency(o.amount),
+          onEdit: () => openRecordEvent({ kind: 'overtime', entry: o }),
           onDelete: () => confirmDelete(o.date, () => removeOvertime(o.id)),
-        }));
-        hoursSnapshots.filter(h => matchesFilter(h.jobId)).forEach(h => items.push({
-          id: h.id,
-          sortKey: norm(h.periodMonth),
-          accent: 'var(--text-dim)',
-          primary: `${h.actualHoursPerWeek}${t.common.hoursPerWeekUnit}`,
-          secondary: `${h.periodMonth}${jobSuffix(h.jobId)}${h.notes ? ` · ${h.notes}` : ''}`,
-          onEdit: () => openHoursModal(h),
+        });
+        const hoursEv = (h: HoursSnapshot): TimelineEvent => ({
+          id: h.id, sortKey: norm(h.periodMonth), year: h.periodMonth.slice(0, 4), accent: 'var(--text-dim)',
+          title: t.salary.hoursChange, date: h.periodMonth, notes: h.notes,
+          amount: `${h.actualHoursPerWeek}${t.common.hoursPerWeekUnit}`,
+          onEdit: () => openRecordEvent({ kind: 'hours', entry: h }),
           onDelete: () => confirmDelete(h.periodMonth, () => removeHoursSnapshot(h.id)),
-        }));
-        items.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+        });
 
-        const menuItems = jobs.length === 0 ? [] : [
-          { label: t.salary.changeTypeRaise, onClick: () => openSalaryEventModal(undefined, 'raise') },
-          { label: t.salary.changeTypePromotion, onClick: () => openSalaryEventModal(undefined, 'promotion') },
-          { label: t.salary.changeTypeAdjustment, onClick: () => openSalaryEventModal(undefined, 'adjustment') },
-          { label: t.salary.bonuses, onClick: () => openBonusModal(), divider: true },
-          { label: t.salary.overtime, onClick: () => openOvertimeModal() },
-          { label: t.salary.hoursChange, onClick: () => openHoursModal() },
-          { label: t.salary.addJob, onClick: () => openJobModal(), divider: true },
-        ];
+        const byDateDesc = (a: TimelineEvent, b: TimelineEvent) => b.sortKey.localeCompare(a.sortKey);
+        const jobEvents = (jobId: string): TimelineEvent[] => [
+          ...sortedSalaries.filter(s => s.jobId === jobId).map(salaryEv),
+          ...bonuses.filter(b => b.jobId === jobId).map(bonusEv),
+          ...overtime.filter(o => o.jobId === jobId).map(overtimeEv),
+          ...hoursSnapshots.filter(h => h.jobId === jobId).map(hoursEv),
+        ].sort(byDateDesc);
+        const unassignedEvents = [
+          ...bonuses.filter(b => !b.jobId).map(bonusEv),
+          ...overtime.filter(o => !o.jobId).map(overtimeEv),
+          ...hoursSnapshots.filter(h => !h.jobId).map(hoursEv),
+        ].sort(byDateDesc);
+        const latestSalaryFor = (jobId: string): SalaryEntry | null => {
+          const list = sortedSalaries.filter(s => s.jobId === jobId);
+          return list.length ? list[list.length - 1] : null;
+        };
+        // Current jobs (no end date) first, then past jobs newest-started first.
+        const laneJobs = [...jobs].sort((a, b) => {
+          const ac = a.endDate ? 1 : 0, bc = b.endDate ? 1 : 0;
+          return ac !== bc ? ac - bc : b.startDate.localeCompare(a.startDate);
+        });
 
-        const tabs = jobs.length > 1
-          ? [
-              { id: 'all', label: t.salary.allJobs },
-              ...[...jobs]
-                .sort((a, b) => b.startDate.localeCompare(a.startDate))
-                .map(j => ({ id: j.id, label: `${j.employer} — ${j.role}` })),
-            ]
-          : [];
+        const renderTimeline = (events: TimelineEvent[]) => {
+          if (events.length === 0) {
+            return <p className="text-[12px] pl-6 pt-2" style={{ color: 'var(--text-3)' }}>{t.salary.noEntries}</p>;
+          }
+          let lastYear = '';
+          return (
+            <div className="relative mt-3 pl-6">
+              <div className="absolute left-[7px] top-2 bottom-2 w-px" style={{ background: 'var(--border)' }} />
+              {events.map(ev => {
+                const showYear = ev.year !== lastYear;
+                lastYear = ev.year;
+                return (
+                  <div key={ev.id}>
+                    {showYear && (
+                      <div className="text-[10px] font-mono font-semibold pt-2 pb-0.5" style={{ color: 'var(--text-3)' }}>{ev.year}</div>
+                    )}
+                    <div className="relative flex items-start justify-between gap-3 py-2 group">
+                      <span className="absolute left-[3px] top-[13px] w-2 h-2 rounded-full" style={{ background: ev.accent, boxShadow: '0 0 0 2px var(--bg-card)' }} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap text-[13px] text-[var(--text-1)]">
+                          <span className="font-medium">{ev.title}</span>
+                          {ev.chip}
+                        </div>
+                        <div className="text-[11px] truncate" style={{ color: 'var(--text-2)' }}>{ev.date}{ev.notes ? ` · ${ev.notes}` : ''}</div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[13px] font-mono font-semibold tabular-nums text-[var(--text-1)]">{ev.amount}</span>
+                        <button aria-label={`${t.edit} — ${ev.title}`} onClick={ev.onEdit} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"><Edit2 size={13} /></button>
+                        <button aria-label={`${t.delete} — ${ev.title}`} onClick={ev.onDelete} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--negative)] hover:bg-[var(--bg-elev)] transition-colors"><Trash2 size={13} /></button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        };
+
+        const renderLane = (job: JobEntry) => {
+          const isCurrent = !job.endDate;
+          const latest = latestSalaryFor(job.id);
+          const spark = sortedSalaries.filter(s => s.jobId === job.id).map(s => s.grossAnnual);
+          return (
+            <div key={job.id} className="rounded-[8px] border p-4" style={{ borderColor: isCurrent ? 'color-mix(in srgb, var(--accent) 35%, transparent)' : 'var(--border)' }}>
+              <div className="flex items-start justify-between gap-3 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Briefcase size={14} className="text-[var(--text-3)] shrink-0" />
+                    <span className="text-[14px] font-semibold text-[var(--text-1)]">{job.employer} — {job.role}</span>
+                    {isCurrent && (
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-[4px]" style={{ color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)' }}>{t.salary.currentJob}</span>
+                    )}
+                  </div>
+                  <div className="text-[11px] mt-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-2)' }}>
+                    <span>{job.startDate} → {job.endDate ?? t.salaryPage.now} · {job.contractedHoursPerWeek}{t.common.hoursPerWeekUnit}</span>
+                    {job.onCallAnnual != null && job.onCallAnnual > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold font-mono tabular-nums" style={{ color: 'var(--positive)', background: 'var(--positive-bg)' }} title={t.salary.onCallAnnual}>
+                        {t.salary.onCallLabel} {formatCurrency(job.onCallAnnual)}/{t.salaryPage.yearAbbr}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <Sparkline values={spark} />
+                  {latest && (
+                    <div className="text-right">
+                      <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: 'var(--text-3)' }}>{isCurrent ? t.salary.nowLabel : t.salary.endLabel}</div>
+                      <div className="text-[17px] font-mono font-semibold text-[var(--text-1)]">{formatCurrency(latest.grossAnnual)}</div>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1">
+                    <button aria-label={`${t.edit} — ${job.employer}`} onClick={() => openJobModal(job)} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"><Edit2 size={13} /></button>
+                    <button aria-label={`${t.delete} — ${job.employer}`} onClick={() => confirmDelete(job.employer, () => removeJob(job.id))} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--negative)] hover:bg-[var(--bg-elev)] transition-colors"><Trash2 size={13} /></button>
+                  </div>
+                </div>
+              </div>
+              {renderTimeline(jobEvents(job.id))}
+            </div>
+          );
+        };
 
         return (
-          <div className={`${card} p-5 md:p-7 space-y-5`}>
+          <div className={`${card} p-5 md:p-7 space-y-4`}>
             <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
               <div className="flex items-center gap-2">
                 <TrendingUp size={14} className="text-[var(--text-2)]" />
                 <h3 className={sectionLabel}>{t.salary.salaryAndJobs}</h3>
               </div>
-              {jobs.length === 0
-                ? <RecordEventButton label={t.salary.recordEvent} onClick={() => openJobModal()} />
-                : <RecordEventMenu label={t.salary.recordEvent} items={menuItems} />}
+              <RecordEventButton
+                label={t.salary.recordEvent}
+                onClick={() => (jobs.length === 0 ? openJobModal() : openRecordEvent())}
+              />
             </div>
 
-            <EntrySection
-              icon={<Briefcase size={13} className="text-[var(--text-3)]" />}
-              label={t.salary.jobs}
-              empty={t.salary.noEntries}
-              items={jobItems}
-              editLabel={t.edit}
-              deleteLabel={t.delete}
-            />
-
-            {tabs.length > 0 && (
-              <div className="flex flex-wrap gap-2" role="tablist" aria-label={t.salary.job}>
-                {tabs.map(tab => {
-                  const active = activeJobFilter === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setActiveJobFilter(tab.id)}
-                      className="px-3 h-8 rounded-[6px] text-[12px] font-semibold transition-colors border"
-                      style={{
-                        background: active ? 'var(--accent-bg)' : 'transparent',
-                        color: active ? 'var(--accent)' : 'var(--text-2)',
-                        borderColor: active ? 'color-mix(in srgb, var(--accent) 35%, transparent)' : 'var(--border)',
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
+            {jobs.length === 0 && (
+              <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{t.salary.noEntries}</p>
+            )}
+            {laneJobs.map(renderLane)}
+            {unassignedEvents.length > 0 && (
+              <div className="rounded-[8px] border p-4" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex items-center gap-2 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{t.salary.unassigned}</span>
+                </div>
+                {renderTimeline(unassignedEvents)}
               </div>
             )}
-
-            <EntrySection
-              icon={<TrendingUp size={13} className="text-[var(--text-3)]" />}
-              label={t.salary.history}
-              empty={t.salary.noEntries}
-              items={items}
-              editLabel={t.edit}
-              deleteLabel={t.delete}
-            />
           </div>
         );
       })()}
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
       {confirm && <ConfirmModal {...confirm} onCancel={closeConfirm} />}
-      {salaryEvent && (
-        <SalaryEventModal
-          existing={salaryEvent.existing}
-          prefillChangeType={salaryEvent.prefillChangeType}
-          jobs={jobs}
-          salaries={salaries}
-          defaultJobId={defaultJobIdForNewEntry()}
-          t={t}
-          formatCurrency={formatCurrency}
-          onSubmit={(payload, existingId) => {
-            if (existingId) updateSalary(existingId, payload);
-            else addSalary(payload);
-            setSalaryEvent(null);
-          }}
-          onClose={() => setSalaryEvent(null)}
+      {recordEvent && (
+        <RecordEventModal
+          target={recordEvent.target}
+          initialType={recordEvent.initialType}
+          onNewJob={() => openJobModal()}
+          onClose={() => setRecordEvent(null)}
         />
       )}
     </div>
@@ -1303,64 +1166,20 @@ const SummaryTile: React.FC<SummaryTileProps> = ({ label, value, sub, chip, colo
   </div>
 );
 
-interface EntryItem {
+// One event on a job's timeline spine (salary change, bonus, overtime, hours).
+interface TimelineEvent {
   id: string;
-  primary: string;
-  secondary: string;
+  sortKey: string;
+  year: string;
+  accent: string;
+  title: string;
   chip?: React.ReactNode;
-  accent?: string;        // optional leading dot colour (merged history feed)
+  date: string;
+  notes?: string;
+  amount: string;
   onEdit: () => void;
   onDelete: () => void;
 }
-
-const EntryRow: React.FC<{ item: EntryItem; editLabel: string; deleteLabel: string }> = ({ item, editLabel, deleteLabel }) => (
-  <div className="flex items-center justify-between py-2.5 border-b border-[var(--border)] last:border-0 group">
-    <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-2 min-w-0">
-        {item.accent && (
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: item.accent }} />
-        )}
-        <div className="text-[13px] font-medium text-[var(--text-1)] font-mono tabular-nums truncate">{item.primary}</div>
-        {item.chip}
-      </div>
-      <div className="text-[11px] text-[var(--text-2)] truncate">{item.secondary}</div>
-    </div>
-    <div className="flex items-center gap-1 shrink-0 ml-2">
-      <button aria-label={`${editLabel} — ${item.primary}`} onClick={item.onEdit} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors">
-        <Edit2 size={13} />
-      </button>
-      <button aria-label={`${deleteLabel} — ${item.primary}`} onClick={item.onDelete} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--negative)] hover:bg-[var(--bg-elev)] transition-colors">
-        <Trash2 size={13} />
-      </button>
-    </div>
-  </div>
-);
-
-// A labelled sub-list (Jobs / History) inside the one salary card.
-const EntrySection: React.FC<{
-  icon: React.ReactNode;
-  label: string;
-  empty: string;
-  items: EntryItem[];
-  editLabel: string;
-  deleteLabel: string;
-}> = ({ icon, label, empty, items, editLabel, deleteLabel }) => (
-  <div className="space-y-2">
-    <div className="flex items-center gap-2">
-      {icon}
-      <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</span>
-    </div>
-    {items.length === 0 ? (
-      <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{empty}</p>
-    ) : (
-      <div className="space-y-0">
-        {items.map(item => <EntryRow key={item.id} item={item} editLabel={editLabel} deleteLabel={deleteLabel} />)}
-      </div>
-    )}
-  </div>
-);
-
-// ── Record-event menu (single Add entry point for the history feed) ──
 
 const RecordEventButton: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => (
   <button
@@ -1372,50 +1191,21 @@ const RecordEventButton: React.FC<{ label: string; onClick: () => void }> = ({ l
   </button>
 );
 
-interface RecordEventMenuItem { label: string; onClick: () => void; divider?: boolean }
-
-const RecordEventMenu: React.FC<{ label: string; items: RecordEventMenuItem[] }> = ({ label, items }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
-  }, [open]);
+// Tiny salary-progression sparkline for a job lane. Null below two points.
+const Sparkline: React.FC<{ values: number[] }> = ({ values }) => {
+  if (values.length < 2) return null;
+  const w = 80, h = 34, pad = 4;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
+    const y = h - pad - ((v - min) / range) * (h - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-[12px] font-semibold border transition-colors"
-        style={{ background: 'var(--accent-bg)', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 35%, transparent)' }}
-      >
-        <Plus size={13} /> {label} <ChevronDown size={13} />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 mt-1 z-20 min-w-[190px] rounded-[8px] border border-[var(--border)] bg-[var(--bg-card)] shadow-lg py-1"
-        >
-          {items.map((it, i) => (
-            <div key={i}>
-              {it.divider && <div className="my-1 border-t border-[var(--border)]" />}
-              <button
-                role="menuitem"
-                onClick={() => { setOpen(false); it.onClick(); }}
-                className="w-full text-left px-3 py-2 text-[13px] text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"
-              >
-                {it.label}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="shrink-0">
+      <polyline points={pts} fill="none" stroke="var(--positive)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 };
 
