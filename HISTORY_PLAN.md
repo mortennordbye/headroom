@@ -17,8 +17,12 @@
 > retired in favour of computed-only net worth: the `HistoryManagerModal` derives each month's
 > net worth from its snapshot inputs (read-only) and the composition editor is the sole write
 > path; the standalone `NetWorthHistoryModal` and the per-month scalar setters were deleted.
-> The Dashboard "Edit history" button opens the manager. Browser-verified in demo mode, 0
-> console errors.
+> The Dashboard "Edit history" button opens the manager. Balance pages
+> (Formue/Boliglån/Pensjon) also show an "Edit month" button in the header when viewing a past
+> month, opening the manager straight into that month's balances editor (`initialMonth` prop),
+> so a historical value can be corrected without leaving the page. Browser-verified in demo
+> mode (edit June's portfolio +100k → the read-only page reflects it, the live month is
+> untouched), 0 console errors.
 
 ## 0. Goal
 

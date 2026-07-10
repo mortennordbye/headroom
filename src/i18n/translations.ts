@@ -497,6 +497,7 @@ export const translations = {
       viewing: 'Viser',
       readOnly: 'Skrivebeskyttet historikk – gå til i dag for å redigere',
       asOf: 'per',
+      editMonth: 'Rediger måneden',
     },
     salary: {
       importPayslip: {
@@ -1632,6 +1633,7 @@ export const translations = {
       viewing: 'Viewing',
       readOnly: 'Read-only history — go to today to edit',
       asOf: 'as of',
+      editMonth: 'Edit month',
     },
     salary: {
       importPayslip: {

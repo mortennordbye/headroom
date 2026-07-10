@@ -11,6 +11,7 @@ import {
   X,
   HelpCircle,
   Lock,
+  Pencil,
 } from 'lucide-react';
 import { format, parse, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
@@ -18,6 +19,7 @@ import { useFinanceSettings } from '../context/FinanceContext';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import OnboardingTour from './onboarding/OnboardingTour';
+import HistoryManagerModal from './HistoryManagerModal';
 
 import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 
@@ -35,6 +37,9 @@ const Layout: React.FC = () => {
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  // Balance-page "edit this month": opens the History manager straight into the
+  // viewed month's balances editor (past months are read-only on the page itself).
+  const [editMonthOpen, setEditMonthOpen] = useState(false);
   const moreActive = MORE_ROUTES.includes(location.pathname);
   const sheetRef = useFocusTrap<HTMLDivElement>(() => setMoreOpen(false), undefined, moreOpen);
 
@@ -170,6 +175,19 @@ const Layout: React.FC = () => {
                 >
                   {t.timeMachine.asOf} {format(parse(hist.activeKey, 'yyyy-MM', new Date()), 'MMM yyyy', { locale: dateLocale })}
                 </span>
+              )}
+              {balanceReadOnly && (
+                <button
+                  onClick={() => setEditMonthOpen(true)}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-[12px] font-semibold border transition-colors"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-1)'; e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                  title={t.timeMachine.editMonth}
+                >
+                  <Pencil size={12} strokeWidth={2} />
+                  {t.timeMachine.editMonth}
+                </button>
               )}
               {!isCurrentMonth && (
                 <button
@@ -350,6 +368,14 @@ const Layout: React.FC = () => {
 
       {/* First-run guided setup (renders only when active; portals to body) */}
       <OnboardingTour />
+
+      {/* Edit the viewed (read-only) month straight from a balance page */}
+      {editMonthOpen && (
+        <HistoryManagerModal
+          initialMonth={hist.activeKey}
+          onClose={() => setEditMonthOpen(false)}
+        />
+      )}
     </div>
   );
 };
