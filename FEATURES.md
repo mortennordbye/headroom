@@ -149,11 +149,12 @@ monthly amount to a future value at two rates: the mortgage's after-tax rate (no
 A Forecast card with an extra-per-month slider surfaces both future values, the effective
 rates, and which side wins by how much over the horizon. (`src/pages/ForecastPage.tsx`.)
 
-### 23. Scenario bands on projections
-Every net-worth projection (`calcNetWorthProjectionByBucket`) draws one deterministic line
-per bucket. Bear/base/bull bands (return ±3pp) around the long-range projection would stop
-the chart overstating certainty. Where: `src/lib/calculations.ts`,
-`src/pages/DashboardPage.tsx`, `src/pages/AssetPage.tsx`.
+### 23. Scenario bands on projections ✅ SHIPPED (Forecast; Assets/Dashboard deferred)
+`netWorthBands` (pure, unit-tested in `src/lib/scenarioBands.ts`) re-runs the projection's
+compounding at the base return and at ±3pp to produce bear/base/bull totals. Rendered as a
+range band behind the Forecast net-worth line so the long-range projection no longer reads
+as a single certain line. (`src/pages/ForecastPage.tsx`.) The Assets/Dashboard charts are
+stacked, where a band doesn't drop in cleanly — deferred to `BACKLOG.md`.
 
 ### 24. Goal completion ETA from actual pace ✅ SHIPPED
 `goalPace` (pure, unit-tested in `src/lib/goalPace.ts`) measures the recent monthly pace of a

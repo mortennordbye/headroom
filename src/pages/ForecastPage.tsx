@@ -9,6 +9,7 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { prepayVsInvest } from '../lib/prepayVsInvest';
+import { netWorthBands } from '../lib/scenarioBands';
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { currentMonthKey, addMonthsKey } from '../lib/date';
@@ -166,6 +167,19 @@ const ForecastPage: React.FC = () => {
 
   const last = projection[projection.length - 1];
   const first = projection[0];
+
+  // Bear/base/bull bands (return ±3pp) so the projection doesn't read as a
+  // single certain line. Contributions are the same across scenarios (they
+  // depend on income/savings, not the return), so the band base equals the
+  // netWorth line and only the growth rate varies.
+  const BAND_DELTA_PP = 3;
+  const chartData = useMemo(() => {
+    const bands = netWorthBands(totalEquity, projection.map(p => p.contribution), returnPct, BAND_DELTA_PP, years);
+    return projection.map((p, i) => ({
+      ...p,
+      band: [bands[i]?.bear ?? p.netWorth, bands[i]?.bull ?? p.netWorth] as [number, number],
+    }));
+  }, [projection, totalEquity, returnPct, years]);
 
   // Financial independence (4% rule): FI number = 25× annual essential spend.
   // The FI year is the first projected year whose real (today's-kroner) net worth
@@ -361,7 +375,7 @@ const ForecastPage: React.FC = () => {
         <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.forecastChartDesc}</p>
         <div className="h-[320px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={projection} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.12} />
@@ -380,6 +394,8 @@ const ForecastPage: React.FC = () => {
                 cursor={{ stroke: 'var(--text-3)', strokeWidth: 1, strokeDasharray: '3 3' }}
               />
               <ReferenceLine y={first.netWorth} stroke="var(--text-3)" strokeDasharray="2 4" />
+              {/* Uncertainty band (bear↔bull), drawn first so the lines sit on top. */}
+              <Area type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={false} activeDot={false} legendType="none" />
               <Area type="monotone" dataKey="netWorth" name={t.forecastPage.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#forecastGradient)" />
               <Area type="monotone" dataKey="netWorthReal" name={t.forecastPage.todaysKroner} stroke="var(--violet)" strokeWidth={2} strokeDasharray="5 3" fill="url(#forecastRealGradient)" />
             </AreaChart>
@@ -388,6 +404,7 @@ const ForecastPage: React.FC = () => {
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{t.forecastPage.nominal}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />{t.forecastPage.todaysKroner}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)', opacity: 0.25 }} />{t.forecastPage.band}</div>
         </div>
       </div>
 

@@ -1061,6 +1061,7 @@ export const translations = {
       nominal: 'Nominell',
       todaysKroner: 'I dagens kroner',
       now: 'Nå',
+      band: 'Usikkerhet (± 3 pp avkastning)',
     },
     assetPage: {
       heroKicker: 'Formue',
@@ -2297,6 +2298,7 @@ export const translations = {
       nominal: 'Nominal',
       todaysKroner: "In today's kroner",
       now: 'Now',
+      band: 'Uncertainty (±3pp return)',
     },
     assetPage: {
       heroKicker: 'Net worth',
