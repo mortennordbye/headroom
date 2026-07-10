@@ -1,61 +1,52 @@
 import { useMemo } from 'react';
 import { format } from 'date-fns';
 import { useFinance, type BalanceSnapshot } from '../context/FinanceContext';
+import { snapToRecordedMonth } from '../lib/snapshots';
 
 export interface BalanceHistory {
-  /** Sorted 'yyyy-MM' keys the user can step through (recorded snapshots + the live month). */
-  monthKeys: string[];
-  /** The month currently being viewed. */
+  /** The recorded snapshot month being shown ('yyyy-MM'). The freely-picked
+   *  header month is snapped to this: the live month when current/future, else
+   *  the latest recorded snapshot at or before it. */
   activeKey: string;
-  /** True when viewing the live (current) month — the page is editable. */
+  /** True when viewing the current (or a future) month — the page is editable. */
   isLive: boolean;
   /** The snapshot for the active month, or null when live. */
   snapshot: BalanceSnapshot | null;
-  /** True when there's at least one past snapshot to travel to (otherwise hide the bar). */
+  /** True when there's at least one recorded snapshot to travel to. */
   hasHistory: boolean;
-  canPrev: boolean;
-  canNext: boolean;
-  goPrev: () => void;
-  goNext: () => void;
-  goLive: () => void;
 }
 
 /**
- * Shared state for the balance-page "time machine". Steps only through months that
- * actually have a recorded snapshot (plus the live month), so the user can never
- * land on an empty month and see misleading data.
+ * Balance-page view of the single shared month (`currentMonth`). The whole app
+ * now tracks one month; balance pages can't show data for a month that was never
+ * recorded, so they *snap* the picked month to the nearest recorded snapshot at
+ * or before it (current/future months are "live" and editable). This keeps the
+ * "never render an empty month with misleading live data" contract while the one
+ * header picker drives every page.
  */
 export function useBalanceHistory(): BalanceHistory {
-  const { balanceSnapshots, historyMonth, setHistoryMonth } = useFinance();
+  const { balanceSnapshots, currentMonth } = useFinance();
   const nowKey = format(new Date(), 'yyyy-MM');
+  const viewKey = format(currentMonth, 'yyyy-MM');
 
-  const monthKeys = useMemo(() => {
-    const keys = new Set(Object.keys(balanceSnapshots));
-    keys.add(nowKey); // the live month is always selectable
-    return Array.from(keys).sort();
-  }, [balanceSnapshots, nowKey]);
+  const recordedKeys = useMemo(
+    () => Object.keys(balanceSnapshots).sort(),
+    [balanceSnapshots],
+  );
 
-  // The active month comes from the shared context slice (null = live), so a
-  // month picked on one balance page carries to the others. Clamp a vanished or
-  // never-recorded key back to live so we never land on an empty month.
-  const rawIdx = historyMonth ? monthKeys.indexOf(historyMonth) : -1;
-  const idx = rawIdx === -1 ? monthKeys.length - 1 : rawIdx;
-  const key = monthKeys[idx];
-  const isLive = key === nowKey;
+  const { activeKey, isLive } = useMemo(
+    () => snapToRecordedMonth(recordedKeys, viewKey, nowKey),
+    [recordedKeys, viewKey, nowKey],
+  );
+
+  // "Has history" counts recorded months other than the live one — that's what
+  // makes the time machine worth showing.
+  const hasHistory = recordedKeys.some(k => k !== nowKey);
 
   return {
-    monthKeys,
-    activeKey: key,
+    activeKey,
     isLive,
-    snapshot: isLive ? null : balanceSnapshots[key] ?? null,
-    hasHistory: monthKeys.length > 1,
-    canPrev: idx > 0,
-    canNext: idx < monthKeys.length - 1,
-    goPrev: () => setHistoryMonth(monthKeys[Math.max(0, idx - 1)]),
-    goNext: () => {
-      const nextKey = monthKeys[Math.min(monthKeys.length - 1, idx + 1)];
-      setHistoryMonth(nextKey === nowKey ? null : nextKey);
-    },
-    goLive: () => setHistoryMonth(null),
+    snapshot: isLive ? null : balanceSnapshots[activeKey] ?? null,
+    hasHistory,
   };
 }

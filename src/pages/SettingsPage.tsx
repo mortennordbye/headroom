@@ -601,12 +601,7 @@ export default function SettingsPage() {
                 {t.settings.dataDesc}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" leadingIcon={<History />} onClick={() => setHistoryOpen(true)}>
-                {t.historyManager.open}
-              </Button>
-              <DeltaChip tone="accent">JSON</DeltaChip>
-            </div>
+            <DeltaChip tone="accent">JSON</DeltaChip>
           </div>
 
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -762,6 +757,36 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* History manager — backfill & correct past months */}
+          <div
+            className="mt-4 rounded-[8px] border p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+            style={{ background: 'var(--surface-1)', borderColor: 'var(--border)' }}
+          >
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <div
+                className="w-10 h-10 rounded-[8px] grid place-items-center shrink-0"
+                style={{ background: 'var(--surface-4)', color: 'var(--text-2)' }}
+              >
+                <History size={18} />
+              </div>
+              <div>
+                <div className="text-[14px] font-semibold">{t.historyManager.title}</div>
+                <p className="mt-1 text-[12px]" style={{ color: 'var(--text-3)' }}>
+                  {t.historyManager.desc}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="md"
+              className="shrink-0 self-start sm:self-auto"
+              leadingIcon={<History />}
+              onClick={() => setHistoryOpen(true)}
+            >
+              {t.historyManager.open}
+            </Button>
           </div>
         </Card>
 

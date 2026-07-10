@@ -32,6 +32,8 @@ export const translations = {
     grossAssets: 'Brutto Formue',
     liabilities: 'Gjeld & Skatt',
     fixedCosts: 'Faste Utgifter',
+    fixedExpensesRecorded: 'Registrerte faste utgifter for denne måneden.',
+    fixedExpensesNotRecorded: 'Ikke registrert for denne måneden – viser dagens beløp.',
     distributionAnalysis: 'Fordelingsanalyse',
     operationalLog: 'Forbrukslogg',
     timestamp: 'Tidspunkt',
@@ -456,14 +458,7 @@ export const translations = {
     },
     netWorthEditor: {
       edit: 'Rediger historikk',
-      title: 'Formueshistorikk',
-      desc: 'Legg inn din faktiske nettoformue for tidligere måneder. Måneder du fyller inn blir ekte datapunkter; resten estimeres til du fyller dem inn.',
       live: 'Live',
-      liveHint: 'Denne måneden oppdateres automatisk fra din nåværende egenkapital.',
-      placeholderEstimate: 'estimat',
-      reset: 'Nullstill',
-      done: 'Ferdig',
-      snapshotSaved: 'Full tilstand lagret – tilgjengelig for tidsmaskin senere',
     },
     historyManager: {
       open: 'Administrer historikk',
@@ -500,11 +495,9 @@ export const translations = {
     },
     timeMachine: {
       viewing: 'Viser',
-      liveLabel: 'I dag (live)',
       readOnly: 'Skrivebeskyttet historikk – gå til i dag for å redigere',
-      backToToday: 'Tilbake til i dag',
-      prevSnapshot: 'Forrige måned',
-      nextSnapshot: 'Neste måned',
+      asOf: 'per',
+      editMonth: 'Rediger måneden',
     },
     salary: {
       importPayslip: {
@@ -1175,6 +1168,8 @@ export const translations = {
     grossAssets: 'Gross Assets',
     liabilities: 'Liabilities & Tax',
     fixedCosts: 'Fixed Costs',
+    fixedExpensesRecorded: 'Recorded fixed expenses for this month.',
+    fixedExpensesNotRecorded: 'Not recorded for this month — showing current amounts.',
     distributionAnalysis: 'Distribution Analysis',
     operationalLog: 'Spending Log',
     timestamp: 'Timestamp',
@@ -1599,14 +1594,7 @@ export const translations = {
     },
     netWorthEditor: {
       edit: 'Edit history',
-      title: 'Net worth history',
-      desc: 'Enter your actual net worth for past months. Months you fill in become real data points; the rest stay estimated until you do.',
       live: 'Live',
-      liveHint: 'This month updates automatically from your current equity.',
-      placeholderEstimate: 'estimate',
-      reset: 'Reset',
-      done: 'Done',
-      snapshotSaved: 'Full state saved — available for the time machine later',
     },
     historyManager: {
       open: 'Manage history',
@@ -1643,11 +1631,9 @@ export const translations = {
     },
     timeMachine: {
       viewing: 'Viewing',
-      liveLabel: 'Today (live)',
       readOnly: 'Read-only history — go to today to edit',
-      backToToday: 'Back to today',
-      prevSnapshot: 'Previous month',
-      nextSnapshot: 'Next month',
+      asOf: 'as of',
+      editMonth: 'Edit month',
     },
     salary: {
       importPayslip: {

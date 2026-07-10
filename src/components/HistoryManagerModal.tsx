@@ -15,6 +15,9 @@ import {
 
 interface HistoryManagerModalProps {
   onClose: () => void;
+  /** When set, open directly into that month's balances editor (e.g. the
+   *  balance-page "edit this month" action) instead of the month grid. */
+  initialMonth?: string;
 }
 
 /** Row status pill: distinguishes the live month, an auto-recorded snapshot, a
@@ -67,7 +70,7 @@ function balancesFrom(base: BalanceSnapshot, live: {
   };
 }
 
-export default function HistoryManagerModal({ onClose }: HistoryManagerModalProps) {
+export default function HistoryManagerModal({ onClose, initialMonth }: HistoryManagerModalProps) {
   const {
     t, lang, formatCurrency,
     balanceSnapshots, netWorthHistory, setManualSnapshot, deleteManualSnapshot,
@@ -79,7 +82,7 @@ export default function HistoryManagerModal({ onClose }: HistoryManagerModalProp
   const nowKey = format(new Date(), 'yyyy-MM');
 
   const [monthsBefore, setMonthsBefore] = useState(0);
-  const [editing, setEditing] = useState<string | null>(null); // month being edited
+  const [editing, setEditing] = useState<string | null>(initialMonth ?? null); // month being edited
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const rows = useMemo(
@@ -108,15 +111,18 @@ export default function HistoryManagerModal({ onClose }: HistoryManagerModalProp
 
   if (editing) {
     const base = balanceSnapshots[editing] ?? nearestSnapshot(balanceSnapshots, editing) ?? liveSnapshot;
+    // Opened straight into this month (balance-page "edit this month"): save/cancel
+    // closes the modal rather than dropping to the grid the user never saw.
+    const done = editing === initialMonth ? onClose : () => setEditing(null);
     return (
       <SnapshotEditor
         monthTitle={monthLabel(editing)}
         initial={balancesFrom(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate })}
         base={base}
-        onCancel={() => setEditing(null)}
+        onCancel={done}
         onSave={(balances) => {
           setManualSnapshot(editing, buildManualSnapshot(base, balances));
-          setEditing(null);
+          done();
         }}
       />
     );
@@ -127,7 +133,7 @@ export default function HistoryManagerModal({ onClose }: HistoryManagerModalProp
       title={hm.title}
       onClose={onClose}
       closeLabel={hm.cancel}
-      panelClassName="sm:min-w-[460px] sm:max-w-lg space-y-4 max-h-[85vh] flex flex-col"
+      panelClassName="sm:min-w-[520px] sm:max-w-xl space-y-4 max-h-[85vh] flex flex-col"
     >
       <p className="text-[12px] leading-relaxed shrink-0" style={{ color: 'var(--text-3)' }}>{hm.desc}</p>
 
@@ -230,7 +236,7 @@ function SnapshotEditor({
       title={`${hm.balances} · ${monthTitle}`}
       onClose={onCancel}
       closeLabel={hm.cancel}
-      panelClassName="sm:min-w-[460px] sm:max-w-lg space-y-4 max-h-[85vh] flex flex-col"
+      panelClassName="sm:min-w-[520px] sm:max-w-xl space-y-4 max-h-[85vh] flex flex-col"
       footer={
         <div className="shrink-0 flex gap-2 pt-2">
           <button

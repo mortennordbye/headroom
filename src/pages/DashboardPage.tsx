@@ -14,7 +14,7 @@ import { AccountBadge } from '../components/AccountBadge';
 import { txDisplayName } from '../lib/labelRules';
 import { EquityCompositionBar } from '../components/EquityCompositionBar';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import NetWorthHistoryModal from '../components/NetWorthHistoryModal';
+import HistoryManagerModal from '../components/HistoryManagerModal';
 import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear,
   calcEmergencyFundStatus, calcDebtToIncome,
@@ -927,11 +927,7 @@ const DashboardPage: React.FC = () => {
       </div>
 
       {historyOpen && (
-        <NetWorthHistoryModal
-          series={netWorthSeries}
-          formatCurrency={formatCurrency}
-          onClose={() => setHistoryOpen(false)}
-        />
+        <HistoryManagerModal onClose={() => setHistoryOpen(false)} />
       )}
     </div>
   );
