@@ -90,10 +90,12 @@ shared `historyMonth` slice, the header month picker now drives the balance-page
 machine on Assets/Loan/Pension (read-only, carries across pages), and the per-page
 `BalanceHistoryBar` was removed. (Salary is still always-live; not in scope.)
 
-### 14. Real empty state for salary sub-entries with no job
-Adding a bonus/overtime/hours entry before any job exists opens an `EditModal` whose only
-field is a disabled hint (`src/pages/SalaryPage.tsx`), which reads as a broken form. Replace
-with an inline "add a job first" CTA that opens the add-job modal.
+### 14. Real empty state for salary sub-entries with no job ✅ OBSOLETE
+Resolved by the type-first record-event modal (PR #40): the "Record event" button only
+renders when `jobs.length > 0` (`src/pages/SalaryPage.tsx`), the empty state shows a plain
+"no entries" line + the Add job button, and the record modal itself carries an inline
+"+ Add job" action (`src/components/RecordEventModal.tsx`). The old disabled-hint EditModal
+form no longer exists, so there's nothing left to fix here.
 
 ### Money insight & what-ifs
 
@@ -313,9 +315,10 @@ optionally `g`-prefixed route jumps. Where: `src/components/Layout.tsx`.
     you X kr/mo") instead of a bare label list. (`src/pages/BudgetPage.tsx`.)
 
 ### Self-hosting
-62. **Blob/DB size not surfaced.** The server warns at 2 MB in the log only; the Settings
-    About card shows a static "Storage: SQLite" chip. Show live blob bytes plus record
-    counts (already computed by `summarizeExport`).
+62. **Blob/DB size surfaced ✅ SHIPPED** — the Settings About card now shows the live blob
+    size (`formatBytes` on the persisted JSON, unit-tested in `src/lib/format.ts`) and the
+    record count (`totalRecords`) alongside the SQLite chip, so a self-hoster can watch the
+    blob grow toward the server's 2 MB warning. (`src/pages/SettingsPage.tsx`.)
 63. **Export stamps `_version: 1` but import never checks it.** `validateAndPreview`
     (`src/pages/SettingsPage.tsx`) ignores the field, so a future format change would import
     silently. Gate on `_version` and warn on newer-than-supported files.
