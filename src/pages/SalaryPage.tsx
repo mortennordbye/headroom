@@ -411,6 +411,16 @@ const SalaryPage: React.FC = () => {
     if (!existing) {
       fields.push({ key: 'initialSalary', label: t.salary.initialSalary, type: 'number', value: '', placeholder: '600000' });
     }
+    const currentJobs = jobs.filter(j => !j.endDate);
+    if (!existing && currentJobs.length > 0) {
+      fields.push({
+        key: 'endPrevJob',
+        label: t.salary.endPrevJobField,
+        type: 'checkbox',
+        value: 'true',
+        hint: currentJobs.map(j => `${j.employer} — ${j.role}`).join(', '),
+      });
+    }
 
     openModal({
       title: existing ? `${t.salary.jobs}: ${existing.employer}` : t.salary.addJob,
@@ -458,16 +468,25 @@ const SalaryPage: React.FC = () => {
         };
         if (existing) {
           updateJob(existing.id, payload);
-        } else {
-          const newJobId = addJob(payload);
-          if (initialSalaryNum !== null) {
-            addSalary({
-              jobId: newJobId,
-              effectiveDate: vals.startDate,
-              grossAnnual: initialSalaryNum,
-              changeType: 'initial' as SalaryChangeType,
-            });
-          }
+          closeModal();
+          return;
+        }
+        const newJobId = addJob(payload);
+        if (initialSalaryNum !== null) {
+          addSalary({
+            jobId: newJobId,
+            effectiveDate: vals.startDate,
+            grossAnnual: initialSalaryNum,
+            changeType: 'initial' as SalaryChangeType,
+          });
+        }
+        // A new current job usually means you left the previous one — end any
+        // earlier still-current job at the new start (opt-out via the checkbox
+        // so genuinely concurrent jobs remain possible).
+        if (vals.endPrevJob === 'true' && payload.endDate == null) {
+          jobs
+            .filter(j => !j.endDate && j.startDate < payload.startDate)
+            .forEach(j => updateJob(j.id, { endDate: payload.startDate }));
         }
         closeModal();
       },
