@@ -50,7 +50,6 @@ import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty,
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
-const TaxBreakdownChart = lazy(() => import('../components/charts/TaxBreakdownChart'));
 const MoneyFlowSankey = lazy(() => import('../components/charts/MoneyFlowSankey'));
 
 const CHANGE_TYPE_COLOR: Record<SalaryChangeType, string> = {
@@ -97,6 +96,8 @@ const SalaryPage: React.FC = () => {
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [confirm, setConfirm] = useState<ConfirmConfig | null>(null);
   const [recordEvent, setRecordEvent] = useState<{ target?: RecordEditTarget; initialType?: RecordType } | null>(null);
+  // Salary-over-time card view: nominal trajectory vs real (inflation-adjusted) hourly.
+  const [timelineView, setTimelineView] = useState<'nominal' | 'real'>('nominal');
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -525,6 +526,19 @@ const SalaryPage: React.FC = () => {
   const chipColor = yoyChip != null && yoyChip >= 0 ? 'var(--positive)' : 'var(--negative)';
   const chipBg = yoyChip != null && yoyChip >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
 
+  // Total-comp: only chart the components that ever carry a value, so the stack
+  // isn't padded with always-zero series (base + on-call, say, without bonus/OT).
+  const compSeries = [
+    { key: 'base', name: t.salaryPage.baseSalary, fill: 'url(#compBaseGradient)', legend: CHART.forest },
+    { key: 'onCall', name: t.salary.onCallLabel, fill: 'url(#compOnCallGradient)', legend: CHART.forestLight },
+    { key: 'bonus', name: t.salary.bonuses, fill: 'url(#compBonusGradient)', legend: CHART.teal },
+    { key: 'overtime', name: t.salary.overtime, fill: 'url(#compOtGradient)', legend: CHART.slate },
+  ] as const;
+  const activeCompSeries = compSeries.filter(s => compByYear.some(r => (r[s.key] ?? 0) > 0));
+  // Hours-vs-rate only says anything when weekly hours actually change over time;
+  // with constant hours the chart is flat, so hide it (still shows for variable hours).
+  const hoursVary = new Set(hoursVsHourly.map(d => Math.round(d.hoursPerWeek))).size > 1;
+
   return (
     <div className="space-y-6 md:space-y-7">
       {/* Hero header */}
@@ -615,34 +629,23 @@ const SalaryPage: React.FC = () => {
         />
       </div>
 
-      {/* Tax breakdown + money flow */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
-        <div className={`${card} p-5 md:p-7`}>
-          <div className="flex items-start justify-between gap-3 pb-4 mb-2 border-b border-[var(--border)]">
-            <div>
-              <h3 className={sectionLabel}>{t.charts.taxBreakdownTitle}</h3>
-              <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.taxBreakdownSub}</p>
-            </div>
-            {marginalRate != null && (
-              <div className="text-right shrink-0" title={t.salaryPage.marginalTitle}>
-                <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{t.salaryPage.marginalRate}</div>
-                <div className="text-[18px] font-mono font-semibold leading-tight" style={{ color: 'var(--warning)' }}>{marginalRate.toFixed(0)}%</div>
-                <div className="text-[9px]" style={{ color: 'var(--text-3)' }}>{t.salaryPage.marginalHint}</div>
-              </div>
-            )}
-          </div>
-          <div className="h-[260px] w-full">
-            <Suspense fallback={<div className="h-full w-full" />}><TaxBreakdownChart /></Suspense>
-          </div>
-        </div>
-        <div className={`${card} p-5 md:p-7`}>
-          <div className="pb-4 mb-2 border-b border-[var(--border)]">
+      {/* Money flow — where the gross salary goes, with the marginal-rate readout. */}
+      <div className={`${card} p-5 md:p-7`}>
+        <div className="flex items-start justify-between gap-3 pb-4 mb-2 border-b border-[var(--border)]">
+          <div>
             <h3 className={sectionLabel}>{t.charts.moneyFlowTitle}</h3>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.moneyFlowSub}</p>
           </div>
-          <div className="h-[260px] w-full">
-            <Suspense fallback={<div className="h-full w-full" />}><MoneyFlowSankey /></Suspense>
-          </div>
+          {marginalRate != null && (
+            <div className="text-right shrink-0" title={t.salaryPage.marginalTitle}>
+              <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{t.salaryPage.marginalRate}</div>
+              <div className="text-[18px] font-mono font-semibold leading-tight" style={{ color: 'var(--warning)' }}>{marginalRate.toFixed(0)}%</div>
+              <div className="text-[9px]" style={{ color: 'var(--text-3)' }}>{t.salaryPage.marginalHint}</div>
+            </div>
+          )}
+        </div>
+        <div className="h-[280px] w-full">
+          <Suspense fallback={<div className="h-full w-full" />}><MoneyFlowSankey /></Suspense>
         </div>
       </div>
 
@@ -655,25 +658,38 @@ const SalaryPage: React.FC = () => {
         />
       )}
 
-      {/* Hero chart: real hourly rate — hidden in generic region (no CPI source). */}
-      {!isGeneric && (
-        <div className={`${card} p-5 md:p-7 space-y-4`}>
-          <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
-            <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-            <h3 className={sectionLabel}>{t.salary.realHourlyRate}</h3>
-          </div>
-          <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.realHourlyRateDesc}</p>
-          <RealHourlyChart series={series} formatCurrency={formatCurrency} t={t} />
-          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.salary.inflationSource}</p>
-        </div>
-      )}
-
-      {/* Salary timeline */}
+      {/* Salary over time — nominal trajectory, with a real-hourly (purchasing-power)
+          toggle when CPI is available. Folds in the former standalone real-rate card. */}
       <div className={`${card} p-5 md:p-7 space-y-4`}>
-        <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
-          <Briefcase size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{t.salary.salaryTimeline}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--border)]">
+          <div className="flex items-center gap-2">
+            <Briefcase size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+            <h3 className={sectionLabel}>{timelineView === 'real' ? t.salary.realHourlyRate : t.salary.salaryTimeline}</h3>
+          </div>
+          {!isGeneric && (
+            <div className="inline-flex rounded-[6px] border border-[var(--border)] p-0.5">
+              {([['nominal', t.salary.salaryTimeline], ['real', t.salary.realHourlyRate]] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTimelineView(v)}
+                  className="px-2.5 py-1 rounded-[4px] text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors"
+                  style={timelineView === v ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : { color: 'var(--text-3)' }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+        {timelineView === 'real' ? (
+          <>
+            <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.realHourlyRateDesc}</p>
+            <RealHourlyChart series={series} formatCurrency={formatCurrency} t={t} />
+            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.salary.inflationSource}</p>
+          </>
+        ) : (
+          <>
         <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.salaryTimelineDesc}</p>
         <div className="h-[280px] w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -758,6 +774,8 @@ const SalaryPage: React.FC = () => {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* YoY vs inflation — hidden in generic region (no CPI source). */}
@@ -874,25 +892,29 @@ const SalaryPage: React.FC = () => {
                 content={<ChartTooltip />}
                 cursor={{ fill: CHART.surface2 }}
               />
-              <Bar dataKey="base" stackId="a" name={t.salaryPage.baseSalary} fill="url(#compBaseGradient)" />
-              <Bar dataKey="onCall" stackId="a" name={t.salary.onCallLabel} fill="url(#compOnCallGradient)" />
-              <Bar dataKey="bonus" stackId="a" name={t.salary.bonuses} fill="url(#compBonusGradient)" />
-              <Bar dataKey="overtime" stackId="a" name={t.salary.overtime} fill="url(#compOtGradient)" radius={[6, 6, 0, 0]}>
-                <LabelList dataKey="total" position="top" formatter={(v) => formatAxisInt(Number(v ?? 0))} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--text-1)' }} />
-              </Bar>
+              {activeCompSeries.map((s, i) => {
+                const isLast = i === activeCompSeries.length - 1;
+                return (
+                  <Bar key={s.key} dataKey={s.key} stackId="a" name={s.name} fill={s.fill} radius={isLast ? [6, 6, 0, 0] : undefined}>
+                    {isLast && (
+                      <LabelList dataKey="total" position="top" formatter={(v) => formatAxisInt(Number(v ?? 0))} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--text-1)' }} />
+                    )}
+                  </Bar>
+                );
+              })}
             </BarChart>
           </ResponsiveContainer>
         </div>
         {/* Inline legend */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.forest }} />{t.salaryPage.baseSalary}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.forestLight }} />{t.salary.onCallLabel}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.teal }} />{t.salary.bonuses}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.slate }} />{t.salary.overtime}</div>
+          {activeCompSeries.map(s => (
+            <div key={s.key} className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: s.legend }} />{s.name}</div>
+          ))}
         </div>
       </div>
 
-      {/* Hours vs effective hourly */}
+      {/* Hours vs effective hourly — only meaningful when weekly hours vary. */}
+      {hoursVary && (
       <div className={`${card} p-5 md:p-7 space-y-4`}>
         <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
           <Clock size={14} strokeWidth={2} className="text-[var(--text-2)]" />
@@ -938,6 +960,7 @@ const SalaryPage: React.FC = () => {
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent)' }} />{t.salary.effectiveHourly}</div>
         </div>
       </div>
+      )}
 
       {/* One box: each job is a lane with its events on a timeline spine */}
       {(() => {
@@ -1121,7 +1144,7 @@ const SalaryPage: React.FC = () => {
                 <h3 className={sectionLabel}>{t.salary.salaryAndJobs}</h3>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                <PaydayField variant="inline" />
+                <PaydayField />
                 <button
                   onClick={() => openJobModal()}
                   className="inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-[12px] font-semibold border border-[var(--border)] text-[var(--text-2)] hover:text-[var(--text-1)] hover:border-[var(--text-3)] transition-colors"

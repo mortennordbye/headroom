@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
-import { PaydayField } from '../components/PaydayField';
 import { accountGroupKey } from '../lib/account';
 import { txDisplayName } from '../lib/labelRules';
 import { buildMatchHaystack } from '../lib/text';
@@ -572,9 +571,6 @@ const BudgetPage: React.FC = () => {
           {`${t.budgetPage.incomeIntro}${formatCurrency(effectiveIncome)}${averageIncome > 0 && Object.keys(monthlyIncomes).length > 1 ? ` (${formatSignedPct(incomeDiff, 1, '')}${t.budgetPage.vsAvgSuffix}` : ''}${t.budgetPage.incomeOutro}`}
         </p>
       </header>
-
-      {/* Payday — when the paycheck lands; gates the income reminder below */}
-      <PaydayField className="max-w-xl" />
 
       {/* Reminder: set this month's income while it's still auto-calculated */}
       {showIncomeReminder && (
