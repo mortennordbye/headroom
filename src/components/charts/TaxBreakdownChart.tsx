@@ -11,10 +11,10 @@ import { CHART } from '../../lib/chartColors';
  * take-home vs total tax are meaningful, so it collapses to two slices.
  */
 export default function TaxBreakdownChart() {
-  const { t, region, grossAnnualIncome, customTaxRatePct, pension, formatCurrency } = useFinance();
+  const { t, region, grossAnnualIncome, customTaxRatePct, pension, annualMortgageInterest, formatCurrency } = useFinance();
 
   const { slices, effectiveRatePct } = useMemo(() => {
-    const b = calcTaxByRegion(grossAnnualIncome, region, customTaxRatePct, pension.ipsAnnualContribution);
+    const b = calcTaxByRegion(grossAnnualIncome, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest);
     const s = region === 'no'
       ? [
           { name: t.charts.netTakeHome, value: Math.max(0, b.netAnnual), color: CHART.forestLight },
@@ -27,7 +27,7 @@ export default function TaxBreakdownChart() {
           { name: t.charts.tax, value: b.totalTax, color: CHART.rust },
         ];
     return { slices: s.filter(x => x.value > 0), effectiveRatePct: b.effectiveRatePct };
-  }, [region, grossAnnualIncome, customTaxRatePct, pension.ipsAnnualContribution, t]);
+  }, [region, grossAnnualIncome, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, t]);
 
   return (
     <ResponsiveContainer width="100%" height="100%">

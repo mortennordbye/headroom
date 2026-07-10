@@ -49,6 +49,29 @@ assets↔homeowner, only in homeowner mode). Code: `src/pages/LoanPage.tsx`,
   page it needs a persisted `number | null` override model (or a `touched` set) rather than
   the page-local `useState`.
 
+Shipped (2026-07): rentefradrag wired end-to-end. `calcNorwegianTax`/`calcTaxByRegion`/
+`calcMarginalTaxRate` gained an `interestDeduction` param (subtracted from alminnelig inntekt,
+uncapped); `annualMortgageInterest` derived in `FinanceContext` (year-one interest via
+`calcAmortizationSchedule`, housing-mode aware) and threaded into budget net income,
+Pengestrøm, SKATTEFORDELING, and Salary take-home. Forecast now uses `calcActiveGrossAnnual`
+for income (on-call + multi-job), per-year mortgage interest as rentefradrag, and seeds its
+raise/savings/return/inflation sliders from the user's salary CAGR, `recommendedInvestment`,
+`growthReturnRate`, and rolling SSB CPI (override-until-touched). Remaining disconnections:
+
+- **Manual monthly-income override goes stale vs the salary system.** `effectiveIncome` uses a
+  per-month manual override that never re-syncs when salary/tax/IPS change
+  (`src/context/FinanceContext.tsx` `effectiveIncome`/`derivedNetMonthlyFor`). Partly
+  deliberate; wants a "stale override" indicator or re-sync affordance rather than silent drift.
+- **BSU tax credit not modeled.** `assets.bsu` is a balance only (no annual-contribution field);
+  the 20% BSU income-tax credit isn't in `calcNorwegianTax`. Needs a new contribution input +
+  a capped credit term in the tax engine. **Where**: `src/lib/norwegianTax.ts`,
+  `src/pages/AssetPage.tsx`.
+- **Wealth tax (formuesskatt) absent.** No `formuesskatt` calc anywhere; for net wealth above
+  the ~1.76M threshold it's ~0.85–1.1%/yr of recurring tax missing from Forecast/Dashboard
+  projections and Pengestrøm. Needs a new calc (threshold/rate inputs, valuation discounts) and
+  wiring into the projections. **Where**: new `src/lib/`, `src/pages/ForecastPage.tsx`,
+  `src/pages/AssetPage.tsx`.
+
 ## Live SSB wage statistics
 
 `/api/wage-stats` currently returns a curated static series (server/index.js, `WAGE_STATS_STATIC`). Should query SSB table 11418 (or 13606) for live national median annual wage instead.

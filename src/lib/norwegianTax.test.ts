@@ -112,6 +112,42 @@ describe('calcNorwegianTax', () => {
     expect(r.effectiveRatePct).toBeGreaterThan(20);
     expect(r.effectiveRatePct).toBeLessThan(40);
   });
+
+  it('interest deduction (rentefradrag) lowers tax by interest × 22%', () => {
+    const base = calcNorwegianTax(700_000, 0, 2026);
+    const withInterest = calcNorwegianTax(700_000, 0, 2026, 50_000);
+    // Only the alminnelig-inntekt part (22%) moves; trinnskatt/trygdeavgift are unchanged.
+    expect(base.totalTax - withInterest.totalTax).toBeCloseTo(50_000 * 0.22, 4);
+    expect(withInterest.trinnskatt).toBeCloseTo(base.trinnskatt, 6);
+    expect(withInterest.trygdeavgift).toBeCloseTo(base.trygdeavgift, 6);
+    // Take-home rises by exactly the tax saving (interest itself isn't a paycheck deduction).
+    expect(withInterest.netAnnual - base.netAnnual).toBeCloseTo(50_000 * 0.22, 4);
+  });
+
+  it('defaults interest deduction to 0 (goldens unaffected)', () => {
+    expect(calcNorwegianTax(700_000, 0, 2026).totalTax)
+      .toBeCloseTo(calcNorwegianTax(700_000, 0, 2026, 0).totalTax, 6);
+  });
+
+  it('does not cap the interest deduction (unlike IPS)', () => {
+    const small = calcNorwegianTax(900_000, 0, 2026, 20_000);
+    const large = calcNorwegianTax(900_000, 0, 2026, 200_000);
+    // 10× the interest → 10× the tax saving, no clamp.
+    const savedSmall = calcNorwegianTax(900_000, 0, 2026).totalTax - small.totalTax;
+    const savedLarge = calcNorwegianTax(900_000, 0, 2026).totalTax - large.totalTax;
+    expect(savedLarge).toBeCloseTo(savedSmall * 10, 2);
+  });
+
+  it('applies the interest deduction in generic mode at the flat rate', () => {
+    const base = calcTaxByRegion(700_000, 'generic', 30, 0, 0);
+    const withInterest = calcTaxByRegion(700_000, 'generic', 30, 0, 40_000);
+    expect(base.totalTax - withInterest.totalTax).toBeCloseTo(40_000 * 0.30, 4);
+  });
+
+  it('leaves the marginal rate unchanged (interest is a lump-sum deduction)', () => {
+    expect(calcMarginalTaxRate(800_000, 0, 2026, 60_000))
+      .toBeCloseTo(calcMarginalTaxRate(800_000, 0, 2026, 0), 6);
+  });
 });
 
 describe('calcMarginalTaxRate', () => {

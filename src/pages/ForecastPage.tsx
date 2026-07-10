@@ -3,40 +3,35 @@ import {
   AreaChart, Area, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { TrendingUp, Wallet, Activity, Flame } from 'lucide-react';
-import { useFinance } from '../context/FinanceContext';
+import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
-import { currentMonthKey } from '../lib/date';
-import { salaryAt } from '../lib/salary';
+import { currentMonthKey, addMonthsKey } from '../lib/date';
 import { formatAxisInt } from '../lib/format';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const ForecastPage: React.FC = () => {
-  const { t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner, formatCurrency, region, customTaxRatePct, pension } = useFinance();
+  const {
+    t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
+    formatCurrency, region, customTaxRatePct, pension,
+    recommendedInvestment, growthReturnRate, inflation, annualMortgageInterest,
+  } = useFinance();
 
   // Current month in render scope so the memos below recompute if the month
   // rolls over during a long-lived session.
   const today = currentMonthKey();
-  // Find current salary (most recent effectiveDate <= today).
+  // Total current gross = base + on-call across all active jobs — the same
+  // figure the Salary and Budget pages use, not just one job's base salary.
   const currentGross = useMemo(() => {
-    // Fall back to the legacy monthly `income` annualized (matching
-    // grossAnnualIncome elsewhere) rather than a fabricated magic number.
-    return salaryAt(today, salaries)?.grossAnnual ?? income * 12;
-  }, [salaries, income, today]);
-
-  // Current job's on-call annual (for OTP base).
-  const currentOnCall = useMemo(() => {
-    const latest = salaryAt(today, salaries);
-    if (!latest) return 0;
-    const job = jobs.find(j => j.id === latest.jobId);
-    return job?.onCallAnnual ?? 0;
-  }, [salaries, jobs, today]);
+    const active = calcActiveGrossAnnual(salaries, jobs, today);
+    return active > 0 ? active : income * 12;
+  }, [salaries, jobs, income, today]);
 
   // Retirement readiness: years to retirement + projected pension wealth.
   const retirement = useMemo(() => {
@@ -45,7 +40,7 @@ const ForecastPage: React.FC = () => {
     const yearsToRetire = hasBirthYear
       ? Math.max(0, pension.retirementAge - (currentYear - pension.birthYear))
       : 0;
-    const otpAnnual = (currentGross + currentOnCall) * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
+    const otpAnnual = currentGross * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
     const ipsAnnual = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
     const otpAtRetire = pensionFutureValue(pension.otpBalance, otpAnnual, pension.otpGrowthRate, yearsToRetire);
     const ipsAtRetire = pensionFutureValue(pension.ipsBalance, ipsAnnual, pension.ipsGrowthRate, yearsToRetire);
@@ -58,14 +53,50 @@ const ForecastPage: React.FC = () => {
       otpAnnual,
       ipsAnnual,
     };
-  }, [pension, currentGross, currentOnCall]);
+  }, [pension, currentGross]);
 
-  // Sliders / inputs (all expressed as percentages where applicable)
-  const [raisePct, setRaisePct] = useState(4.5);
-  const [savingsPct, setSavingsPct] = useState(25);
-  const [returnPct, setReturnPct] = useState(5);
-  const [inflationPct, setInflationPct] = useState(3);
+  // Seeds from the user's real data — the sliders start from these instead of
+  // magic numbers, and follow the data until the user overrides a slider.
+  const raiseSeed = useMemo(() => {
+    const sorted = [...salaries].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    if (sorted.length < 2) return 4.5;
+    const first = sorted[0], last = sorted[sorted.length - 1];
+    const [fy, fm] = first.effectiveDate.split('-').map(Number);
+    const [ly, lm] = last.effectiveDate.split('-').map(Number);
+    const yrs = ((ly - fy) * 12 + (lm - fm)) / 12;
+    if (yrs <= 0 || first.grossAnnual <= 0) return 4.5;
+    const cagr = (Math.pow(last.grossAnnual / first.grossAnnual, 1 / yrs) - 1) * 100;
+    return Number.isFinite(cagr) && cagr > 0 ? Math.round(cagr * 10) / 10 : 4.5;
+  }, [salaries]);
+
+  const inflationSeed = useMemo(() => {
+    if (inflation.length === 0) return 3;
+    let latest = inflation[0];
+    for (const p of inflation) if (p.month > latest.month) latest = p;
+    const prior = inflation.find(p => p.month === addMonthsKey(latest.month, -12));
+    if (!prior || prior.cpiIndex <= 0) return 3;
+    const pct = (latest.cpiIndex / prior.cpiIndex - 1) * 100;
+    return Number.isFinite(pct) && pct > 0 ? Math.round(pct * 10) / 10 : 3;
+  }, [inflation]);
+
+  const savingsSeed = useMemo(() => {
+    const net = calcTaxByRegion(currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
+    if (net <= 0) return 25;
+    const pct = (recommendedInvestment * 12 / net) * 100;
+    return Number.isFinite(pct) && pct > 0 ? Math.min(90, Math.round(pct)) : 25;
+  }, [currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, recommendedInvestment]);
+
+  // Sliders start from the seeds and follow them until the user drags one
+  // (override wins). Stored as null-until-touched so late-loading data still seeds.
+  const [raiseOverride, setRaisePct] = useState<number | null>(null);
+  const [savingsOverride, setSavingsPct] = useState<number | null>(null);
+  const [returnOverride, setReturnPct] = useState<number | null>(null);
+  const [inflationOverride, setInflationPct] = useState<number | null>(null);
   const [years, setYears] = useState(15);
+  const raisePct = raiseOverride ?? raiseSeed;
+  const savingsPct = savingsOverride ?? savingsSeed;
+  const returnPct = returnOverride ?? growthReturnRate;
+  const inflationPct = inflationOverride ?? inflationSeed;
 
   // Select the real mortgage by housing mode, exactly as the context does for
   // net-worth projections: homeowner uses the `homeowner` inputs; first-buyer &
@@ -101,13 +132,15 @@ const ForecastPage: React.FC = () => {
     let mortgage = startingMortgage;
 
     for (let y = 0; y <= years; y++) {
+      // Interest on the balance entering this year — the year's rentefradrag base,
+      // which declines as the mortgage amortizes.
+      const mortgageInterest = mortgage * mortgageRate;
       if (y > 0) {
         gross = gross * (1 + raisePct / 100);
         // Mortgage paydown (interest grows balance, payment reduces it)
-        const interestAccrued = mortgage * mortgageRate;
-        mortgage = Math.max(0, mortgage + interestAccrued - annualMortgagePayment);
+        mortgage = Math.max(0, mortgage + mortgageInterest - annualMortgagePayment);
       }
-      const tax = calcTaxByRegion(gross, region, customTaxRatePct, pension.ipsAnnualContribution);
+      const tax = calcTaxByRegion(gross, region, customTaxRatePct, pension.ipsAnnualContribution, mortgageInterest);
       const net = tax.netAnnual;
       const contribution = Math.max(0, net * (savingsPct / 100));
       if (y > 0) {

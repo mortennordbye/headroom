@@ -574,12 +574,7 @@ const BudgetPage: React.FC = () => {
       </header>
 
       {/* Payday — when the paycheck lands; gates the income reminder below */}
-      <div className="flex flex-wrap items-center gap-3">
-        <PaydayField />
-        <span className="text-[12px] max-w-md" style={{ color: 'var(--text-3)' }}>
-          {t.settings.paydayDesc}
-        </span>
-      </div>
+      <PaydayField className="max-w-xl" />
 
       {/* Reminder: set this month's income while it's still auto-calculated */}
       {showIncomeReminder && (

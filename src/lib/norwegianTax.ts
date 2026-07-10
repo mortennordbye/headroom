@@ -117,13 +117,15 @@ export function calcTaxByRegion(
   region: Region,
   customRatePct: number,
   ipsContribution: number = 0,
+  interestDeduction: number = 0,
 ): NorwegianTaxBreakdown {
-  if (region === 'no') return calcNorwegianTax(grossAnnual, ipsContribution);
+  if (region === 'no') return calcNorwegianTax(grossAnnual, ipsContribution, TAX_YEAR, interestDeduction);
   const gross = Math.max(0, grossAnnual);
   const rate = Math.min(100, Math.max(0, customRatePct)) / 100;
-  // Approximate: IPS deduction also lowers taxable income in generic mode at the same flat rate.
+  // Approximate: IPS + interest deductions also lower taxable income in generic mode at the flat rate.
   const ipsDeduction = Math.min(Math.max(0, ipsContribution), IPS_MAX_DEDUCTION);
-  const taxable = Math.max(0, gross - ipsDeduction);
+  const interest = Math.max(0, interestDeduction);
+  const taxable = Math.max(0, gross - ipsDeduction - interest);
   const totalTax = taxable * rate;
   const netAnnual = gross - totalTax - ipsDeduction;
   return {
@@ -150,11 +152,12 @@ export function calcMarginalTaxRate(
   grossAnnual: number,
   ipsContribution: number = 0,
   year: number = TAX_YEAR,
+  interestDeduction: number = 0,
 ): number {
   const gross = Math.max(0, grossAnnual);
   const delta = 1000;
-  const base = calcNorwegianTax(gross, ipsContribution, year).totalTax;
-  const bumped = calcNorwegianTax(gross + delta, ipsContribution, year).totalTax;
+  const base = calcNorwegianTax(gross, ipsContribution, year, interestDeduction).totalTax;
+  const bumped = calcNorwegianTax(gross + delta, ipsContribution, year, interestDeduction).totalTax;
   return ((bumped - base) / delta) * 100;
 }
 
@@ -162,13 +165,17 @@ export function calcNorwegianTax(
   grossAnnual: number,
   ipsContribution: number = 0,
   year: number = TAX_YEAR,
+  interestDeduction: number = 0,
 ): NorwegianTaxBreakdown {
   const P = TAX_PARAMS[year] ?? PARAMS;
   const gross = Math.max(0, grossAnnual);
   const ipsDeduction = Math.min(Math.max(0, ipsContribution), IPS_MAX_DEDUCTION);
+  // Mortgage/loan interest (rentefradrag) reduces alminnelig inntekt, taxed back
+  // at the 22% rate. Uncapped, unlike the IPS deduction.
+  const interest = Math.max(0, interestDeduction);
 
   const minstefradrag = Math.min(gross * P.minstefradragRate, P.minstefradragMax);
-  const alminneligInntekt = Math.max(0, gross - minstefradrag - ipsDeduction);
+  const alminneligInntekt = Math.max(0, gross - minstefradrag - ipsDeduction - interest);
   const skattegrunnlag = Math.max(0, alminneligInntekt - P.personfradrag);
   const inntektsskatt = skattegrunnlag * P.skattAlminneligRate;
 
