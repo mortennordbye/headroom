@@ -20,36 +20,26 @@ its snapshot spine is the prerequisite for items 12, 15, 18, 24, 25 and 26, whic
 
 ## Big
 
-### 1. Transaction search
-There is no way to find a transaction by name, merchant or amount anywhere in the app; the
-only narrowing tools are the category drill-down and the account pill. With bank sync pulling
-in dozens of rows a month this is the largest daily-use gap.
-Where: `src/pages/BudgetPage.tsx` (ledger), `src/pages/DashboardPage.tsx` (recent list).
-Sketch: a text/amount filter box above the ledger, matching merchant + description + label,
-reusing `buildMatchHaystack` from `src/lib/text.ts`.
+### 1. Transaction search ✅ SHIPPED
+Free-text filter above the Daily Tracker ledger, matching merchant + description + display
+label + amount (via `buildMatchHaystack`). Non-matching days collapse away; a match count and
+empty state give feedback. (`src/pages/BudgetPage.tsx`.)
 
-### 2. Bulk select / bulk recategorize / bulk delete
-Every transaction is edited or deleted one modal at a time (`editDailyTransaction` /
-`removeDailyTransaction`). Cleaning up a mis-synced or mis-categorized batch is painful.
-Where: `src/pages/BudgetPage.tsx`.
-Sketch: checkbox multi-select on ledger rows with a floating action bar (set category, set
-label, delete). Pairs naturally with search (item 1): filter, select all, fix.
+### 2. Bulk select / bulk recategorize / bulk delete ✅ SHIPPED
+A "Select" toggle turns ledger chips into checkboxes; selected rows raise a floating action
+bar to set a category on all of them or delete them in one confirm. Composes with search
+(item 1): filter, select, fix. (`src/pages/BudgetPage.tsx`.)
 
-### 3. Recurring-transaction detection
-The app already links transactions to fixed expenses via per-transaction "map to fixed
-expense" and guesses envelopes via `suggestEnvelopeLinks`, but nothing notices that the same
-merchant hits every month and suggests creating a fixed expense / envelope from it.
-Where: `src/lib/envelopes.ts`, `src/lib/transfers.ts` (pattern precedent),
-`src/pages/BudgetPage.tsx` (nudge UI, like the existing collision-detector nudge).
-Sketch: detect same-merchant, similar-amount, ~monthly cadence over the last 3+ months and
-offer one-tap "make this a fixed expense".
+### 3. Recurring-transaction detection ✅ SHIPPED
+`src/lib/recurring.ts` (pure, unit-tested) groups expense rows by normalized merchant and
+surfaces any charging a similar amount across 3+ of the last 4 months that isn't already a
+fixed expense. A nudge in the Fixed Expenses card offers one-tap "make fixed expense" (created
+as a pattern envelope so it draws down instead of double-counting).
 
-### 4. Multi-arch Docker image (arm64)
-The publish workflow has no `platforms:` key, so `ghcr.io/...:latest` is amd64-only, and
-`better-sqlite3` is a native addon so there is no fallback. A friend on a Raspberry Pi can't
-run the prebuilt image at all, and Apple-Silicon Docker runs it under emulation.
-Where: `.github/workflows/build.yml` (buildx is already set up).
-Sketch: `platforms: linux/amd64,linux/arm64` on the build-push step.
+### 4. Multi-arch Docker image (arm64) ✅ SHIPPED
+`.github/workflows/build.yml` now builds `linux/amd64,linux/arm64` with a QEMU setup step;
+`better-sqlite3` compiles from source per-arch in the Dockerfile, so Raspberry Pi and
+Apple-Silicon self-hosters get a native prebuilt image.
 
 ---
 
