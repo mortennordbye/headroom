@@ -41,6 +41,7 @@ import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
 import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
 import ConfirmModal from '../components/ConfirmModal';
+import { UndoToast } from '../components/ui/UndoToast';
 import { StatCard } from '../components/ui/StatCard';
 
 // Recharts (~150 KB gz) is lazy-loaded so it stays off the first-paint critical
@@ -132,7 +133,7 @@ interface ModalConfig {
 let lastAddDefaults: { category: string; kind: 'income' | 'expense' } = { category: '', kind: 'expense' };
 
 interface PendingDelete {
-  type: 'expense' | 'transaction';
+  type: 'expense';
   id: string;
   name: string;
 }
@@ -186,6 +187,7 @@ const BudgetPage: React.FC = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [undoTx, setUndoTx] = useState<DailyTransaction | null>(null);
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -289,11 +291,7 @@ const BudgetPage: React.FC = () => {
 
   const confirmDelete = () => {
     if (!pendingDelete) return;
-    if (pendingDelete.type === 'expense') {
-      setFixedExpenses(fixedExpenses.filter(e => e.id !== pendingDelete.id));
-    } else {
-      setDailyTransactions(dailyTransactions.filter(t => t.id !== pendingDelete.id));
-    }
+    setFixedExpenses(fixedExpenses.filter(e => e.id !== pendingDelete.id));
     setPendingDelete(null);
   };
 
@@ -395,8 +393,17 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  const removeDailyTransaction = (id: string, description: string) => {
-    setPendingDelete({ type: 'transaction', id, name: description });
+  // Routine deletes use undo (not a confirm): remove the row immediately and
+  // offer a brief window to bring it back via the toast.
+  const removeDailyTransaction = (id: string) => {
+    const tx = dailyTransactions.find(t => t.id === id);
+    if (!tx) return;
+    setDailyTransactions(dailyTransactions.filter(t => t.id !== id));
+    setUndoTx(tx);
+  };
+  const undoDelete = () => {
+    if (undoTx) setDailyTransactions([...dailyTransactions, undoTx]);
+    setUndoTx(null);
   };
 
   // --- CSV Export ---
@@ -1054,7 +1061,7 @@ const BudgetPage: React.FC = () => {
                       <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
                         <Edit2 size={11} />
                       </button>
-                      <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
+                      <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
                         <Trash2 size={11} />
                       </button>
                     </span>
@@ -1128,7 +1135,7 @@ const BudgetPage: React.FC = () => {
                           <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => editDailyTransaction(tx.id, tx.description, tx.amount, tx.category, tx.kind, tx.merchant)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
                             <Edit2 size={12} />
                           </button>
-                          <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id, tx.description)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
+                          <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
                             <Trash2 size={12} />
                           </button>
                         </span>
@@ -1244,7 +1251,7 @@ const BudgetPage: React.FC = () => {
       {pendingDelete && (
         <ConfirmModal
           title={t.confirmDelete}
-          message={pendingDelete.type === 'expense' ? t.confirmDeleteExpenseMsg : t.confirmDeleteTransactionMsg}
+          message={t.confirmDeleteExpenseMsg}
           confirmLabel={t.delete}
           cancelLabel={t.cancel}
           onConfirm={confirmDelete}
@@ -1252,6 +1259,15 @@ const BudgetPage: React.FC = () => {
         />
       )}
       {payslipOpen && <PayslipImportModal onClose={() => setPayslipOpen(false)} />}
+      {undoTx && (
+        <UndoToast
+          message={t.budgetPage.txDeleted}
+          undoLabel={t.budgetPage.undo}
+          dismissLabel={t.dismiss}
+          onUndo={undoDelete}
+          onDismiss={() => setUndoTx(null)}
+        />
+      )}
     </div>
   );
 };

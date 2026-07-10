@@ -245,7 +245,6 @@ export const translations = {
     },
     confirmDelete: 'Bekreft sletting',
     confirmDeleteExpenseMsg: 'Er du sikker på at du vil slette denne utgiften?',
-    confirmDeleteTransactionMsg: 'Er du sikker på at du vil slette denne transaksjonen?',
     templates: 'Maler',
     addTemplate: 'Ny mal',
     exportCSV: 'Eksporter CSV',
@@ -1149,6 +1148,8 @@ export const translations = {
       bulkClear: 'Fjern valg',
       confirmBulkDeleteMsg: 'Slette {count} valgte transaksjoner? Dette kan ikke angres.',
       quickAddToday: 'Legg til for i dag',
+      txDeleted: 'Transaksjon slettet',
+      undo: 'Angre',
     },
     employerCostPage: {
       heroBefore: 'Hva koster du ',
@@ -1398,7 +1399,6 @@ export const translations = {
     },
     confirmDelete: 'Confirm Delete',
     confirmDeleteExpenseMsg: 'Are you sure you want to delete this expense?',
-    confirmDeleteTransactionMsg: 'Are you sure you want to delete this transaction?',
     templates: 'Templates',
     addTemplate: 'New Template',
     exportCSV: 'Export CSV',
@@ -2302,6 +2302,8 @@ export const translations = {
       bulkClear: 'Clear selection',
       confirmBulkDeleteMsg: 'Delete {count} selected transactions? This cannot be undone.',
       quickAddToday: 'Quick add for today',
+      txDeleted: 'Transaction deleted',
+      undo: 'Undo',
     },
     employerCostPage: {
       heroBefore: 'What do you ',
