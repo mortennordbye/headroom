@@ -125,6 +125,12 @@ interface ModalConfig {
   error?: string;
 }
 
+// Session-local memory of the last category/kind used when adding a transaction,
+// so repeated manual entries don't reset to a blank expense every time. Module
+// scope keeps it across route changes within a session; intentionally not
+// persisted (resets on reload).
+let lastAddDefaults: { category: string; kind: 'income' | 'expense' } = { category: '', kind: 'expense' };
+
 interface PendingDelete {
   type: 'expense' | 'transaction';
   id: string;
@@ -300,17 +306,23 @@ const BudgetPage: React.FC = () => {
 
   // --- Daily Transactions ---
   const addDailyTransaction = (dateStr: string, prefill?: Partial<TransactionTemplate>) => {
+    // Plain "add" reuses the last category/kind (session-local); a template
+    // prefill takes precedence over the remembered defaults.
+    const defaultCategory = prefill?.category ?? lastAddDefaults.category;
+    const defaultKind = prefill ? 'expense' : lastAddDefaults.kind;
     openModal({
       title: format(new Date(dateStr + 'T00:00:00'), 'dd.MM.yyyy'),
       fields: [
         { key: 'description', label: t.transactionDetails, type: 'text', value: prefill?.description ?? '', placeholder: t.budgetPage.transactionPlaceholder },
         { key: 'amount', label: t.impact, type: 'number', value: prefill?.amount?.toString() ?? '', placeholder: '0' },
-        { key: 'category', label: t.category, type: 'select', value: prefill?.category ?? '', options: categoryOptions },
-        kindField('expense'),
+        { key: 'category', label: t.category, type: 'select', value: defaultCategory, options: categoryOptions },
+        kindField(defaultKind),
       ],
       onSave: (vals) => {
         const amount = parsePositiveNumber(vals.amount);
         if (vals.description.trim() && amount !== null) {
+          const kind = vals.kind === 'income' ? 'income' : 'expense';
+          lastAddDefaults = { category: vals.category.trim(), kind };
           setDailyTransactions([...dailyTransactions, {
             id: crypto.randomUUID(),
             date: dateStr,
@@ -318,7 +330,7 @@ const BudgetPage: React.FC = () => {
             amount,
             category: vals.category.trim() || undefined,
             categorySource: vals.category.trim() ? 'manual' : undefined,
-            kind: vals.kind === 'income' ? 'income' : 'expense',
+            kind,
           }]);
           closeModal();
         } else {
