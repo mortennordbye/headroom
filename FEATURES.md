@@ -142,12 +142,12 @@ futures can't be held side by side (rate +2pp vs job change vs prepay). Persist 
 and add a two-scenario compare (two projection lines plus a delta tile).
 Where: `src/pages/ForecastPage.tsx`.
 
-### 22. "Prepay mortgage vs invest" comparison
-The app computes interest saved from extra debt payments (`DebtSection.interestSaved`) and
-expected investment return (`ForecastPage.returnPct`) separately but never contrasts them,
-despite this being the most common spare-krone question in Norway (deductible interest).
-Sketch: a tile comparing "extra 5 000 kr/mo: prepay saves X (after 22% deduction) vs
-invest at Y% over N years".
+### 22. "Prepay mortgage vs invest" comparison ✅ SHIPPED
+`prepayVsInvest` (pure, unit-tested in `src/lib/prepayVsInvest.ts`) grows a fixed extra
+monthly amount to a future value at two rates: the mortgage's after-tax rate (nominal ×
+(1 − 22% deduction)) if it prepays deductible debt, or the expected return if invested.
+A Forecast card with an extra-per-month slider surfaces both future values, the effective
+rates, and which side wins by how much over the horizon. (`src/pages/ForecastPage.tsx`.)
 
 ### 23. Scenario bands on projections
 Every net-worth projection (`calcNetWorthProjectionByBucket`) draws one deterministic line

@@ -2,12 +2,13 @@ import React, { useMemo, useState } from 'react';
 import {
   AreaChart, Area, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { TrendingUp, Wallet, Activity, Flame } from 'lucide-react';
+import { TrendingUp, Wallet, Activity, Flame, Scale } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import ChartTooltip from '../components/ChartTooltip';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
+import { prepayVsInvest } from '../lib/prepayVsInvest';
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { currentMonthKey, addMonthsKey } from '../lib/date';
@@ -93,6 +94,7 @@ const ForecastPage: React.FC = () => {
   const [returnOverride, setReturnPct] = useState<number | null>(null);
   const [inflationOverride, setInflationPct] = useState<number | null>(null);
   const [years, setYears] = useState(15);
+  const [extraMonthly, setExtraMonthly] = useState(5000);
   const raisePct = raiseOverride ?? raiseSeed;
   const savingsPct = savingsOverride ?? savingsSeed;
   const returnPct = returnOverride ?? growthReturnRate;
@@ -183,6 +185,16 @@ const ForecastPage: React.FC = () => {
       yearsToFi: hit ? hit.yearIndex : null,
     };
   }, [totalFixedExpenses, totalEquity, projection]);
+
+  // Prepay mortgage vs invest: the extra krone earns the after-tax mortgage rate
+  // if it pays down deductible debt, or the expected return if invested. The
+  // deduction rate is 22% (alminnelig inntekt) in Norway, or the user's flat
+  // rate in generic mode. Only shown when there's actually a mortgage to prepay.
+  const prepay = useMemo(() => {
+    if (startingMortgage <= 0) return null;
+    const deductionRate = region === 'no' ? 22 : customTaxRatePct;
+    return prepayVsInvest(extraMonthly, mortgageRatePct, returnPct, years, deductionRate);
+  }, [startingMortgage, region, customTaxRatePct, extraMonthly, mortgageRatePct, returnPct, years]);
 
   return (
     <div className="space-y-6 md:space-y-7">
@@ -298,6 +310,45 @@ const ForecastPage: React.FC = () => {
             </div>
             <ProgressBar pct={fire.progressPct} color="var(--accent)" />
           </div>
+        </div>
+      )}
+
+      {/* Prepay vs invest */}
+      {prepay && (
+        <div className={`${card} p-5 md:p-7 space-y-4`}>
+          <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
+            <Scale size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+            <h3 className={sectionLabel}>{t.forecast.prepayTitle}</h3>
+          </div>
+          <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.prepayDesc}</p>
+          <div className="max-w-xs">
+            <SliderInput label={t.forecast.prepayExtra} value={extraMonthly} onChange={setExtraMonthly} min={0} max={20000} step={500} suffix=" kr" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+            <FireStat
+              label={t.forecast.prepayLegPrepay}
+              value={formatCurrency(Math.round(prepay.prepayFutureValue))}
+              sub={`${prepay.afterTaxMortgageRatePct.toFixed(1)}% · ${t.forecast.prepayAfterTaxRateSub}`}
+              color={prepay.winner === 'prepay' ? 'var(--positive)' : undefined}
+            />
+            <FireStat
+              label={t.forecast.prepayLegInvest}
+              value={formatCurrency(Math.round(prepay.investFutureValue))}
+              sub={`${returnPct}% · ${t.forecast.prepayReturnSub}`}
+              color={prepay.winner === 'invest' ? 'var(--accent)' : undefined}
+            />
+          </div>
+          <div
+            className="text-[13px] font-semibold"
+            style={{ color: prepay.winner === 'prepay' ? 'var(--positive)' : prepay.winner === 'invest' ? 'var(--accent)' : 'var(--text-2)' }}
+          >
+            {(prepay.winner === 'prepay' ? t.forecast.prepayWinsPrepay
+              : prepay.winner === 'invest' ? t.forecast.prepayWinsInvest
+              : t.forecast.prepayTie)
+              .replace('{amount}', formatCurrency(Math.round(prepay.advantage)))
+              .replace('{years}', String(years))}
+          </div>
+          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.forecast.prepayNote}</p>
         </div>
       )}
 
