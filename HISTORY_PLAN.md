@@ -14,9 +14,11 @@
 > when snapped to an earlier recording). §5.3 BudgetPage past-month envelope math now reads
 > `snapshot.fixedExpenses` (via `viewFixedExpenses` in `FinanceContext`), with read-only
 > fixed-expense editors and a recorded/not-recorded marker. The scalar net-worth editor was
-> folded into `HistoryManagerModal` (inline headline field for snapshot-less months) and the
-> standalone `NetWorthHistoryModal` deleted; the Dashboard "Edit history" button opens the
-> manager. Browser-verified in demo mode, 0 console errors.
+> retired in favour of computed-only net worth: the `HistoryManagerModal` derives each month's
+> net worth from its snapshot inputs (read-only) and the composition editor is the sole write
+> path; the standalone `NetWorthHistoryModal` and the per-month scalar setters were deleted.
+> The Dashboard "Edit history" button opens the manager. Browser-verified in demo mode, 0
+> console errors.
 
 ## 0. Goal
 
@@ -271,10 +273,15 @@ be represented at all.
 > rewriting `NetWorthHistoryModal`; the scalar net-worth editor still exists on the Dashboard
 > unchanged (its 12-month window not dropped). The manager supersedes it functionally and
 > shows snapshot-derived net worth per month.
-> **Follow-up ✅ (2026-07-10):** the scalar editor is now folded in — `HistoryManagerModal`
-> rows without a snapshot expose an inline headline-net-worth field (writes `netWorthHistory`);
-> the standalone `NetWorthHistoryModal` was deleted and the Dashboard "Edit history" button
-> opens the manager. The rolling-12-month cap is gone (the manager backfills any month).
+> **Follow-up ✅ (2026-07-10):** the standalone scalar editor is retired — net worth is now
+> **computed-only**. The `HistoryManagerModal` shows each month's net worth derived from its
+> snapshot inputs (read-only), and the only way to record/correct a month is the composition
+> editor (per-account savings, portfolio, house value/debt, crypto, pensions, debts) which
+> recomputes the total live. The standalone `NetWorthHistoryModal` and the per-month scalar
+> setters (`setNetWorthForMonth`/`clearNetWorthForMonth`) were deleted; the Dashboard "Edit
+> history" button opens the manager. `netWorthHistory` remains only as a read-only fallback
+> for legacy/pre-snapshot months (imports still populate it); nothing types into it anymore.
+> The rolling-12-month cap is gone (the manager backfills any month).
 
 **4.1 Promote `NetWorthHistoryModal` into a History manager** ✅ (Settings or the Assets
 page). A month-grid list showing every month from the earliest record to now, each row

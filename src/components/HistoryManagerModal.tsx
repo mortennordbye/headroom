@@ -6,7 +6,6 @@ import { useFinance, type BalanceSnapshot } from '../context/FinanceContext';
 import { ModalShell } from './ui/ModalShell';
 import { NumberRow } from './ui/NumberRow';
 import { netWorthFromSnapshot } from '../lib/netWorth';
-import { parseLocaleNumber } from '../lib/validators';
 import {
   nearestSnapshot,
   historyRows,
@@ -72,7 +71,6 @@ export default function HistoryManagerModal({ onClose }: HistoryManagerModalProp
   const {
     t, lang, formatCurrency,
     balanceSnapshots, netWorthHistory, setManualSnapshot, deleteManualSnapshot,
-    setNetWorthForMonth, clearNetWorthForMonth,
     assets, loan, pension, homeowner, transition, housingMode, debts, fixedExpenses, categoryBudgets,
     savingsTargetPercent, growthReturnRate, houseGrowthRate,
   } = useFinance();
@@ -83,17 +81,6 @@ export default function HistoryManagerModal({ onClose }: HistoryManagerModalProp
   const [monthsBefore, setMonthsBefore] = useState(0);
   const [editing, setEditing] = useState<string | null>(null); // month being edited
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  // Drafts for the inline headline-net-worth field (months with no snapshot).
-  const [scalarDrafts, setScalarDrafts] = useState<Record<string, string>>({});
-
-  // Commit a quick headline value to the lightweight scalar store; blank clears
-  // it. Months with a snapshot don't use this — the snapshot is authoritative.
-  const commitScalar = (monthKey: string, raw: string) => {
-    const trimmed = raw.trim();
-    if (trimmed === '') { clearNetWorthForMonth(monthKey); return; }
-    const n = parseLocaleNumber(trimmed);
-    if (Number.isFinite(n)) setNetWorthForMonth(monthKey, n);
-  };
 
   const rows = useMemo(
     () => historyRows(balanceSnapshots, netWorthHistory, nowKey, monthsBefore),
@@ -155,23 +142,9 @@ export default function HistoryManagerModal({ onClose }: HistoryManagerModalProp
               </div>
               <div className="flex-1 min-w-0 flex items-center gap-2">
                 <StatePill state={isCurrent ? 'live' : row.state} hm={hm} liveLabel={t.netWorthEditor.live} />
-                {isCurrent || row.state !== 'missing' ? (
-                  <span className="text-[12px] font-mono" style={{ color: ref === null ? 'var(--text-3)' : 'var(--text-1)' }}>
-                    {ref === null ? '—' : formatCurrency(ref)}
-                  </span>
-                ) : (
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    aria-label={`${hm.headline} — ${monthLabel(row.monthKey)}`}
-                    value={scalarDrafts[row.monthKey] ?? (row.monthKey in netWorthHistory ? String(netWorthHistory[row.monthKey]) : '')}
-                    onChange={e => setScalarDrafts(prev => ({ ...prev, [row.monthKey]: e.target.value }))}
-                    onBlur={e => commitScalar(row.monthKey, e.target.value)}
-                    placeholder={hm.headline}
-                    className="w-[116px] text-[12px] font-mono bg-transparent border-b outline-none focus:border-[var(--accent)] transition-colors"
-                    style={{ borderColor: 'var(--border)', color: 'var(--text-1)' }}
-                  />
-                )}
+                <span className="text-[12px] font-mono" style={{ color: ref === null ? 'var(--text-3)' : 'var(--text-1)' }}>
+                  {ref === null ? '—' : formatCurrency(ref)}
+                </span>
               </div>
               {!isCurrent && (
                 <div className="flex items-center gap-1 shrink-0">

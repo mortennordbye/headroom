@@ -518,8 +518,6 @@ interface FinanceDataContextType {
   setPayslip: (monthKey: string, data: MonthlyPayslip) => void;
   removePayslip: (monthKey: string) => void;
   netWorthHistory: Record<string, number>;
-  setNetWorthForMonth: (monthKey: string, value: number) => void;
-  clearNetWorthForMonth: (monthKey: string) => void;
   balanceSnapshots: Record<string, BalanceSnapshot>;
   /** Backfill/edit a manual snapshot for a past month (source forced to 'manual'). */
   setManualSnapshot: (monthKey: string, snapshot: BalanceSnapshot) => void;
@@ -1327,22 +1325,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Manually record (or correct) the net worth for a past month, so the history
-  // chart reflects the user's real numbers instead of interpolated estimates.
-  // The current real month is not edited here — it auto-snapshots from live equity.
-  const setNetWorthForMonth = useCallback((key: string, value: number) => {
-    setNetWorthHistory(prev => ({ ...prev, [key]: Math.round(value) }));
-  }, []);
-
-  const clearNetWorthForMonth = useCallback((key: string) => {
-    setNetWorthHistory(prev => {
-      if (!(key in prev)) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  }, []);
-
   // Backfill/edit a manual snapshot for a past month. Forces source:'manual' and
   // v:2 so it's distinguishable from auto captures and safe to delete later. The
   // auto-capture effect only ever targets the real current month, so a manual
@@ -1956,7 +1938,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     income, setIncome,
     monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip,
-    netWorthHistory, setNetWorthForMonth, clearNetWorthForMonth, balanceSnapshots,
+    netWorthHistory, balanceSnapshots,
     setManualSnapshot, deleteManualSnapshot,
     fixedExpenses, setFixedExpenses,
     debts, setDebts,
@@ -1981,8 +1963,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     restoreAssetTaxDefaults, restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   }), [
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
-    payslips, setPayslip, removePayslip, netWorthHistory, setNetWorthForMonth,
-    clearNetWorthForMonth, balanceSnapshots, setManualSnapshot, deleteManualSnapshot,
+    payslips, setPayslip, removePayslip, netWorthHistory,
+    balanceSnapshots, setManualSnapshot, deleteManualSnapshot,
     fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, accountLabels, setAccountLabel, applyBankSync,
     categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule, removeAccountData,
