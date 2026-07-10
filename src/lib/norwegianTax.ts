@@ -138,6 +138,26 @@ export function calcTaxByRegion(
   };
 }
 
+/**
+ * Marginal tax rate on the next krone of wage income, as a percent. Computed as
+ * a finite difference of `totalTax` so it captures every moving part at once:
+ * the trinnskatt bracket you're in, the 22% on alminnelig inntekt (net of the
+ * minstefradrag phase-in at low income), and trygdeavgift (incl. its opptrapping
+ * band). Norwegian model only — in generic mode the marginal rate equals the
+ * flat effective rate, so this isn't needed there.
+ */
+export function calcMarginalTaxRate(
+  grossAnnual: number,
+  ipsContribution: number = 0,
+  year: number = TAX_YEAR,
+): number {
+  const gross = Math.max(0, grossAnnual);
+  const delta = 1000;
+  const base = calcNorwegianTax(gross, ipsContribution, year).totalTax;
+  const bumped = calcNorwegianTax(gross + delta, ipsContribution, year).totalTax;
+  return ((bumped - base) / delta) * 100;
+}
+
 export function calcNorwegianTax(
   grossAnnual: number,
   ipsContribution: number = 0,

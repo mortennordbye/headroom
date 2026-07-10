@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calcNorwegianTax,
+  calcMarginalTaxRate,
   calcTaxByRegion,
   TAX_PARAMS,
   TAX_YEAR,
@@ -110,6 +111,34 @@ describe('calcNorwegianTax', () => {
     const r = calcNorwegianTax(730_000);
     expect(r.effectiveRatePct).toBeGreaterThan(20);
     expect(r.effectiveRatePct).toBeLessThan(40);
+  });
+});
+
+describe('calcMarginalTaxRate', () => {
+  it('exceeds the effective rate on a progressive schedule', () => {
+    const gross = 700_000;
+    const marginal = calcMarginalTaxRate(gross);
+    const effective = calcNorwegianTax(gross).effectiveRatePct;
+    expect(marginal).toBeGreaterThan(effective);
+  });
+
+  it('lands in the expected band for a mid-high salary', () => {
+    // ~22% alminnelig + ~13.7% trinnskatt bracket + ~7.6% trygdeavgift.
+    const marginal = calcMarginalTaxRate(800_000);
+    expect(marginal).toBeGreaterThan(40);
+    expect(marginal).toBeLessThan(46);
+  });
+
+  it('is low at the bottom of the scale (below the trygde/trinn thresholds)', () => {
+    expect(calcMarginalTaxRate(90_000)).toBeLessThan(20);
+  });
+
+  it('rises across a trinnskatt bracket boundary', () => {
+    const P = TAX_PARAMS[TAX_YEAR];
+    const boundary = P.trinnskatt[3].from; // the big jump (~13.7%)
+    expect(calcMarginalTaxRate(boundary + 5_000)).toBeGreaterThan(
+      calcMarginalTaxRate(boundary - 5_000),
+    );
   });
 });
 

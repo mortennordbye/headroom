@@ -45,6 +45,44 @@ export function amortize(balance: number, annualRatePct: number, monthlyPayment:
   return { months, totalInterest, feasible, schedule };
 }
 
+export interface ExtraPaymentSavings {
+  baseMonths: number;      // months to pay off at the scheduled annuity payment
+  extraMonths: number;     // months to pay off with the extra added each month
+  monthsSaved: number;     // baseMonths − extraMonths (0 when infeasible)
+  baseInterest: number;
+  extraInterest: number;
+  interestSaved: number;   // baseInterest − extraInterest (0 when infeasible)
+  feasible: boolean;       // both legs actually amortize
+}
+
+/**
+ * What one fixed extra monthly payment does to a mortgage: months and interest
+ * saved versus paying only the scheduled annuity. Both legs run through
+ * `amortize`, so the comparison is internally consistent. `basePayment` is the
+ * scheduled annuity (from `calcMonthlyPayment`, passed in to avoid a cross-module
+ * import); `extraMonthly` is clamped at 0 since a negative "extra" is meaningless.
+ */
+export function extraPaymentSavings(
+  balance: number,
+  annualRatePct: number,
+  basePayment: number,
+  extraMonthly: number,
+): ExtraPaymentSavings {
+  const extra = Math.max(0, extraMonthly);
+  const base = amortize(balance, annualRatePct, basePayment);
+  const withExtra = amortize(balance, annualRatePct, basePayment + extra);
+  const feasible = base.feasible && withExtra.feasible;
+  return {
+    baseMonths: base.months,
+    extraMonths: withExtra.months,
+    monthsSaved: feasible ? base.months - withExtra.months : 0,
+    baseInterest: base.totalInterest,
+    extraInterest: withExtra.totalInterest,
+    interestSaved: feasible ? base.totalInterest - withExtra.totalInterest : 0,
+    feasible,
+  };
+}
+
 export type PayoffStrategy = 'avalanche' | 'snowball';
 
 export interface PayoffPlan {

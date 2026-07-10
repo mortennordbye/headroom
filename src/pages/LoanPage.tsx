@@ -49,6 +49,7 @@ import {
   calcBorrowingCapacity,
 } from '../lib/calculations';
 import { parseLocaleNumber } from '../lib/validators';
+import { extraPaymentSavings, formatMonths } from '../lib/debt';
 
 interface ModalConfig {
   title: string;
@@ -64,7 +65,7 @@ const PaydownVsPlanChart = lazy(() => import('../components/charts/PaydownVsPlan
 
 const LoanPage: React.FC = () => {
   const {
-    t, loan: liveLoan, updateLoan,
+    t, lang, loan: liveLoan, updateLoan,
     housingMode: liveHousingMode, setHousingMode,
     homeowner: liveHomeowner, updateHomeowner,
     transition: liveTransition, updateTransition,
@@ -451,7 +452,11 @@ const LoanPage: React.FC = () => {
             schedule={amortizationSchedule}
             chartData={chartData}
             t={t}
+            lang={lang}
             formatCurrency={formatCurrency}
+            principal={loan.laanebelop}
+            annualRatePct={loan.rente}
+            basePayment={calc.monthlyPaymentBase}
           />
         </>
       )}
@@ -591,7 +596,11 @@ const LoanPage: React.FC = () => {
             schedule={homeownerAmortization}
             chartData={homeownerChartData}
             t={t}
+            lang={lang}
             formatCurrency={formatCurrency}
+            principal={homeowner.currentMortgageBalance}
+            annualRatePct={homeowner.rente}
+            basePayment={homeownerStatus.monthlyPaymentCalc}
           />
 
           {/* Loan-to-value over time */}
@@ -749,10 +758,20 @@ interface AmortizationAccordionProps {
   schedule: ReturnType<typeof calcAmortizationSchedule>;
   chartData: ReturnType<typeof calcAmortizationSchedule>;
   t: ReturnType<typeof import('../context/FinanceContext').useFinance>['t'];
+  lang: 'nb' | 'en';
   formatCurrency: (n: number) => string;
+  /** Extra-payment what-if inputs: the loan and its scheduled annuity payment. */
+  principal: number;
+  annualRatePct: number;
+  basePayment: number;
 }
 
-function AmortizationAccordion({ show, onToggle, schedule, chartData, t, formatCurrency }: AmortizationAccordionProps) {
+function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, formatCurrency, principal, annualRatePct, basePayment }: AmortizationAccordionProps) {
+  const [extra, setExtra] = useState(0);
+  const savings = useMemo(
+    () => extraPaymentSavings(principal, annualRatePct, basePayment, extra),
+    [principal, annualRatePct, basePayment, extra],
+  );
   return (
     <div className={`${card} overflow-hidden`}>
       <button
@@ -770,6 +789,45 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, formatC
 
       {show && (
         <div className="border-t border-[var(--border)]">
+          {/* Extra-payment what-if: months + interest saved vs the base schedule. */}
+          <div className="px-5 py-5 md:px-7 space-y-4 border-b border-[var(--border)]">
+            <div>
+              <h4 className="text-[12px] font-semibold text-[var(--text-1)]">{t.loanPage.extraPaymentTitle}</h4>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-2)' }}>{t.loanPage.extraPaymentDesc}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={10000}
+                step={500}
+                value={extra}
+                onChange={(e) => setExtra(Number(e.target.value))}
+                aria-label={t.loanPage.extraPaymentLabel}
+                className="flex-1 h-2 rounded-full appearance-none cursor-pointer accent-[var(--accent)]"
+                style={{ background: 'color-mix(in srgb, var(--text-3) 18%, transparent)' }}
+              />
+              <span className="font-mono text-[13px] font-semibold min-w-[96px] text-right" style={{ color: 'var(--accent)' }}>
+                +{formatCurrency(extra)}/{t.common.moAbbr}
+              </span>
+            </div>
+            {extra > 0 && savings.feasible ? (
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: t.loanPage.extraPaymentTimeSaved, value: formatMonths(savings.monthsSaved, lang), pos: true },
+                  { label: t.loanPage.extraPaymentInterestSaved, value: formatCurrency(Math.round(savings.interestSaved)), pos: true },
+                  { label: t.loanPage.extraPaymentNewPayoff, value: formatMonths(savings.extraMonths, lang), pos: false },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-[8px] p-3 border bg-[var(--bg-raised)] border-[var(--border)]">
+                    <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)] mb-1">{s.label}</div>
+                    <div className="text-[14px] font-mono font-semibold" style={{ color: s.pos ? 'var(--positive)' : 'var(--text-1)' }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.loanPage.extraPaymentNone}</p>
+            )}
+          </div>
           <div className="px-5 py-5 md:px-7">
             <div className="h-[200px] md:h-[260px] w-full">
               <ResponsiveContainer width="100%" height="100%">

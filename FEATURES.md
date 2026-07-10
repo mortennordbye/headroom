@@ -79,13 +79,10 @@ The transaction editor was extracted into a shared `EditTransactionModal` (used 
 ledger and the Dashboard recent list, whose rows are now buttons). Fixing a wrong category no
 longer means leaving for the Budget page.
 
-### 12. Month in the URL
-The selected month lives only in app state, so a refresh or shared link always lands on the
-current month; "June's budget" can't be bookmarked. Reflect the month in the query string.
-Where: `src/components/Layout.tsx` (`currentMonth`).
-HISTORY_PLAN: unblocked — Phase 3's unified month model shipped (the header picker now
-drives `currentMonth` on Dashboard/Budget and `historyMonth` on balance pages); this just
-needs the active month reflected in the query string.
+### 12. Month in the URL ✅ SHIPPED
+`Layout.tsx` now mirrors the shared month into a `?m=YYYY-MM` query param (replace, so
+stepping doesn't spam history) and re-adds it across route changes; on mount a valid `?m`
+is adopted, so a refresh or shared link lands on that month. "June's budget" is bookmarkable.
 
 ### 13. One coherent month model across pages ✅ SHIPPED (PR #31)
 Delivered as Phase 3 (§5.1/§5.2) of `HISTORY_PLAN.md`: the stepper state was lifted to a
@@ -100,16 +97,11 @@ with an inline "add a job first" CTA that opens the add-job modal.
 
 ### Money insight & what-ifs
 
-### 15. Mortgage extra-payment what-if
-LoanPage renders a full year-by-year amortization schedule (`calcAmortizationSchedule`) but
-has no "pay X extra per month" control, even though `amortize` and DebtSection already prove
-the extra-payment pattern. A homeowner can't see that +2 000 kr/mo clears the loan N years
-early. Where: `src/pages/LoanPage.tsx`, `src/lib/debt.ts`.
-Sketch: an extra-payment slider on the amortization accordion showing months saved and
-interest saved vs the base schedule.
-HISTORY_PLAN: unblocked — Phase 4 §6.3 shipped `PaydownVsPlanChart` (plan-vs-actual) on
-LoanPage; this adds the extra-payment slider as a forward what-if layer over the same
-amortization schedule.
+### 15. Mortgage extra-payment what-if ✅ SHIPPED
+`extraPaymentSavings` (pure, unit-tested in `src/lib/debt.ts`) runs the loan through `amortize`
+twice — with and without a fixed extra monthly payment — and returns months + interest saved.
+A slider on the shared amortization accordion (first-buyer and homeowner) surfaces "time saved
+/ interest saved / new payoff time". (`src/pages/LoanPage.tsx`.)
 
 ### 16. Give `recurringTemplates` its UI
 `TransactionTemplate` and `recurringTemplates` are fully typed, persisted and exported
@@ -118,11 +110,11 @@ already accepts a template prefill, but no UI creates or applies templates. A "s
 templates" quick-pick in the add-transaction modal would serve recurring manual entries
 (rent split, cash allowance).
 
-### 17. Marginal tax rate readout
-`calcNorwegianTax` exposes only the effective rate; the trinnskatt bracket structure needed
-for "your next krone is taxed at X%" is already in `src/lib/norwegianTax.ts`, and the
-marginal rate is already computed internally to fold bonuses into budget income. Surface it
-on SalaryPage so "is the extra shift worth it" is answerable.
+### 17. Marginal tax rate readout ✅ SHIPPED
+`calcMarginalTaxRate` (pure, unit-tested in `src/lib/norwegianTax.ts`) takes a finite
+difference of `totalTax` so it captures the trinnskatt bracket, the 22% alminnelig (net of the
+minstefradrag phase-in) and trygdeavgift at once. Shown as a "next krone" readout beside the
+tax-breakdown chart on SalaryPage (Norwegian region only).
 
 ### 18. BSU cap tracking
 `assets.bsu` is a bare scalar summed into cash; nothing tracks the 27 500 kr/yr contribution
@@ -172,14 +164,11 @@ HISTORY_PLAN: unblocked — Phases 1-2 shipped; "actual pace" can now come from 
 history of the goal's source balance (`savingsSeriesFrom` / snapshot deltas), not from the
 recommended-savings figure.
 
-### 25. Financial-independence (FIRE) tile
-All inputs exist (net worth, annual essential expenses via `totalFixedExpenses`, the
-projection engine) but there's no "years to FI" or 25x-expenses readout. A FI tile on
-Forecast: net worth vs 25x annual essential spend, and the projected FI year at the current
-savings rate.
-HISTORY_PLAN: unblocked — Phase 2 shipped `netWorthSeriesFrom`; anchor the FI trajectory on
-that real net-worth history rather than the live number alone. (The Dashboard history-insights
-chips shipped in PR #31 are a lightweight precedent for this kind of derived readout.)
+### 25. Financial-independence (FIRE) tile ✅ SHIPPED
+A FI card on Forecast: the 25× annual-essential-spend target (from `totalFixedExpenses`),
+progress of net worth toward it, and the projected FI year — the first projected year whose
+real (today's-kroner) net worth clears the target, so it tracks the assumption sliders live.
+(`src/pages/ForecastPage.tsx`.)
 
 ### 26. Year-in-review report
 Per-year comp (`compByYear`), annual cashflow (`monthlyCashflow`) and multi-month category
@@ -311,9 +300,10 @@ optionally `g`-prefixed route jumps. Where: `src/components/Layout.tsx`.
     (return 5%, savings 25%) even though the context carries the user's `growthReturnRate`
     and `savingsTargetPercent`; the Dashboard even nags about untuned defaults while
     Forecast uses different numbers. Seed the sliders from the user's values.
-59. **No savings-rate decline warning.** The 12-month savings-rate series is computed and
-    charted, but nothing flags the trailing rate falling under `savingsTargetPercent`. Add a
-    banner/chip on Budget or Dashboard.
+59. **No savings-rate decline warning.** ✅ SHIPPED — `savingsRateStatus` (pure, unit-tested
+    in `src/lib/savingsRate.ts`) averages the trailing 3 months of the cashflow series and, when
+    it slips under `savingsTargetPercent`, the Budget savings-rate card raises a warning banner
+    (`src/pages/BudgetPage.tsx`).
 60. **Emergency-fund months use fixed expenses only.** `calcEmergencyFundStatus(bufferAccount,
     totalFixedExpenses)` counts discretionary subscriptions but ignores variable essentials
     (groceries), so "months covered" can mislead both ways. Let the user mark essential lines

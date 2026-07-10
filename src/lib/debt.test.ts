@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths, sumDebtByType, calcDebtBalanceByYear, debtPaydownVsPlan } from './debt';
+import { amortize, planPayoff, formatMonths, sumDebtByType, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings } from './debt';
+import { calcMonthlyPayment } from './calculations';
 import type { Debt, BalanceSnapshot } from '../context/FinanceContext';
 
 const debt = (over: Partial<Debt> = {}): Debt => ({
@@ -201,5 +202,41 @@ describe('debtPaydownVsPlan', () => {
     });
     expect(r.points[0].actual).toBe(50_000); // revolving excluded
     expect(r.points.every(p => Number.isFinite(p.actual) && Number.isFinite(p.plan))).toBe(true);
+  });
+});
+
+describe('extraPaymentSavings', () => {
+  const balance = 3_000_000;
+  const rate = 5.5;
+  const term = 25;
+  const basePayment = calcMonthlyPayment(balance, rate, term);
+
+  it('is a no-op when the extra is zero', () => {
+    const r = extraPaymentSavings(balance, rate, basePayment, 0);
+    expect(r.monthsSaved).toBe(0);
+    expect(r.interestSaved).toBeCloseTo(0, 0);
+    expect(r.feasible).toBe(true);
+  });
+
+  it('shortens the term and cuts interest with a positive extra', () => {
+    const r = extraPaymentSavings(balance, rate, basePayment, 3_000);
+    expect(r.monthsSaved).toBeGreaterThan(0);
+    expect(r.extraMonths).toBeLessThan(r.baseMonths);
+    expect(r.interestSaved).toBeGreaterThan(0);
+    expect(r.extraInterest).toBeLessThan(r.baseInterest);
+  });
+
+  it('clamps a negative extra to zero', () => {
+    const r = extraPaymentSavings(balance, rate, basePayment, -5_000);
+    expect(r.monthsSaved).toBe(0);
+    expect(r.interestSaved).toBeCloseTo(0, 0);
+  });
+
+  it('reports infeasible when the base payment cannot outrun interest', () => {
+    // A trivially small payment never amortizes → not feasible, no negative savings.
+    const r = extraPaymentSavings(balance, rate, 100, 0);
+    expect(r.feasible).toBe(false);
+    expect(r.monthsSaved).toBe(0);
+    expect(r.interestSaved).toBe(0);
   });
 });

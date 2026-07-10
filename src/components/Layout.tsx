@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -36,6 +36,8 @@ const Layout: React.FC = () => {
   const hist = useBalanceHistory();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const monthSyncedRef = useRef(false);
   const [moreOpen, setMoreOpen] = useState(false);
   // Balance-page "edit this month": opens the History manager straight into the
   // viewed month's balances editor (past months are read-only on the page itself).
@@ -57,6 +59,31 @@ const Layout: React.FC = () => {
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
   const viewKey = format(currentMonth, 'yyyy-MM');
+
+  // Month ⇄ URL. On first mount, adopt a valid ?m=YYYY-MM so a refresh or shared
+  // link lands on that month.
+  useEffect(() => {
+    const m = searchParams.get('m');
+    if (m && /^\d{4}-\d{2}$/.test(m)) {
+      const parsed = startOfMonth(parse(m, 'yyyy-MM', new Date()));
+      if (!isNaN(parsed.getTime()) && format(parsed, 'yyyy-MM') !== viewKey) {
+        setCurrentMonth(parsed);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Mirror the selected month into the query string (replace, so month-stepping
+  // doesn't spam history) and keep it present across route changes. The first run
+  // is skipped so the mount-time read above wins any conflict.
+  useEffect(() => {
+    if (!monthSyncedRef.current) { monthSyncedRef.current = true; return; }
+    if (searchParams.get('m') === viewKey) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('m', viewKey);
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewKey, location.pathname]);
   // Balance pages are read-only for any non-current month, and snap the picked
   // month to the nearest recorded snapshot — surface both cues in the chip.
   const balanceReadOnly = isBalanceRoute && !hist.isLive;
