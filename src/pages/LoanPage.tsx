@@ -354,7 +354,7 @@ const LoanPage: React.FC = () => {
                   resetLabel={lp.resetAuto} />
                 <LoanRow label={lp.maxPrice} notes={calc.capacity.ltvBound ? lp.maxPriceLtvNote : lp.maxPriceIncomeNote}
                   value={fmtNum(Math.round(calc.capacity.maxPrice))}
-                  highlight />
+                  highlight highlightColor="brass" />
                 <LoanRow label={lp.maxLoan} notes={lp.maxLoanNote}
                   value={fmtNum(Math.round(calc.capacity.debtAtMaxPrice))} />
                 <LoanRow label={lp.stressTest} notes={`${lp.stressTestNotePrefix}${fmtPct(calc.capacity.stressRatePct)}`}
@@ -392,7 +392,7 @@ const LoanPage: React.FC = () => {
                 <LoanRow label={lp.totalInterestLabel} notes={lp.totalInterestNote}
                   value={fmtNum(calc.totalInterest)} />
                 <LoanRow label={lp.totalCostLabel} notes={lp.totalCostNote}
-                  value={fmtNum(calc.totalCost)} highlight />
+                  value={fmtNum(calc.totalCost)} highlight highlightColor="brass" />
               </div>
             </div>
 
@@ -440,7 +440,7 @@ const LoanPage: React.FC = () => {
                   value={fmtNum(loan.kjoepesum)}
                   onEdit={() => editNum(lp.maxPurchase, 'kjoepesum', loan.kjoepesum)} />
                 <LoanRow label={lp.totalPrice} notes={lp.totalPriceNote}
-                  value={fmtNum(calc.totalpris)} highlight />
+                  value={fmtNum(calc.totalpris)} highlight highlightColor="brass" />
               </div>
             </div>
 
@@ -901,7 +901,7 @@ interface LoanRowProps {
   notes?: string;
   onEdit?: () => void;
   highlight?: boolean;
-  highlightColor?: 'blue' | 'green' | 'red';
+  highlightColor?: 'blue' | 'green' | 'red' | 'brass';
   /** Small chip after the label (e.g. Auto / Overstyrt). */
   badge?: React.ReactNode;
   /** When set, shows a reset-to-auto control that clears a manual override. */
@@ -913,8 +913,8 @@ interface LoanRowProps {
 function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blue', badge, onReset, resetLabel }: LoanRowProps) {
   const isCalculated = !onEdit;
   const valueColor = highlight
-    ? highlightColor === 'green'
-      ? 'text-[var(--positive)]'
+    ? highlightColor === 'brass'
+      ? 'text-[var(--brass)]'
       : highlightColor === 'red'
         ? 'text-[var(--negative)]'
         : 'text-[var(--positive)]'
@@ -947,12 +947,14 @@ function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blu
             <RotateCcw size={12} />
           </button>
         )}
-        <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${valueColor} ${onEdit ? 'group-hover:opacity-70 transition-opacity' : ''}`}>
-          {value}
-        </span>
-        {onEdit
-          ? <Edit2 size={13} className="text-[var(--text-2)] sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0" />
-          : <span className="w-[13px] shrink-0" />}
+        {onEdit ? (
+          <span className="inline-flex items-center gap-2 rounded-[6px] border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1.5 group-hover:border-[var(--brass-dim)] group-hover:bg-[var(--bg-elev)] transition-colors">
+            <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${valueColor}`}>{value}</span>
+            <Edit2 size={12} className="text-[var(--text-3)] shrink-0" />
+          </span>
+        ) : (
+          <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${valueColor}`}>{value}</span>
+        )}
       </div>
     </div>
   );
