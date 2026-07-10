@@ -157,6 +157,7 @@ function fullPayload(): ExportPayload {
     onboardingCompleted: true,
     assumptionsNudgeDismissed: true,
     incomeReminderDismissedMonth: '2026-01',
+    payday: 25,
   };
 }
 
@@ -172,15 +173,15 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 44 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(44);
+  it('registers exactly the 45 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(45);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (25) or preserve (19)', () => {
+  it('partitions every field into reset (26) or preserve (19)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
-    expect(reset).toHaveLength(25);
+    expect(reset).toHaveLength(26);
     expect(preserve).toHaveLength(19);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([
