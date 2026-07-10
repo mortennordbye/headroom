@@ -1186,6 +1186,18 @@ const BudgetPage: React.FC = () => {
         </>)}
       </div>
 
+      {/* Quick-add FAB (mobile, current month): log today's spend without
+          expanding and scrolling the tracker. Hidden while selecting rows. */}
+      {isCurrentMonth && !selectMode && (
+        <button
+          onClick={() => addDailyTransaction(format(today, 'yyyy-MM-dd'))}
+          aria-label={t.budgetPage.quickAddToday}
+          className="md:hidden fixed right-4 bottom-20 z-30 flex items-center justify-center w-14 h-14 rounded-full shadow-lg bg-[var(--forest)] hover:bg-[var(--forest-dim)] text-[var(--text)] transition-colors"
+        >
+          <PlusCircle size={24} strokeWidth={2} />
+        </button>
+      )}
+
       {/* Bulk-action bar — floats while rows are selected */}
       {selectMode && selected.size > 0 && (
         <div

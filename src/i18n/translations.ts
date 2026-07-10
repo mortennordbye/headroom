@@ -1148,6 +1148,7 @@ export const translations = {
       bulkDelete: 'Slett',
       bulkClear: 'Fjern valg',
       confirmBulkDeleteMsg: 'Slette {count} valgte transaksjoner? Dette kan ikke angres.',
+      quickAddToday: 'Legg til for i dag',
     },
     employerCostPage: {
       heroBefore: 'Hva koster du ',
@@ -2300,6 +2301,7 @@ export const translations = {
       bulkDelete: 'Delete',
       bulkClear: 'Clear selection',
       confirmBulkDeleteMsg: 'Delete {count} selected transactions? This cannot be undone.',
+      quickAddToday: 'Quick add for today',
     },
     employerCostPage: {
       heroBefore: 'What do you ',
