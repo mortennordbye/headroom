@@ -1063,32 +1063,6 @@ const SalaryPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Jobber — source of truth, full width above the filter */}
-      <EntryList
-        title={t.salary.jobs}
-        icon={<Briefcase size={14} className="text-[var(--text-2)]" />}
-        onAdd={() => openJobModal()}
-        empty={t.salary.noEntries}
-        editLabel={t.edit}
-        deleteLabel={t.delete}
-        items={jobs.map(j => ({
-          id: j.id,
-          primary: `${j.employer} — ${j.role}`,
-          secondary: `${j.startDate} → ${j.endDate ?? t.salaryPage.now} · ${j.contractedHoursPerWeek}${t.common.hoursPerWeekUnit}`,
-          chip: j.onCallAnnual && j.onCallAnnual > 0 ? (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold font-mono tabular-nums shrink-0"
-              style={{ color: 'var(--positive)', background: 'var(--positive-bg)' }}
-              title={t.salary.onCallAnnual}
-            >
-              {t.salary.onCallLabel} {formatCurrency(j.onCallAnnual)}/{t.salaryPage.yearAbbr}
-            </span>
-          ) : undefined,
-          onEdit: () => openJobModal(j),
-          onDelete: () => confirmDelete(j.employer, () => removeJob(j.id)),
-        }))}
-      />
-
       {/* Payday — the day the paycheck lands; drives the Budget income reminder */}
       <div className="flex flex-wrap items-center gap-3">
         <PaydayField />
@@ -1097,40 +1071,7 @@ const SalaryPage: React.FC = () => {
         </span>
       </div>
 
-      {/* Job filter tabs — only meaningful with more than one job */}
-      {jobs.length > 1 && (() => {
-        const tabs: { id: string; label: string }[] = [
-          { id: 'all', label: t.salary.allJobs },
-          ...[...jobs]
-            .sort((a, b) => b.startDate.localeCompare(a.startDate))
-            .map(j => ({ id: j.id, label: `${j.employer} — ${j.role}` })),
-        ];
-        return (
-          <div className="flex flex-wrap gap-2" role="tablist" aria-label={t.salary.job}>
-            {tabs.map(tab => {
-              const active = activeJobFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setActiveJobFilter(tab.id)}
-                  className="px-3 h-8 rounded-[6px] text-[12px] font-semibold transition-colors border"
-                  style={{
-                    background: active ? 'var(--accent-bg)' : 'transparent',
-                    color: active ? 'var(--accent)' : 'var(--text-2)',
-                    borderColor: active ? 'color-mix(in srgb, var(--accent) 35%, transparent)' : 'var(--border)',
-                  }}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        );
-      })()}
-
-      {/* Merged, reverse-chronological history of every salary event */}
+      {/* One box: jobs pinned on top, then the chronological salary history */}
       {(() => {
         const showAll = activeJobFilter === 'all';
         const matchesFilter = (jobId: string | undefined) => showAll || jobId === activeJobFilter;
@@ -1181,6 +1122,25 @@ const SalaryPage: React.FC = () => {
             </span>
           );
         };
+
+        // Jobs are pinned at the top of the card, not folded into the timeline.
+        const jobItems: EntryItem[] = jobs.map(j => ({
+          id: j.id,
+          accent: CHANGE_TYPE_COLOR.job_change,
+          primary: `${j.employer} — ${j.role}`,
+          secondary: `${j.startDate} → ${j.endDate ?? t.salaryPage.now} · ${j.contractedHoursPerWeek}${t.common.hoursPerWeekUnit}`,
+          chip: j.onCallAnnual && j.onCallAnnual > 0 ? (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold font-mono tabular-nums shrink-0"
+              style={{ color: 'var(--positive)', background: 'var(--positive-bg)' }}
+              title={t.salary.onCallAnnual}
+            >
+              {t.salary.onCallLabel} {formatCurrency(j.onCallAnnual)}/{t.salaryPage.yearAbbr}
+            </span>
+          ) : undefined,
+          onEdit: () => openJobModal(j),
+          onDelete: () => confirmDelete(j.employer, () => removeJob(j.id)),
+        }));
 
         type FeedItem = EntryItem & { sortKey: string };
         const items: FeedItem[] = [];
@@ -1233,23 +1193,69 @@ const SalaryPage: React.FC = () => {
           { label: t.salary.addJob, onClick: () => openJobModal(), divider: true },
         ];
 
+        const tabs = jobs.length > 1
+          ? [
+              { id: 'all', label: t.salary.allJobs },
+              ...[...jobs]
+                .sort((a, b) => b.startDate.localeCompare(a.startDate))
+                .map(j => ({ id: j.id, label: `${j.employer} — ${j.role}` })),
+            ]
+          : [];
+
         return (
-          <EntryList
-            title={t.salary.history}
-            icon={<TrendingUp size={14} className="text-[var(--text-2)]" />}
-            empty={t.salary.noEntries}
-            editLabel={t.edit}
-            deleteLabel={t.delete}
-            items={items}
-            headerAction={
-              jobs.length === 0
-                ? (
-                  <RecordEventButton label={t.salary.recordEvent} onClick={() => openJobModal()} />
-                ) : (
-                  <RecordEventMenu label={t.salary.recordEvent} items={menuItems} />
-                )
-            }
-          />
+          <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <TrendingUp size={14} className="text-[var(--text-2)]" />
+                <h3 className={sectionLabel}>{t.salary.salaryAndJobs}</h3>
+              </div>
+              {jobs.length === 0
+                ? <RecordEventButton label={t.salary.recordEvent} onClick={() => openJobModal()} />
+                : <RecordEventMenu label={t.salary.recordEvent} items={menuItems} />}
+            </div>
+
+            <EntrySection
+              icon={<Briefcase size={13} className="text-[var(--text-3)]" />}
+              label={t.salary.jobs}
+              empty={t.salary.noEntries}
+              items={jobItems}
+              editLabel={t.edit}
+              deleteLabel={t.delete}
+            />
+
+            {tabs.length > 0 && (
+              <div className="flex flex-wrap gap-2" role="tablist" aria-label={t.salary.job}>
+                {tabs.map(tab => {
+                  const active = activeJobFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setActiveJobFilter(tab.id)}
+                      className="px-3 h-8 rounded-[6px] text-[12px] font-semibold transition-colors border"
+                      style={{
+                        background: active ? 'var(--accent-bg)' : 'transparent',
+                        color: active ? 'var(--accent)' : 'var(--text-2)',
+                        borderColor: active ? 'color-mix(in srgb, var(--accent) 35%, transparent)' : 'var(--border)',
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <EntrySection
+              icon={<TrendingUp size={13} className="text-[var(--text-3)]" />}
+              label={t.salary.history}
+              empty={t.salary.noEntries}
+              items={items}
+              editLabel={t.edit}
+              deleteLabel={t.delete}
+            />
+          </div>
         );
       })()}
 
@@ -1307,59 +1313,48 @@ interface EntryItem {
   onDelete: () => void;
 }
 
-interface EntryListProps {
-  title: string;
+const EntryRow: React.FC<{ item: EntryItem; editLabel: string; deleteLabel: string }> = ({ item, editLabel, deleteLabel }) => (
+  <div className="flex items-center justify-between py-2.5 border-b border-[var(--border)] last:border-0 group">
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2 min-w-0">
+        {item.accent && (
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: item.accent }} />
+        )}
+        <div className="text-[13px] font-medium text-[var(--text-1)] font-mono tabular-nums truncate">{item.primary}</div>
+        {item.chip}
+      </div>
+      <div className="text-[11px] text-[var(--text-2)] truncate">{item.secondary}</div>
+    </div>
+    <div className="flex items-center gap-1 shrink-0 ml-2">
+      <button aria-label={`${editLabel} — ${item.primary}`} onClick={item.onEdit} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors">
+        <Edit2 size={13} />
+      </button>
+      <button aria-label={`${deleteLabel} — ${item.primary}`} onClick={item.onDelete} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--negative)] hover:bg-[var(--bg-elev)] transition-colors">
+        <Trash2 size={13} />
+      </button>
+    </div>
+  </div>
+);
+
+// A labelled sub-list (Jobs / History) inside the one salary card.
+const EntrySection: React.FC<{
   icon: React.ReactNode;
-  onAdd?: () => void;            // renders a "+ <title>" add button when set
-  headerAction?: React.ReactNode; // custom header control (takes precedence over onAdd)
+  label: string;
   empty: string;
   items: EntryItem[];
   editLabel: string;
   deleteLabel: string;
-}
-
-const EntryList: React.FC<EntryListProps> = ({ title, icon, onAdd, headerAction, empty, items, editLabel, deleteLabel }) => (
-  <div className={`${card} p-5 md:p-7 space-y-4`}>
-    <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
-      <div className="flex items-center gap-2">
-        {icon}
-        <h3 className={sectionLabel}>{title}</h3>
-      </div>
-      {headerAction ?? (onAdd && (
-        <button
-          onClick={onAdd}
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
-        >
-          <Plus size={12} /> {title.split(' ')[0]}
-        </button>
-      ))}
+}> = ({ icon, label, empty, items, editLabel, deleteLabel }) => (
+  <div className="space-y-2">
+    <div className="flex items-center gap-2">
+      {icon}
+      <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</span>
     </div>
     {items.length === 0 ? (
       <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{empty}</p>
     ) : (
       <div className="space-y-0">
-        {items.map(item => (
-          <div key={item.id} className="flex items-center justify-between py-2.5 border-b border-[var(--border)] last:border-0 group">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 min-w-0">
-                {item.accent && (
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: item.accent }} />
-                )}
-                <div className="text-[13px] font-medium text-[var(--text-1)] font-mono tabular-nums truncate">{item.primary}</div>
-                {item.chip}
-              </div>
-              <div className="text-[11px] text-[var(--text-2)] truncate">{item.secondary}</div>
-            </div>
-            <div className="flex items-center gap-1 shrink-0 ml-2">
-              <button aria-label={`${editLabel} — ${item.primary}`} onClick={item.onEdit} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors">
-                <Edit2 size={13} />
-              </button>
-              <button aria-label={`${deleteLabel} — ${item.primary}`} onClick={item.onDelete} className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--negative)] hover:bg-[var(--bg-elev)] transition-colors">
-                <Trash2 size={13} />
-              </button>
-            </div>
-          </div>
-        ))}
+        {items.map(item => <EntryRow key={item.id} item={item} editLabel={editLabel} deleteLabel={deleteLabel} />)}
       </div>
     )}
   </div>
