@@ -5,6 +5,12 @@ const path = require('path');
 const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
 const bank = require('./bank');
+const pkg = require('./package.json');
+
+// Build identity. CI passes the commit SHA as BUILD_SHA (see Dockerfile / the
+// build workflow's build-args); local runs report 'dev'. Together with the
+// package version this makes "what am I running" answerable via /api/version.
+const BUILD_SHA = process.env.BUILD_SHA || 'dev';
 
 const app = express();
 
@@ -163,6 +169,12 @@ app.get('/healthz', (_req, res) => {
   }
 });
 
+// "What version am I running." version is the single source in package.json;
+// sha is the CI-stamped commit ('dev' locally).
+app.get('/api/version', (_req, res) => {
+  res.json({ version: pkg.version, sha: BUILD_SHA });
+});
+
 app.get('/api/data', (req, res) => {
   const blob = readBlob();
   // The client echoes this rev back on save so we can detect a stale write.
@@ -248,17 +260,36 @@ app.post('/api/data', (req, res) => {
   const bodyRev = req.body._rev;
   delete req.body._rev;
   const stored = getStmt.get('headroom');
+  // Parse the stored blob defensively. A corrupt row would otherwise lock the
+  // user out permanently: GET already serves null (readBlob guards its parse),
+  // so the client reports rev 0, which mismatches the corrupt row's real rev
+  // and, on the old code, threw inside this 409 branch's JSON.parse — 500ing
+  // every save. No read, no write, no recovery. Instead, when the stored blob
+  // is unreadable there is no valid prior state to protect: quarantine the
+  // corrupt bytes (a truncated blob may be hand-recoverable) and fall through
+  // to last-write-wins so this valid payload restores write access.
+  let storedContent = null;
+  let storedCorrupt = false;
+  if (stored) {
+    try {
+      storedContent = JSON.parse(stored.content);
+    } catch {
+      storedCorrupt = true;
+      console.warn('[data] stored blob is corrupt JSON — quarantining and accepting incoming payload (last-write-wins recovery)');
+      writeStmt.run({ id: 'headroom:corrupt', content: stored.content, rev: stored.rev });
+    }
+  }
   // Optimistic concurrency: if the client sent the rev it last saw (X-Data-Rev
   // header, or `_rev` in the body for the beacon flush) and it no longer
   // matches, a newer write landed in between — reject so we don't clobber it.
-  // A request carrying neither (a genuinely old client build) keeps the
-  // last-write-wins path.
+  // A request carrying neither (a genuinely old client build), or a corrupt
+  // stored blob, keeps the last-write-wins path.
   const clientRev = req.get('X-Data-Rev') ?? (typeof bodyRev === 'number' ? String(bodyRev) : null);
-  if (stored && clientRev != null && Number(clientRev) !== stored.rev) {
+  if (stored && !storedCorrupt && clientRev != null && Number(clientRev) !== stored.rev) {
     return res.status(409).json({
       error: 'stale revision — data changed elsewhere',
       currentRev: stored.rev,
-      current: JSON.parse(stored.content),
+      current: storedContent,
     });
   }
   const merged = preserveUserFields(reconcileBankTransactions(req.body));

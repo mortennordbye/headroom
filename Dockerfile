@@ -26,6 +26,10 @@ COPY server/docker-entrypoint.sh ./
 COPY --from=frontend-build /app/dist ./dist
 RUN chmod +x docker-entrypoint.sh && mkdir -p /data && chown -R node:node /app /data
 ENV DATA_DIR=/data
+# Commit SHA baked at build time (CI passes --build-arg BUILD_SHA=<sha>); surfaced
+# via /api/version. Defaults to 'dev' for local `docker build` without the arg.
+ARG BUILD_SHA=dev
+ENV BUILD_SHA=$BUILD_SHA
 EXPOSE 3001
 # The entrypoint fixes /data ownership (root → node) then execs the app as the
 # non-root `node` user. It is the only code that runs as root, briefly, at start.

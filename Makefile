@@ -17,9 +17,11 @@ seed:
 	@echo "  Seeded. App: http://localhost:8080"
 	@echo ""
 
-# Wipe the DB inside the volume and re-seed from scratch.
+# Wipe the DB inside the volume and re-seed from scratch. Copies the existing DB
+# to a timestamped .bak inside the volume first, so a mis-run on real data is
+# recoverable (docker cp it out with `make backup` or the shell).
 seed-reset:
-	@docker-compose run --rm --no-deps headroom sh -c 'rm -f /data/database.sqlite && node seed.js'
+	@docker-compose run --rm --no-deps headroom sh -c 'if [ -f /data/database.sqlite ]; then cp /data/database.sqlite "/data/database.sqlite.bak-$$(date +%Y%m%d-%H%M%S)"; echo "  Backed up existing DB before reset."; fi && rm -f /data/database.sqlite && node seed.js'
 	@docker-compose restart headroom 2>/dev/null || true
 	@echo ""
 	@echo "  Reset + seeded. App: http://localhost:8080"

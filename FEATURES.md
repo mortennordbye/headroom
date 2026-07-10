@@ -193,29 +193,11 @@ instead of needing their own aggregation.
 
 ### Data safety & self-hosting
 
-### 27. Corrupt-blob lockout recovery
-`readBlob()` guards the GET path, but the 409 stale-revision branch does an unguarded
-`JSON.parse(stored.content)`: once the single blob row is corrupt, reads serve `null` and
-every save 500s, so the user can neither read nor recover. Wrap the parse and fall through
-to last-write-wins (or quarantine the corrupt row). Where: `server/index.js` (409 branch).
-
-### 28. Snapshot before destructive operations
-JSON import (`importAll`), `resetAll`, and `make seed-reset` all overwrite or delete the
-live blob with no prior snapshot; the rev counter protects against concurrent writes, not
-intentional overwrites of good data. Auto-save a timestamped copy of the current blob before
-import/reset. Where: `src/pages/SettingsPage.tsx`, `server/index.js`, `Makefile`.
-
 ### 29. Automated, rotating backups
 `make backup` is a single manual `docker cp` with no schedule, retention or rotation; a
 friend who forgets has exactly one live copy. Ship a compose sidecar or entrypoint cron that
 snapshots and prunes to N copies, or an in-app scheduled export. Where: `Makefile`,
 `docker-compose.yml`.
-
-### 30. One real version number and a version endpoint
-Three version numbers diverge (`APP_VERSION = '3.0.0'` in SettingsPage, `0.0.0` in
-package.json, `1.0.0` in server/package.json) and `/healthz` returns only `{ok}`, so "what
-version am I running" is unanswerable. CI already stamps `sha-<short>` image tags; expose
-build SHA via `/api/version` and render it in Settings About.
 
 ### 31. In-app bank sync history
 `recordSync` overwrites `last_sync` and the sync route's `{fetched, added, total}` result is
