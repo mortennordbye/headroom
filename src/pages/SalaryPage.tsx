@@ -42,6 +42,7 @@ import { PaydayField } from '../components/PaydayField';
 import RecordEventModal, { type RecordEditTarget, type RecordType } from '../components/RecordEventModal';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
+import { restskattEstimate } from '../lib/restskatt';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
 import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
@@ -88,7 +89,7 @@ const SalaryPage: React.FC = () => {
     overtime, removeOvertime,
     hoursSnapshots, removeHoursSnapshot,
     inflation, inflationStale,
-    wageStats,
+    wageStats, payslips,
     region, customTaxRatePct, pension, annualMortgageInterest,
   } = useFinance();
   const isGeneric = region === 'generic';
@@ -522,6 +523,18 @@ const SalaryPage: React.FC = () => {
     ? calcMarginalTaxRate(current.totalAnnual, pension.ipsAnnualContribution)
     : null;
 
+  // Restskatt early warning: withheld-to-date vs expected annual tax, projected
+  // from this year's payslips. Norwegian model only — "restskatt" is a Norwegian
+  // concept and the tax fn already carries region + deductions.
+  const restskatt = useMemo(() => {
+    if (isGeneric) return null;
+    return restskattEstimate(
+      payslips,
+      yearOf(currentMonthKey),
+      (gross) => calcTaxByRegion(gross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).totalTax,
+    );
+  }, [isGeneric, payslips, currentMonthKey, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest]);
+
   const yoyChip = yoy ? yoy.salary - yoy.cpi : null;
   const chipColor = yoyChip != null && yoyChip >= 0 ? 'var(--positive)' : 'var(--negative)';
   const chipBg = yoyChip != null && yoyChip >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
@@ -648,6 +661,45 @@ const SalaryPage: React.FC = () => {
           <Suspense fallback={<div className="h-full w-full" />}><MoneyFlowSankey /></Suspense>
         </div>
       </div>
+
+      {/* Restskatt early warning — withheld-to-date vs expected annual tax. */}
+      {restskatt && (
+        <div className={`${card} p-5 md:p-7 space-y-4`}>
+          <div className="flex items-start justify-between gap-3 pb-4 border-b border-[var(--border)]">
+            <div>
+              <h3 className={sectionLabel}>{t.salaryPage.restskattTitle}</h3>
+              <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.salaryPage.restskattDesc}</p>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider shrink-0" style={{ color: 'var(--text-3)' }}>
+              {t.salaryPage.restskattMonths.replace('{n}', String(restskatt.monthsRecorded))}
+            </span>
+          </div>
+          <div
+            className="text-[14px] font-semibold"
+            style={{ color: restskatt.status === 'restskatt' ? 'var(--warning)' : restskatt.status === 'refund' ? 'var(--positive)' : 'var(--text-2)' }}
+          >
+            {(restskatt.status === 'restskatt' ? t.salaryPage.restskattRestskatt
+              : restskatt.status === 'refund' ? t.salaryPage.restskattRefund
+              : t.salaryPage.restskattOnTrack)
+              .replace('{amount}', formatCurrency(Math.round(Math.abs(restskatt.gap))))}
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-[13px]">
+            <div>
+              <div className={sectionLabel + ' mb-1'}>{t.salaryPage.restskattWithheld}</div>
+              <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.withheldToDate))}</div>
+            </div>
+            <div>
+              <div className={sectionLabel + ' mb-1'}>{t.salaryPage.restskattProjected}</div>
+              <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.projectedAnnualWithholding))}</div>
+            </div>
+            <div>
+              <div className={sectionLabel + ' mb-1'}>{t.salaryPage.restskattExpected}</div>
+              <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.expectedAnnualTax))}</div>
+            </div>
+          </div>
+          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.salaryPage.restskattNote}</p>
+        </div>
+      )}
 
       {/* Next salary review — forward-looking helper for negotiation moments. */}
       {!isGeneric && reviewContext && (

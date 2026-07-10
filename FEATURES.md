@@ -124,11 +124,12 @@ Where: `src/context/FinanceContext.tsx` (`Assets.bsu`), Assets page.
 HISTORY_PLAN: unblocked — Phase 1 shipped, so `balanceSnapshots` now carries per-month BSU
 balances; "contributed this year" can be derived from the snapshot deltas rather than asked for.
 
-### 19. Restskatt early warning
-Each imported payslip stores that month's withheld tax (`MonthlyPayslip.tax`) and
-`calcNorwegianTax(gross).totalTax` computes the expected annual liability, but nothing
-compares them. A "withheld vs expected" tile could flag a likely restskatt (or refund)
-months before skatteoppgjøret.
+### 19. Restskatt early warning ✅ SHIPPED
+`restskattEstimate` (pure, unit-tested in `src/lib/restskatt.ts`) sums this year's withheld
+tax from the payslips, projects the annual gross linearly, and compares the projected
+withholding to the expected liability (via a caller-supplied tax fn carrying region +
+deductions). A Salary tile flags a likely restskatt or refund past a materiality threshold,
+with a note on the June/December withholding it doesn't model. (`src/pages/SalaryPage.tsx`.)
 
 ### 20. Feriepenger month modeling
 `monthlyCashflow` applies a flat income to every month, so the June feriepenger spike and
