@@ -10,11 +10,13 @@ import {
   Wallet,
   X,
   ArrowLeftRight,
+  Search,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
 import { accountGroupKey } from '../lib/account';
 import { txDisplayName } from '../lib/labelRules';
+import { buildMatchHaystack } from '../lib/text';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
@@ -169,6 +171,7 @@ const BudgetPage: React.FC = () => {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -454,6 +457,21 @@ const BudgetPage: React.FC = () => {
   // log remains a faithful record of what moved).
   const accountMatch = (tx: DailyTransaction) =>
     accountFilter == null || accountGroupKey(tx, accountLabels) === accountFilter;
+
+  // Free-text ledger search over merchant + description + display label + amount.
+  // Empty query matches everything; otherwise a case-insensitive substring test.
+  const query = search.trim().toLowerCase();
+  const searchMatch = (tx: DailyTransaction) => {
+    if (!query) return true;
+    const hay = `${buildMatchHaystack(tx.merchant, tx.description)}${txDisplayName(tx, labelRules).toLowerCase()} ${tx.amount} `;
+    return hay.includes(query);
+  };
+  const rowMatch = (tx: DailyTransaction) => accountMatch(tx) && searchMatch(tx);
+  // When searching, drop days with no matching rows so results read as a list.
+  const ledgerDays = query ? dailyData.filter(day => day.transactions.some(rowMatch)) : dailyData;
+  const searchCount = query
+    ? ledgerDays.reduce((n, day) => n + day.transactions.filter(rowMatch).length, 0)
+    : 0;
 
   // Account scope, as a compact dropdown placed next to the analysis it filters.
   // Default is "all accounts"; only shown when there's more than one account.
@@ -850,9 +868,46 @@ const BudgetPage: React.FC = () => {
         </div>
 
         {logOpen && (<>
+        {/* Search */}
+        <div className="px-4 py-3 md:px-7 md:py-4 border-b border-[var(--border)]">
+          <div className="relative max-w-sm">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-3)] pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t.budgetPage.searchPlaceholder}
+              aria-label={t.budgetPage.searchLabel}
+              className="w-full h-8 pl-8 pr-8 rounded-[6px] text-[13px] border"
+              style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label={t.budgetPage.searchClear}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {query && (
+            <p className="mt-2 text-[11px] text-[var(--text-3)]">
+              {t.budgetPage.searchResults.replace('{count}', searchCount.toString())}
+            </p>
+          )}
+        </div>
+
+        {query && ledgerDays.length === 0 && (
+          <div className="px-4 py-8 md:px-7 text-center text-[13px]" style={{ color: 'var(--text-3)' }}>
+            {t.budgetPage.searchNoResults}
+          </div>
+        )}
+
         {/* Mobile */}
         <div className="md:hidden divide-y divide-[var(--border)]">
-          {dailyData.map((day) => (
+          {ledgerDays.map((day) => (
             <div key={day.dateStr} className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -875,9 +930,9 @@ const BudgetPage: React.FC = () => {
                 </div>
               </div>
 
-              {day.transactions.filter(accountMatch).length > 0 && (
+              {day.transactions.filter(rowMatch).length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {day.transactions.filter(accountMatch).map((tx) => {
+                  {day.transactions.filter(rowMatch).map((tx) => {
                     const coveredBy = envelopeNameFor(tx);
                     const isTransfer = internalTransferIds.has(tx.id);
                     return (
@@ -902,13 +957,15 @@ const BudgetPage: React.FC = () => {
                 </div>
               )}
 
-              <button
-                onClick={() => addDailyTransaction(day.dateStr)}
-                className="flex items-center gap-1 text-[var(--accent)] text-[12px] font-medium"
-              >
-                <PlusCircle size={13} strokeWidth={2} />
-                <span>{t.budgetPage.addShort}</span>
-              </button>
+              {!query && (
+                <button
+                  onClick={() => addDailyTransaction(day.dateStr)}
+                  className="flex items-center gap-1 text-[var(--accent)] text-[12px] font-medium"
+                >
+                  <PlusCircle size={13} strokeWidth={2} />
+                  <span>{t.budgetPage.addShort}</span>
+                </button>
+              )}
             </div>
           ))}
 
@@ -932,7 +989,7 @@ const BudgetPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {dailyData.map((day) => (
+              {ledgerDays.map((day) => (
                 <tr key={day.dateStr} className="hover:bg-[var(--bg-raised)] transition-colors group">
                   <td className="px-7 py-4">
                     <div className="font-mono font-medium text-[13px] text-[var(--text-1)]">{format(day.date, 'dd.MM.yyyy')}</div>
@@ -940,7 +997,7 @@ const BudgetPage: React.FC = () => {
                   </td>
                   <td className="px-7 py-4">
                     <div className="flex flex-wrap gap-2">
-                      {day.transactions.filter(accountMatch).map((tx) => {
+                      {day.transactions.filter(rowMatch).map((tx) => {
                         const coveredBy = envelopeNameFor(tx);
                         const isTransfer = internalTransferIds.has(tx.id);
                         return (
@@ -965,13 +1022,15 @@ const BudgetPage: React.FC = () => {
                         </span>
                         );
                       })}
-                      <button
-                        onClick={() => addDailyTransaction(day.dateStr)}
-                        aria-label={t.add}
-                        className="text-[var(--accent)] hover:opacity-70 p-1 transition-opacity"
-                      >
-                        <PlusCircle size={18} strokeWidth={2} />
-                      </button>
+                      {!query && (
+                        <button
+                          onClick={() => addDailyTransaction(day.dateStr)}
+                          aria-label={t.add}
+                          className="text-[var(--accent)] hover:opacity-70 p-1 transition-opacity"
+                        >
+                          <PlusCircle size={18} strokeWidth={2} />
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="px-7 py-4 text-[13px] font-mono font-medium text-right">

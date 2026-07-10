@@ -1132,6 +1132,11 @@ export const translations = {
       perAccountMonthly: 'Forbruk per konto per måned',
       total: 'Totalt',
       addShort: 'Legg til',
+      searchPlaceholder: 'Søk etter navn, sted eller beløp…',
+      searchLabel: 'Søk i transaksjoner',
+      searchClear: 'Tøm søk',
+      searchResults: '{count} treff',
+      searchNoResults: 'Ingen transaksjoner matcher søket.',
     },
     employerCostPage: {
       heroBefore: 'Hva koster du ',
@@ -2268,6 +2273,11 @@ export const translations = {
       perAccountMonthly: 'Spending per account per month',
       total: 'Total',
       addShort: 'Add',
+      searchPlaceholder: 'Search by name, merchant or amount…',
+      searchLabel: 'Search transactions',
+      searchClear: 'Clear search',
+      searchResults: '{count} matches',
+      searchNoResults: 'No transactions match your search.',
     },
     employerCostPage: {
       heroBefore: 'What do you ',
