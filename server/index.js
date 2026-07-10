@@ -456,8 +456,10 @@ if (fs.existsSync(DIST)) {
   // A missing hashed asset (e.g. a stale chunk after redeploy) must 404, not
   // fall through to the SPA handler — returning index.html (text/html) for a
   // /assets/*.js request triggers a MIME error and a blank screen instead of a
-  // catchable "chunk failed to load".
-  app.get(/^\/assets\//, (_req, res) => res.sendStatus(404));
+  // catchable "chunk failed to load". Scope this to paths that look like a build
+  // FILE (a final segment with an extension) so it doesn't swallow the client
+  // route `/assets` (the Formue page) — `/assets/` must fall through to the SPA.
+  app.get(/^\/assets\/.+\.[^/]+$/, (_req, res) => res.sendStatus(404));
   // SPA fallback. Regex route (not the bare '*' string) for Express 5 /
   // path-to-regexp v8 compatibility; matches any unhandled GET.
   app.get(/.*/, (req, res) => res.sendFile(path.join(DIST, 'index.html')));
