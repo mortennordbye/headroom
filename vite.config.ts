@@ -36,10 +36,19 @@ export default defineConfig({
         navigateFallback: '/index.html',
         // Never serve index.html for API or hashed-asset requests — a missing
         // chunk must surface as a load error, not as HTML masquerading as JS.
-        navigateFallbackDenylist: [/^\/api/, /^\/assets\//],
+        // Build output lives under /static (see build.assetsDir) so this can't
+        // collide with the /assets client route (the Formue page).
+        navigateFallbackDenylist: [/^\/api/, /^\/static\//],
       },
     }),
   ],
+  build: {
+    // Emit hashed chunks under /static instead of Vite's default /assets, which
+    // collides with the app's `/assets` client route (the Formue page). With the
+    // collision gone, a hard reload of /assets serves the SPA cleanly — no
+    // serve-static directory redirect and no over-broad 404 guard needed.
+    assetsDir: 'static',
+  },
   server: {
     proxy: {
       '/api': 'http://localhost:3001',
