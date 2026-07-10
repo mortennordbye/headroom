@@ -5,6 +5,13 @@
 > out. Genuinely remaining, all intentional: `deletedBankIds` pruning (§5.7, BACKLOG-tracked
 > as provably unsafe), the bank twin-dedup shims (§5.6/§7, kept until the blob converges), the
 > `SalaryPage.trailingHourly` extraction (§5.1, do when next touched), and §8.8 (won't-do).
+>
+> **Full re-verification (2026-07-09):** every ✅ FINISHED item in sections 1–8 was
+> independently checked against the current code (not the commit messages). All confirmed
+> in place. One residual surfaced and was fixed in the same pass: the last stray hex from
+> §5.5 (`#0E1310` in `SmartRecommendations.tsx`) is now `var(--bg)`; the other §5.5
+> leftovers (ConfirmModal danger hover, surface overlays) had already been tokenised in
+> 9dd67a7. Forward-looking UX/feature ideas from the same pass live in `FEATURES.md`.
 
 Full pass over how every number is computed and how values flow into charts, tables and tiles,
 motivated by the app being shared (friends now self-host their own instances, each
@@ -238,6 +245,11 @@ recorded then — and the live debt editor is hidden while time-travelling.)
 `AssetPage.tsx:90-93` uses live `totalDebt` (and a fully-live `EquityCompositionBar`) even
 when rendering a historical snapshot; LoanPage gates on `hist.isLive` correctly. Fix: gate
 like LoanPage; long-term, snapshotting debts (the BACKLOG item in 4.1) makes history honest.
+_Extended by PR #31 (full historization): the time machine was lifted to a shared
+`historyMonth` and unified into the header month picker (one control across Assets/Loan/
+Pension), and the remaining history-mode live-data leaks were closed (AssetPage projections
+now read the snapshot's `assumptions`/rate/term; PensionPage income resolves at the viewed
+month)._
 
 **4.6 ✅ FINISHED (616837c) Old balance snapshots can render NaN in the composition chart.**
 `computeEquityBreakdown` does no field guarding and
@@ -245,6 +257,10 @@ like LoanPage; long-term, snapshotting debts (the BACKLOG item in 4.1) makes his
 saved before a field existed (`cryptoUnrealizedGain`, `bufferAccount`, ...) yields
 `undefined * n → NaN` in the bar. `sanitizePayload` also skips snapshot internals (see 2.1).
 Fix: `?? 0` each field inside `computeEquityBreakdown`; cheapest, covers all callers.
+_Extended by PR #31 (full historization): the same finite-or-0 guard now wraps every new
+snapshot reader (`netWorthFromSnapshot` debt balances, `paydownVsPlan`/`debtPaydownVsPlan`
+mortgage & debt reads, `LtvChart` actual series, `snapshotSeries`), so a hand-edited/missing
+balance or NaN rate can't reach the new derived-history charts either._
 
 **4.7 ✅ FINISHED (e2a27bf) Salary YoY tiles fabricate "+0.0%" with short history.**
 With fewer than 13 months of data, `yoy` returns zeros instead of null, so a new user sees a
@@ -333,10 +349,12 @@ BudgetPage does it right).
 - ✅ FINISHED (8c1264e) `PayslipImportModal.tsx:169,236`: literal "Visma" badge instead of
   the provider-registry name.
 
-**5.5 ✅ FINISHED (a7c76e8, via 8.3) Hardcoded hex colours outside `chartColors.ts`.**
-(SVG contexts now use CHART.* via the 8.3 prop blocks; CSS contexts use theme vars. Left:
-ConfirmModal's bespoke `#9c4632` danger hover (no token) and the recurring
-`rgba(255,255,255,0.0x)` backgrounds, which need a new token rather than a swap.)
+**5.5 ✅ FINISHED (a7c76e8, via 8.3; fully closed 2026-07-09) Hardcoded hex colours outside `chartColors.ts`.**
+(SVG contexts now use CHART.* via the 8.3 prop blocks; CSS contexts use theme vars. The
+former leftovers are closed: the ConfirmModal danger hover and the `rgba(255,255,255,0.0x)`
+surface overlays got tokens in 9dd67a7, and the last stray `#0E1310` in
+`SmartRecommendations.tsx` (allocation-strip label) became `var(--bg)` on 2026-07-09.
+The only remaining raw rgba is the documented token mirror in `chartColors.ts`.)
 SVG contexts that should use the `CHART.*` mirror: `SalaryPage` (axis `#5F6555`, grid
 `#262A20`, comp-chart gradient hexes), `PensionPage.tsx:147-166`,
 `ForecastPage.tsx:237-268`, `DebtSection.tsx`, `BudgetDistributionChart.tsx` (local copies
