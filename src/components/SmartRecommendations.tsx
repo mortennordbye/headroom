@@ -266,7 +266,7 @@ export default function SmartRecommendations() {
                   style={{
                     width: `${pct}%`,
                     background: entry.color,
-                    color: '#0E1310',
+                    color: 'var(--bg)',
                     opacity: hoveredSlice === null || hoveredSlice === i ? 1 : 0.4,
                   }}
                   onMouseEnter={() => setHoveredSlice(i)}
