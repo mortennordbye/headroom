@@ -14,6 +14,7 @@ import {
   CheckSquare,
   Square,
   ListChecks,
+  Repeat,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
@@ -29,6 +30,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
+import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
 import { incomeDiffPct } from '../lib/income';
@@ -445,6 +447,19 @@ const BudgetPage: React.FC = () => {
   );
   const linkExpenseToCategory = (expenseId: string, category: string) =>
     setFixedExpenses(fixedExpenses.map(e => e.id === expenseId ? { ...e, category: isCategoryKey(category) ? category : undefined } : e));
+
+  // Recurring-payment detector: a merchant charging a steady amount ~monthly that
+  // isn't yet a fixed expense. One tap creates a matching fixed expense (as a
+  // pattern envelope, so it draws down instead of double-counting). Session-dismissable.
+  const [dismissedRecurring, setDismissedRecurring] = useState<Set<string>>(new Set());
+  const recurringSuggestions = useMemo(
+    () => detectRecurring(dailyTransactions, fixedExpenses, monthKey).filter(s => !dismissedRecurring.has(s.key)),
+    [dailyTransactions, fixedExpenses, monthKey, dismissedRecurring],
+  );
+  const makeFixedFromRecurring = (s: RecurringSuggestion) => {
+    setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: s.label, amount: s.amount, type: 'fixed', category: s.category, match: s.key }]);
+    setDismissedRecurring(prev => new Set(prev).add(s.key));
+  };
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
@@ -721,6 +736,38 @@ const BudgetPage: React.FC = () => {
                     </button>
                     <button
                       onClick={() => setDismissedLinks(prev => new Set(prev).add(s.expenseId))}
+                      className="px-2 py-1 rounded-[4px] text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
+                    >
+                      {t.envelopeSuggestDismiss}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!expensesReadOnly && recurringSuggestions.length > 0 && (
+            <div className="rounded-[6px] border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[var(--accent-bg)] p-3 space-y-2.5">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-1)]">
+                <Repeat size={13} className="text-[var(--accent)]" />
+                {t.recurringSuggestTitle}
+              </div>
+              {recurringSuggestions.slice(0, 4).map(s => (
+                <div key={s.key} className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] leading-snug text-[var(--text-2)] min-w-0">
+                    {t.recurringSuggestText
+                      .replace('{name}', s.label)
+                      .replace('{amount}', formatCurrency(s.amount))
+                      .replace('{months}', s.months.toString())}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => makeFixedFromRecurring(s)}
+                      className="px-2.5 py-1 rounded-[4px] text-[11px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-opacity"
+                    >
+                      {t.recurringSuggestAction}
+                    </button>
+                    <button
+                      onClick={() => setDismissedRecurring(prev => new Set(prev).add(s.key))}
                       className="px-2 py-1 rounded-[4px] text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
                     >
                       {t.envelopeSuggestDismiss}
