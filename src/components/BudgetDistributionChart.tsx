@@ -1,5 +1,6 @@
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  usePlotArea, useChartWidth,
   type TooltipContentProps,
 } from 'recharts';
 import type { FixedExpense } from '../context/FinanceContext';
@@ -14,6 +15,43 @@ interface Props {
   ofFixedCostsLabel: string;
 }
 
+const MONO = '"IBM Plex Mono", ui-monospace, monospace';
+
+/**
+ * Right-aligned value column drawn in the chart's reserved right margin: each
+ * category's amount with its share of fixed costs beneath, stacked in one
+ * aligned column instead of floating at each bar's end. Positioned via Recharts'
+ * plot-geometry hooks so it stays locked to the bar rows at any width.
+ */
+function ValueColumn({ data, total, format }: { data: FixedExpense[]; total: number; format: (n: number) => string }) {
+  const plot = usePlotArea();
+  const chartWidth = useChartWidth();
+  if (!plot || !chartWidth || data.length === 0) return null;
+  // Bars fill equal-height bands across the plot; derive each row's centre from
+  // the plot geometry so the value block locks to its bar at any chart size.
+  const bandH = plot.height / data.length;
+  const rightX = chartWidth - 8;
+  return (
+    <g>
+      {data.map((e, i) => {
+        const yc = plot.y + bandH * (i + 0.5);
+        const pct = total > 0 ? (e.amount / total) * 100 : 0;
+        const pctStr = `${pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%`;
+        return (
+          <g key={e.name}>
+            <text x={rightX} y={yc - 2} textAnchor="end" fontFamily={MONO} fontSize={11} fontWeight={600} fill={CHART.text1}>
+              {format(e.amount)}
+            </text>
+            <text x={rightX} y={yc + 9} textAnchor="end" fontFamily={MONO} fontSize={9} fill={CHART.textDim}>
+              {pctStr}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 /**
  * The fixed-expense distribution bar chart. Split into its own module and
  * lazy-loaded by BudgetPage (the default route) so Recharts (~150 KB gzipped
@@ -24,7 +62,7 @@ export default function BudgetDistributionChart({
 }: Props) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 60, left: 16, bottom: 4 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 96, left: 16, bottom: 4 }}>
         <CartesianGrid {...GRID_PROPS} horizontal={false} />
         <XAxis type="number" hide />
         <YAxis
@@ -64,16 +102,8 @@ export default function BudgetDistributionChart({
           {data.map((e, i) => (
             <Cell key={`cell-${i}`} fill={expenseColor(e.type)} />
           ))}
-          <LabelList
-            dataKey="amount"
-            position="right"
-            offset={10}
-            fill={CHART.textSoft}
-            fontSize={11}
-            fontWeight={600}
-            formatter={(v: unknown) => formatCurrencyShort(Number(v ?? 0))}
-          />
         </Bar>
+        <ValueColumn data={data} total={totalFixedExpenses} format={formatCurrencyShort} />
       </BarChart>
     </ResponsiveContainer>
   );
