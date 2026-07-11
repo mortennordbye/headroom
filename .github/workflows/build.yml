@@ -49,10 +49,17 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      short_sha: ${{ steps.vars.outputs.short_sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # 7-char short SHA, matching docker/metadata-action's type=sha,format=short.
+      - name: Compute short SHA
+        id: vars
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -90,3 +97,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Open a PR against the homelab repo bumping the Kustomize image tag to the
+  # SHA we just pushed. Merging that PR is what deploys (ArgoCD syncs from Git).
+  deploy:
+    name: Bump homelab image tag
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: mortennordbye/homelab/.github/workflows/bump-image.yml@main
+    with:
+      app_dir: k8s/talos/apps/headroom
+      image: ghcr.io/mortennordbye/headroom
+      new_tag: sha-${{ needs.build.outputs.short_sha }}
+    secrets:
+      app-id: ${{ secrets.HOMELAB_DEPLOYER_APP_ID }}
+      app-private-key: ${{ secrets.HOMELAB_DEPLOYER_PRIVATE_KEY }}
