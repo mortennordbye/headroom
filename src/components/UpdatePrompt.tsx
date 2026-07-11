@@ -1,4 +1,5 @@
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { useFinance } from '../context/FinanceContext';
 
 /**
  * Surfaces a waiting service worker (registerType: 'prompt'). Clicking Update
@@ -10,6 +11,7 @@ import { useRegisterSW } from 'virtual:pwa-register/react';
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly
 
 export default function UpdatePrompt() {
+  const { t } = useFinance();
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
@@ -48,14 +50,14 @@ export default function UpdatePrompt() {
       className="fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-[8px]"
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
     >
-      <span className="text-[13px]">Ny versjon tilgjengelig / New version available</span>
+      <span className="text-[13px]">{t.updatePrompt.message}</span>
       <button
         type="button"
         onClick={handleUpdate}
         className="px-3 py-1.5 rounded-[8px] text-[12px] font-medium"
         style={{ background: 'var(--accent)', color: 'var(--bg)' }}
       >
-        Oppdater / Update
+        {t.updatePrompt.update}
       </button>
       <button
         type="button"
@@ -63,7 +65,7 @@ export default function UpdatePrompt() {
         className="px-2 py-1.5 rounded-[8px] text-[12px]"
         style={{ color: 'var(--text-3)' }}
       >
-        Senere / Later
+        {t.updatePrompt.later}
       </button>
     </div>
   );

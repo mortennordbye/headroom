@@ -15,6 +15,10 @@
  * always carries meaning — see role notes inline; never assign a hue decoratively.
  */
 :root {
+  /* Dark-only theme: tell the UA so native controls (select popups, number
+     spinners, month/date pickers, autofill, scrollbars) render dark to match. */
+  color-scheme: dark;
+
   /* ── Canonical palette ─────────────────────────── */
   --bg: #0E100D;
   --bg-2: #141712;
@@ -213,5 +217,41 @@ textarea,
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print: the app is dark-on-dark with sticky chrome, so a raw print is unusable.
+   Remap the core surface/text tokens to a light theme (the aliases cascade, so
+   components re-theme without edits), drop the fixed header + bottom nav +
+   toasts, and let content flow full-width. Chart hues stay legible on white. */
+@media print {
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-2: #ffffff;
+    --bg-3: #ffffff;
+    --bg-elev: #ffffff;
+    --rule: #d4d4d4;
+    --text: #111111;
+    --text-soft: #444444;
+    --text-dim: #666666;
+    --border-strong: #999999;
+  }
+  body {
+    background: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* App chrome: top header, mobile bottom nav, the "More" sheet / dialogs, and
+     any fixed-position toast (update prompt, undo). */
+  header,
+  nav,
+  [role="dialog"],
+  .fixed {
+    display: none !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
   }
 }

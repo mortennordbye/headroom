@@ -42,7 +42,7 @@ export default function AllocationDonut({ stocks, house, cash, crypto, pension }
 
   return (
     <div className="h-full w-full flex flex-col">
-      <div className="flex-1 min-h-0">
+      <div role="img" aria-label={t.charts.aria.allocation} className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={slices} dataKey="value" nameKey="name" innerRadius="60%" outerRadius="88%" paddingAngle={2} stroke="none">

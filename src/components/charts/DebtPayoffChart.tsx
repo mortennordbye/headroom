@@ -56,7 +56,7 @@ export default function DebtPayoffChart({ balances, startYear, nonMortgageDebt }
         </div>
       </div>
 
-      <div className="flex-1 min-h-[180px] w-full">
+      <div role="img" aria-label={t.charts.aria.debtPayoff} className="flex-1 min-h-[180px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
             <defs>

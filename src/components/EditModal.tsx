@@ -10,7 +10,7 @@ export interface ModalFieldOption {
 export interface ModalField {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'checkbox';
+  type: 'text' | 'number' | 'select' | 'checkbox' | 'month';
   value: string;
   placeholder?: string;
   options?: ModalFieldOption[]; // required when type === 'select'

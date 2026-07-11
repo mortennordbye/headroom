@@ -36,6 +36,7 @@ export default function CashflowChart() {
   }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale]);
 
   return (
+    <div role="img" aria-label={t.charts.aria.cashflow} className="w-full h-full">
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
         <CartesianGrid {...GRID_PROPS} vertical={false} />
@@ -48,5 +49,6 @@ export default function CashflowChart() {
         <Line name={t.charts.net} dataKey="net" stroke={CHART.brass} strokeWidth={2} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
+    </div>
   );
 }

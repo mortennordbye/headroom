@@ -35,7 +35,7 @@ export default function PensionHistoryChart() {
         <h3 className="text-[11px] font-medium uppercase tracking-[0.1em]" style={{ color: 'var(--text-2)' }}>{c.pensionHistoryTitle}</h3>
         <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{c.pensionHistorySub}</p>
       </div>
-      <div className="h-[220px] w-full">
+      <div role="img" aria-label={t.charts.aria.pensionHistory} className="h-[220px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
             <CartesianGrid {...GRID_PROPS} vertical={false} />

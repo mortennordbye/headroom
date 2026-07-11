@@ -55,11 +55,11 @@ export default function EquityHistoryTable() {
       <table className="w-full text-[12px] tabular-nums">
         <thead>
           <tr style={{ color: 'var(--text-3)' }}>
-            <th className="text-left font-medium py-1.5 pr-3"></th>
+            <th scope="col" className="text-left font-medium py-1.5 pr-3"></th>
             {cols.map(col => (
-              <th key={col.key} className="text-right font-medium py-1.5 px-2 whitespace-nowrap">{col.label}</th>
+              <th scope="col" key={col.key} className="text-right font-medium py-1.5 px-2 whitespace-nowrap">{col.label}</th>
             ))}
-            <th className="text-right font-medium py-1.5 pl-2 whitespace-nowrap">{c.equityHistoryTotal}</th>
+            <th scope="col" className="text-right font-medium py-1.5 pl-2 whitespace-nowrap">{c.equityHistoryTotal}</th>
           </tr>
         </thead>
         <tbody>

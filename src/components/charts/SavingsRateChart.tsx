@@ -32,6 +32,7 @@ export default function SavingsRateChart() {
   }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale]);
 
   return (
+    <div role="img" aria-label={t.charts.aria.savingsRate} className="w-full h-full">
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
         <CartesianGrid {...GRID_PROPS} vertical={false} />
@@ -42,5 +43,6 @@ export default function SavingsRateChart() {
         <Line name={t.charts.savingsRate} type="monotone" dataKey="rate" stroke={CHART.forestLight} strokeWidth={2} dot={{ r: 2, fill: CHART.forestLight }} />
       </LineChart>
     </ResponsiveContainer>
+    </div>
   );
 }

@@ -125,7 +125,7 @@ const GoalsSection: React.FC = () => {
           options: sourceOptions,
         },
         { key: 'manualCurrent', label: t.goals.manualCurrent, type: 'number', value: (existing?.manualCurrent ?? 0).toString() },
-        { key: 'deadline', label: t.goals.deadline, type: 'text', value: existing?.deadline ?? '', placeholder: '2027-12' },
+        { key: 'deadline', label: t.goals.deadline, type: 'month', value: existing?.deadline ?? '', placeholder: '2027-12' },
         { key: 'notes', label: t.goals.notes, type: 'text', value: existing?.notes ?? '' },
       ],
       onSave: (vals) => {

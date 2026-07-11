@@ -35,7 +35,7 @@ export default function CategoryTrendChart() {
   }
 
   return (
-    <div className="w-full h-[220px]">
+    <div role="img" aria-label={t.charts.aria.categoryTrend} className="w-full h-[220px]">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
           <CartesianGrid {...GRID_PROPS} vertical={false} />

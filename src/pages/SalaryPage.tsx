@@ -89,7 +89,7 @@ const SalaryPage: React.FC = () => {
     overtime, removeOvertime,
     hoursSnapshots, removeHoursSnapshot,
     inflation, inflationStale,
-    wageStats, payslips,
+    wageStats, wageStatsStale, payslips,
     region, customTaxRatePct, pension, annualMortgageInterest,
   } = useFinance();
   const isGeneric = region === 'generic';
@@ -573,6 +573,11 @@ const SalaryPage: React.FC = () => {
             {t.salary.inflationOffline}
           </p>
         )}
+        {wageStatsStale && (
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--warning)' }}>
+            {t.salary.wageBenchmarkOffline}
+          </p>
+        )}
       </header>
 
       {/* Summary tiles */}
@@ -878,10 +883,10 @@ const SalaryPage: React.FC = () => {
             <table className="w-full text-[12px] border-t border-[var(--border)]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--text-2)' }}>
-                  <th className="py-2 pr-3 font-medium uppercase tracking-wider text-[10px]">{t.salaryPage.year}</th>
-                  <th className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.salaryCol}</th>
-                  <th className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.cpi}</th>
-                  <th className="py-2 pl-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.gap}</th>
+                  <th scope="col" className="py-2 pr-3 font-medium uppercase tracking-wider text-[10px]">{t.salaryPage.year}</th>
+                  <th scope="col" className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.salaryCol}</th>
+                  <th scope="col" className="py-2 px-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.cpi}</th>
+                  <th scope="col" className="py-2 pl-2 font-medium uppercase tracking-wider text-[10px] text-right">{t.salaryPage.gap}</th>
                 </tr>
               </thead>
               <tbody>
