@@ -28,10 +28,20 @@ interface BankConnection {
   needsRelink?: boolean;
 }
 
+interface SyncLogEntry {
+  at: string;
+  ok: boolean;
+  added?: number;
+  fetched?: number;
+  total?: number;
+  error?: string;
+}
+
 interface BankStatus {
   linked: boolean;
   configured: boolean;
   connections?: BankConnection[];
+  syncLog?: SyncLogEntry[];
   hasRedirect?: boolean;
   redirectUrl?: string;
   redirectFromEnv?: boolean;
@@ -314,6 +324,7 @@ export function BankSyncCard() {
   );
 
   const connections = status?.connections ?? [];
+  const syncLog = status?.syncLog ?? [];
 
   // Colour the status line by outcome: error messages read as negative, success
   // as accent. `linkError` can carry a `(reason)` suffix, so match by prefix.
@@ -530,6 +541,21 @@ export function BankSyncCard() {
               </Button>
             )}
           </div>
+          {syncLog.length > 0 && (
+            <div className="pt-1">
+              <div className="text-[12px] font-medium mb-1" style={muted}>{b.syncHistory}</div>
+              <ul className="space-y-0.5">
+                {syncLog.slice(0, 5).map((e, i) => (
+                  <li key={`${e.at}-${i}`} className="text-[12px] flex items-baseline gap-2" style={muted}>
+                    <span className="tabular-nums">{new Date(e.at).toLocaleString()}</span>
+                    <span style={{ color: e.ok ? 'var(--positive, var(--text-2))' : 'var(--negative)' }}>
+                      {e.ok ? b.syncOkEntry.replace('{added}', String(e.added ?? 0)) : b.syncErrEntry}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="pt-1">{keyBlock}</div>
         </div>
       )}

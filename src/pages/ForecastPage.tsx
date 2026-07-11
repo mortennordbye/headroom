@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   AreaChart, Area, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { TrendingUp, Wallet, Activity, Flame, Scale } from 'lucide-react';
+import { TrendingUp, Wallet, Activity, Flame, Scale, GitCompare } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import ChartTooltip from '../components/ChartTooltip';
@@ -11,6 +11,7 @@ import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { prepayVsInvest } from '../lib/prepayVsInvest';
 import { netWorthBands } from '../lib/scenarioBands';
+import { projectForecast, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { currentMonthKey, addMonthsKey } from '../lib/date';
@@ -24,6 +25,7 @@ const ForecastPage: React.FC = () => {
     t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
     formatCurrency, region, customTaxRatePct, pension,
     recommendedInvestment, growthReturnRate, inflation, annualMortgageInterest,
+    forecastAssumptions: fa, setForecastAssumptions,
   } = useFinance();
   const reduced = useReducedMotion();
 
@@ -90,18 +92,32 @@ const ForecastPage: React.FC = () => {
     return Number.isFinite(pct) && pct > 0 ? Math.min(90, Math.round(pct)) : 25;
   }, [currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, recommendedInvestment]);
 
-  // Sliders start from the seeds and follow them until the user drags one
-  // (override wins). Stored as null-until-touched so late-loading data still seeds.
-  const [raiseOverride, setRaisePct] = useState<number | null>(null);
-  const [savingsOverride, setSavingsPct] = useState<number | null>(null);
-  const [returnOverride, setReturnPct] = useState<number | null>(null);
-  const [inflationOverride, setInflationPct] = useState<number | null>(null);
-  const [years, setYears] = useState(15);
-  const [extraMonthly, setExtraMonthly] = useState(5000);
-  const raisePct = raiseOverride ?? raiseSeed;
-  const savingsPct = savingsOverride ?? savingsSeed;
-  const returnPct = returnOverride ?? growthReturnRate;
-  const inflationPct = inflationOverride ?? inflationSeed;
+  // Assumptions are persisted per scenario (null-until-dragged, so each slider
+  // keeps following its live-data seed until the user sets it). Scenario B seeds
+  // from A, so "compare" opens as a copy of A that you diverge one lever at a time.
+  const compareOn = fa.compareOn;
+  const setA = (patch: Partial<ForecastScenario>) => setForecastAssumptions({ ...fa, a: { ...fa.a, ...patch } });
+  const setB = (patch: Partial<ForecastScenario>) => setForecastAssumptions({ ...fa, b: { ...fa.b, ...patch } });
+  const toggleCompare = () => setForecastAssumptions({ ...fa, compareOn: !fa.compareOn });
+
+  const effA: EffectiveScenario = {
+    raisePct: fa.a.raisePct ?? raiseSeed,
+    savingsPct: fa.a.savingsPct ?? savingsSeed,
+    returnPct: fa.a.returnPct ?? growthReturnRate,
+    inflationPct: fa.a.inflationPct ?? inflationSeed,
+    years: fa.a.years ?? 15,
+    extraMonthly: fa.a.extraMonthly ?? 5000,
+  };
+  const effB: EffectiveScenario = {
+    raisePct: fa.b.raisePct ?? effA.raisePct,
+    savingsPct: fa.b.savingsPct ?? effA.savingsPct,
+    returnPct: fa.b.returnPct ?? effA.returnPct,
+    inflationPct: fa.b.inflationPct ?? effA.inflationPct,
+    years: fa.b.years ?? effA.years,
+    extraMonthly: fa.b.extraMonthly ?? effA.extraMonthly,
+  };
+  // Scenario A drives every existing tile/chart/memo below under the original names.
+  const { returnPct, years, extraMonthly } = effA;
 
   // Select the real mortgage by housing mode, exactly as the context does for
   // net-worth projections: homeowner uses the `homeowner` inputs; first-buyer &
@@ -110,7 +126,6 @@ const ForecastPage: React.FC = () => {
   const isHomeowner = housingMode === 'homeowner';
   const startingMortgage = (isHomeowner ? homeowner.currentMortgageBalance : loan.laanebelop) ?? 0;
   const mortgageRatePct = (isHomeowner ? homeowner.rente : loan.rente) ?? 5;
-  const mortgageRate = mortgageRatePct / 100;
   const mortgageTermYears = (isHomeowner ? homeowner.nedbetalingstid : loan.nedbetalingstid) ?? 25;
   // Annual mortgage payment = 12 × the shared monthly annuity, so the forecast
   // uses the same payment as the Loan page rather than re-deriving it annually.
@@ -119,56 +134,32 @@ const ForecastPage: React.FC = () => {
     [startingMortgage, mortgageRatePct, mortgageTermYears],
   );
 
-  // Forecast series
-  const projection = useMemo(() => {
-    const out: {
-      yearIndex: number;
-      yearLabel: number;
-      gross: number;
-      net: number;
-      contribution: number;
-      netWorth: number;
-      netWorthReal: number;
-      mortgage: number;
-    }[] = [];
-    const startYear = new Date().getFullYear();
-    let gross = currentGross;
-    let netWorth = totalEquity;
-    let mortgage = startingMortgage;
+  // Non-assumption inputs shared by both scenarios (the user's real position).
+  const inputs = useMemo<ForecastInputs>(() => ({
+    currentGross, totalEquity, startingMortgage, mortgageRatePct,
+    annualMortgagePayment, region, customTaxRatePct,
+    ipsAnnualContribution: pension.ipsAnnualContribution,
+    startYear: new Date().getFullYear(),
+  }), [currentGross, totalEquity, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution]);
 
-    for (let y = 0; y <= years; y++) {
-      // Interest on the balance entering this year — the year's rentefradrag base,
-      // which declines as the mortgage amortizes.
-      const mortgageInterest = mortgage * mortgageRate;
-      if (y > 0) {
-        gross = gross * (1 + raisePct / 100);
-        // Mortgage paydown (interest grows balance, payment reduces it)
-        mortgage = Math.max(0, mortgage + mortgageInterest - annualMortgagePayment);
-      }
-      const tax = calcTaxByRegion(gross, region, customTaxRatePct, pension.ipsAnnualContribution, mortgageInterest);
-      const net = tax.netAnnual;
-      const contribution = Math.max(0, net * (savingsPct / 100));
-      if (y > 0) {
-        netWorth = netWorth * (1 + returnPct / 100) + contribution;
-      }
-      const realDeflator = Math.pow(1 + inflationPct / 100, y);
-      const netWorthReal = netWorth / realDeflator;
-      out.push({
-        yearIndex: y,
-        yearLabel: startYear + y,
-        gross: Math.round(gross),
-        net: Math.round(net),
-        contribution: Math.round(contribution),
-        netWorth: Math.round(netWorth),
-        netWorthReal: Math.round(netWorthReal),
-        mortgage: Math.round(mortgage),
-      });
-    }
-    return out;
-  }, [currentGross, totalEquity, startingMortgage, mortgageRate, annualMortgagePayment, raisePct, savingsPct, returnPct, inflationPct, years, region, customTaxRatePct, pension.ipsAnnualContribution]);
+  // Forecast series — scenario A always, scenario B only while comparing.
+  const projection = useMemo(() => projectForecast(inputs, effA),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inputs, effA.raisePct, effA.savingsPct, effA.returnPct, effA.inflationPct, effA.years]);
+  const projectionB = useMemo(() => (compareOn ? projectForecast(inputs, effB) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [compareOn, inputs, effB.raisePct, effB.savingsPct, effB.returnPct, effB.inflationPct, effB.years]);
 
   const last = projection[projection.length - 1];
   const first = projection[0];
+
+  // A vs B final net worth (compare mode) — the delta tile.
+  const compare = useMemo(() => {
+    if (!projectionB || projectionB.length === 0) return null;
+    const aFinal = projection[projection.length - 1].netWorth;
+    const bFinal = projectionB[projectionB.length - 1].netWorth;
+    return { aFinal, bFinal, delta: aFinal - bFinal };
+  }, [projection, projectionB]);
 
   // Bear/base/bull bands (return ±3pp) so the projection doesn't read as a
   // single certain line. Contributions are the same across scenarios (they
@@ -180,8 +171,9 @@ const ForecastPage: React.FC = () => {
     return projection.map((p, i) => ({
       ...p,
       band: [bands[i]?.bear ?? p.netWorth, bands[i]?.bull ?? p.netWorth] as [number, number],
+      netWorthB: projectionB ? (projectionB[i]?.netWorth ?? null) : null,
     }));
-  }, [projection, totalEquity, returnPct, years]);
+  }, [projection, projectionB, totalEquity, returnPct, years]);
 
   // Financial independence (4% rule): FI number = 25× annual essential spend.
   // The FI year is the first projected year whose real (today's-kroner) net worth
@@ -230,17 +222,60 @@ const ForecastPage: React.FC = () => {
 
       {/* Control panel */}
       <div className={`${card} p-5 md:p-7 space-y-5`}>
-        <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
-          <Activity size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{t.forecastPage.assumptions}</h3>
+        <div className="flex items-center justify-between gap-2 pb-4 border-b border-[var(--border)]">
+          <div className="flex items-center gap-2">
+            <Activity size={14} strokeWidth={2} className="text-[var(--text-2)]" />
+            <h3 className={sectionLabel}>{t.forecastPage.assumptions}</h3>
+          </div>
+          <button
+            onClick={toggleCompare}
+            aria-pressed={compareOn}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium border transition-colors"
+            style={compareOn
+              ? { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--accent)' }
+              : { borderColor: 'var(--border)', color: 'var(--text-2)' }}
+          >
+            <GitCompare size={13} strokeWidth={2} />
+            {compareOn ? t.forecast.compareOn : t.forecast.compare}
+          </button>
         </div>
+
+        {compareOn && <div className={sectionLabel} style={{ color: 'var(--accent)' }}>{t.forecast.scenarioA}</div>}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <SliderInput label={t.forecast.raiseAssumption} value={raisePct} onChange={setRaisePct} min={0} max={15} step={0.5} suffix="%" />
-          <SliderInput label={t.forecast.savingsRateAssumption} value={savingsPct} onChange={setSavingsPct} min={0} max={70} step={5} suffix="%" />
-          <SliderInput label={t.forecast.returnAssumption} value={returnPct} onChange={setReturnPct} min={-2} max={12} step={0.5} suffix="%" />
-          <SliderInput label={t.forecast.inflationAssumption} value={inflationPct} onChange={setInflationPct} min={0} max={10} step={0.5} suffix="%" />
-          <SliderInput label={t.forecast.years} value={years} onChange={setYears} min={1} max={40} step={1} suffix={t.forecastPage.yearSuffix} />
+          <SliderInput label={t.forecast.raiseAssumption} value={effA.raisePct} onChange={(v) => setA({ raisePct: v })} min={0} max={15} step={0.5} suffix="%" />
+          <SliderInput label={t.forecast.savingsRateAssumption} value={effA.savingsPct} onChange={(v) => setA({ savingsPct: v })} min={0} max={70} step={5} suffix="%" />
+          <SliderInput label={t.forecast.returnAssumption} value={effA.returnPct} onChange={(v) => setA({ returnPct: v })} min={-2} max={12} step={0.5} suffix="%" />
+          <SliderInput label={t.forecast.inflationAssumption} value={effA.inflationPct} onChange={(v) => setA({ inflationPct: v })} min={0} max={10} step={0.5} suffix="%" />
+          <SliderInput label={t.forecast.years} value={effA.years} onChange={(v) => setA({ years: v })} min={1} max={40} step={1} suffix={t.forecastPage.yearSuffix} />
         </div>
+
+        {compareOn && (
+          <>
+            <div className="pt-1 border-t border-[var(--border)]" />
+            <div className={sectionLabel} style={{ color: 'var(--brass)' }}>{t.forecast.scenarioB}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <SliderInput label={t.forecast.raiseAssumption} value={effB.raisePct} onChange={(v) => setB({ raisePct: v })} min={0} max={15} step={0.5} suffix="%" accent="var(--brass)" />
+              <SliderInput label={t.forecast.savingsRateAssumption} value={effB.savingsPct} onChange={(v) => setB({ savingsPct: v })} min={0} max={70} step={5} suffix="%" accent="var(--brass)" />
+              <SliderInput label={t.forecast.returnAssumption} value={effB.returnPct} onChange={(v) => setB({ returnPct: v })} min={-2} max={12} step={0.5} suffix="%" accent="var(--brass)" />
+              <SliderInput label={t.forecast.inflationAssumption} value={effB.inflationPct} onChange={(v) => setB({ inflationPct: v })} min={0} max={10} step={0.5} suffix="%" accent="var(--brass)" />
+              <SliderInput label={t.forecast.years} value={effB.years} onChange={(v) => setB({ years: v })} min={1} max={40} step={1} suffix={t.forecastPage.yearSuffix} accent="var(--brass)" />
+            </div>
+            {compare && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] p-4 border bg-[var(--bg-raised)] border-[var(--border)]">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{t.forecast.compareDelta}</div>
+                  <div className="text-[12px] font-mono mt-0.5" style={{ color: 'var(--text-2)' }}>
+                    <span style={{ color: 'var(--accent)' }}>A</span> {formatCurrency(compare.aFinal)} · <span style={{ color: 'var(--brass)' }}>B</span> {formatCurrency(compare.bFinal)}
+                  </div>
+                </div>
+                <div className="text-[14px] font-mono font-semibold" style={{ color: compare.delta >= 0 ? 'var(--accent)' : 'var(--brass)' }}>
+                  {(compare.delta >= 0 ? t.forecast.compareAWins : t.forecast.compareBWins)
+                    .replace('{amount}', formatCurrency(Math.abs(compare.delta)))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Summary tiles */}
@@ -338,7 +373,7 @@ const ForecastPage: React.FC = () => {
           </div>
           <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.prepayDesc}</p>
           <div className="max-w-xs">
-            <SliderInput label={t.forecast.prepayExtra} value={extraMonthly} onChange={setExtraMonthly} min={0} max={20000} step={500} suffix=" kr" />
+            <SliderInput label={t.forecast.prepayExtra} value={extraMonthly} onChange={(v) => setA({ extraMonthly: v })} min={0} max={20000} step={500} suffix=" kr" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
             <FireStat
@@ -398,13 +433,17 @@ const ForecastPage: React.FC = () => {
               <ReferenceLine y={first.netWorth} stroke="var(--text-3)" strokeDasharray="2 4" />
               {/* Uncertainty band (bear↔bull), drawn first so the lines sit on top. */}
               <Area type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={false} activeDot={false} legendType="none" />
-              <Area isAnimationActive={!reduced} type="monotone" dataKey="netWorth" name={t.forecastPage.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#forecastGradient)" />
+              <Area isAnimationActive={!reduced} type="monotone" dataKey="netWorth" name={compareOn ? t.forecast.scenarioA : t.forecastPage.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#forecastGradient)" />
               <Area isAnimationActive={!reduced} type="monotone" dataKey="netWorthReal" name={t.forecastPage.todaysKroner} stroke="var(--violet)" strokeWidth={2} strokeDasharray="5 3" fill="url(#forecastRealGradient)" />
+              {compareOn && (
+                <Area isAnimationActive={!reduced} type="monotone" dataKey="netWorthB" name={t.forecast.scenarioB} stroke="var(--brass)" strokeWidth={2} strokeDasharray="6 3" fill="none" connectNulls />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{t.forecastPage.nominal}</div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />{compareOn ? t.forecast.scenarioA : t.forecastPage.nominal}</div>
+          {compareOn && <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--brass)' }} />{t.forecast.scenarioB}</div>}
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />{t.forecastPage.todaysKroner}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)', opacity: 0.25 }} />{t.forecastPage.band}</div>
         </div>
@@ -452,13 +491,14 @@ interface SliderInputProps {
   max: number;
   step: number;
   suffix?: string;
+  accent?: string;
 }
 
-const SliderInput: React.FC<SliderInputProps> = ({ label, value, onChange, min, max, step, suffix }) => (
+const SliderInput: React.FC<SliderInputProps> = ({ label, value, onChange, min, max, step, suffix, accent = 'var(--accent)' }) => (
   <div className="space-y-2">
     <div className="flex items-baseline justify-between gap-2">
       <span className={sectionLabel}>{label}</span>
-      <span className="font-mono text-[13px] font-semibold" style={{ color: 'var(--accent)' }}>
+      <span className="font-mono text-[13px] font-semibold" style={{ color: accent }}>
         {value}{suffix}
       </span>
     </div>
@@ -469,8 +509,8 @@ const SliderInput: React.FC<SliderInputProps> = ({ label, value, onChange, min, 
       step={step}
       value={value}
       onChange={(e) => onChange(parseFloat(e.target.value))}
-      className="w-full h-2 rounded-full appearance-none cursor-pointer accent-[var(--accent)]"
-      style={{ background: 'color-mix(in srgb, var(--text-3) 18%, transparent)' }}
+      className="w-full h-2 rounded-full appearance-none cursor-pointer"
+      style={{ accentColor: accent, background: 'color-mix(in srgb, var(--text-3) 18%, transparent)' }}
     />
   </div>
 );

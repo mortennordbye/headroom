@@ -88,6 +88,7 @@ const DashboardPage: React.FC = () => {
     mortgageRate,
     mortgageTermYears,
     grossAnnualIncome,
+    region,
     assumptionsNudgeDismissed,
     dismissAssumptionsNudge,
   } = useFinance();
@@ -746,6 +747,9 @@ const DashboardPage: React.FC = () => {
           <div className="h-[240px] w-full mt-2">
             <Suspense fallback={<ChartSkeleton />}><CashflowChart /></Suspense>
           </div>
+          {region === 'no' && (
+            <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>{t.charts.feriepengerNote}</p>
+          )}
         </Card>
 
         {/* ─── Resilience row: emergency fund + debt-to-income (6 + 6) ─── */}

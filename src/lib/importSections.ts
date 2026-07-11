@@ -31,7 +31,7 @@ export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
   included: [
     'assets', 'pension', 'loan', 'housingMode', 'homeowner', 'transition',
     'employerCostConfig', 'billingConfig',
-    'lang', 'savingsTargetPercent', 'growthReturnRate', 'houseGrowthRate',
+    'lang', 'savingsTargetPercent', 'growthReturnRate', 'forecastAssumptions', 'houseGrowthRate',
     'cashGrowthRate', 'cryptoGrowthRate', 'displayCurrency', 'nokToUsd',
     'customCurrencyCode', 'customCurrencyRate', 'region', 'customTaxRatePct',
     'hiddenNavItems', 'onboardingCompleted', 'assumptionsNudgeDismissed',

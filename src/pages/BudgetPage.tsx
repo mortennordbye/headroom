@@ -187,6 +187,9 @@ const BudgetPage: React.FC = () => {
     savingsTargetPercent,
     payday,
     labelRules,
+    region,
+    grossAnnualIncome,
+    employerCostConfig,
     formatCurrency,
     formatCurrencyShort,
   } = useFinance();
@@ -195,9 +198,12 @@ const BudgetPage: React.FC = () => {
   // under the target (same inputs as SavingsRateChart so the banner and line agree).
   const savingsWarning = useMemo(() => {
     const months = lastNMonthKeys(currentMonth, 12);
-    const rows = monthlyCashflow(months, nonTransferTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses);
+    const seasonal = region === 'no'
+      ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
+      : null;
+    const rows = monthlyCashflow(months, nonTransferTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses, seasonal);
     return savingsRateStatus(rows, savingsTargetPercent);
-  }, [currentMonth, nonTransferTransactions, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsTargetPercent]);
+  }, [currentMonth, nonTransferTransactions, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsTargetPercent, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);

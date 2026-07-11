@@ -16,6 +16,7 @@ const SalaryPage = lazy(() => import('./pages/SalaryPage'));
 const ForecastPage = lazy(() => import('./pages/ForecastPage'));
 const PensionPage = lazy(() => import('./pages/PensionPage'));
 const EmployerCostPage = lazy(() => import('./pages/EmployerCostPage'));
+const YearReviewPage = lazy(() => import('./pages/YearReviewPage'));
 
 function RouteFallback() {
   const { t } = useFinance();
@@ -52,6 +53,7 @@ function App() {
               <Route path="forecast" element={<Suspense fallback={<RouteFallback />}><ForecastPage /></Suspense>} />
               <Route path="pension" element={<Suspense fallback={<RouteFallback />}><PensionPage /></Suspense>} />
               <Route path="employer-cost" element={<Suspense fallback={<RouteFallback />}><EmployerCostPage /></Suspense>} />
+              <Route path="year" element={<Suspense fallback={<RouteFallback />}><YearReviewPage /></Suspense>} />
               <Route path="settings" element={<Suspense fallback={<RouteFallback />}><SettingsPage /></Suspense>} />
             </Route>
           </Routes>

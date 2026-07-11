@@ -132,17 +132,26 @@ withholding to the expected liability (via a caller-supplied tax fn carrying reg
 deductions). A Salary tile flags a likely restskatt or refund past a materiality threshold,
 with a note on the June/December withholding it doesn't model. (`src/pages/SalaryPage.tsx`.)
 
-### 20. Feriepenger month modeling
-`monthlyCashflow` applies a flat income to every month, so the June feriepenger spike and
-the December half-trekk are invisible unless a payslip is imported for those months, even
-though `MonthlyPayslip.holidayPay` and the `holiday_pay` bonus type exist. Model the
-June/December swings in the budget projection (seeded from `feriepengesatsPct`).
+### 20. Feriepenger month modeling ✅ SHIPPED
+`feriepengerMonthlyNet` (pure, unit-tested in `src/lib/feriepenger.ts`) reshapes the flat
+monthly net into the June feriepenger spike (lump paid, no tax that month, seeded from
+`feriepengesatsPct` × gross) and the December half-trekk spike, recovering both from the 10
+ordinary months so the calendar year still sums to the same net. `monthlyCashflow` takes an
+optional `seasonal` config and applies it to un-overridden months (a real payslip override
+always wins); wired on the Cashflow + Savings-rate charts and the Budget savings warning,
+gated on the Norwegian region. A Dashboard note explains the swings. (`src/lib/feriepenger.ts`,
+`src/lib/monthlyCashflow.ts`, `src/components/charts/*`, `src/pages/DashboardPage.tsx`.)
 
-### 21. Saved forecast scenarios / A-B compare
-The five Forecast assumption sliders are local `useState`: a refresh loses them and two
-futures can't be held side by side (rate +2pp vs job change vs prepay). Persist assumptions
-and add a two-scenario compare (two projection lines plus a delta tile).
-Where: `src/pages/ForecastPage.tsx`.
+### 21. Saved forecast scenarios / A-B compare ✅ SHIPPED
+The inline projection loop was extracted into `projectForecast` (pure, unit-tested in
+`src/lib/forecastProjection.ts`) so two scenarios run the same tax/mortgage/return math. The
+five assumptions are now a **persisted** object `forecastAssumptions` (scenario A, compare
+scenario B, compare on/off) — each lever null-until-dragged so it keeps seeding from live data;
+wired through every registry-enforced persist site. A "Compare" toggle reveals a second slider
+row (B seeds from A, diverge one lever at a time), overlays B's net-worth line (brass, dashed)
+on the projection chart, and shows an A-vs-B end-of-horizon delta tile.
+(`src/lib/forecastProjection.ts`, `src/pages/ForecastPage.tsx`, `src/context/FinanceContext.tsx`,
+`src/lib/payloadRegistry.ts`, `src/lib/importSections.ts`.)
 
 ### 22. "Prepay mortgage vs invest" comparison ✅ SHIPPED
 `prepayVsInvest` (pure, unit-tested in `src/lib/prepayVsInvest.ts`) grows a fixed extra
@@ -171,35 +180,44 @@ progress of net worth toward it, and the projected FI year — the first project
 real (today's-kroner) net worth clears the target, so it tracks the assumption sliders live.
 (`src/pages/ForecastPage.tsx`.)
 
-### 26. Year-in-review report
-Per-year comp (`compByYear`), annual cashflow (`monthlyCashflow`) and multi-month category
-totals (`monthlyCategoryTotals`) all exist as pure functions, but there's no consolidated
-annual view (income, tax paid, savings rate, top categories, net-worth change) and no
-print/PDF path. Assemble a year-in-review page from the existing aggregators (pairs with
-the print stylesheet, item 63).
-HISTORY_PLAN: unblocked — the plan has landed (main); net-worth change and month-by-month
-balances now come straight from snapshots (`equitySeriesFrom` / `netWorthSeriesFrom`)
-instead of needing their own aggregation.
+### 26. Year-in-review report ✅ SHIPPED
+`yearReview` (pure, unit-tested in `src/lib/yearReview.ts`) assembles one calendar year from
+the existing aggregators — income (`monthlyCashflow` over per-month derived/override income),
+tax paid (summed from imported payslips, with coverage), savings rate, net-worth change
+(snapshot/`netWorthHistory` first-vs-last, anchored to live net worth for the current year)
+and top spending categories (transfers excluded). A new `/year` route (nav + More sheet)
+renders a hero, four summary tiles, a top-categories bar list and a month-by-month table with
+totals, plus a "Print / save PDF" button (`window.print()`, controls `print:hidden`) that
+rides the existing print stylesheet. `derivedNetMonthlyFor` was exposed on the context for the
+per-month income reconstruction. (`src/lib/yearReview.ts`, `src/pages/YearReviewPage.tsx`,
+`src/App.tsx`, `src/components/navItems.tsx`.)
 
 ### Data safety & self-hosting
 
-### 29. Automated, rotating backups
-`make backup` is a single manual `docker cp` with no schedule, retention or rotation; a
-friend who forgets has exactly one live copy. Ship a compose sidecar or entrypoint cron that
-snapshots and prunes to N copies, or an in-app scheduled export. Where: `Makefile`,
-`docker-compose.yml`.
+### 29. Automated, rotating backups ✅ SHIPPED
+`server/backup.js` (pure prune/rotation logic, unit-tested) runs inside the existing single
+`node` process — no cron, no extra image package, no new dependency — using better-sqlite3's
+built-in online `.backup()` to write a timestamped, consistent snapshot into `${DATA_DIR}/backups`
+on an interval, then prunes to the N newest. Configured via `BACKUP_INTERVAL_HOURS` (default 24,
+0 disables) and `BACKUP_KEEP` (default 7), documented in `docker-compose.yml` and the README;
+the first run is delayed by the time left since the newest snapshot so restarts don't churn.
+The off-volume `make backup` still complements it. (`server/backup.js`, `server/index.js`,
+`Dockerfile`, `docker-compose.yml`, `README.md`.)
 
-### 31. In-app bank sync history
-`recordSync` overwrites `last_sync` and the sync route's `{fetched, added, total}` result is
-never persisted, so a self-hoster can't see whether the nightly cron ran or how many rows it
-pulled. Persist a small rolling sync log (timestamp, added count, ok/err) and render it in
-`BankSyncCard`. Where: `server/bank.js`, `src/components/BankSyncCard.tsx`.
+### 31. In-app bank sync history ✅ SHIPPED
+`recordSync(outcome)` now appends a bounded rolling log entry (timestamp, added count, ok/err —
+pure `makeSyncEntry`/`appendSyncLog`, unit-tested) to the server-side `eb-session.json` store and
+the sync route records both successes and failures. `getStatus()` surfaces the log (newest first)
+and `BankSyncCard` renders the recent entries under the sync button, so a self-hoster can see
+whether the nightly cron ran and what it pulled — no app-blob persist sites touched.
+(`server/bank.js`, `server/index.js`, `src/components/BankSyncCard.tsx`.)
 
-### 32. Compose resource limits and pinnable image docs
-`docker-compose.yml` sets no memory/CPU limits on a process that loads the whole blob into
-memory, and the README's update instructions only mention `:latest`, never the immutable
-`sha-` tags CI publishes, so friends can't pin or roll back. Add a modest `mem_limit` and
-document `sha-` pinning.
+### 32. Compose resource limits and pinnable image docs ✅ SHIPPED
+`docker-compose.yml` now sets modest ceilings (`mem_limit: 512m`, `cpus: 1.5`) so a runaway
+can't starve the host — verified enforced on the running container (single-user usage sits
+~70 MiB, well under). The README's Updating section documents pinning to the immutable
+`sha-<short-commit>` tags CI publishes (alongside `:latest`) for reproducible deploys and
+one-command rollback. (`docker-compose.yml`, `README.md`.)
 
 ### Accessibility
 
@@ -218,11 +236,15 @@ it reveals on focus and jumps to `<main id="main-content" tabIndex={-1}>`, so a 
 can bypass the nav on every route. Label routed through `translations.ts`.
 (`src/components/Layout.tsx`.)
 
-### 35. Persistent glossary for domain terms
-The only explanations of "headroom", LTV, trinnskatt, OTP/IPS live in the one-shot `learn`
-onboarding topics (`src/lib/onboarding.ts`); after `onboardingCompleted` there's no way to
-look a term up. Add inline info tooltips on domain labels or a glossary panel behind the
-existing header help button.
+### 35. Persistent glossary for domain terms ✅ SHIPPED
+A dedicated, searchable glossary panel (`GlossaryModal`, built on `ModalShell`) reachable any
+time from a new header book button and a "More" sheet entry — independent of the one-shot
+onboarding tour. `src/lib/glossary.ts` (pure, unit-tested) holds the ordered term list and the
+region gate; the 16 definitions (headroom, net worth, equity, LTV, savings rate, emergency
+fund, effective rate, plus the Norway-only feriepenger/trinnskatt/trygdeavgift/minstefradrag/
+marginalskatt/restskatt/OTP/IPS/BSU set) live in `t.glossary.terms` in both locales, with the
+Norwegian-specific ones hidden outside the NO region. Free-text search filters term + body.
+(`src/lib/glossary.ts`, `src/components/GlossaryModal.tsx`, `src/components/Layout.tsx`.)
 
 ### 36. Keyboard month-stepping ✅ SHIPPED (arrow keys; route shortcuts deferred)
 The header month picker is now a `role="group"` with an `onKeyDown`: Left/Right step the

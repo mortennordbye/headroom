@@ -15,12 +15,14 @@ import { monthlyCashflow } from '../../lib/monthlyCashflow';
  * Monthly cashflow for the last 12 months: money in (income) vs money out
  * (fixed expenses + logged expense transactions), with a net-surplus line.
  * Income uses the manual override for a month when set, else the current
- * effective income as an estimate; fixed expenses use the current total for
- * every month (they aren't snapshotted), so past months are approximate.
+ * effective income as an estimate — reshaped by the June feriepenger spike and
+ * December half-trekk for Norwegian salary; fixed expenses use the current total
+ * for every month (they aren't snapshotted), so past months are approximate.
  */
 export default function CashflowChart() {
   const {
     t, lang, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
+    region, grossAnnualIncome, employerCostConfig,
     // Whole-finance cashflow: net out internal transfers, but not per-account (income
     // isn't account-scoped), so use nonTransferTransactions.
     nonTransferTransactions: dailyTransactions, formatCurrencyShort,
@@ -30,12 +32,15 @@ export default function CashflowChart() {
 
   const data = useMemo(() => {
     const months = lastNMonthKeys(currentMonth, 12);
-    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses)
+    const seasonal = region === 'no'
+      ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
+      : null;
+    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses, seasonal)
       .map(({ month, income, expenses, net }) => ({
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
         income, expenses, net,
       }));
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   return (
     <div role="img" aria-label={t.charts.aria.cashflow} className="w-full h-full">

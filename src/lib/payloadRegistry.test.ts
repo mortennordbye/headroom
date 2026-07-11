@@ -136,6 +136,11 @@ function fullPayload(): ExportPayload {
     lang: 'en',
     savingsTargetPercent: 25,
     growthReturnRate: 8,
+    forecastAssumptions: {
+      a: { raisePct: 5, savingsPct: 30, returnPct: 7, inflationPct: 3, years: 20, extraMonthly: 4000 },
+      b: { raisePct: null, savingsPct: null, returnPct: 9, inflationPct: null, years: null, extraMonthly: null },
+      compareOn: true,
+    },
     houseGrowthRate: 4,
     cashGrowthRate: 2,
     cryptoGrowthRate: 1,
@@ -173,21 +178,21 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 45 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(45);
+  it('registers exactly the 46 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(46);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (26) or preserve (19)', () => {
+  it('partitions every field into reset (26) or preserve (20)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
     expect(reset).toHaveLength(26);
-    expect(preserve).toHaveLength(19);
+    expect(preserve).toHaveLength(20);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([
-      'lang', 'savingsTargetPercent', 'growthReturnRate', 'houseGrowthRate', 'cashGrowthRate',
-      'cryptoGrowthRate', 'displayCurrency', 'nokToUsd', 'customCurrencyCode', 'customCurrencyRate',
-      'jobs', 'salaries', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'region',
+      'lang', 'savingsTargetPercent', 'growthReturnRate', 'forecastAssumptions', 'houseGrowthRate',
+      'cashGrowthRate', 'cryptoGrowthRate', 'displayCurrency', 'nokToUsd', 'customCurrencyCode',
+      'customCurrencyRate', 'jobs', 'salaries', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'region',
       'customTaxRatePct', 'hiddenNavItems',
     ]));
   });

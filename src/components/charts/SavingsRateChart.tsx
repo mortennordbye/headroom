@@ -17,6 +17,7 @@ import { monthlyCashflow } from '../../lib/monthlyCashflow';
 export default function SavingsRateChart() {
   const {
     t, lang, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
+    region, grossAnnualIncome, employerCostConfig,
     // Whole-finance rate: net out internal transfers, but not per-account (income
     // isn't account-scoped), so use nonTransferTransactions.
     nonTransferTransactions: dailyTransactions, savingsTargetPercent,
@@ -26,12 +27,15 @@ export default function SavingsRateChart() {
 
   const data = useMemo(() => {
     const months = lastNMonthKeys(currentMonth, 12);
-    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses)
+    const seasonal = region === 'no'
+      ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
+      : null;
+    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses, seasonal)
       .map(({ month, rate }) => ({
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
         rate,
       }));
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   return (
     <div role="img" aria-label={t.charts.aria.savingsRate} className="w-full h-full">
