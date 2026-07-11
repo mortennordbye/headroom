@@ -714,6 +714,9 @@ async function fetchMappedTransactions() {
 
 // How many recent sync outcomes to keep in the rolling log (oldest pruned).
 const SYNC_LOG_MAX = 20;
+// Cap how many added-transaction summaries we store per entry, so a large
+// first-time backfill can't bloat the session store.
+const SYNC_LOG_ITEMS_MAX = 50;
 
 /** Shape one sync outcome into a compact, bounded log entry. Pure. */
 function makeSyncEntry(outcome, nowIso) {
@@ -724,6 +727,13 @@ function makeSyncEntry(outcome, nowIso) {
     entry.added = num(outcome.added);
     entry.fetched = num(outcome.fetched);
     entry.total = num(outcome.total);
+    if (Array.isArray(outcome.items) && outcome.items.length) {
+      entry.items = outcome.items.slice(0, SYNC_LOG_ITEMS_MAX).map((it) => ({
+        date: typeof it.date === 'string' ? it.date.slice(0, 10) : '',
+        description: String(it.description ?? '').slice(0, 80),
+        amount: Number.isFinite(it.amount) ? it.amount : 0,
+      }));
+    }
   } else if (outcome.error) {
     entry.error = String(outcome.error).slice(0, 200);
   }

@@ -22,6 +22,26 @@ describe('makeSyncEntry', () => {
   it('treats a missing ok flag as success', () => {
     expect(makeSyncEntry({ added: 1 }, 't').ok).toBe(true);
   });
+
+  it('stores a compact summary of added transactions', () => {
+    const e = makeSyncEntry(
+      { ok: true, added: 2, items: [
+        { id: 'a', date: '2026-07-05T00:00:00.000Z', description: 'Rema 1000', amount: 742, extra: 'dropped' },
+        { date: '2026-07-06', description: 'x'.repeat(120), amount: 3.5 },
+      ] },
+      't',
+    );
+    expect(e.items).toEqual([
+      { date: '2026-07-05', description: 'Rema 1000', amount: 742 },
+      { date: '2026-07-06', description: 'x'.repeat(80), amount: 3.5 },
+    ]);
+  });
+
+  it('omits items when none were added, and caps the list at 50', () => {
+    expect(makeSyncEntry({ ok: true, items: [] }, 't')).not.toHaveProperty('items');
+    const many = Array.from({ length: 60 }, (_, i) => ({ date: '2026-07-05', description: `d${i}`, amount: i }));
+    expect(makeSyncEntry({ ok: true, items: many }, 't').items).toHaveLength(50);
+  });
 });
 
 describe('appendSyncLog', () => {

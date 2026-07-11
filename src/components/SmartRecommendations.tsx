@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { AlertTriangle, TrendingUp, Edit2 } from 'lucide-react';
+import { format } from 'date-fns';
+import { AlertTriangle, TrendingUp, Edit2, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
 import { ProgressBar } from './ui/ProgressBar';
@@ -89,6 +90,9 @@ export default function SmartRecommendations() {
     suggestedInvestment,
     conservativeMode,
     conservativeReason,
+    currentMonth,
+    conservativeNudgeDismissedMonth,
+    dismissConservativeNudge,
     monthlyIncomes,
     savingsTargetPercent,
     setSavingsTargetPercent,
@@ -160,10 +164,19 @@ export default function SmartRecommendations() {
 
   return (
     <div data-tour="budget-plan" className={`${card} p-5 md:p-7`}>
-      {conservativeMode && (
+      {conservativeMode && conservativeNudgeDismissedMonth !== format(currentMonth, 'yyyy-MM') && (
         <div className="mb-4 flex items-center gap-2 border bg-[var(--warning-bg)] border-[color-mix(in_srgb,var(--warning)_30%,transparent)] rounded-[6px] px-4 py-2.5 text-[12px] text-[var(--warning)] font-medium">
           <AlertTriangle size={13} className="shrink-0" />
-          <span>{conservativeReason === 'volatility' ? t.volatileIncomeWarning : t.conservativeWarning}</span>
+          <span className="flex-1">{conservativeReason === 'volatility' ? t.volatileIncomeWarning : t.conservativeWarning}</span>
+          <button
+            type="button"
+            onClick={() => dismissConservativeNudge(format(currentMonth, 'yyyy-MM'))}
+            aria-label={t.dismiss}
+            title={t.dismiss}
+            className="shrink-0 -mr-1 p-1 rounded-[6px] transition-opacity hover:opacity-70"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 

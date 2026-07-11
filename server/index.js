@@ -504,6 +504,7 @@ app.post('/api/bank/sync', async (_req, res) => {
     const blob = stored.content;
     const existing = Array.isArray(blob.dailyTransactions) ? blob.dailyTransactions : [];
     const before = existing.length;
+    const existingIds = new Set(existing.map((tx) => tx.id));
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
     blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds);
     // Bump rev so *other* open tabs see the change and refetch the freshly-synced
@@ -512,7 +513,10 @@ app.post('/api/bank/sync', async (_req, res) => {
     const newRev = writeBlob('headroom', JSON.stringify(blob), stored.rev);
     const added = blob.dailyTransactions.length - before;
     const total = blob.dailyTransactions.length;
-    bank.recordSync({ ok: true, added, fetched: mapped.length, total });
+    // The rows genuinely new this sync (id not in the prior ledger), so the
+    // Settings sync-history can list *what* was pulled in, not just how many.
+    const items = blob.dailyTransactions.filter((tx) => !existingIds.has(tx.id));
+    bank.recordSync({ ok: true, added, fetched: mapped.length, total, items });
     res.set('X-Data-Rev', String(newRev));
     res.json({
       ok: true,
