@@ -23,7 +23,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useFinance, DEFAULT_TAX_RATES, type Assets, type Debt, type Pension, type SavingsAccount } from '../context/FinanceContext';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
+import { ChartSkeleton } from '../components/ui/Skeleton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { provenanceOf } from '../lib/provenance';
 import EditModal, { type ModalField } from '../components/EditModal';
@@ -37,6 +39,7 @@ import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
+import { currentMonthKey } from '../lib/date';
 import { bsuStatus } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
 import { formatAxisInt } from '../lib/format';
@@ -88,6 +91,7 @@ const AssetPage: React.FC = () => {
     restoreGrowthRateDefaults,
     balanceSnapshots,
   } = useFinance();
+  const reduced = useReducedMotion();
 
   // Time machine: when viewing a past month, render that month's snapshot (read-only).
   const hist = useBalanceHistory();
@@ -129,6 +133,21 @@ const AssetPage: React.FC = () => {
     // confirms — matching fixed expenses, goals and debts — rather than deleting
     // instantly.
     const [pendingSavingsDelete, setPendingSavingsDelete] = useState<string | null>(null);
+
+    // Projection legend is click-to-toggle: clicking a bucket hides/shows its
+    // area so the user can isolate one series (e.g. stocks vs house).
+    const [hiddenBuckets, setHiddenBuckets] = useState<Set<string>>(() => new Set());
+    const toggleBucket = (key: string) => setHiddenBuckets(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+    const projectionBuckets = [
+      { key: 'stocks', label: t.bucketStocks, color: 'var(--forest)' },
+      { key: 'crypto', label: t.bucketCrypto, color: 'var(--rust)' },
+      { key: 'cash', label: t.bucketCash, color: 'var(--slate)' },
+      { key: 'house', label: t.bucketHouse, color: 'var(--teal)' },
+    ];
 
     // `allowNegative` is for unrealized gain/loss fields: a loss is a legitimate
     // negative value (it carries a deductible latent tax benefit). All other
@@ -189,7 +208,7 @@ const AssetPage: React.FC = () => {
     () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm, 15),
     [assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm]
   );
-  const debtByYear = useMemo(() => calcDebtBalanceByYear(debts, 15), [debts]);
+  const debtByYear = useMemo(() => calcDebtBalanceByYear(debts, 15, currentMonthKey()), [debts]);
   const projectionData = useMemo(
     () => calcNetWorthProjectionByBucket(
       { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity },
@@ -509,7 +528,7 @@ const AssetPage: React.FC = () => {
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.allocationSub}</p>
           </div>
           <div className="flex-1 min-h-[260px] w-full mt-4">
-            <Suspense fallback={<div className="h-full w-full" />}>
+            <Suspense fallback={<ChartSkeleton />}>
               <AllocationDonut stocks={netInvestment} house={houseEquity} cash={cashTotal} crypto={netCrypto} pension={pensionTotal} />
             </Suspense>
           </div>
@@ -520,7 +539,7 @@ const AssetPage: React.FC = () => {
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.liquidLockedSub}</p>
           </div>
           <div className="flex-1 flex flex-col justify-center mt-6">
-            <Suspense fallback={<div className="h-full w-full" />}>
+            <Suspense fallback={<ChartSkeleton />}>
               <LiquidLockedBar liquid={liquidWealth} locked={lockedWealth} />
             </Suspense>
           </div>
@@ -538,7 +557,7 @@ const AssetPage: React.FC = () => {
           <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.debtPayoffSub}</p>
         </div>
         <div className="h-[300px] md:h-[340px] w-full">
-          <Suspense fallback={<div className="h-full w-full" />}>
+          <Suspense fallback={<ChartSkeleton />}>
             <DebtPayoffChart balances={mortgageBalances} startYear={projectionStartYear} nonMortgageDebt={totalDebt} />
           </Suspense>
         </div>
@@ -551,7 +570,7 @@ const AssetPage: React.FC = () => {
           <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.compositionSub}</p>
         </div>
         <div className="h-[260px] md:h-[300px] w-full">
-          <Suspense fallback={<div className="h-full w-full" />}><NetWorthCompositionChart /></Suspense>
+          <Suspense fallback={<ChartSkeleton />}><NetWorthCompositionChart /></Suspense>
         </div>
         <EquityHistoryTable />
       </div>
@@ -621,19 +640,31 @@ const AssetPage: React.FC = () => {
               <XAxis dataKey="year" {...AXIS_PROPS} />
               <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
               <Tooltip content={<ChartTooltip />} />
-              <Area type="monotone" dataKey="house" stackId="1" name={t.bucketHouse} stroke={CHART.teal} fill="url(#houseGrad)" />
-              <Area type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke={CHART.slate} fill="url(#cashGrad)" />
-              <Area type="monotone" dataKey="crypto" stackId="1" name={t.bucketCrypto} stroke={CHART.rust} fill="url(#cryptoGrad)" />
-              <Area type="monotone" dataKey="stocks" stackId="1" name={t.bucketStocks} stroke={CHART.forestLight} fill="url(#stocksGrad)" />
+              <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('house')} type="monotone" dataKey="house" stackId="1" name={t.bucketHouse} stroke={CHART.teal} fill="url(#houseGrad)" />
+              <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('cash')} type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke={CHART.slate} fill="url(#cashGrad)" />
+              <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('crypto')} type="monotone" dataKey="crypto" stackId="1" name={t.bucketCrypto} stroke={CHART.rust} fill="url(#cryptoGrad)" />
+              <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('stocks')} type="monotone" dataKey="stocks" stackId="1" name={t.bucketStocks} stroke={CHART.forestLight} fill="url(#stocksGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--forest)' }} />{t.bucketStocks}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--rust)' }} />{t.bucketCrypto}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--slate)' }} />{t.bucketCash}</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--teal)' }} />{t.bucketHouse}</div>
+          {projectionBuckets.map(b => {
+            const off = hiddenBuckets.has(b.key);
+            return (
+              <button
+                key={b.key}
+                type="button"
+                onClick={() => toggleBucket(b.key)}
+                aria-pressed={!off}
+                className="flex items-center gap-1.5 transition-opacity hover:opacity-100"
+                style={{ opacity: off ? 0.4 : 1 }}
+              >
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: b.color }} />
+                <span style={off ? { textDecoration: 'line-through' } : undefined}>{b.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>

@@ -35,6 +35,7 @@ import {
   DEFAULT_TAX_RATES,
 } from '../context/FinanceContext';
 import { summarizeExport, totalRecords, type SummaryItem } from '../lib/exportSummary';
+import { IMPORT_SECTIONS, filterPayloadToSections, type ImportSectionKey } from '../lib/importSections';
 import { formatBytes } from '../lib/format';
 import { NAV_ITEMS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
 import { Card } from '../components/ui/Card';
@@ -120,9 +121,17 @@ export default function SettingsPage() {
   // Import state
   const [importState, setImportState] = useState<ImportState>('idle');
   const [importPreview, setImportPreview] = useState<ExportPayload | null>(null);
+  // Which sections of a previewed file to actually restore (all by default).
+  const [restoreSections, setRestoreSections] = useState<Set<ImportSectionKey>>(() => new Set(IMPORT_SECTIONS));
+  const toggleRestoreSection = (key: ImportSectionKey) => setRestoreSections(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   const [importError, setImportError] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
 
   // Build identity for the About card. Fetched from the server so the version
   // has a single source (package.json) and the CI-stamped commit SHA is shown.
@@ -202,6 +211,7 @@ export default function SettingsPage() {
         return;
       }
       setImportPreview(data as ExportPayload);
+      setRestoreSections(new Set(IMPORT_SECTIONS)); // every section selected by default
       setImportState('ready');
       setImportError('');
     } catch {
@@ -225,10 +235,38 @@ export default function SettingsPage() {
     reader.readAsText(file);
   };
 
+  // Restore from a SQLite backup file (`make backup` output). The server only
+  // extracts the JSON blob from it; the extracted data then flows through the
+  // same preview → selective-restore → confirm path as a JSON import.
+  const processRestoreFile = async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const res = await fetch('/api/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: buf,
+      });
+      if (!res.ok) {
+        setImportError(t.settings.restoreError);
+        setImportState('error');
+        return;
+      }
+      const { data } = await res.json();
+      validateAndPreview(JSON.stringify(data));
+    } catch {
+      setImportError(t.settings.restoreError);
+      setImportState('error');
+    } finally {
+      if (restoreInputRef.current) restoreInputRef.current.value = '';
+    }
+  };
+
   const confirmImport = () => {
-    if (!importPreview) return;
+    if (!importPreview || restoreSections.size === 0) return;
     backupBeforeDestructive();
-    importAll(importPreview);
+    // Restore only the selected sections; unselected sections' keys are omitted,
+    // so import-mode applyPayload leaves that data untouched.
+    importAll(filterPayloadToSections(importPreview, restoreSections));
     setImportState('done');
     setImportPreview(null);
     setTimeout(() => setImportState('idle'), 2500);
@@ -752,6 +790,29 @@ export default function SettingsPage() {
                     </div>
                   </label>
 
+                  {/* Restore from a raw SQLite backup (make backup) without a terminal. */}
+                  <div className="mt-3 flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
+                    <span>{t.settings.restoreOr}</span>
+                    <input
+                      ref={restoreInputRef}
+                      type="file"
+                      accept=".sqlite,.db,application/octet-stream,application/vnd.sqlite3,application/x-sqlite3"
+                      className="sr-only"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) processRestoreFile(file);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => restoreInputRef.current?.click()}
+                      className="underline underline-offset-2 hover:opacity-80 transition-opacity"
+                      style={{ color: 'var(--violet)' }}
+                    >
+                      {t.settings.restoreFromBackup}
+                    </button>
+                  </div>
+
                   {importState === 'error' && (
                     <div
                       role="alert"
@@ -774,7 +835,15 @@ export default function SettingsPage() {
                       {totalRecords(importPreview)} {t.settings.summary.records}
                     </div>
                   </div>
-                  <PayloadSummary payload={importPreview} compareTo={currentPayload} />
+                  <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>
+                    {t.settings.summary.restoreHint}
+                  </p>
+                  <PayloadSummary
+                    payload={importPreview}
+                    compareTo={currentPayload}
+                    selectedSections={restoreSections}
+                    onToggleSection={toggleRestoreSection}
+                  />
                   <div
                     className="flex items-start gap-2 text-[12px] rounded-[8px] p-3"
                     style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
@@ -788,7 +857,7 @@ export default function SettingsPage() {
                     </p>
                   )}
                   <div className="flex gap-2">
-                    <Button variant="danger" size="md" leadingIcon={<Trash2 />} onClick={confirmImport}>
+                    <Button variant="danger" size="md" leadingIcon={<Trash2 />} onClick={confirmImport} disabled={restoreSections.size === 0}>
                       {t.settings.replaceConfirm}
                     </Button>
                     <Button variant="ghost" size="md" onClick={resetImport}>
@@ -1078,9 +1147,14 @@ const SECTION_ICONS: Record<string, ReactNode> = {
 function PayloadSummary({
   payload,
   compareTo,
+  selectedSections,
+  onToggleSection,
 }: {
   payload: Partial<ExportPayload>;
   compareTo?: Partial<ExportPayload>;
+  /** When provided (import preview), each section header becomes a restore toggle. */
+  selectedSections?: Set<ImportSectionKey>;
+  onToggleSection?: (key: ImportSectionKey) => void;
 }) {
   const { t } = useFinanceSettings();
   const sum = t.settings.summary;
@@ -1096,28 +1170,50 @@ function PayloadSummary({
 
   return (
     <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-      {summarizeExport(payload).map(sec => (
-        <div key={sec.key}>
-          <div
-            className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] mb-2"
-            style={{ color: 'var(--text-3)' }}
-          >
+      {summarizeExport(payload).map(sec => {
+        const key = sec.key as ImportSectionKey;
+        const selectable = !!onToggleSection;
+        const on = !selectable || (selectedSections?.has(key) ?? true);
+        const header = (
+          <>
+            {selectable && (
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={() => onToggleSection!(key)}
+                className="h-3.5 w-3.5 accent-[var(--accent)]"
+                aria-label={sectionLabels[sec.key]}
+              />
+            )}
             {SECTION_ICONS[sec.key]}
             {sectionLabels[sec.key]}
+          </>
+        );
+        return (
+          <div key={sec.key} style={{ opacity: on ? 1 : 0.45 }}>
+            {selectable ? (
+              <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] mb-2 cursor-pointer" style={{ color: 'var(--text-3)' }}>
+                {header}
+              </label>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: 'var(--text-3)' }}>
+                {header}
+              </div>
+            )}
+            <div className="space-y-1">
+              {sec.items.map(it => (
+                <SummaryRow
+                  key={it.key}
+                  item={it}
+                  label={itemLabels[it.key]}
+                  current={currentCounts[it.key]}
+                  compare={!!compareTo}
+                />
+              ))}
+            </div>
           </div>
-          <div className="space-y-1">
-            {sec.items.map(it => (
-              <SummaryRow
-                key={it.key}
-                item={it}
-                label={itemLabels[it.key]}
-                current={currentCounts[it.key]}
-                compare={!!compareTo}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

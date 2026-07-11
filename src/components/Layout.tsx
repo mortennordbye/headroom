@@ -12,6 +12,7 @@ import {
   HelpCircle,
   Lock,
   Pencil,
+  Check,
 } from 'lucide-react';
 import { format, parse, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
@@ -32,7 +33,7 @@ const BALANCE_SCOPED_ROUTES = ['/assets', '/loan', '/pension'];
 const HIDE_TIME_MARKER_ROUTES = ['/settings'];
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded, hiddenNavItems, demoMode, toggleDemoMode, startOnboarding } = useFinanceSettings();
+  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded, hiddenNavItems, demoMode, toggleDemoMode, startOnboarding } = useFinanceSettings();
   const hist = useBalanceHistory();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
@@ -422,6 +423,19 @@ const Layout: React.FC = () => {
           initialMonth={viewKey}
           onClose={() => setEditMonthOpen(false)}
         />
+      )}
+
+      {/* Transient "saved" tick — a subtle positive confirmation that an edit
+          persisted (saves are otherwise silent; only failures raise a banner). */}
+      {justSaved && (
+        <div
+          role="status"
+          className="animate-fade-in fixed right-4 bottom-20 md:bottom-6 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-lg text-[12px] font-medium"
+          style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
+        >
+          <Check size={13} style={{ color: 'var(--positive)' }} />
+          {t.saved}
+        </div>
       )}
     </div>
   );

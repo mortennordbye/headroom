@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { PlusCircle, Trash2, Landmark } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFinance, type Debt, type DebtType } from '../context/FinanceContext';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import EditModal, { type ModalField } from './EditModal';
 import ConfirmModal from './ConfirmModal';
 import ChartTooltip from './ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { amortize, planPayoff, formatMonths, DEBT_TYPES, type PayoffStrategy } from '../lib/debt';
-import { parseLocaleNumber } from '../lib/validators';
+import { currentMonthKey } from '../lib/date';
+import { parseLocaleNumber, isValidYearMonth } from '../lib/validators';
 import DebtPaydownVsPlanChart from './charts/DebtPaydownVsPlanChart';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
@@ -30,6 +32,13 @@ interface ModalConfig {
 
 export default function DebtSection() {
   const { t, lang, debts, setDebts, totalDebt, formatCurrency } = useFinance();
+  const reduced = useReducedMotion();
+  // Deferment is a real-world timeline, so measure it from the actual current
+  // month, not the header picker's month.
+  const nowKey = currentMonthKey();
+  // A student loan is deferred (interest-free, no payment) while its
+  // interest-free month is still in the future — Lånekassen "while studying".
+  const isDeferred = (dbt: Debt) => dbt.interestFreeUntil != null && dbt.interestFreeUntil > nowKey;
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Debt | null>(null);
   const [strategy, setStrategy] = useState<PayoffStrategy>('avalanche');
@@ -50,6 +59,12 @@ export default function DebtSection() {
     { key: 'revolving', label: d.revolvingLabel, type: 'select', value: val.revolving ? 'yes' : 'no', options: revolvingOptions },
     { key: 'rate', label: d.rate, type: 'number', value: val.rate != null ? String(val.rate) : '' },
     { key: 'minPayment', label: d.minPayment, type: 'number', value: val.minPayment != null ? String(val.minPayment) : '' },
+    // Lånekassen interest-free/deferred month — only meaningful for student loans.
+    {
+      key: 'interestFreeUntil', label: d.interestFreeLabel, type: 'month',
+      value: val.interestFreeUntil ?? '', hint: d.interestFreeHint,
+      showWhen: (v) => v.type === 'student',
+    },
   ];
 
   const validate = (v: Record<string, string>) => {
@@ -67,6 +82,9 @@ export default function DebtSection() {
       rate: revolving ? 0 : rate!,
       minPayment: revolving ? 0 : minPayment!,
       revolving,
+      // Persist an interest-free month only for a (non-revolving) student loan.
+      interestFreeUntil: v.type === 'student' && !revolving && isValidYearMonth(v.interestFreeUntil)
+        ? v.interestFreeUntil : undefined,
     };
   };
   const err = () => setModal(p => p && { ...p, error: t.validation.fillAllFields });
@@ -80,8 +98,8 @@ export default function DebtSection() {
     onSave: v => { const parsed = validate(v); if (!parsed) return err(); setDebts(debts.map(x => x.id === debt.id ? { ...x, ...parsed } : x)); setModal(null); },
   });
 
-  const plan = planPayoff(debts, extra, strategy);
-  const baseline = planPayoff(debts, 0, strategy);
+  const plan = planPayoff(debts, extra, strategy, nowKey);
+  const baseline = planPayoff(debts, 0, strategy, nowKey);
   const interestSaved = isFinite(baseline.totalInterest) && isFinite(plan.totalInterest)
     ? Math.max(0, baseline.totalInterest - plan.totalInterest) : 0;
   const fmtAxis = (v: number) => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v));
@@ -105,7 +123,8 @@ export default function DebtSection() {
           {/* Ledger */}
           <div className="space-y-0">
             {debts.map(debt => {
-              const a = debt.revolving ? null : amortize(debt.balance, debt.rate, debt.minPayment);
+              const deferred = isDeferred(debt);
+              const a = debt.revolving || deferred ? null : amortize(debt.balance, debt.rate, debt.minPayment);
               return (
                 <div key={debt.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0 gap-3">
                   <button type="button" aria-label={`${t.edit} — ${debt.name}`} className="min-w-0 cursor-pointer text-left" onClick={() => openEdit(debt)}>
@@ -115,7 +134,11 @@ export default function DebtSection() {
                       <span className="text-[10px] uppercase tracking-wider shrink-0" style={{ color: 'var(--text-3)' }}>{d.types[debt.type]}</span>
                     </div>
                     <div className="text-[11px] mt-0.5 ml-[15px]" style={{ color: 'var(--text-3)' }}>
-                      {debt.revolving || !a ? (
+                      {debt.revolving ? (
+                        d.revolvingBadge
+                      ) : deferred ? (
+                        d.interestFreeTag.replace('{date}', debt.interestFreeUntil ?? '')
+                      ) : !a ? (
                         d.revolvingBadge
                       ) : (
                         <>
@@ -190,7 +213,7 @@ export default function DebtSection() {
                     <XAxis dataKey="month" tickFormatter={(m: number) => `${Math.round(m / 12)}${t.common.yrAbbr}`} {...AXIS_PROPS} />
                     <YAxis tickFormatter={fmtAxis} {...AXIS_PROPS_Y} width={44} />
                     <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="total" name={d.sum} stroke={CHART.rust} fill="url(#debtGrad)" strokeWidth={1.8} />
+                    <Area isAnimationActive={!reduced} type="monotone" dataKey="total" name={d.sum} stroke={CHART.rust} fill="url(#debtGrad)" strokeWidth={1.8} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

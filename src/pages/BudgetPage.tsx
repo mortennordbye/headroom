@@ -43,6 +43,7 @@ import { incomeDiffPct } from '../lib/income';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import { ProgressBar } from '../components/ui/ProgressBar';
+import { ChartSkeleton } from '../components/ui/Skeleton';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
 import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
@@ -269,6 +270,12 @@ const BudgetPage: React.FC = () => {
     value: value ?? '', options: trackCategoryOptions, hint: t.trackCategoryHint,
   });
   const parseTrackedCategory = (value: string) => (isCategoryKey(value) ? value : undefined);
+  // Optional merchant/text pattern that ties this fixed expense to its own
+  // transactions (takes priority over the category envelope for matching).
+  const matchField = (value?: string) => ({
+    key: 'match', label: t.budgetPage.matchPatternLabel, type: 'text' as const,
+    value: value ?? '', placeholder: t.budgetPage.matchPatternPlaceholder, hint: t.budgetPage.matchPatternHint,
+  });
 
   const addFixedExpense = () => {
     openModal({
@@ -278,11 +285,12 @@ const BudgetPage: React.FC = () => {
         { key: 'amount', label: t.newAmount, type: 'number', value: '', placeholder: '0' },
         { key: 'type', label: t.expenseTypeLabel, type: 'select', value: 'fixed', options: typeOptions },
         trackCategoryField(),
+        matchField(),
       ],
       onSave: (vals) => {
         const amount = parsePositiveNumber(vals.amount);
         if (vals.name.trim() && amount !== null) {
-          setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: vals.name.trim(), amount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category) }]);
+          setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: vals.name.trim(), amount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category), match: vals.match.trim() || undefined }]);
           closeModal();
         } else {
           setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.newExpenseName + t.validation.requiredSuffix : t.newAmount + t.validation.positiveAmountSuffix } : null);
@@ -291,7 +299,7 @@ const BudgetPage: React.FC = () => {
     });
   };
 
-  const editFixedExpense = (id: string, name: string, amount: number, type?: ExpenseType, category?: string) => {
+  const editFixedExpense = (id: string, name: string, amount: number, type?: ExpenseType, category?: string, match?: string) => {
     openModal({
       title: name,
       fields: [
@@ -299,11 +307,12 @@ const BudgetPage: React.FC = () => {
         { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
         { key: 'type', label: t.expenseTypeLabel, type: 'select', value: type ?? 'fixed', options: typeOptions },
         trackCategoryField(category),
+        matchField(match),
       ],
       onSave: (vals) => {
         const newAmount = parsePositiveNumber(vals.amount);
         if (vals.name.trim() && newAmount !== null) {
-          setFixedExpenses(fixedExpenses.map(e => e.id === id ? { ...e, name: vals.name.trim(), amount: newAmount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category) } : e));
+          setFixedExpenses(fixedExpenses.map(e => e.id === id ? { ...e, name: vals.name.trim(), amount: newAmount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category), match: vals.match.trim() || undefined } : e));
           closeModal();
         } else {
           setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.editName + t.validation.requiredSuffix : t.editAmount + t.validation.positiveAmountSuffix } : null);
@@ -865,7 +874,7 @@ const BudgetPage: React.FC = () => {
                       type="button"
                       aria-label={`${t.edit} — ${expense.name}`}
                       className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
-                      onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category)}
+                      onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category, expense.match)}
                     >
                       <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
                       <span className="truncate">{expense.name}</span>
@@ -882,7 +891,7 @@ const BudgetPage: React.FC = () => {
                           type="button"
                           aria-label={`${t.edit} — ${expense.name}`}
                           className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
-                          onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category)}
+                          onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category, expense.match)}
                         >
                           {formatCurrency(expense.amount)}
                         </button>
@@ -920,7 +929,7 @@ const BudgetPage: React.FC = () => {
             {t.distributionAnalysis}
           </h2>
           <div className="flex-1 min-h-[280px] md:min-h-[340px] w-full">
-            <Suspense fallback={<div className="h-full w-full" />}>
+            <Suspense fallback={<ChartSkeleton />}>
               <BudgetDistributionChart
                 data={sortedExpenses}
                 totalFixedExpenses={totalFixedExpenses}
@@ -979,7 +988,7 @@ const BudgetPage: React.FC = () => {
             </div>
           )}
           <div className="flex-1 min-h-[240px] w-full">
-            <Suspense fallback={<div className="h-full w-full" />}><SavingsRateChart /></Suspense>
+            <Suspense fallback={<ChartSkeleton />}><SavingsRateChart /></Suspense>
           </div>
         </div>
         <div className={`${card} p-5 md:p-7`}>
@@ -987,7 +996,7 @@ const BudgetPage: React.FC = () => {
             <h2 className={sectionLabel}>{t.charts.heatmapTitle}</h2>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.heatmapSub}</p>
           </div>
-          <Suspense fallback={<div className="h-[240px] w-full" />}><SpendingHeatmap /></Suspense>
+          <Suspense fallback={<ChartSkeleton className="h-[240px] w-full" />}><SpendingHeatmap /></Suspense>
         </div>
       </div>
 

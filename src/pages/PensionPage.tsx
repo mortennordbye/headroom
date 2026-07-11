@@ -4,6 +4,7 @@ import {
 } from 'recharts';
 import { Briefcase, TrendingUp, Lock, Calculator } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual, DEFAULT_PENSION, type Pension } from '../context/FinanceContext';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
@@ -24,6 +25,7 @@ const PensionHistoryChart = lazy(() => import('../components/charts/PensionHisto
 
 const PensionPage: React.FC = () => {
   const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct } = useFinance();
+  const reduced = useReducedMotion();
 
   // Time machine: when viewing a past month, render that month's pension snapshot (read-only).
   const hist = useBalanceHistory();
@@ -155,8 +157,8 @@ const PensionPage: React.FC = () => {
                   <XAxis dataKey="year" {...AXIS_PROPS} />
                   <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Area type="monotone" dataKey="ips" stackId="1" name="IPS" stroke={CHART.teal} fill="url(#ipsGrad)" />
-                  <Area type="monotone" dataKey="otp" stackId="1" name="OTP" stroke={CHART.forestLight} fill="url(#otpGrad)" />
+                  <Area isAnimationActive={!reduced} type="monotone" dataKey="ips" stackId="1" name="IPS" stroke={CHART.teal} fill="url(#ipsGrad)" />
+                  <Area isAnimationActive={!reduced} type="monotone" dataKey="otp" stackId="1" name="OTP" stroke={CHART.forestLight} fill="url(#otpGrad)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { FinanceProvider } from './context/FinanceContext';
+import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import UpdatePrompt from './components/UpdatePrompt';
 import Layout from './components/Layout';
+import { Skeleton } from './components/ui/Skeleton';
 
 // Code-split per route: each page bundle is fetched only when navigated to.
 const BudgetPage = lazy(() => import('./pages/BudgetPage'));
@@ -17,9 +18,19 @@ const PensionPage = lazy(() => import('./pages/PensionPage'));
 const EmployerCostPage = lazy(() => import('./pages/EmployerCostPage'));
 
 function RouteFallback() {
+  const { t } = useFinance();
+  // Page-shaped skeleton: title, a row of stat tiles, then a large chart block —
+  // the layout most routes settle into, so first paint doesn't flash a blank box.
   return (
-    <div className="grid place-items-center py-24 text-[12px]" style={{ color: 'var(--text-3)' }}>
-      …
+    <div className="space-y-4" role="status" aria-label={t.loading}>
+      <Skeleton className="h-7 w-48" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
+      </div>
+      <Skeleton className="h-64 w-full" />
     </div>
   );
 }

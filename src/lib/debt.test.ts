@@ -144,6 +144,47 @@ describe('calcDebtBalanceByYear', () => {
     const d = debt({ balance: 500_000, rate: 25, minPayment: 100 });
     expect(calcDebtBalanceByYear([d], 2)).toEqual([500_000, 500_000, 500_000]);
   });
+
+  it('holds a deferred student loan flat until its interest-free month, then amortizes', () => {
+    // Interest-free until 2028-07 → 24 months of deferment from 2026-07.
+    const studielan = debt({ type: 'student', balance: 300_000, rate: 3, minPayment: 3_000, interestFreeUntil: '2028-07' });
+    const out = calcDebtBalanceByYear([studielan], 5, '2026-07');
+    expect(out[0]).toBe(300_000);
+    expect(out[1]).toBe(300_000); // still studying
+    expect(out[2]).toBe(300_000); // deferment ends this month
+    expect(out[3]).toBeLessThan(300_000); // now repaying
+  });
+});
+
+describe('planPayoff — Lånekassen deferment', () => {
+  const studielan = (over: Partial<Debt> = {}): Debt =>
+    debt({ type: 'student', balance: 300_000, rate: 3, minPayment: 3_000, interestFreeUntil: '2028-07', ...over });
+
+  it('accrues no interest and takes no payment while deferred, then amortizes after', () => {
+    const plan = planPayoff([studielan()], 0, 'avalanche', '2026-07');
+    // 24 deferred months: the balance sits flat, so series[1..24] all equal the start.
+    for (let m = 1; m <= 24; m++) expect(plan.balanceSeries[m].total).toBe(300_000);
+    // The month after deferment ends, the balance finally drops.
+    expect(plan.balanceSeries[25].total).toBeLessThan(300_000);
+    expect(plan.feasible).toBe(true);
+  });
+
+  it('delays payoff by the deferment while paying the same amortization interest', () => {
+    const deferred = planPayoff([studielan()], 0, 'avalanche', '2026-07');
+    const immediate = planPayoff([studielan({ interestFreeUntil: undefined })], 0, 'avalanche', '2026-07');
+    // The amortization phase is identical, just shifted 24 interest-free months
+    // later — so total interest matches and payoff is pushed out by the deferment.
+    expect(deferred.totalInterest).toBeCloseTo(immediate.totalInterest, 5);
+    expect(deferred.months).toBe(immediate.months + 24);
+  });
+
+  it('ignores the interest-free month when no current month is supplied (back-compat)', () => {
+    const withKey = planPayoff([studielan()], 0, 'avalanche', '2026-07');
+    const noKey = planPayoff([studielan()], 0, 'avalanche');
+    // Without a reference month there's no deferment → it amortizes from month 0.
+    expect(noKey.balanceSeries[1].total).toBeLessThan(300_000);
+    expect(noKey.months).toBeLessThan(withKey.months);
+  });
 });
 
 describe('sumDebtByType', () => {

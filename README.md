@@ -181,10 +181,28 @@ The volume is the only live copy, so keep a backup — two easy options:
 
 ### Restore
 
-- From a JSON export: open the app and use **Settings → Import**.
-- From a SQLite snapshot: `docker cp backups/<file>.sqlite headroom:/data/database.sqlite && make restart` (for the pre-built image, replace `make restart` with `docker restart headroom`).
+Both paths open a **preview** first, where you pick which sections to restore (income & work, budget & spending, assets/debt/goals, settings) — the rest of your data is left untouched — and a safety copy of your current data is downloaded before anything is replaced.
+
+- **From a JSON export:** open the app and use **Settings → Import** (drop the file or browse).
+- **From a SQLite snapshot (in-app):** **Settings → Import → "restore from a SQLite backup (.sqlite)"**, then pick a `make backup` file. The server reads the finance blob out of the uploaded database and hands it to the same import preview — no terminal needed.
+- **From a SQLite snapshot (manual):** `docker cp backups/<file>.sqlite headroom:/data/database.sqlite && make restart` (for the pre-built image, replace `make restart` with `docker restart headroom`).
 
 > Bank sync only reaches ~90 days back per fetch, but stored transactions are never dropped — they accumulate as you keep syncing. So your history keeps growing on your machine, and an export captures all of it. Sync regularly (don't leave gaps longer than ~90 days) and export now and then, and you have a durable, ever-growing record.
+
+### HTTP API
+
+The app is a thin JSON API over the single-blob store (no per-field endpoints). It's **unauthenticated** by design (single-user, loopback-bound — see [Security](#security)); don't expose it to an untrusted network. The endpoints the UI drives:
+
+| Method & path | Purpose |
+|---------------|---------|
+| `GET /healthz` | Liveness probe (touches the DB). |
+| `GET /api/version` | Running `version` + build `sha`. |
+| `GET /api/data` | The whole finance blob; `X-Data-Rev` header carries the revision. |
+| `POST /api/data` | Overwrite the blob (shape-validated, last-write-wins with an optimistic-concurrency `X-Data-Rev` check → `409` on a stale write). |
+| `POST /api/restore` | Restore helper: upload a `make backup` SQLite file (raw body, `application/octet-stream`); the server opens it **read-only**, extracts the `headroom` JSON blob and returns `{ data }`. **It never writes** — the client applies it through the normal import preview/confirm. Rejects a non-SQLite / non-Headroom file with `400`. |
+| `GET /api/inflation?from=YYYY-MM&to=YYYY-MM` | SSB CPI series (cached; `stale` flag when served from cache). Add **`&force=1`** to bypass the once-per-hour upstream-fetch cooldown for a user-initiated refresh. |
+| `GET /api/wage-stats` | Curated national median-wage series. |
+| `GET/POST/DELETE /api/bank/*` | Enable Banking transaction sync (`status`, `aspsps`, `link`, `callback`, `sync`, `config`, `key`, `connection/:id`) — see `scripts/enable-banking/`. |
 
 ## Tech stack
 

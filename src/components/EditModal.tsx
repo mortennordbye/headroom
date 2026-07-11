@@ -16,6 +16,10 @@ export interface ModalField {
   options?: ModalFieldOption[]; // required when type === 'select'
   suggestions?: string[];       // text fields only — populates a <datalist> for autocomplete
   hint?: string;                // optional helper text rendered under the field
+  /** Show this field only when the predicate holds for the current values
+   *  (e.g. a manual-amount field that's irrelevant once a source is picked).
+   *  Hidden fields keep their value in state; they're just not rendered. */
+  showWhen?: (values: Record<string, string>) => boolean;
 }
 
 interface EditModalProps {
@@ -41,10 +45,17 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
   const actualCancelLabel = cancelLabel ?? t.cancel;
   const actualSaveLabel = saveLabel ?? t.save;
 
-  const handleSave = () => onSave(values);
+  // Dirty = any field diverged from its initial value; used to guard a
+  // backdrop mis-tap from discarding a half-typed edit.
+  const [initialValues] = useState(values);
+  const isDirty = fields.some(f => values[f.key] !== initialValues[f.key]);
+  // Fields can conditionally hide based on the current values (e.g. a manual
+  // field that's moot once a source is selected). Hidden fields keep their value.
+  const visibleFields = fields.filter(f => !f.showWhen || f.showWhen(values));
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSave();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(values);
   };
 
   return (
@@ -54,16 +65,19 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
       closeLabel={t.cancel}
       panelClassName="sm:min-w-[360px] sm:max-w-sm space-y-5"
       initialFocus={firstInputRef}
+      preventBackdropClose={isDirty}
       footer={
         <div className="flex gap-2 pt-1">
           <button
+            type="button"
             onClick={onCancel}
             className="flex-1 py-2.5 rounded-[6px] text-[13px] font-medium text-[var(--text-2)] bg-[var(--bg-elev)] hover:bg-[var(--bg-raised)] transition-colors"
           >
             {actualCancelLabel}
           </button>
           <button
-            onClick={handleSave}
+            type="submit"
+            form={formId}
             className="flex-1 py-2.5 rounded-[6px] text-[13px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-opacity"
           >
             {actualSaveLabel}
@@ -73,7 +87,8 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
     >
         <div className="space-y-3">
           {header}
-          {fields.map((field, idx) => field.type === 'checkbox' ? (
+          <form id={formId} onSubmit={handleSubmit} className="space-y-3">
+          {visibleFields.map((field, idx) => field.type === 'checkbox' ? (
             <div key={field.key} className="space-y-1.5">
               <label htmlFor={fieldId(field.key)} className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -100,7 +115,6 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
                   ref={idx === 0 ? (firstInputRef as Ref<HTMLSelectElement>) : undefined}
                   value={values[field.key]}
                   onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                  onKeyDown={handleKeyDown}
                   className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[6px] px-4 py-3 text-[14px] text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--positive)]"
                 >
                   {(field.options ?? []).map(opt => (
@@ -118,7 +132,6 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
                     placeholder={field.placeholder}
                     autoComplete={field.suggestions ? 'off' : undefined}
                     onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    onKeyDown={handleKeyDown}
                     className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[6px] px-4 py-3 text-[14px] font-mono text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--positive)] placeholder:text-[var(--text-2)] placeholder:font-sans"
                   />
                   {field.suggestions && field.suggestions.length > 0 && (
@@ -153,6 +166,7 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
           {error && (
             <p className="text-[12px] text-[var(--negative)] font-medium">{error}</p>
           )}
+          </form>
         </div>
     </ModalShell>
   );

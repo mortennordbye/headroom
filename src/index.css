@@ -187,6 +187,15 @@ textarea,
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+/* Loading placeholder pulse. The global reduced-motion block above neutralizes
+   the animation, leaving a static block. */
+.animate-skeleton {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
 
 ::selection {
   background: color-mix(in srgb, var(--forest-light) 26%, transparent);

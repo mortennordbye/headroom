@@ -90,6 +90,14 @@ export interface Debt {
    * payoff planner/projection. rate/minPayment are irrelevant when this is set.
    */
   revolving?: boolean;
+  /**
+   * Lånekassen student-loan basics: the loan is interest-free and
+   * payment-deferred while studying. `interestFreeUntil` (YYYY-MM) is the month
+   * repayment/interest begin — until then the payoff planner accrues 0% interest
+   * and requires no payment (the balance sits flat), then it amortizes normally
+   * at `rate`/`minPayment`. Only surfaced in the UI for `type === 'student'`.
+   */
+  interestFreeUntil?: string;
 }
 
 export interface DailyTransaction {
@@ -505,6 +513,8 @@ interface FinanceSettingsContextType {
   dataLoadFailed: boolean;
   /** True when the most recent save failed and changes are pending a retry. */
   saveFailed: boolean;
+  /** Briefly true right after a change was persisted — drives the transient "saved" tick. */
+  justSaved: boolean;
   /** Manually re-attempt a failed save (used by the "not saved" banner). */
   retrySave: () => void;
   /** True after a newer server version was adopted (concurrent write elsewhere). */
@@ -602,6 +612,8 @@ interface FinanceDataContextType {
   updateBillingConfig: (key: keyof BillingRateConfig, value: number | null) => void;
   inflation: InflationPoint[];
   inflationStale: boolean;
+  /** Force a fresh SSB inflation fetch, bypassing the server's attempt cooldown. */
+  refreshInflation: () => Promise<void>;
   wageStats: WageStatPoint[];
   wageStatsStale: boolean;
   importAll: (data: Partial<ExportPayload>) => void;
@@ -868,6 +880,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const demoSnapshot = useRef<Partial<ExportPayload> | null>(null);
   const [dataLoadFailed, setDataLoadFailed] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // Briefly flipped true after a successful persist to flash a "saved" tick.
+  const [justSaved, setJustSaved] = useState(false);
+  const savedFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Optimistic-concurrency revision last seen from the server; echoed on every
   // save so a stale write is rejected instead of clobbering a newer one.
   const revRef = useRef(0);
@@ -1019,6 +1034,27 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Fetch SSB inflation data when region is Norway. In 'generic' mode we
   // don't have inflation source for the user's country, so we skip the call
   // and the UI hides inflation-dependent features.
+  const loadInflation = useCallback(async (force = false) => {
+    const now = new Date();
+    const to = format(now, 'yyyy-MM');
+    const from = format(new Date(now.getFullYear() - 12, now.getMonth(), 1), 'yyyy-MM');
+    try {
+      const r = await fetch(`/api/inflation?from=${from}&to=${to}${force ? '&force=1' : ''}`);
+      if (!r.ok) { setInflationStale(true); return; }
+      const data = await r.json();
+      if (!data) { setInflationStale(true); return; }
+      if (Array.isArray(data.points)) setInflation(data.points);
+      // Clear the stale flag when the server served a fresh fetch (relevant on a
+      // manual refresh that finally reaches SSB), set it when it's still cached.
+      setInflationStale(Boolean(data.stale));
+    } catch {
+      setInflationStale(true);
+    }
+  }, []);
+
+  // A manual refresh forces past the server's per-hour SSB attempt cooldown.
+  const refreshInflation = useCallback(() => loadInflation(true), [loadInflation]);
+
   useEffect(() => {
     if (region !== 'no') {
       // Intentional reset of fetched data when leaving Norway region.
@@ -1027,18 +1063,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setInflationStale(false);
       return;
     }
-    const now = new Date();
-    const to = format(now, 'yyyy-MM');
-    const from = format(new Date(now.getFullYear() - 12, now.getMonth(), 1), 'yyyy-MM');
-    fetch(`/api/inflation?from=${from}&to=${to}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data) => {
-        if (!data) { setInflationStale(true); return; }
-        if (Array.isArray(data.points)) setInflation(data.points);
-        if (data.stale) setInflationStale(true);
-      })
-      .catch(() => setInflationStale(true));
-  }, [region]);
+    void loadInflation(false);
+  }, [region, loadInflation]);
 
   // Auto-save plumbing. The save is debounced (a slider drag or paging the month
   // picker would otherwise fire dozens of full-state POSTs), in-flight requests
@@ -1098,6 +1124,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       saveDirty.current = false;
       saveRetries.current = 0;
       setSaveFailed(false);
+      // A real change persisted — flash the "saved" tick briefly.
+      setJustSaved(true);
+      if (savedFlashTimer.current) clearTimeout(savedFlashTimer.current);
+      savedFlashTimer.current = setTimeout(() => setJustSaved(false), 1800);
     } catch {
       if (ctrl.signal.aborted) return; // replaced by a newer save — not a failure
       setSaveFailed(true);
@@ -1942,7 +1972,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     demoMode, toggleDemoMode,
     onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,
     startOnboarding, resetGuide, completeOnboarding,
-    dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded,
+    dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded,
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
@@ -1954,7 +1984,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     demoMode, toggleDemoMode,
     onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,
     startOnboarding, resetGuide, completeOnboarding,
-    dataLoadFailed, saveFailed, retrySave, dataReloaded, dismissDataReloaded,
+    dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded,
   ]);
 
   const dataValue = useMemo<FinanceDataContextType>(() => ({
@@ -1981,7 +2011,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
     goals, addGoal, updateGoal, removeGoal,
     employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
-    inflation, inflationStale, wageStats, wageStatsStale,
+    inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     importAll, buildPayload, resetAll,
     restoreAssetTaxDefaults, restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   }), [
@@ -2000,7 +2030,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     bonuses, addBonus, updateBonus, removeBonus, overtime, addOvertime, updateOvertime,
     removeOvertime, hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
     goals, addGoal, updateGoal, removeGoal, employerCostConfig, updateEmployerCostConfig,
-    billingConfig, updateBillingConfig, inflation, inflationStale, wageStats, wageStatsStale,
+    billingConfig, updateBillingConfig, inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     importAll, buildPayload, resetAll, restoreAssetTaxDefaults,
     restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   ]);

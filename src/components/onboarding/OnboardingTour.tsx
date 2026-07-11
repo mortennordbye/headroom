@@ -28,6 +28,11 @@ const TOPIC_ICON: Record<string, typeof Wallet> = {
   dashboard: LayoutDashboard, salary: LineChart, forecast: TrendingUp, loan: Landmark, settings: SettingsIcon,
 };
 
+// Furthest-reached step, kept module-scoped (not persisted) so re-opening the
+// tour within a session resumes where the user left off instead of restarting
+// at welcome. Reset to 0 on a genuine finish; a full page reload also resets it.
+let resumeIndex = 0;
+
 const inputCls = 'w-full rounded-[6px] px-3 py-2.5 text-[14px] border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]';
 const inputStyle = { background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' } as const;
 const microLabel = 'text-[11px] font-medium uppercase tracking-wide';
@@ -74,14 +79,17 @@ function OnboardingHub() {
   const { t, demoMode, toggleDemoMode, completeOnboarding, jobs, salaries, effectiveIncome } = useFinance();
   const navigate = useNavigate();
   const location = useLocation();
-  const [started, setStarted] = useState(false); // false = welcome
-  const [index, setIndex] = useState(0);
+  const [started, setStarted] = useState(resumeIndex > 0); // false = welcome
+  const [index, setIndex] = useState(resumeIndex);
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const highlightedEl = useRef<Element | null>(null);
 
   const sequence = ONBOARDING_TOPICS;
   const topic = started ? sequence[index] ?? null : null;
+
+  // Remember how far we got so re-opening resumes here (module-scoped above).
+  useEffect(() => { resumeIndex = started ? index : 0; }, [started, index]);
 
   const clearHighlight = useCallback(() => {
     if (highlightedEl.current) {
@@ -132,7 +140,9 @@ function OnboardingHub() {
           : true);
   const canSkip = !!topic && !topic.required && !isLast;
   const onBack = () => { if (isFirst) { setStarted(false); } else { setIndex(i => i - 1); } };
-  const advance = () => { if (isLast) { completeOnboarding(); } else { setIndex(i => i + 1); } };
+  // Finishing clears the resume marker so a later replay starts fresh; leaving
+  // early (X / Escape) keeps it so re-opening resumes mid-setup.
+  const advance = () => { if (isLast) { resumeIndex = 0; completeOnboarding(); } else { setIndex(i => i + 1); } };
   const onNext = () => { if (canProceed) advance(); };
 
   const topicCopy = t.onboarding.topics;

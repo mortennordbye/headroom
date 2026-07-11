@@ -48,6 +48,17 @@ export default defineConfig({
     // collision gone, a hard reload of /assets serves the SPA cleanly — no
     // serve-static directory redirect and no over-broad 404 guard needed.
     assetsDir: 'static',
+    rollupOptions: {
+      output: {
+        // Pin the two heaviest shared vendors to their own chunks so the
+        // lazy-chart / date-fns boundary is stable across builds (charts still
+        // load recharts on demand; only the chunk name/hash is stabilized).
+        manualChunks(id) {
+          if (id.includes('node_modules/recharts')) return 'recharts';
+          if (id.includes('node_modules/date-fns')) return 'datefns';
+        },
+      },
+    },
   },
   server: {
     proxy: {

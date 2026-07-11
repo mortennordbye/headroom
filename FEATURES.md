@@ -243,20 +243,25 @@ without the mouse. The optional `g`-prefixed route jumps were not built.
     `wageStatsStale` flag (context) on a failed/empty response, mirroring `inflationStale`;
     SalaryPage shows a "Wage statistics unavailable — could not reach SSB" note in the header
     (i18n'd). (`src/context/FinanceContext.tsx`, `src/pages/SalaryPage.tsx`.)
-39. **No positive "saved" signal.** Saves are silent; only failures raise a banner
-    (`doSave` in `src/context/FinanceContext.tsx`). A subtle transient "saved" tick builds
-    trust that an edit persisted.
-40. **Skeletons for lazy routes/charts.** `RouteFallback` is a bare "…" (`src/App.tsx`) and
-    chart `Suspense` fallbacks are empty divs; slow first paint shows blank boxes.
+39. **No positive "saved" signal ✅ SHIPPED** — a genuine (non-no-op) persist now flips a
+    transient `justSaved` flag in `doSave`; `Layout` renders a subtle bottom-right "Saved" tick
+    (check + label, `t.saved`, both locales) that auto-clears after ~1.8s. Failures still raise
+    the existing banner. (`src/context/FinanceContext.tsx`, `src/components/Layout.tsx`.)
+40. **Skeletons for lazy routes/charts ✅ SHIPPED** — a shared `Skeleton`/`ChartSkeleton`
+    (`src/components/ui/Skeleton.tsx`, pulse honours reduced-motion) replaces the bare "…"
+    `RouteFallback` with a page-shaped skeleton (`src/App.tsx`) and the empty-div chart
+    `Suspense` fallbacks across Budget/Dashboard/Asset/Loan/Salary. (`fallback={null}` charts
+    left as-is — a deliberate below-fold choice.)
 41. **Consent-expiry lead-time nudge ✅ SHIPPED** — the per-connection expiry line now turns
     amber once `daysLeft` is within a 14-day lead window (`RELINK_LEAD_DAYS`), not only after
     `needsRelink` flips, so a cron-driven sync doesn't go silent right up to expiry.
     (`src/components/BankSyncCard.tsx`.)
 
 ### Input polish
-42. **Goals modal always shows the manual-current field** even when the goal source is
-    Portfolio/BSU/etc. (`src/components/GoalsSection.tsx`); needs conditional-field support
-    in `EditModal` or a filtered field list.
+42. **Goals modal always shows the manual-current field ✅ SHIPPED** — `EditModal` gained a
+    per-field `showWhen(values)` predicate; the goal's manual-current field now renders only
+    when the source is `manual`, hiding when a tracked source (Portfolio/BSU/account/…) is
+    picked. (`src/components/EditModal.tsx`, `src/components/GoalsSection.tsx`.)
 43. **Goal deadline is free-text `YYYY-MM` ✅ SHIPPED** — `EditModal` gained a `'month'` field
     type rendering `<input type="month">`; the goal deadline field uses it, so the native month
     picker replaces free-text entry (its `YYYY-MM` value matches the existing validators/storage
@@ -265,15 +270,18 @@ without the mouse. The optional `g`-prefixed route jumps were not built.
     everywhere (Settings slider raised 95→100 to match `SmartRecommendations`), and `RangeRow`'s
     number input clamps its committed value to `[0, max]` (and carries `max`) like the slider,
     so no RangeRow can commit an out-of-range figure. (`src/pages/SettingsPage.tsx`.)
-45. **Fixed-expense match pattern only settable from a transaction.** The "map to fixed
-    expense" rule can't be added or edited from the fixed-expense editor itself
-    (`src/pages/BudgetPage.tsx`). Add a match field there.
-46. **EditModal has no `<form>` semantics.** Enter-to-submit is wired per input
-    (`src/components/EditModal.tsx`), so the checkbox field and suggestion chips don't
-    submit and there's no `type="submit"`. Wrap fields in a `<form onSubmit>`.
-47. **Backdrop-click discards in-progress edits.** `ModalShell` closes on any overlay click
-    with no dirty guard, so a mis-tap throws away a half-typed amount (the onboarding tour
-    deliberately guards leaving). Suppress backdrop-close when dirty, or confirm.
+45. **Fixed-expense match pattern only settable from a transaction ✅ SHIPPED** — the
+    fixed-expense add/edit form now carries an optional "match pattern" text field
+    (`FixedExpense.match`), so the merchant/text rule that draws transactions to a fixed
+    expense is editable from the expense editor itself. (`src/pages/BudgetPage.tsx`.)
+46. **EditModal has no `<form>` semantics ✅ SHIPPED** — the fields are now wrapped in a
+    `<form onSubmit>`; the footer Save is `type="submit"` associated via the `form` attribute
+    (it sits outside the form in `ModalShell`), so both click and Enter (implicit submission)
+    submit. The per-input `onKeyDown` Enter handling was removed. (`src/components/EditModal.tsx`.)
+47. **Backdrop-click discards in-progress edits ✅ SHIPPED** — `ModalShell` gained an opt-in
+    `preventBackdropClose`; `EditModal` computes dirty (any field diverged from its initial
+    value) and passes it, so an outside mis-tap on a half-typed edit is ignored while
+    Escape/X/Cancel still close. (`src/components/ui/ModalShell.tsx`, `src/components/EditModal.tsx`.)
 
 ### Reading & copying
 48. **Global `user-select: none` blocks copying figures ✅ SHIPPED** — the Dashboard headline
@@ -291,18 +299,21 @@ without the mouse. The optional `g`-prefixed route jumps were not built.
 50. **AssetPage projection legend colour mismatch ✅ SHIPPED** — the crypto legend swatch now
     uses `var(--rust)`, matching the area's `CHART.rust` (and the sibling swatches' direct
     palette tokens) instead of the value-sign alias `var(--negative)`. (`src/pages/AssetPage.tsx`.)
-51. **Legends aren't interactive.** No click-to-isolate/toggle on the multi-series projection
-    charts (`src/pages/AssetPage.tsx`, `src/components/SmartRecommendations.tsx` has
-    hover-dim only).
+51. **Legends aren't interactive ✅ SHIPPED** — the AssetPage growth-projection legend is now
+    click-to-toggle: clicking a bucket hides/shows its area (`hide` on each `<Area>`), with the
+    legend chip dimming + strikethrough. The SmartRecommendations allocation legend gained
+    click-to-pin (hover previews, click persists the focus). (`src/pages/AssetPage.tsx`,
+    `src/components/SmartRecommendations.tsx`.)
 52. **UpdatePrompt bypasses i18n ✅ SHIPPED** — the hardcoded bilingual strings now read from
     `t.updatePrompt.{message,update,later}` via `useFinance` (UpdatePrompt renders inside the
     provider), so the prompt shows one locale. (`src/components/UpdatePrompt.tsx`.)
 53. **CSV export is current-month only ✅ SHIPPED** — `exportCSV` now takes a scope; the ledger
     toolbar has a second "Export all" button that dumps the full transaction history
     (`budget-all.csv`) alongside the month export. (`src/pages/BudgetPage.tsx`.)
-54. **Recharts animations ignore `prefers-reduced-motion`.** The reduced-motion CSS block
-    only neutralizes CSS transitions, not Recharts' JS-driven tweens; pass
-    `isAnimationActive={!reduced}` from a media-query hook.
+54. **Recharts animations ignore `prefers-reduced-motion` ✅ SHIPPED** — a new
+    `useReducedMotion` hook (`src/hooks/useReducedMotion.ts`) drives `isAnimationActive={!reduced}`
+    on every animating Recharts primitive across the 13 chart wrappers + the inline page charts
+    (Asset/Loan/Forecast/Salary/Pension), so JS-driven tweens are skipped under reduced-motion.
 55. **No `color-scheme: dark` ✅ SHIPPED** — `:root` now declares `color-scheme: dark`, so
     native UI (select popups, number spinners, the new month picker, autofill, scrollbars)
     renders dark against the app (`src/index.css`).
@@ -313,9 +324,14 @@ without the mouse. The optional `g`-prefixed route jumps were not built.
     when that lands.
 
 ### Norwegian domain
-57. **Studielån is only a generic debt.** The `student` debt type is amortized like any loan
-    (`src/lib/debt.ts`), ignoring Lånekassen specifics (0% while studying, deferment), so its
-    payoff row can mislead. Model the subtype's basics.
+57. **Studielån is only a generic debt ✅ SHIPPED** — `Debt` gained an optional
+    `interestFreeUntil` (YYYY-MM); a student loan is now carried flat (0% interest, no payment —
+    Lånekassen "while studying") in `planPayoff`/`calcDebtBalanceByYear` until that month, then
+    amortizes normally. `planPayoff`/`calcDebtBalanceByYear` take a `nowMonthKey`; the DebtSection
+    editor shows a "Rentefritt til (studielån)" field (only for `student` type, via `EditModal`'s
+    `showWhen`) and the ledger row reads "rentefritt til {date}" while deferred. Pure logic +
+    deferment tests in `src/lib/debt.ts` / `debt.test.ts`; wired on Assets/Dashboard projections
+    with the real current month. (`src/components/DebtSection.tsx`, `src/context/FinanceContext.tsx`.)
 58. **Forecast ignores the user's tuned assumptions ✅ OBSOLETE** — already addressed: the
     Forecast sliders seed from real data (`returnPct = returnOverride ?? growthReturnRate`, a
     `savingsSeed` derived from `recommendedInvestment`/net income, plus `raiseSeed`/`inflationSeed`
@@ -325,10 +341,12 @@ without the mouse. The optional `g`-prefixed route jumps were not built.
     in `src/lib/savingsRate.ts`) averages the trailing 3 months of the cashflow series and, when
     it slips under `savingsTargetPercent`, the Budget savings-rate card raises a warning banner
     (`src/pages/BudgetPage.tsx`).
-60. **Emergency-fund months use fixed expenses only.** `calcEmergencyFundStatus(bufferAccount,
-    totalFixedExpenses)` counts discretionary subscriptions but ignores variable essentials
-    (groceries), so "months covered" can mislead both ways. Let the user mark essential lines
-    or include median variable spend.
+60. **Emergency-fund months use fixed expenses only ✅ SHIPPED (subscriptions excluded)** —
+    `essentialMonthlyExpenses` (pure, unit-tested in `src/lib/fixedExpenseTotals.ts`) sums every
+    fixed-expense line except discretionary `subscription`s (the things you cancel in an
+    emergency); the gauge now divides the buffer by that instead of `totalFixedExpenses`
+    (`src/components/charts/EmergencyFundGauge.tsx`). A richer "mark individual lines essential"
+    toggle was left out (needs a persisted per-line flag).
 61. **Fixed expenses totaled by type ✅ SHIPPED** — `fixedExpenseTotalsByType` (pure,
     unit-tested in `src/lib/fixedExpenseTotals.ts`) sums the monthly amount per type; the
     Budget fixed-expense colour key now shows each present type's total ("subscriptions cost
@@ -343,15 +361,23 @@ without the mouse. The optional `g`-prefixed route jumps were not built.
     `EXPORT_VERSION` const now stamps the export and gates `validateAndPreview`: a file whose
     `_version` is newer than this build is refused with an "update the app first" error (i18n'd);
     older/absent versions still import as legacy. (`src/pages/SettingsPage.tsx`.)
-64. **Import is all-or-nothing.** The preview diff is good, but `confirmImport` replaces the
-    whole payload; a per-section selective restore (just the ledger, just settings) would
-    pair naturally with the existing diff summary.
-65. **SSB inflation has no manual refresh.** The retry cooldown lives in memory
-    (`server/index.js`), so after an outage the user can't force a fetch short of restarting
-    the container. Add a "refresh" action that resets the cooldown.
-66. **Restore is shell-only.** Recovering a SQLite snapshot is documented as
-    `docker cp` + restart (`README.md`); an in-app restore path (or surfacing the last
-    auto-snapshot from item 28) would make recovery reachable without a terminal.
+64. **Import is all-or-nothing ✅ SHIPPED** — the import preview's four sections are now
+    per-section restore toggles (checkboxes); on confirm only the checked sections' keys are
+    applied, so the rest of the data is left untouched. The section→key partition
+    (`src/lib/importSections.ts`, pure) is asserted **exhaustive and disjoint against the payload
+    registry** by `importSections.test.ts`, so a partial restore can't silently drop or duplicate
+    a field. Confirm disables when nothing is selected. (`src/pages/SettingsPage.tsx`.)
+65. **SSB inflation has no manual refresh ✅ SHIPPED** — `/api/inflation` now honours a
+    `force=1` query that bypasses the per-hour SSB attempt cooldown (`server/index.js`); the
+    context exposes `refreshInflation()` (re-fetch, clears the stale flag on a fresh result),
+    and the SalaryPage "inflation offline" note carries a Refresh button (i18n'd,
+    `inflationRefresh`/`inflationRefreshing`). (`src/context/FinanceContext.tsx`, `src/pages/SalaryPage.tsx`.)
+66. **Restore is shell-only ✅ SHIPPED** — the Settings import card gained "restore from a
+    SQLite backup (.sqlite)": a new `POST /api/restore` opens the uploaded `make backup` DB
+    read-only, extracts the `headroom` JSON blob and returns it (it never writes the live data),
+    and the client feeds that blob into the existing import preview → selective-restore → confirm
+    flow. So recovery from a raw backup no longer needs a terminal, and reuses the same safety
+    (backup-before-apply, section toggles). (`server/index.js`, `src/pages/SettingsPage.tsx`.)
 
 ### Accessibility & i18n leaks
 67. **Hardcoded-English aria/copy leaks ✅ SHIPPED** — the month-stepper aria-labels
@@ -364,13 +390,14 @@ without the mouse. The optional `g`-prefixed route jumps were not built.
     `EquityHistoryTable`. (`src/pages/BudgetPage.tsx`, `src/pages/SalaryPage.tsx`,
     `src/pages/LoanPage.tsx`, `src/components/MonthlyAccountSpend.tsx`,
     `src/components/EquityHistoryTable.tsx`.)
-69. **Onboarding always restarts from the top.** Only the `onboardingCompleted` boolean
-    persists; re-entering the tour begins at welcome even mid-setup
-    (`src/components/onboarding/OnboardingTour.tsx`). Persist the last topic index and
-    resume.
-70. **Optional: explicit vendor `manualChunks`.** Charts and pdf.js are already lazy; an
-    explicit recharts/date-fns vendor split in `vite.config.ts` would make the shared-chunk
-    boundary stable across builds. Low priority.
+69. **Onboarding always restarts from the top ✅ SHIPPED (in-session resume)** — the tour now
+    remembers the furthest-reached step in a module-scoped `resumeIndex`, so re-opening it
+    mid-session resumes there instead of welcome; finishing clears it, leaving early keeps it.
+    (`src/components/onboarding/OnboardingTour.tsx`.) Cross-reload persistence was left out (it
+    would need a field in the payload registry, syncing a tour position across devices).
+70. **Explicit vendor `manualChunks` ✅ SHIPPED** — `vite.config.ts` now splits `recharts` and
+    `date-fns` into their own named chunks (function form of `manualChunks`), stabilizing the
+    lazy-chart / date-fns chunk boundary across builds.
 
 ---
 

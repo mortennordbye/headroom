@@ -3,6 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { savingsSeriesFrom } from '../../lib/snapshotSeries';
 import { fillMonthGaps } from '../../lib/monthGrid';
 import ChartTooltip from '../ChartTooltip';
@@ -14,6 +15,7 @@ import { SERIES, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartCol
  */
 export default function SavingsHistoryChart() {
   const { t, lang, formatCurrency, formatCurrencyShort, balanceSnapshots } = useFinance();
+  const reduced = useReducedMotion();
   const c = t.charts;
   const dateLocale = lang === 'nb' ? nb : enUS;
 
@@ -44,7 +46,7 @@ export default function SavingsHistoryChart() {
             <Tooltip content={<ChartTooltip valueFormatter={formatCurrency} labelFormatter={(l) => String(l)} />} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             {accounts.map((a, i) => (
-              <Line key={a.id} name={a.name} type="monotone" dataKey={a.id} stroke={SERIES[i % SERIES.length]} strokeWidth={2} dot={{ r: 2 }} />
+              <Line isAnimationActive={!reduced} key={a.id} name={a.name} type="monotone" dataKey={a.id} stroke={SERIES[i % SERIES.length]} strokeWidth={2} dot={{ r: 2 }} />
             ))}
           </LineChart>
         </ResponsiveContainer>

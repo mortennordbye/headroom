@@ -3,6 +3,7 @@ import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveCo
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { calcAmortizationSchedule } from '../../lib/calculations';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
@@ -21,6 +22,7 @@ interface LtvRow {
  */
 export default function LtvChart() {
   const { t, lang, homeowner, assets, houseGrowthRate, balanceSnapshots } = useFinance();
+  const reduced = useReducedMotion();
   const c = t.charts;
   const dateLocale = lang === 'nb' ? nb : enUS;
 
@@ -80,8 +82,8 @@ export default function LtvChart() {
         <YAxis tickFormatter={(v) => `${v}%`} {...AXIS_PROPS_Y} width={40} domain={[0, 'auto']} />
         <Tooltip content={<ChartTooltip valueFormatter={(v) => `${v.toFixed(1)}%`} labelFormatter={(l) => String(l)} />} />
         <ReferenceLine y={85} stroke={CHART.rust} strokeDasharray="4 4" label={{ value: c.ltvCap, position: 'insideTopRight', fontSize: 10, fill: CHART.rust }} />
-        <Line name={c.ltvProjected} type="monotone" dataKey="projected" stroke={CHART.teal} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
-        <Line name={c.ltvActual} type="monotone" dataKey="actual" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+        <Line isAnimationActive={!reduced} name={c.ltvProjected} type="monotone" dataKey="projected" stroke={CHART.teal} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+        <Line isAnimationActive={!reduced} name={c.ltvActual} type="monotone" dataKey="actual" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} connectNulls />
       </ComposedChart>
     </ResponsiveContainer>
     </div>

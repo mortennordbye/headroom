@@ -310,6 +310,48 @@ app.post('/api/data', (req, res) => {
   res.json({ ok: true, rev });
 });
 
+// In-app restore from a SQLite backup file (what `make backup` copies out), so
+// recovery doesn't need a terminal. This only EXTRACTS the JSON blob from the
+// uploaded DB and returns it — it never writes the live data. The client feeds
+// the returned blob into the normal import preview → confirm flow (which takes a
+// safety backup and applies via the usual save path), so there's no second write
+// path to keep in sync and no concurrency edge cases here. `express.raw` reads
+// the binary body regardless of content type (the global json parser only acts
+// on application/json, so it passes a binary upload straight through).
+app.post('/api/restore', express.raw({ type: () => true, limit: '50mb' }), (req, res) => {
+  const buf = req.body;
+  // express.raw yields a Buffer. Reject anything else — a parsed string/array
+  // (body-parser type tampering) or a missing body — before any length/byte
+  // inspection, so there's no array-vs-string type confusion downstream.
+  if (typeof buf !== 'object' || Array.isArray(buf) || !Buffer.isBuffer(buf)) {
+    return res.status(400).json({ error: 'not a SQLite backup file' });
+  }
+  // SQLite files begin with the literal "SQLite format 3\0".
+  if (buf.length < 16 || buf.toString('utf8', 0, 15) !== 'SQLite format 3') {
+    return res.status(400).json({ error: 'not a SQLite backup file' });
+  }
+  // Open the uploaded database in memory, read-only — the attacker-controlled
+  // bytes never touch disk (no temp file to write or clean up).
+  let src;
+  try {
+    src = new Database(buf, { readonly: true });
+    const row = src.prepare("SELECT content FROM finance_data WHERE id = 'headroom'").get();
+    if (!row || typeof row.content !== 'string') {
+      return res.status(400).json({ error: 'backup contains no finance data' });
+    }
+    const data = JSON.parse(row.content);
+    if (!isValidFinancePayload(data)) {
+      return res.status(400).json({ error: 'backup data is not a valid finance blob' });
+    }
+    res.json({ data });
+  } catch (err) {
+    console.warn(`[restore] could not read backup: ${err.message}`);
+    res.status(400).json({ error: 'could not read the backup database' });
+  } finally {
+    try { if (src) src.close(); } catch { /* ignore */ }
+  }
+});
+
 app.get('/api/inflation', async (req, res) => {
   const from = String(req.query.from || '').match(/^\d{4}-\d{2}$/) ? req.query.from : null;
   const to = String(req.query.to || '').match(/^\d{4}-\d{2}$/) ? req.query.to : null;
@@ -327,9 +369,12 @@ app.get('/api/inflation', async (req, res) => {
   const latestAt = latestRow?.latest ? Date.parse(latestRow.latest) : 0;
   const ageMs = Date.now() - latestAt;
   const needsRefresh = cached.length < expectedCount || ageMs > CACHE_TTL_MS;
+  // A user-initiated refresh bypasses the per-hour attempt cooldown (but not the
+  // needsRefresh check — nothing to fetch when the cache is already current).
+  const force = req.query.force === '1';
 
   let stale = false;
-  if (needsRefresh && Date.now() - lastSsbAttemptAt > SSB_ATTEMPT_COOLDOWN_MS) {
+  if (needsRefresh && (force || Date.now() - lastSsbAttemptAt > SSB_ATTEMPT_COOLDOWN_MS)) {
     lastSsbAttemptAt = Date.now();
     try {
       const points = await fetchCpi(paddedFrom, to);

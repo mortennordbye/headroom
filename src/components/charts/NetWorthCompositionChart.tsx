@@ -3,6 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { computeEquityBreakdown } from '../../lib/equity';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
@@ -15,6 +16,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColo
  */
 export default function NetWorthCompositionChart() {
   const { t, lang, balanceSnapshots, assets, currentMonth, formatCurrencyShort } = useFinance();
+  const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
 
   const data = useMemo(() => {
@@ -59,6 +61,7 @@ export default function NetWorthCompositionChart() {
         {areas.map(a => (
           <Area
             key={a.key}
+            isAnimationActive={!reduced}
             type="monotone"
             dataKey={a.key}
             name={a.name}
