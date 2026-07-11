@@ -22,7 +22,8 @@ import type { LabelRule } from '../lib/labelRules';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
-import { lastNMonthKeys, currentMonthKey } from '../lib/date';
+import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
+import { computeAutomationPostings, type AutomationRule, type AutomationState, type ResolvedPosting } from '../lib/automation';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
 import { dedupeBankTransactions } from '../lib/bankDedup';
@@ -70,7 +71,23 @@ export interface FixedExpense {
    * broad category. When set, it takes priority over `category` for matching.
    */
   match?: string;
+  /**
+   * Optional automation destination. When set, this recurring expense moves a
+   * balance every month: grow a savings account, or pay down the mortgage / a
+   * debt by the principal portion (amortization-aware, see src/lib/automation.ts).
+   * The expense's `amount` is what moves; it's already counted in the budget, so
+   * the money leaves free-to-spend and lands in the destination — no double count.
+   */
+  destinationKind?: ExpenseDestinationKind;
+  savingsAccountId?: string;   // set iff destinationKind === 'savingsAccount'
+  debtId?: string;             // set iff destinationKind === 'debt'
+  /** 'yyyy-MM' last month the automation posted; absent = never. Double-apply
+   *  guard. Set to the current month when a destination is first assigned, so the
+   *  first move happens the NEXT month. */
+  lastPostedMonth?: string;
 }
+
+export type ExpenseDestinationKind = 'savingsAccount' | 'mortgage' | 'debt';
 
 // Non-mortgage debts (studielån, forbrukslån, kredittkort, …). Modeled separately
 // from the mortgage (which lives in Assets.houseDebt) and reduce net worth.
@@ -149,6 +166,21 @@ export interface SavingsAccount {
   id: string;
   name: string;
   balance: number;
+}
+
+// A multi-month automation catch-up awaiting the user's confirmation (non-
+// persisted view state). Single-month posts apply silently; a gap of ≥2 months
+// surfaces here so the user can confirm a potentially large back-post.
+export interface PendingCatchup {
+  expenseId: string;         // the fixed expense whose automation is behind
+  name: string;
+  targetKind: ExpenseDestinationKind;
+  monthsDue: number;
+  /** Signed change to the target if the full catch-up is applied (+savings /
+   *  −paydown), for the confirmation message. Handlers recompute from live
+   *  state, so this is display-only. */
+  deltaFull: number;
+  infeasible: boolean;
 }
 
 export interface Assets {
@@ -606,6 +638,11 @@ interface FinanceDataContextType {
   addGoal: (g: Omit<Goal, 'id'>) => void;
   updateGoal: (id: string, patch: Partial<Omit<Goal, 'id'>>) => void;
   removeGoal: (id: string) => void;
+  /** Multi-month automation catch-ups awaiting confirmation (fixed-expense
+   *  destinations that fell behind — see the automation runner). */
+  pendingCatchups: PendingCatchup[];
+  confirmCatchup: (expenseId: string) => void;
+  declineCatchup: (expenseId: string) => void;
   employerCostConfig: EmployerCostConfig;
   updateEmployerCostConfig: (key: keyof EmployerCostConfig, value: number) => void;
   billingConfig: BillingRateConfig;
@@ -1693,6 +1730,119 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const updateGoal = goalsCrud.update;
   const removeGoal = goalsCrud.remove;
 
+  // ── Fixed-expense automations (a recurring expense that moves a balance) ──────
+  // A fixed expense with a `destinationKind` grows a savings account or pays down
+  // the mortgage / a debt each month by its amount. See src/lib/automation.ts.
+
+  // Multi-month catch-ups awaiting confirmation (view state, not persisted).
+  const [pendingCatchups, setPendingCatchups] = useState<PendingCatchup[]>([]);
+
+  // Project the destination-bearing fixed expenses to the runner's rule shape.
+  const automationRules = useMemo<AutomationRule[]>(() => fixedExpenses
+    .filter(e => e.destinationKind)
+    .map(e => ({
+      id: e.id,
+      name: e.name,
+      amount: e.amount,
+      targetKind: e.destinationKind!,
+      savingsAccountId: e.savingsAccountId,
+      debtId: e.debtId,
+      // A destination is stamped with lastPostedMonth on assignment, so this
+      // fallback only matters for imported data — start it next month.
+      startMonth: addMonthsKey(currentMonthKey(), 1),
+      lastPostedMonth: e.lastPostedMonth,
+    })), [fixedExpenses]);
+
+  // Build the runner's balance/rate snapshot from live state (memoized so the
+  // effect and the confirm/decline handlers share one source).
+  const automationState = useMemo<AutomationState>(() => ({
+    savings: Object.fromEntries((assets.savingsAccounts ?? []).map(s => [s.id, s.balance])),
+    mortgage: assets.houseDebt,
+    mortgageRate: housingMode === 'homeowner' ? homeowner.rente : loan.rente,
+    debts: Object.fromEntries(debts.map(d => [d.id, { balance: d.balance, rate: d.rate }])),
+    housingMode,
+  }), [assets.savingsAccounts, assets.houseDebt, housingMode, homeowner.rente, loan.rente, debts]);
+
+  // Apply a resolved posting's absolute new balance to the right slice. Debt
+  // writes are batched by the caller (a single setDebts) to avoid stale-closure
+  // clobber; savings/mortgage use functional setters and compose safely.
+  const applyPostingBalances = useCallback((postings: ResolvedPosting[]) => {
+    const debtPatch: Record<string, number> = {};
+    let hasDebtPatch = false;
+    for (const p of postings) {
+      if (p.targetKind === 'savingsAccount' && p.savingsAccountId) {
+        updateSavingsAccount(p.savingsAccountId, { balance: p.newBalance });
+      } else if (p.targetKind === 'mortgage') {
+        // updateHomeowner mirrors the balance into assets.houseDebt + transition.
+        updateHomeowner('currentMortgageBalance', p.newBalance);
+      } else if (p.targetKind === 'debt' && p.debtId) {
+        debtPatch[p.debtId] = p.newBalance;
+        hasDebtPatch = true;
+      }
+    }
+    if (hasDebtPatch) setDebts(debts.map(d => (d.id in debtPatch ? { ...d, balance: debtPatch[d.id] } : d)));
+  }, [updateSavingsAccount, updateHomeowner, debts]);
+
+  // Stamp lastPostedMonth on the posted expenses.
+  const stampPosted = useCallback((ids: Set<string>, month: string) => {
+    setFixedExpenses(prev => prev.map(e => (ids.has(e.id) ? { ...e, lastPostedMonth: month } : e)));
+  }, []);
+
+  // The monthly runner. Modeled on the balanceSnapshots effect: gated by
+  // `loaded.current`, targets the real current month, and only writes when there
+  // is something to do (so a plain load/reload never dirties data). Single-month
+  // posts apply immediately; a ≥2-month gap is deferred to `pendingCatchups`.
+  useEffect(() => {
+    if (!loaded.current) return;
+    const currentMonth = currentMonthKey();
+    const postings = computeAutomationPostings(automationRules, automationState, currentMonth);
+
+    const multi = postings.filter(p => p.monthsDue >= 2);
+    const nextPending: PendingCatchup[] = multi.map(p => {
+      const base = p.targetKind === 'savingsAccount' ? (automationState.savings[p.savingsAccountId!] ?? 0)
+        : p.targetKind === 'mortgage' ? automationState.mortgage
+        : (automationState.debts[p.debtId!]?.balance ?? 0);
+      return {
+        expenseId: p.rule.id,
+        name: p.rule.name,
+        targetKind: p.targetKind,
+        monthsDue: p.monthsDue,
+        deltaFull: p.newBalance - base,
+        infeasible: !!p.infeasible,
+      };
+    });
+    setPendingCatchups(prev => (stableStringify(prev) === stableStringify(nextPending) ? prev : nextPending));
+
+    const immediate = postings.filter(p => p.monthsDue === 1);
+    if (immediate.length === 0) return;
+    // Deliberate: post this month's automations into persisted state. The
+    // lastPostedMonth stamp + no-op guard make a re-run converge (monthsDue → 0),
+    // same shape as the balance-snapshot effect above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    applyPostingBalances(immediate);
+    stampPosted(new Set(immediate.map(p => p.rule.id)), currentMonth);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [automationRules, automationState]);
+
+  const confirmCatchup = useCallback((expenseId: string) => {
+    const currentMonth = currentMonthKey();
+    const [posting] = computeAutomationPostings(
+      automationRules.filter(r => r.id === expenseId), automationState, currentMonth);
+    if (posting) applyPostingBalances([posting]);
+    stampPosted(new Set([expenseId]), currentMonth);
+    setPendingCatchups(prev => prev.filter(p => p.expenseId !== expenseId));
+  }, [automationRules, automationState, applyPostingBalances, stampPosted]);
+
+  const declineCatchup = useCallback((expenseId: string) => {
+    const currentMonth = currentMonthKey();
+    // Apply a single month, then stamp to current so the skipped months don't re-prompt.
+    const [posting] = computeAutomationPostings(
+      automationRules.filter(r => r.id === expenseId), automationState, currentMonth, 1);
+    if (posting) applyPostingBalances([posting]);
+    stampPosted(new Set([expenseId]), currentMonth);
+    setPendingCatchups(prev => prev.filter(p => p.expenseId !== expenseId));
+  }, [automationRules, automationState, applyPostingBalances, stampPosted]);
+
   // Set (or clear, with null / ≤0) a category's monthly budget cap.
   const setCategoryBudget = useCallback((category: CategoryKey, amount: number | null) => {
     setCategoryBudgets(prev => {
@@ -2010,6 +2160,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     overtime, addOvertime, updateOvertime, removeOvertime,
     hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
     goals, addGoal, updateGoal, removeGoal,
+    pendingCatchups, confirmCatchup, declineCatchup,
     employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
     inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     importAll, buildPayload, resetAll,
@@ -2029,7 +2180,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     jobs, addJob, updateJob, removeJob, salaries, addSalary, updateSalary, removeSalary,
     bonuses, addBonus, updateBonus, removeBonus, overtime, addOvertime, updateOvertime,
     removeOvertime, hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
-    goals, addGoal, updateGoal, removeGoal, employerCostConfig, updateEmployerCostConfig,
+    goals, addGoal, updateGoal, removeGoal,
+    pendingCatchups, confirmCatchup, declineCatchup,
+    employerCostConfig, updateEmployerCostConfig,
     billingConfig, updateBillingConfig, inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     importAll, buildPayload, resetAll, restoreAssetTaxDefaults,
     restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
