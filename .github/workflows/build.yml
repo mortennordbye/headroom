@@ -98,8 +98,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Open a PR against the homelab repo bumping the Kustomize image tag to the
-  # SHA we just pushed. Merging that PR is what deploys (ArgoCD syncs from Git).
+  # Open a homelab PR bumping the deployment image to the SHA we just pushed.
   deploy:
     name: Bump homelab image tag
     needs: build
