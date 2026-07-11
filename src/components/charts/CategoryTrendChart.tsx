@@ -42,7 +42,9 @@ export default function CategoryTrendChart() {
         <BarChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
           <CartesianGrid {...GRID_PROPS} vertical={false} />
           <XAxis dataKey="label" {...AXIS_PROPS} />
-          <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={44} />
+          {/* Compact axis ticks (e.g. "80k") so long values like "80 000 kr"
+              aren't clipped by the narrow axis width; bar-top labels stay full. */}
+          <YAxis tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} {...AXIS_PROPS_Y} width={40} />
           <Tooltip cursor={{ fill: CHART.track }} content={<ChartTooltip />} />
           {series.map((c, i) => (
             <Bar isAnimationActive={!reduced} key={c.key} name={t.categoryLabels[c.key]} dataKey={c.key} stackId="s" fill={c.color} maxBarSize={32}>

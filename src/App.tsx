@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import UpdatePrompt from './components/UpdatePrompt';
+import CatchupPrompt from './components/CatchupPrompt';
 import Layout from './components/Layout';
 import { Skeleton } from './components/ui/Skeleton';
 
@@ -60,6 +61,7 @@ function App() {
         </BrowserRouter>
       </ErrorBoundary>
       <UpdatePrompt />
+      <CatchupPrompt />
     </FinanceProvider>
   );
 }
