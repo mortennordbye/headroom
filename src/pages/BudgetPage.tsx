@@ -28,6 +28,7 @@ import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance, type TransactionTemplate, type ExpenseType, type DailyTransaction, type FixedExpense } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
+import ExpenseDialog from '../components/ExpenseDialog';
 import EditTransactionModal from '../components/EditTransactionModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
@@ -36,7 +37,7 @@ import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
 import { monthlyCashflow } from '../lib/monthlyCashflow';
 import { savingsRateStatus } from '../lib/savingsRate';
 import { fixedExpenseTotalsByType } from '../lib/fixedExpenseTotals';
-import { lastNMonthKeys, isBeforePayday, currentMonthKey } from '../lib/date';
+import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
 import { incomeDiffPct } from '../lib/income';
@@ -101,7 +102,10 @@ function EnvelopeBar({ envelope, formatCurrency, labels }: {
       <ProgressBar pct={pct} heightClass="h-[3px]" color={color} />
       <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-2)]">
         <span>{formatCurrency(envelope.actual)} / {formatCurrency(envelope.budgeted)}</span>
-        <span style={{ color }}>
+        <span
+          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold"
+          style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)` }}
+        >
           {envelope.overspent > 0
             ? `${formatCurrency(envelope.overspent)} ${labels.over}`
             : `${formatCurrency(envelope.remaining)} ${labels.left}`}
@@ -260,63 +264,20 @@ const BudgetPage: React.FC = () => {
   });
 
   // --- Fixed Expenses ---
-  const typeOptions = (Object.keys(EXPENSE_TYPE_COLOR) as ExpenseType[]).map(v => ({ value: v, label: t.expenseType[v] }));
-  // Optional envelope link: a fixed expense tracked against a spending category
-  // (see src/lib/envelopes.ts). Blank = a plain reserved amount (the default).
-  const trackCategoryOptions = [
-    { value: '', label: t.trackCategoryNone },
-    ...CATEGORIES.filter(c => c.key !== 'income').map(c => ({ value: c.key, label: t.categoryLabels[c.key] })),
-  ];
-  const trackCategoryField = (value?: string) => ({
-    key: 'category', label: t.trackCategoryLabel, type: 'select' as const,
-    value: value ?? '', options: trackCategoryOptions, hint: t.trackCategoryHint,
-  });
-  const parseTrackedCategory = (value: string) => (isCategoryKey(value) ? value : undefined);
-  // Optional merchant/text pattern that ties this fixed expense to its own
-  // transactions (takes priority over the category envelope for matching).
-  const matchField = (value?: string) => ({
-    key: 'match', label: t.budgetPage.matchPatternLabel, type: 'text' as const,
-    value: value ?? '', placeholder: t.budgetPage.matchPatternPlaceholder, hint: t.budgetPage.matchPatternHint,
-  });
+  // Add/edit runs in the dedicated ExpenseDialog (src/components/ExpenseDialog.tsx),
+  // not the shared EditModal — it groups essentials, the "what happens to the
+  // money" destination, and advanced tracking/matching options.
+  const [expenseDialog, setExpenseDialog] = useState<{ editing?: FixedExpense } | null>(null);
+  const openExpenseDialog = (editing?: FixedExpense) => setExpenseDialog({ editing });
+  const saveExpense = (payload: Omit<FixedExpense, 'id'>) => {
+    setFixedExpenses(
+      expenseDialog?.editing
+        ? fixedExpenses.map(e => (e.id === expenseDialog.editing!.id ? { ...e, ...payload } : e))
+        : [...fixedExpenses, { id: crypto.randomUUID(), ...payload }],
+    );
+    setExpenseDialog(null);
+  };
 
-  // Optional automation destination: when set, this recurring expense moves its
-  // amount into a savings account or toward the mortgage/a debt each month (see
-  // src/lib/automation.ts). Encoded like GoalsSection: `sa:<id>` / `debt:<id>` /
-  // `mortgage` / '' (none), so EditModal's flat <select> can carry it.
-  const SA_PREFIX = 'sa:';
-  const DEBT_PREFIX = 'debt:';
-  const encodeDestination = (e: { destinationKind?: string; savingsAccountId?: string; debtId?: string }): string => {
-    if (e.destinationKind === 'savingsAccount' && e.savingsAccountId) return `${SA_PREFIX}${e.savingsAccountId}`;
-    if (e.destinationKind === 'debt' && e.debtId) return `${DEBT_PREFIX}${e.debtId}`;
-    if (e.destinationKind === 'mortgage') return 'mortgage';
-    return '';
-  };
-  const decodeDestination = (value: string): Pick<FixedExpense, 'destinationKind' | 'savingsAccountId' | 'debtId'> => {
-    if (value.startsWith(SA_PREFIX)) return { destinationKind: 'savingsAccount', savingsAccountId: value.slice(SA_PREFIX.length) };
-    if (value.startsWith(DEBT_PREFIX)) return { destinationKind: 'debt', debtId: value.slice(DEBT_PREFIX.length) };
-    if (value === 'mortgage') return { destinationKind: 'mortgage' };
-    return {};
-  };
-  const destinationOptions = [
-    { value: '', label: t.expenseDestination.none },
-    ...(assets.savingsAccounts ?? []).map(s => ({ value: `${SA_PREFIX}${s.id}`, label: `${t.expenseDestination.savings}: ${s.name}` })),
-    ...(housingMode !== 'first_buyer' ? [{ value: 'mortgage', label: t.expenseDestination.mortgage }] : []),
-    ...debts.map(d => ({ value: `${DEBT_PREFIX}${d.id}`, label: `${t.expenseDestination.debt}: ${d.name}` })),
-  ];
-  const destinationField = (value?: string) => ({
-    key: 'destination', label: t.expenseDestination.label, type: 'select' as const,
-    value: value ?? '', options: destinationOptions, hint: t.expenseDestination.hint,
-  });
-  // Resolve the destination fields to persist, stamping lastPostedMonth to the
-  // current month when a destination is newly assigned so the first move happens
-  // NEXT month (and clearing it when the destination is removed).
-  const resolveDestination = (encoded: string, prev?: FixedExpense): Pick<FixedExpense, 'destinationKind' | 'savingsAccountId' | 'debtId' | 'lastPostedMonth'> => {
-    const dest = decodeDestination(encoded);
-    if (!dest.destinationKind) return { destinationKind: undefined, savingsAccountId: undefined, debtId: undefined, lastPostedMonth: undefined };
-    const unchanged = prev?.destinationKind === dest.destinationKind
-      && prev?.savingsAccountId === dest.savingsAccountId && prev?.debtId === dest.debtId;
-    return { ...dest, lastPostedMonth: unchanged ? prev?.lastPostedMonth : currentMonthKey() };
-  };
   // Display label for a destination-bearing expense's target (or null if none).
   const destinationLabelFor = (e: FixedExpense): string | null => {
     if (e.destinationKind === 'savingsAccount') {
@@ -331,53 +292,6 @@ const BudgetPage: React.FC = () => {
       return housingMode === 'first_buyer' ? t.expenseDestination.pausedNoMortgage : t.expenseDestination.mortgage;
     }
     return null;
-  };
-
-  const addFixedExpense = () => {
-    openModal({
-      title: t.fixedCosts,
-      fields: [
-        { key: 'name', label: t.newExpenseName, type: 'text', value: '', placeholder: t.budgetPage.expenseNamePlaceholder },
-        { key: 'amount', label: t.newAmount, type: 'number', value: '', placeholder: '0' },
-        { key: 'type', label: t.expenseTypeLabel, type: 'select', value: 'fixed', options: typeOptions },
-        trackCategoryField(),
-        matchField(),
-        destinationField(),
-      ],
-      onSave: (vals) => {
-        const amount = parsePositiveNumber(vals.amount);
-        if (vals.name.trim() && amount !== null) {
-          setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: vals.name.trim(), amount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category), match: vals.match.trim() || undefined, ...resolveDestination(vals.destination) }]);
-          closeModal();
-        } else {
-          setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.newExpenseName + t.validation.requiredSuffix : t.newAmount + t.validation.positiveAmountSuffix } : null);
-        }
-      },
-    });
-  };
-
-  const editFixedExpense = (id: string, name: string, amount: number, type?: ExpenseType, category?: string, match?: string) => {
-    const prev = fixedExpenses.find(e => e.id === id);
-    openModal({
-      title: name,
-      fields: [
-        { key: 'name', label: t.editName, type: 'text', value: name },
-        { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
-        { key: 'type', label: t.expenseTypeLabel, type: 'select', value: type ?? 'fixed', options: typeOptions },
-        trackCategoryField(category),
-        matchField(match),
-        destinationField(prev ? encodeDestination(prev) : ''),
-      ],
-      onSave: (vals) => {
-        const newAmount = parsePositiveNumber(vals.amount);
-        if (vals.name.trim() && newAmount !== null) {
-          setFixedExpenses(fixedExpenses.map(e => e.id === id ? { ...e, name: vals.name.trim(), amount: newAmount, type: vals.type as ExpenseType, category: parseTrackedCategory(vals.category), match: vals.match.trim() || undefined, ...resolveDestination(vals.destination, prev) } : e));
-          closeModal();
-        } else {
-          setModal(prev => prev ? { ...prev, error: !vals.name.trim() ? t.editName + t.validation.requiredSuffix : t.editAmount + t.validation.positiveAmountSuffix } : null);
-        }
-      },
-    });
   };
 
   const removeFixedExpense = (id: string, name: string) => {
@@ -824,7 +738,7 @@ const BudgetPage: React.FC = () => {
             <h2 className={sectionLabel}>{t.fixedCosts}</h2>
             {!expensesReadOnly && (
               <button
-                onClick={addFixedExpense}
+                onClick={() => openExpenseDialog()}
                 aria-label={`${t.add} — ${t.fixedCosts}`}
                 className="text-[var(--accent)] hover:opacity-70 transition-opacity"
               >
@@ -920,8 +834,15 @@ const BudgetPage: React.FC = () => {
               // under the first of them.
               const envelope = reconciliation.byExpenseId.get(expense.id);
               const showEnvelope = !!envelope && envelope.actual > 0 && envelope.expenseIds[0] === expense.id;
+              const isOver = envelope?.status === 'over';
               return (
-              <div key={expense.id} className="py-3 border-b border-[var(--border)] last:border-0">
+              <div
+                key={expense.id}
+                className={`relative py-4 border-b border-[var(--border)] last:border-0 ${isOver ? 'pl-2.5' : ''}`}
+              >
+                {/* Over-budget accent: a rounded bar inset from the row edges so
+                    two adjacent over-budget rows read separately, not as one bar. */}
+                {isOver && <span aria-hidden className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-full bg-[var(--rust)]" />}
                 <div className="flex items-center justify-between group">
                   {expensesReadOnly ? (
                     <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] min-w-0">
@@ -933,7 +854,7 @@ const BudgetPage: React.FC = () => {
                       type="button"
                       aria-label={`${t.edit} — ${expense.name}`}
                       className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
-                      onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category, expense.match)}
+                      onClick={() => openExpenseDialog(expense)}
                     >
                       <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
                       <span className="truncate">{expense.name}</span>
@@ -950,7 +871,7 @@ const BudgetPage: React.FC = () => {
                           type="button"
                           aria-label={`${t.edit} — ${expense.name}`}
                           className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
-                          onClick={() => editFixedExpense(expense.id, expense.name, expense.amount, expense.type, expense.category, expense.match)}
+                          onClick={() => openExpenseDialog(expense)}
                         >
                           {formatCurrency(expense.amount)}
                         </button>
@@ -1387,6 +1308,13 @@ const BudgetPage: React.FC = () => {
       )}
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
+      {expenseDialog && (
+        <ExpenseDialog
+          expense={expenseDialog.editing}
+          onSave={saveExpense}
+          onClose={() => setExpenseDialog(null)}
+        />
+      )}
       {editingTx && <EditTransactionModal tx={editingTx} onClose={() => setEditingTx(null)} />}
       {pendingDelete && (
         <ConfirmModal
