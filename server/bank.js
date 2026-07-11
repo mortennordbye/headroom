@@ -616,7 +616,8 @@ function getStatus() {
     appIdFromEnv: Boolean(ENV_APP_ID),
     configured: hasRedirect && keyPresent && Boolean(appId),
   };
-  const connections = readStore().connections.map((c) => {
+  const store = readStore();
+  const connections = store.connections.map((c) => {
     const expiry = new Date(c.valid_until).getTime();
     const daysLeft = Number.isFinite(expiry) ? Math.max(0, Math.ceil((expiry - Date.now()) / 864e5)) : 0;
     return {
@@ -630,7 +631,9 @@ function getStatus() {
       needsRelink: Boolean(c.needs_relink) || !sessionValid(c),
     };
   });
-  return { linked: connections.length > 0, connections, ...base };
+  // Rolling sync history, newest first, for the Settings card.
+  const syncLog = [...(store.syncLog || [])].reverse();
+  return { linked: connections.length > 0, connections, syncLog, ...base };
 }
 
 /**
@@ -709,16 +712,47 @@ async function fetchMappedTransactions() {
   return mapped;
 }
 
-/** Record a successful sync time on every live connection (clears its relink flag). */
-function recordSync() {
+// How many recent sync outcomes to keep in the rolling log (oldest pruned).
+const SYNC_LOG_MAX = 20;
+
+/** Shape one sync outcome into a compact, bounded log entry. Pure. */
+function makeSyncEntry(outcome, nowIso) {
+  const ok = outcome.ok !== false;
+  const entry = { at: nowIso, ok };
+  if (ok) {
+    const num = (v) => (Number.isFinite(v) ? v : 0);
+    entry.added = num(outcome.added);
+    entry.fetched = num(outcome.fetched);
+    entry.total = num(outcome.total);
+  } else if (outcome.error) {
+    entry.error = String(outcome.error).slice(0, 200);
+  }
+  return entry;
+}
+
+/** Append an entry to a rolling log, keeping at most `max` (newest). Pure. */
+function appendSyncLog(log, entry, max = SYNC_LOG_MAX) {
+  const next = (Array.isArray(log) ? log : []).concat([entry]);
+  return next.slice(Math.max(0, next.length - max));
+}
+
+/**
+ * Record a sync outcome: on success, stamp `last_sync` on every live connection
+ * (clearing its relink flag); always append a rolling log entry (ok or error) so
+ * the Settings card can show whether a cron sync ran and what it pulled.
+ */
+function recordSync(outcome = {}) {
   const store = readStore();
   const now = new Date().toISOString();
-  for (const c of store.connections) {
-    if (sessionValid(c)) {
-      c.last_sync = now;
-      c.needs_relink = false;
+  if (outcome.ok !== false) {
+    for (const c of store.connections) {
+      if (sessionValid(c)) {
+        c.last_sync = now;
+        c.needs_relink = false;
+      }
     }
   }
+  store.syncLog = appendSyncLog(store.syncLog, makeSyncEntry(outcome, now));
   writeStore(store);
 }
 
@@ -737,6 +771,8 @@ module.exports = {
   getStatus,
   fetchMappedTransactions,
   recordSync,
+  makeSyncEntry,
+  appendSyncLog,
   removeConnection,
   // key management
   hasKey,

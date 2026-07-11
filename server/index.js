@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
 const bank = require('./bank');
+const { startBackupSchedule, parseCount } = require('./backup');
 const pkg = require('./package.json');
 
 // Build identity. CI passes the commit SHA as BUILD_SHA (see Dockerfile / the
@@ -509,17 +510,21 @@ app.post('/api/bank/sync', async (_req, res) => {
     // rows. We return the new rev so the tab that triggered the sync can adopt it
     // and not treat its own sync as a conflicting external change.
     const newRev = writeBlob('headroom', JSON.stringify(blob), stored.rev);
-    bank.recordSync();
+    const added = blob.dailyTransactions.length - before;
+    const total = blob.dailyTransactions.length;
+    bank.recordSync({ ok: true, added, fetched: mapped.length, total });
     res.set('X-Data-Rev', String(newRev));
     res.json({
       ok: true,
       fetched: mapped.length,
-      added: blob.dailyTransactions.length - before,
-      total: blob.dailyTransactions.length,
+      added,
+      total,
       dailyTransactions: blob.dailyTransactions,
       rev: newRev,
     });
   } catch (err) {
+    // Log the failed attempt too, so a silent cron failure is visible in-app.
+    try { bank.recordSync({ ok: false, error: err.message }); } catch { /* store write best-effort */ }
     if (err.needsRelink) return res.status(409).json({ error: err.message, needsRelink: true });
     console.error('[bank] sync failed:', err.message);
     res.status(500).json({ error: err.message });
@@ -541,6 +546,13 @@ if (fs.existsSync(DIST)) {
   // path-to-regexp v8 compatibility; matches any unhandled GET.
   app.get(/.*/, (req, res) => res.sendFile(path.join(DIST, 'index.html')));
 }
+
+// Rotating on-disk backups (see backup.js). BACKUP_INTERVAL_HOURS=0 disables it.
+const backupSchedule = startBackupSchedule(db, DATA_DIR, {
+  intervalHours: parseCount(process.env.BACKUP_INTERVAL_HOURS, 24),
+  keep: parseCount(process.env.BACKUP_KEEP, 7),
+});
+if (backupSchedule) console.log(`[backup] rotating snapshots enabled → ${backupSchedule.dir}`);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`API running on :${PORT}`));

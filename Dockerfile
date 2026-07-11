@@ -22,6 +22,7 @@ COPY server/index.js ./
 COPY server/seed.js ./
 COPY server/ssb.js ./
 COPY server/bank.js ./
+COPY server/backup.js ./
 COPY server/docker-entrypoint.sh ./
 COPY --from=frontend-build /app/dist ./dist
 RUN chmod +x docker-entrypoint.sh && mkdir -p /data && chown -R node:node /app /data

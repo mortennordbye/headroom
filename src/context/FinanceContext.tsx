@@ -42,6 +42,7 @@ import {
   derivePayload,
   type PayloadSetters,
 } from '../lib/payloadRegistry';
+import { DEFAULT_FORECAST_ASSUMPTIONS, type ForecastAssumptions } from '../lib/forecastProjection';
 
 // --- Types ---
 
@@ -467,6 +468,9 @@ interface FinanceSettingsContextType {
   setSavingsTargetPercent: (val: number) => void;
   growthReturnRate: number;
   setGrowthReturnRate: (val: number) => void;
+  /** Saved Forecast assumptions (scenario A, compare scenario B, compare on/off). */
+  forecastAssumptions: ForecastAssumptions;
+  setForecastAssumptions: (val: ForecastAssumptions) => void;
   houseGrowthRate: number;
   setHouseGrowthRate: (val: number) => void;
   cashGrowthRate: number;
@@ -636,6 +640,9 @@ interface FinanceDerivedContextType {
   averageIncome: number;
   /** Last-12-months net income (override or derived), oldest → newest, keyed by month. */
   incomeSeries: { month: string; value: number }[];
+  /** Net monthly income implied for any 'yyyy-MM' from salary history + bonuses
+   *  (before manual overrides). Used to reconstruct income for past months. */
+  derivedNetMonthlyFor: (monthKey: string) => number;
   recommendedSpending: number;
   recommendedInvestment: number;
   suggestedInvestment: number;
@@ -732,6 +739,7 @@ export interface ExportPayload {
   currentMonth?: string;
   savingsTargetPercent?: number;
   growthReturnRate?: number;
+  forecastAssumptions?: ForecastAssumptions;
   houseGrowthRate?: number;
   cashGrowthRate?: number;
   cryptoGrowthRate?: number;
@@ -840,6 +848,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [homeowner, setHomeowner] = useState<HomeownerData>(DEFAULT_HOMEOWNER);
   const [transition, setTransition] = useState<TransitionData>(DEFAULT_TRANSITION);
   const [growthReturnRate, setGrowthReturnRate] = useState<number>(DEFAULT_GROWTH_RATES.growthReturnRate);
+  const [forecastAssumptions, setForecastAssumptions] = useState<ForecastAssumptions>(DEFAULT_FORECAST_ASSUMPTIONS);
   const [houseGrowthRate, setHouseGrowthRate] = useState<number>(DEFAULT_GROWTH_RATES.houseGrowthRate);
   const [cashGrowthRate, setCashGrowthRate] = useState<number>(DEFAULT_GROWTH_RATES.cashGrowthRate);
   const [cryptoGrowthRate, setCryptoGrowthRate] = useState<number>(DEFAULT_GROWTH_RATES.cryptoGrowthRate);
@@ -920,14 +929,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang,
-    savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
+    savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, payday,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
-    housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate,
+    housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
@@ -957,6 +966,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       loan: setLoan, pension: setPension, recurringTemplates: setRecurringTemplates,
       housingMode: setHousingMode, homeowner: setHomeowner, transition: setTransition, lang: setLang,
       savingsTargetPercent: setSavingsTargetPercent, growthReturnRate: setGrowthReturnRate,
+      forecastAssumptions: setForecastAssumptions,
       houseGrowthRate: setHouseGrowthRate, cashGrowthRate: setCashGrowthRate, cryptoGrowthRate: setCryptoGrowthRate,
       displayCurrency: setDisplayCurrency, nokToUsd: setNokToUsdState, customCurrencyCode: setCustomCurrencyCode,
       customCurrencyRate: setCustomCurrencyRate, jobs: setJobs, salaries: setSalaries, bonuses: setBonuses,
@@ -1960,7 +1970,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
     currentMonth, setCurrentMonth,
     savingsTargetPercent, setSavingsTargetPercent,
-    growthReturnRate, setGrowthReturnRate, houseGrowthRate, setHouseGrowthRate,
+    growthReturnRate, setGrowthReturnRate, forecastAssumptions, setForecastAssumptions,
+    houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
     region, setRegion, customTaxRatePct, setCustomTaxRatePct,
     hiddenNavItems, toggleNavItem,
@@ -1975,7 +1986,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded,
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
-    currentMonth, savingsTargetPercent, growthReturnRate, houseGrowthRate,
+    currentMonth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
     cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
@@ -2038,6 +2049,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const derivedValue = useMemo<FinanceDerivedContextType>(() => ({
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
+    derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
@@ -2046,6 +2058,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
+    derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,

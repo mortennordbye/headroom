@@ -10,6 +10,18 @@ services:
       - headroom_data:/data
     restart: unless-stopped
     container_name: headroom
+    # Modest ceilings so a runaway can't starve the host. The app loads the whole
+    # JSON blob into memory but a single user stays far under this; raise it if you
+    # import a very large history. (docker compose honours these legacy keys
+    # outside swarm mode.)
+    mem_limit: 512m
+    cpus: 1.5
+    environment:
+      # Rotating on-disk SQLite snapshots into /data/backups (on the volume).
+      # Defaults shown; set BACKUP_INTERVAL_HOURS=0 to disable. `make backup`
+      # (off-volume host copy) still works alongside these.
+      BACKUP_INTERVAL_HOURS: 24
+      BACKUP_KEEP: 7
     healthcheck:
       # Node has no curl/wget in the alpine image; use the runtime itself.
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

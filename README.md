@@ -89,6 +89,8 @@ Because you re-attach the same `-v headroom_data:/data` volume (Option A) or reu
 
 > **Tip:** before a big update, it costs nothing to take a snapshot first — `make backup`, or **Settings → Export** in the app (see [Data persistence](#data-persistence)).
 
+> **Pinning to a specific version (and rolling back).** `:latest` always moves to the newest build. Every CI build is *also* published under an **immutable `sha-<short-commit>` tag** — e.g. `ghcr.io/mortennordbye/headroom:sha-0112d73`. Pin to one for a reproducible deploy, and if an update misbehaves just start the previous `sha-` tag again (same volume, your data is untouched): swap `:latest` for `:sha-<short>` in the `docker run`/`docker pull` commands above. Browse the available tags on the [package page](https://github.com/mortennordbye/headroom/pkgs/container/headroom).
+
 > **Browser shows an old version after updating?** The app is a PWA and caches itself. Accept the "new version available" prompt, or hard-reload (Cmd/Ctrl+Shift+R). Your data is unaffected — this is only the UI cache.
 
 ## Commands
@@ -174,10 +176,11 @@ Everything you enter lives in one SQLite database inside the named Docker volume
 
 ### Backups
 
-The volume is the only live copy, so keep a backup — two easy options:
+The volume is the only live copy, so keep a backup — three options:
 
-1. **In-app export (best, portable).** **Settings → Export** downloads your entire state as a single JSON file. This is the safest backup: it's independent of Docker, survives losing the volume, and can be imported on a fresh install or a different machine via **Settings → Import**. Because it holds your full accumulated transaction history, an occasional export is a complete backup.
-2. **Database snapshot.** `make backup` copies the SQLite file to `./backups/` (timestamped, gitignored).
+1. **Automatic rotating snapshots (on by default).** The container writes a timestamped SQLite snapshot into `/data/backups` on a schedule and prunes to the newest N, so you always have recent copies without remembering to run anything. Tune via `docker-compose.yml`: `BACKUP_INTERVAL_HOURS` (default `24`, set `0` to disable) and `BACKUP_KEEP` (default `7`). These live on the same volume, so pair them with an occasional off-volume copy (below).
+2. **In-app export (best, portable).** **Settings → Export** downloads your entire state as a single JSON file. This is the safest backup: it's independent of Docker, survives losing the volume, and can be imported on a fresh install or a different machine via **Settings → Import**. Because it holds your full accumulated transaction history, an occasional export is a complete backup.
+3. **Database snapshot (off-volume).** `make backup` copies the live SQLite file to the host `./backups/` (timestamped, gitignored).
 
 ### Restore
 
@@ -186,6 +189,7 @@ Both paths open a **preview** first, where you pick which sections to restore (i
 - **From a JSON export:** open the app and use **Settings → Import** (drop the file or browse).
 - **From a SQLite snapshot (in-app):** **Settings → Import → "restore from a SQLite backup (.sqlite)"**, then pick a `make backup` file. The server reads the finance blob out of the uploaded database and hands it to the same import preview — no terminal needed.
 - **From a SQLite snapshot (manual):** `docker cp backups/<file>.sqlite headroom:/data/database.sqlite && make restart` (for the pre-built image, replace `make restart` with `docker restart headroom`).
+- **From an automatic snapshot:** list them with `docker exec headroom ls /data/backups`, copy one out with `docker cp headroom:/data/backups/<file>.sqlite ./backups/`, then use either SQLite-restore path above.
 
 > Bank sync only reaches ~90 days back per fetch, but stored transactions are never dropped — they accumulate as you keep syncing. So your history keeps growing on your machine, and an export captures all of it. Sync regularly (don't leave gaps longer than ~90 days) and export now and then, and you have a durable, ever-growing record.
 

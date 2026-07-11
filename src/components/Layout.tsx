@@ -10,6 +10,7 @@ import {
   Menu as MenuIcon,
   X,
   HelpCircle,
+  BookOpen,
   Lock,
   Pencil,
   Check,
@@ -21,6 +22,7 @@ import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import OnboardingTour from './onboarding/OnboardingTour';
 import HistoryManagerModal from './HistoryManagerModal';
+import GlossaryModal from './GlossaryModal';
 
 import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 
@@ -30,7 +32,7 @@ const MONTH_SCOPED_ROUTES = ['/', '/budget'];
 // through recorded snapshot months, read-only) instead of `currentMonth`.
 const BALANCE_SCOPED_ROUTES = ['/assets', '/loan', '/pension'];
 // Pages with no time dimension at all hide the time marker entirely.
-const HIDE_TIME_MARKER_ROUTES = ['/settings'];
+const HIDE_TIME_MARKER_ROUTES = ['/settings', '/year'];
 
 const Layout: React.FC = () => {
   const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded, hiddenNavItems, demoMode, toggleDemoMode, startOnboarding } = useFinanceSettings();
@@ -40,6 +42,7 @@ const Layout: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const monthSyncedRef = useRef(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
   // Balance-page "edit this month": opens the History manager straight into the
   // viewed month's balances editor (past months are read-only on the page itself).
   const [editMonthOpen, setEditMonthOpen] = useState(false);
@@ -158,6 +161,18 @@ const Layout: React.FC = () => {
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
           >
             <HelpCircle size={16} strokeWidth={2} />
+          </button>
+          {/* Glossary — persistent term lookup, desktop header (mobile: "More" sheet). */}
+          <button
+            onClick={() => setGlossaryOpen(true)}
+            aria-label={t.glossary.open}
+            title={t.glossary.open}
+            className="hidden sm:grid place-items-center w-8 h-8 rounded-[6px] border transition-colors"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brass)'; e.currentTarget.style.borderColor = 'var(--brass-dim)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+          >
+            <BookOpen size={16} strokeWidth={2} />
           </button>
           {showPicker ? (
             <>
@@ -384,6 +399,15 @@ const Layout: React.FC = () => {
               <HelpCircle size={18} strokeWidth={1.75} />
               <span>{t.onboarding.guide}</span>
             </button>
+            {/* Glossary — the mobile trigger for the term lookup */}
+            <button
+              onClick={() => { setMoreOpen(false); setGlossaryOpen(true); }}
+              className="mt-2 w-full flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
+              style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)', color: 'var(--text-1)' }}
+            >
+              <BookOpen size={18} strokeWidth={1.75} />
+              <span>{t.glossary.open}</span>
+            </button>
           </div>
         </div>
       )}
@@ -413,6 +437,9 @@ const Layout: React.FC = () => {
 
       {/* First-run guided setup (renders only when active; portals to body) */}
       <OnboardingTour />
+
+      {/* Persistent glossary — term lookup reachable any time (header / More sheet) */}
+      {glossaryOpen && <GlossaryModal onClose={() => setGlossaryOpen(false)} />}
 
       {/* Edit the picked (read-only) month straight from a balance page. Uses the
           picked month, not the snapped `activeKey`, so a gap/pre-earliest view

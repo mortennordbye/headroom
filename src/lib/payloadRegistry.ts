@@ -16,6 +16,7 @@
 // tests exercise this module directly.
 import type { ExportPayload } from '../context/FinanceContext';
 import { DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from './employerCost';
+import { DEFAULT_FORECAST_ASSUMPTIONS } from './forecastProjection';
 import { dedupeBankTransactions } from './bankDedup';
 import { migrateSavingsAccounts, migrateSnapshotSavings } from './savingsMigration';
 
@@ -164,6 +165,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     lang: { group: 'preserve', demo: 'preference', read: whenTruthy('lang') },
     savingsTargetPercent: { group: 'preserve', demo: 'personal', read: whenDefined('savingsTargetPercent') },
     growthReturnRate: { group: 'preserve', demo: 'preference', read: whenDefined('growthReturnRate') },
+    forecastAssumptions: { group: 'preserve', demo: 'preference', read: mergedWith('forecastAssumptions', DEFAULT_FORECAST_ASSUMPTIONS) },
     houseGrowthRate: { group: 'preserve', demo: 'preference', read: whenDefined('houseGrowthRate') },
     cashGrowthRate: { group: 'preserve', demo: 'preference', read: whenDefined('cashGrowthRate') },
     cryptoGrowthRate: { group: 'preserve', demo: 'preference', read: whenDefined('cryptoGrowthRate') },

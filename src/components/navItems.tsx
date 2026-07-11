@@ -7,6 +7,7 @@ import {
   Briefcase,
   Receipt,
   Building2,
+  CalendarRange,
   Settings as SettingsIcon,
 } from 'lucide-react';
 
@@ -14,12 +15,12 @@ import {
 export const ALWAYS_VISIBLE_NAV = '/settings';
 
 /** Routes surfaced inside the "Mer" sheet on mobile (everything past the 4 primary tabs). */
-export const MORE_ROUTES = ['/forecast', '/pension', '/employer-cost', '/loan', '/settings'];
+export const MORE_ROUTES = ['/forecast', '/pension', '/employer-cost', '/year', '/loan', '/settings'];
 
 export interface NavItem {
   path: string;
   /** key into t.nav */
-  key: 'dashboard' | 'budget' | 'assets' | 'salary' | 'forecast' | 'pension' | 'employerCost' | 'loan' | 'settings';
+  key: 'dashboard' | 'budget' | 'assets' | 'salary' | 'forecast' | 'pension' | 'employerCost' | 'year' | 'loan' | 'settings';
   icon: React.ReactNode;
 }
 
@@ -33,5 +34,6 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/pension', key: 'pension', icon: <Briefcase size={20} strokeWidth={1.75} /> },
   { path: '/forecast', key: 'forecast', icon: <Activity size={20} strokeWidth={1.75} /> },
   { path: '/employer-cost', key: 'employerCost', icon: <Receipt size={20} strokeWidth={1.75} /> },
+  { path: '/year', key: 'year', icon: <CalendarRange size={20} strokeWidth={1.75} /> },
   { path: '/settings', key: 'settings', icon: <SettingsIcon size={20} strokeWidth={1.75} /> },
 ];
