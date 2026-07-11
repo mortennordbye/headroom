@@ -51,6 +51,11 @@ import HistoryManagerModal from '../components/HistoryManagerModal';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
 
+// Bump when the export payload shape changes incompatibly. Exports stamp this;
+// import refuses a file whose version is newer than we understand (older or
+// absent is treated as legacy and still imports).
+const EXPORT_VERSION = 1;
+
 export default function SettingsPage() {
   const {
     t,
@@ -144,7 +149,7 @@ export default function SettingsPage() {
   // restore). Demo state is never persisted, so it's never backed up.
   const downloadSnapshot = (filename: string) => {
     const payload: ExportPayload & { _version: number; _exportedAt: string } = {
-      _version: 1,
+      _version: EXPORT_VERSION,
       _exportedAt: new Date().toISOString(),
       ...buildPayload(),
       currentMonth: format(currentMonth, 'yyyy-MM'),
@@ -186,6 +191,13 @@ export default function SettingsPage() {
         !Array.isArray(data.dailyTransactions)
       ) {
         setImportError(t.invalidFile);
+        setImportState('error');
+        return;
+      }
+      // Refuse a file written by a newer format than this build understands, so
+      // an import can't silently drop or misread fields added in a later version.
+      if (typeof data._version === 'number' && data._version > EXPORT_VERSION) {
+        setImportError(t.importVersionTooNew);
         setImportState('error');
         return;
       }
@@ -528,7 +540,7 @@ export default function SettingsPage() {
               value={Math.round(savingsTargetPercent)}
               onChange={setSavingsTargetPercent}
               min={0}
-              max={95}
+              max={100}
               step={1}
               suffix="%"
             />
@@ -1005,10 +1017,11 @@ function RangeRow({
   useEffect(() => { setDraft(value.toString()); }, [value]);
   const commitDraft = () => {
     const n = parseLocaleNumber(draft);
-    if (Number.isFinite(n) && n >= 0) onChange(n);
+    // Clamp to the same [0, max] range as the slider, so the number input can't
+    // commit a value the slider would then snap away from.
+    if (Number.isFinite(n) && n >= 0) onChange(Math.min(n, max));
     else setDraft(value.toString());
   };
-  // Slider clamps to its own range; the number input below it has no upper cap.
   const sliderValue = Math.min(Math.max(value, min), max);
   return (
     <div>
@@ -1028,6 +1041,7 @@ function RangeRow({
             value={draft}
             step={step}
             min={0}
+            max={max}
             onChange={e => setDraft(e.target.value)}
             onBlur={commitDraft}
             onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}

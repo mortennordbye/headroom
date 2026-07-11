@@ -26,6 +26,7 @@ export default function EmergencyFundGauge() {
 
   return (
     <div className="relative h-full w-full">
+      <div role="img" aria-label={t.charts.aria.emergencyFund} className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <RadialBarChart
           data={data}
@@ -39,6 +40,7 @@ export default function EmergencyFundGauge() {
           <RadialBar dataKey="value" cornerRadius={8} background={{ fill: CHART.track }} angleAxisId={0} />
         </RadialBarChart>
       </ResponsiveContainer>
+      </div>
       <div className="absolute inset-0 grid place-items-center pointer-events-none">
         <div className="text-center">
           <div className="text-[24px] font-mono font-semibold leading-none" style={{ color: 'var(--text-1)' }}>

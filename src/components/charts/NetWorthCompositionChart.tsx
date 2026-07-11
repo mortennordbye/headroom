@@ -49,6 +49,7 @@ export default function NetWorthCompositionChart() {
   ];
 
   return (
+    <div role="img" aria-label={t.charts.aria.netWorthComposition} className="w-full h-full">
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
         <CartesianGrid {...GRID_PROPS} vertical={false} />
@@ -70,5 +71,6 @@ export default function NetWorthCompositionChart() {
         ))}
       </AreaChart>
     </ResponsiveContainer>
+    </div>
   );
 }

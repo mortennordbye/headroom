@@ -363,6 +363,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           <div
+            data-selectable
             className="font-mono font-medium tracking-[-0.03em] leading-none mt-4"
             style={{
               fontSize: 'clamp(40px, 5.5vw, 60px)',
@@ -522,7 +523,7 @@ const DashboardPage: React.FC = () => {
               <div className="text-[24px] font-semibold tabular-nums">{formatCurrency(effectiveIncome)}</div>
               <div className="mt-1">
                 <DeltaChip tone={incomeDiff >= 0 ? 'positive' : 'negative'} size="sm">
-                  {formatSignedPct(incomeDiff)} vs avg
+                  {formatSignedPct(incomeDiff)} {t.vsAvg}
                 </DeltaChip>
               </div>
             </div>
@@ -531,7 +532,7 @@ const DashboardPage: React.FC = () => {
           <div
             className="mt-5 flex h-3 rounded-[4px] overflow-hidden"
             style={{ background: 'var(--bg-elev)' }}
-            aria-label="Budget composition"
+            aria-label={t.budgetComposition}
           >
             {budgetUsedPct > 0 && <div style={{ width: `${budgetUsedPct}%`, background: 'var(--teal)' }} />}
             {spentPct > 0 && <div style={{ width: `${spentPct}%`, background: 'var(--warning)' }} />}

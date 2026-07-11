@@ -72,6 +72,7 @@ export default function LtvChart() {
   }, [balanceSnapshots, homeowner, assets.houseValue, houseGrowthRate, dateLocale]);
 
   return (
+    <div role="img" aria-label={c.aria.ltv} className="w-full h-full">
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
         <CartesianGrid {...GRID_PROPS} vertical={false} />
@@ -83,5 +84,6 @@ export default function LtvChart() {
         <Line name={c.ltvActual} type="monotone" dataKey="actual" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} connectNulls />
       </ComposedChart>
     </ResponsiveContainer>
+    </div>
   );
 }

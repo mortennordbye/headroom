@@ -106,6 +106,15 @@ const Layout: React.FC = () => {
 
   return (
     <div className="min-h-[100dvh] text-[var(--text-1)] font-sans">
+      {/* Skip link — first focusable element, visually hidden until focused, so a
+          keyboard user can jump past the nav straight to the page content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-[6px] focus:text-[13px] focus:font-semibold"
+        style={{ background: 'var(--brass)', color: 'var(--bg)' }}
+      >
+        {t.skipToContent}
+      </a>
       {/* ─── Top nav ─────────────────────────── */}
       <header
         className="sticky top-0 z-20 flex items-center justify-between gap-4 px-5 md:px-8 py-4 border-b"
@@ -152,6 +161,14 @@ const Layout: React.FC = () => {
           {showPicker ? (
             <>
               <div
+                role="group"
+                aria-label={t.monthPicker}
+                onKeyDown={(e) => {
+                  // Left/Right step months when focus is anywhere in the picker
+                  // (e.g. on a stepper button), so it's operable without the mouse.
+                  if (e.key === 'ArrowLeft') { e.preventDefault(); setCurrentMonth(subMonths(currentMonth, 1)); }
+                  else if (e.key === 'ArrowRight') { e.preventDefault(); setCurrentMonth(addMonths(currentMonth, 1)); }
+                }}
                 className="flex items-center gap-1 rounded-[6px] border p-1 transition-colors"
                 style={{
                   background: statusBg,
@@ -161,7 +178,7 @@ const Layout: React.FC = () => {
               >
                 <button
                   onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                  aria-label="Previous month"
+                  aria-label={t.prevMonth}
                   className="grid place-items-center w-7 h-7 rounded-[4px] transition-colors"
                   style={{ color: 'var(--text-2)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
@@ -185,7 +202,7 @@ const Layout: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                  aria-label="Next month"
+                  aria-label={t.nextMonth}
                   className="grid place-items-center w-7 h-7 rounded-[4px] transition-colors"
                   style={{ color: 'var(--text-2)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
@@ -249,7 +266,7 @@ const Layout: React.FC = () => {
       </header>
 
       {/* ─── Main ────────────────────────────── */}
-      <main className="max-w-[1320px] mx-auto px-5 md:px-8 py-6 md:py-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12">
+      <main id="main-content" tabIndex={-1} className="max-w-[1320px] mx-auto px-5 md:px-8 py-6 md:py-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12 focus:outline-none">
         {demoMode && (
           <div
             className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"

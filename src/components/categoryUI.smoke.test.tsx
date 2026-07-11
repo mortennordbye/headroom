@@ -35,6 +35,7 @@ const mockCtx = {
     budgetLabel: 'Budget', remainingLabel: 'Left', overBudgetBy: 'Over by',
     setBudgets: 'Set budgets', noBudgetsSet: 'No budgets', done: 'Done',
     envelopeManagedNote: 'Managed as envelopes', envelopeTracked: 'Tracked by an envelope',
+    charts: { aria: { categoryTrend: 'Monthly spending by category' } },
   },
   currentMonth: new Date('2026-07-15T00:00:00'),
   dailyTransactions: TRANSACTIONS,

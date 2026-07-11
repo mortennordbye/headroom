@@ -867,11 +867,11 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 bg-[var(--bg-raised)]">
                 <tr className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">
-                  <th className="px-5 md:px-7 py-3">{t.year}</th>
-                  <th className="px-5 md:px-7 py-3 text-right">{t.annualPayment}</th>
-                  <th className="px-5 md:px-7 py-3 text-right">{t.principalPayment}</th>
-                  <th className="px-5 md:px-7 py-3 text-right">{t.interestPayment}</th>
-                  <th className="px-5 md:px-7 py-3 text-right">{t.remainingBalance}</th>
+                  <th scope="col" className="px-5 md:px-7 py-3">{t.year}</th>
+                  <th scope="col" className="px-5 md:px-7 py-3 text-right">{t.annualPayment}</th>
+                  <th scope="col" className="px-5 md:px-7 py-3 text-right">{t.principalPayment}</th>
+                  <th scope="col" className="px-5 md:px-7 py-3 text-right">{t.interestPayment}</th>
+                  <th scope="col" className="px-5 md:px-7 py-3 text-right">{t.remainingBalance}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">

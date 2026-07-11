@@ -108,6 +108,7 @@ export default function MoneyFlowSankey() {
   }
 
   return (
+    <div role="img" aria-label={t.charts.aria.moneyFlow} className="w-full h-full">
     <ResponsiveContainer width="100%" height="100%">
       <Sankey
         data={{ nodes: data.nodes, links: data.links }}
@@ -120,5 +121,6 @@ export default function MoneyFlowSankey() {
         <Tooltip content={<ChartTooltip hideLabel valueFormatter={(v) => formatCurrency(v)} />} />
       </Sankey>
     </ResponsiveContainer>
+    </div>
   );
 }

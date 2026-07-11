@@ -603,6 +603,7 @@ interface FinanceDataContextType {
   inflation: InflationPoint[];
   inflationStale: boolean;
   wageStats: WageStatPoint[];
+  wageStatsStale: boolean;
   importAll: (data: Partial<ExportPayload>) => void;
   buildPayload: () => ExportPayload;
   resetAll: () => void;
@@ -839,6 +840,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [inflation, setInflation] = useState<InflationPoint[]>([]);
   const [inflationStale, setInflationStale] = useState<boolean>(false);
   const [wageStats, setWageStats] = useState<WageStatPoint[]>([]);
+  const [wageStatsStale, setWageStatsStale] = useState<boolean>(false);
   const [region, setRegion] = useState<Region>('no');
   const [customTaxRatePct, setCustomTaxRatePct] = useState<number>(DEFAULT_TAX_RATES.customTaxRatePct);
   const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
@@ -1002,14 +1004,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       // Intentional reset of fetched data when leaving Norway region.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setWageStats([]);
+      setWageStatsStale(false);
       return;
     }
     fetch('/api/wage-stats')
       .then(r => r.ok ? r.json() : null)
       .then((data) => {
         if (data && Array.isArray(data.points)) setWageStats(data.points);
+        else setWageStatsStale(true);
       })
-      .catch(() => {});
+      .catch(() => setWageStatsStale(true));
   }, [region]);
 
   // Fetch SSB inflation data when region is Norway. In 'generic' mode we
@@ -1977,7 +1981,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
     goals, addGoal, updateGoal, removeGoal,
     employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
-    inflation, inflationStale, wageStats,
+    inflation, inflationStale, wageStats, wageStatsStale,
     importAll, buildPayload, resetAll,
     restoreAssetTaxDefaults, restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   }), [
@@ -1996,7 +2000,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     bonuses, addBonus, updateBonus, removeBonus, overtime, addOvertime, updateOvertime,
     removeOvertime, hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
     goals, addGoal, updateGoal, removeGoal, employerCostConfig, updateEmployerCostConfig,
-    billingConfig, updateBillingConfig, inflation, inflationStale, wageStats,
+    billingConfig, updateBillingConfig, inflation, inflationStale, wageStats, wageStatsStale,
     importAll, buildPayload, resetAll, restoreAssetTaxDefaults,
     restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   ]);

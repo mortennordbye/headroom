@@ -72,7 +72,7 @@ export default function PaydownVsPlanChart() {
         </div>
       </div>
 
-      <div className="h-[220px] w-full">
+      <div role="img" aria-label={t.charts.aria.paydownVsPlan} className="h-[220px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
             <CartesianGrid {...GRID_PROPS} vertical={false} />

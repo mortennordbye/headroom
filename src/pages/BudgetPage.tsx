@@ -438,10 +438,12 @@ const BudgetPage: React.FC = () => {
   };
 
   // --- CSV Export ---
-  const exportCSV = () => {
+  // scope 'month' exports just the selected month; 'all' exports the full ledger
+  // history (every recorded transaction), sorted oldest-first either way.
+  const exportCSV = (scope: 'month' | 'all' = 'month') => {
     const monthStr = format(currentMonth, 'yyyy-MM');
-    const monthTransactions = dailyTransactions.filter(tx => tx.date.startsWith(monthStr));
-    const sorted = [...monthTransactions].sort((a, b) => a.date.localeCompare(b.date));
+    const source = scope === 'all' ? dailyTransactions : dailyTransactions.filter(tx => tx.date.startsWith(monthStr));
+    const sorted = [...source].sort((a, b) => a.date.localeCompare(b.date));
 
     const header = ['Date', 'Day', 'Description', 'Category', 'Amount'];
     const rows = sorted.map(tx => {
@@ -460,7 +462,7 @@ const BudgetPage: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `budget-${monthStr}.csv`;
+    a.download = scope === 'all' ? 'budget-all.csv' : `budget-${monthStr}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1017,11 +1019,22 @@ const BudgetPage: React.FC = () => {
             )}
             {logOpen && totalSpentThisMonth > 0 && (
               <button
-                onClick={exportCSV}
+                onClick={() => exportCSV('month')}
+                aria-label={t.exportCSV}
                 className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors px-2 py-1 rounded-lg hover:bg-[var(--bg-elev)]"
               >
                 <Download size={13} />
                 <span className="hidden sm:inline">{t.exportCSV}</span>
+              </button>
+            )}
+            {logOpen && dailyTransactions.length > 0 && (
+              <button
+                onClick={() => exportCSV('all')}
+                aria-label={t.exportCSVAll}
+                className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors px-2 py-1 rounded-lg hover:bg-[var(--bg-elev)]"
+              >
+                <Download size={13} />
+                <span className="hidden sm:inline">{t.exportCSVAll}</span>
               </button>
             )}
           </div>
@@ -1111,10 +1124,10 @@ const BudgetPage: React.FC = () => {
                       <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                       {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
-                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => setEditingTx(tx)} className="text-[var(--text-2)] hover:text-[var(--accent)]">
+                      <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => setEditingTx(tx)} className="text-[var(--text-2)] hover:text-[var(--accent)] p-1.5 -m-0.5">
                         <Edit2 size={11} />
                       </button>
-                      <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)]">
+                      <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)] p-1.5 -m-0.5">
                         <Trash2 size={11} />
                       </button>
                     </span>
@@ -1148,10 +1161,10 @@ const BudgetPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[var(--bg-raised)] text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">
-                <th className="px-7 py-3.5">{t.timestamp}</th>
-                <th className="px-7 py-3.5">{t.transactionDetails}</th>
-                <th className="px-7 py-3.5 text-right">{t.impact}</th>
-                <th className="px-7 py-3.5 text-right">{t.runningBalance}</th>
+                <th scope="col" className="px-7 py-3.5">{t.timestamp}</th>
+                <th scope="col" className="px-7 py-3.5">{t.transactionDetails}</th>
+                <th scope="col" className="px-7 py-3.5 text-right">{t.impact}</th>
+                <th scope="col" className="px-7 py-3.5 text-right">{t.runningBalance}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -1185,10 +1198,10 @@ const BudgetPage: React.FC = () => {
                           {tx.category && (
                             <span className="text-[10px] text-[var(--text-2)] hidden lg:inline">{isCategoryKey(tx.category) ? t.categoryLabels[tx.category] : tx.category}</span>
                           )}
-                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => setEditingTx(tx)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors">
+                          <button aria-label={`${t.edit} — ${tx.description}`} onClick={() => setEditingTx(tx)} className="text-[var(--text-2)] hover:text-[var(--accent)] transition-colors p-1.5 -m-0.5">
                             <Edit2 size={12} />
                           </button>
-                          <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors">
+                          <button aria-label={`${t.delete} — ${tx.description}`} onClick={() => removeDailyTransaction(tx.id)} className="text-[var(--text-2)] hover:text-[var(--negative)] transition-colors p-1.5 -m-0.5">
                             <Trash2 size={12} />
                           </button>
                         </span>

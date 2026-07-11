@@ -203,16 +203,20 @@ document `sha-` pinning.
 
 ### Accessibility
 
-### 33. Text alternatives for charts
-All 13 Recharts wrappers render bare SVG with no `role="img"`/`aria-label` and are not
-`aria-hidden`; a screen reader traverses unlabeled axis ticks (only `SpendingHeatmap` has
-per-cell labels). Wrap each container in `role="img"` with a one-line summary label.
-Where: `src/components/charts/*.tsx`.
+### 33. Text alternatives for charts ✅ SHIPPED
+All 13 Recharts wrappers now wrap their graphic box in `role="img"` with a one-line
+`aria-label` summary (new `t.charts.aria.*` set, both locales), so a screen reader announces
+the chart's meaning instead of traversing unlabeled ticks. The label sits on the chart box
+only — titles/legends/stat readouts stay outside it and remain individually readable; the
+two overlay gauges keep their live text accessible. `SpendingHeatmap` (already per-cell
+labelled) and the div-based `LiquidLockedBar` (fully text) were left as-is.
+(`src/components/charts/*.tsx`.)
 
-### 34. Skip-to-content link
-A keyboard user must Tab through the whole desktop nav on every route before reaching
-content. Add a visually-hidden "skip to content" as the first focusable element targeting
-`<main>`. Where: `src/components/Layout.tsx`.
+### 34. Skip-to-content link ✅ SHIPPED
+A visually-hidden "skip to content" link is now the first focusable element in `Layout`;
+it reveals on focus and jumps to `<main id="main-content" tabIndex={-1}>`, so a keyboard user
+can bypass the nav on every route. Label routed through `translations.ts`.
+(`src/components/Layout.tsx`.)
 
 ### 35. Persistent glossary for domain terms
 The only explanations of "headroom", LTV, trinnskatt, OTP/IPS live in the one-shot `learn`
@@ -220,41 +224,47 @@ onboarding topics (`src/lib/onboarding.ts`); after `onboardingCompleted` there's
 look a term up. Add inline info tooltips on domain labels or a glossary panel behind the
 existing header help button.
 
-### 36. Keyboard month-stepping and shortcuts
-The only keydown handlers are per-input Enter/Escape; the month stepper is two buttons
-requiring Tab+Enter. Add left/right arrow month stepping when the picker is focused, and
-optionally `g`-prefixed route jumps. Where: `src/components/Layout.tsx`.
+### 36. Keyboard month-stepping ✅ SHIPPED (arrow keys; route shortcuts deferred)
+The header month picker is now a `role="group"` with an `onKeyDown`: Left/Right step the
+month when focus is anywhere in the picker (e.g. on a stepper button), so paging is operable
+without the mouse. The optional `g`-prefixed route jumps were not built.
+(`src/components/Layout.tsx`.)
 
 ---
 
 ## Small
 
 ### Feedback & errors
-37. **Bank sync errors render in accent colour.** `syncError`/`linkError`/`keyInvalid` look
-    identical to success text (`src/components/BankSyncCard.tsx`, `color: var(--accent)`).
-    Use `var(--negative)` for error outcomes.
-38. **Silent wage-stats failure.** The SSB comparison line just vanishes on fetch failure
-    (`.catch(() => {})` in `src/context/FinanceContext.tsx`), unlike inflation which sets
-    `inflationStale`. Surface a small "benchmark unavailable" note.
+37. **Bank sync errors render in accent colour ✅ SHIPPED** — the status line now colours
+    error outcomes (`linkError`/`keyInvalid`/`syncError`/`needsRelink`, matched by prefix so
+    the `linkError (reason)` suffix still counts) with `var(--negative)`; success stays accent.
+    (`src/components/BankSyncCard.tsx`.)
+38. **Silent wage-stats failure ✅ SHIPPED** — the wage-stats fetch now sets a
+    `wageStatsStale` flag (context) on a failed/empty response, mirroring `inflationStale`;
+    SalaryPage shows a "Wage statistics unavailable — could not reach SSB" note in the header
+    (i18n'd). (`src/context/FinanceContext.tsx`, `src/pages/SalaryPage.tsx`.)
 39. **No positive "saved" signal.** Saves are silent; only failures raise a banner
     (`doSave` in `src/context/FinanceContext.tsx`). A subtle transient "saved" tick builds
     trust that an edit persisted.
 40. **Skeletons for lazy routes/charts.** `RouteFallback` is a bare "…" (`src/App.tsx`) and
     chart `Suspense` fallbacks are empty divs; slow first paint shows blank boxes.
-41. **Consent-expiry lead-time nudge.** `daysLeft` is computed per connection
-    (`server/bank.js`) but `BankSyncCard` only escalates once `needsRelink` is already true;
-    a cron-driven sync goes silent with no prior warning. Warn at e.g. 14 days remaining.
+41. **Consent-expiry lead-time nudge ✅ SHIPPED** — the per-connection expiry line now turns
+    amber once `daysLeft` is within a 14-day lead window (`RELINK_LEAD_DAYS`), not only after
+    `needsRelink` flips, so a cron-driven sync doesn't go silent right up to expiry.
+    (`src/components/BankSyncCard.tsx`.)
 
 ### Input polish
 42. **Goals modal always shows the manual-current field** even when the goal source is
     Portfolio/BSU/etc. (`src/components/GoalsSection.tsx`); needs conditional-field support
     in `EditModal` or a filtered field list.
-43. **Goal deadline is free-text `YYYY-MM`** (`src/components/GoalsSection.tsx`); use
-    `<input type="month">`.
-44. **Slider vs number-input caps disagree.** Savings-target slider caps at 95
-    (`src/pages/SettingsPage.tsx`) while the inline % editor allows 100
-    (`src/components/SmartRecommendations.tsx`) and `RangeRow`'s number input has no upper
-    cap. Reconcile.
+43. **Goal deadline is free-text `YYYY-MM` ✅ SHIPPED** — `EditModal` gained a `'month'` field
+    type rendering `<input type="month">`; the goal deadline field uses it, so the native month
+    picker replaces free-text entry (its `YYYY-MM` value matches the existing validators/storage
+    unchanged). (`src/components/EditModal.tsx`, `src/components/GoalsSection.tsx`.)
+44. **Slider vs number-input caps disagree ✅ SHIPPED** — the savings-target cap is now 100
+    everywhere (Settings slider raised 95→100 to match `SmartRecommendations`), and `RangeRow`'s
+    number input clamps its committed value to `[0, max]` (and carries `max`) like the slider,
+    so no RangeRow can commit an out-of-range figure. (`src/pages/SettingsPage.tsx`.)
 45. **Fixed-expense match pattern only settable from a transaction.** The "map to fixed
     expense" rule can't be added or edited from the fixed-expense editor itself
     (`src/pages/BudgetPage.tsx`). Add a match field there.
@@ -266,41 +276,51 @@ optionally `g`-prefixed route jumps. Where: `src/components/Layout.tsx`.
     deliberately guards leaving). Suppress backdrop-close when dirty, or confirm.
 
 ### Reading & copying
-48. **Global `user-select: none` blocks copying figures.** A user can't copy their net-worth
-    number or an account tail from a card (`src/index.css`; only inputs and `[data-selectable]`
-    opt back in). Add `data-selectable` to key monetary/identifier readouts.
-49. **Tiny touch targets on ledger row actions.** Edit/delete icons are 11-12px inside chips
-    (`src/pages/BudgetPage.tsx`), far under the ~44px mobile guideline. Pad the hit areas.
+48. **Global `user-select: none` blocks copying figures ✅ SHIPPED** — the Dashboard headline
+    net-worth figure and the BankSyncCard account name/tail rows now carry `data-selectable`
+    (which already opts back into `user-select: text`), so the two most-copied readouts (headline
+    total, account identifier) can be selected. (`src/pages/DashboardPage.tsx`,
+    `src/components/BankSyncCard.tsx`.)
+49. **Tiny touch targets on ledger row actions ✅ SHIPPED** — the ledger edit/delete buttons
+    (mobile chips + desktop rows) gained `p-1.5 -m-0.5`, roughly doubling the tap area (~23px)
+    while keeping the compact chip layout via the negative margin. (True 44px isn't reachable in
+    a 24px chip without redesigning the row, so this is a padding improvement, not full compliance.)
+    (`src/pages/BudgetPage.tsx`.)
 
 ### Charts & PWA
-50. **AssetPage projection legend colour mismatch.** The legend's crypto swatch uses
-    `var(--negative)` while the stacked area uses `CHART.rust` (`src/pages/AssetPage.tsx`).
-    Use the same token.
+50. **AssetPage projection legend colour mismatch ✅ SHIPPED** — the crypto legend swatch now
+    uses `var(--rust)`, matching the area's `CHART.rust` (and the sibling swatches' direct
+    palette tokens) instead of the value-sign alias `var(--negative)`. (`src/pages/AssetPage.tsx`.)
 51. **Legends aren't interactive.** No click-to-isolate/toggle on the multi-series projection
     charts (`src/pages/AssetPage.tsx`, `src/components/SmartRecommendations.tsx` has
     hover-dim only).
-52. **UpdatePrompt bypasses i18n.** "Ny versjon tilgjengelig / New version available" is
-    hardcoded bilingual (`src/components/UpdatePrompt.tsx`); move to `translations.ts`.
-53. **CSV export is current-month only.** `exportCSV` filters to the selected month
-    (`src/pages/BudgetPage.tsx`); offer a full-history export.
+52. **UpdatePrompt bypasses i18n ✅ SHIPPED** — the hardcoded bilingual strings now read from
+    `t.updatePrompt.{message,update,later}` via `useFinance` (UpdatePrompt renders inside the
+    provider), so the prompt shows one locale. (`src/components/UpdatePrompt.tsx`.)
+53. **CSV export is current-month only ✅ SHIPPED** — `exportCSV` now takes a scope; the ledger
+    toolbar has a second "Export all" button that dumps the full transaction history
+    (`budget-all.csv`) alongside the month export. (`src/pages/BudgetPage.tsx`.)
 54. **Recharts animations ignore `prefers-reduced-motion`.** The reduced-motion CSS block
     only neutralizes CSS transitions, not Recharts' JS-driven tweens; pass
     `isAnimationActive={!reduced}` from a media-query hook.
-55. **No `color-scheme: dark`.** `:root` sets dark tokens but never declares `color-scheme`,
-    so native UI (select popups, number spinners, month pickers, autofill) renders light
-    against the dark app (`src/index.css`).
-56. **No print stylesheet.** Pages print dark-on-dark with the sticky header and bottom nav
-    overlapping content; add an `@media print` block (light background, hide chrome). Pairs
-    with the year-in-review report (item 26).
+55. **No `color-scheme: dark` ✅ SHIPPED** — `:root` now declares `color-scheme: dark`, so
+    native UI (select popups, number spinners, the new month picker, autofill, scrollbars)
+    renders dark against the app (`src/index.css`).
+56. **No print stylesheet ✅ SHIPPED** — an `@media print` block remaps the core surface/text
+    tokens to a light theme (aliases cascade, so components re-theme without edits), hides the
+    fixed header / bottom nav / dialogs / toasts, and lets `main` flow full-width. Chart hues
+    stay legible on white. (`src/index.css`.) Still pairs with the year-in-review report (item 26)
+    when that lands.
 
 ### Norwegian domain
 57. **Studielån is only a generic debt.** The `student` debt type is amortized like any loan
     (`src/lib/debt.ts`), ignoring Lånekassen specifics (0% while studying, deferment), so its
     payoff row can mislead. Model the subtype's basics.
-58. **Forecast ignores the user's tuned assumptions.** Slider defaults are hardcoded
-    (return 5%, savings 25%) even though the context carries the user's `growthReturnRate`
-    and `savingsTargetPercent`; the Dashboard even nags about untuned defaults while
-    Forecast uses different numbers. Seed the sliders from the user's values.
+58. **Forecast ignores the user's tuned assumptions ✅ OBSOLETE** — already addressed: the
+    Forecast sliders seed from real data (`returnPct = returnOverride ?? growthReturnRate`, a
+    `savingsSeed` derived from `recommendedInvestment`/net income, plus `raiseSeed`/`inflationSeed`
+    from salary and CPI history), each `override ?? seed` so the slider follows the data until
+    dragged. The FEATURES note was stale. (`src/pages/ForecastPage.tsx`.)
 59. **No savings-rate decline warning.** ✅ SHIPPED — `savingsRateStatus` (pure, unit-tested
     in `src/lib/savingsRate.ts`) averages the trailing 3 months of the cashflow series and, when
     it slips under `savingsTargetPercent`, the Budget savings-rate card raises a warning banner
@@ -319,9 +339,10 @@ optionally `g`-prefixed route jumps. Where: `src/components/Layout.tsx`.
     size (`formatBytes` on the persisted JSON, unit-tested in `src/lib/format.ts`) and the
     record count (`totalRecords`) alongside the SQLite chip, so a self-hoster can watch the
     blob grow toward the server's 2 MB warning. (`src/pages/SettingsPage.tsx`.)
-63. **Export stamps `_version: 1` but import never checks it.** `validateAndPreview`
-    (`src/pages/SettingsPage.tsx`) ignores the field, so a future format change would import
-    silently. Gate on `_version` and warn on newer-than-supported files.
+63. **Export stamps `_version: 1` but import never checks it ✅ SHIPPED** — a shared
+    `EXPORT_VERSION` const now stamps the export and gates `validateAndPreview`: a file whose
+    `_version` is newer than this build is refused with an "update the app first" error (i18n'd);
+    older/absent versions still import as legacy. (`src/pages/SettingsPage.tsx`.)
 64. **Import is all-or-nothing.** The preview diff is good, but `confirmImport` replaces the
     whole payload; a per-section selective restore (just the ledger, just settings) would
     pair naturally with the existing diff summary.
@@ -333,13 +354,16 @@ optionally `g`-prefixed route jumps. Where: `src/components/Layout.tsx`.
     auto-snapshot from item 28) would make recovery reachable without a terminal.
 
 ### Accessibility & i18n leaks
-67. **Hardcoded-English aria/copy leaks:** month-stepper `aria-label="Previous/Next month"`
-    (`src/components/Layout.tsx`), `aria-label="Budget composition"` and the visible
-    "vs avg" chip text (`src/pages/DashboardPage.tsx`), and the mobile CSV button whose
-    label is hidden below `sm` leaving a bare icon with no `aria-label`
-    (`src/pages/BudgetPage.tsx`). Route all through `translations.ts`.
-68. **Ledger table headers lack `scope="col"`** (`src/pages/BudgetPage.tsx` and the other
-    `<th>` sites). Add scope attributes.
+67. **Hardcoded-English aria/copy leaks ✅ SHIPPED** — the month-stepper aria-labels
+    (`src/components/Layout.tsx`), the "Budget composition" aria-label and visible "vs avg"
+    chip text (`src/pages/DashboardPage.tsx`), and the mobile CSV button's now-present
+    `aria-label` (`src/pages/BudgetPage.tsx`) all route through `translations.ts`
+    (`prevMonth`/`nextMonth`/`budgetComposition`/`vsAvg`, and the existing `exportCSV`).
+68. **Ledger table headers lack `scope="col"` ✅ SHIPPED** — every `<thead>` `<th>` now carries
+    `scope="col"`: Budget ledger, Salary history, Loan amortization, `MonthlyAccountSpend`, and
+    `EquityHistoryTable`. (`src/pages/BudgetPage.tsx`, `src/pages/SalaryPage.tsx`,
+    `src/pages/LoanPage.tsx`, `src/components/MonthlyAccountSpend.tsx`,
+    `src/components/EquityHistoryTable.tsx`.)
 69. **Onboarding always restarts from the top.** Only the `onboardingCompleted` boolean
     persists; re-entering the tour begins at welcome even mid-setup
     (`src/components/onboarding/OnboardingTour.tsx`). Persist the last topic index and

@@ -32,13 +32,13 @@ export function MonthlyAccountSpend() {
         <table className="w-full text-[12px] border-collapse">
           <thead>
             <tr className="text-[var(--text-2)]">
-              <th className="text-left font-medium py-1.5 pr-3">{t.budgetPage.accountFilterLabel}</th>
+              <th scope="col" className="text-left font-medium py-1.5 pr-3">{t.budgetPage.accountFilterLabel}</th>
               {months.map((m) => (
-                <th key={m} className="text-right font-medium py-1.5 px-2 whitespace-nowrap capitalize">
+                <th scope="col" key={m} className="text-right font-medium py-1.5 px-2 whitespace-nowrap capitalize">
                   {format(new Date(`${m}-01T00:00:00`), 'MMM', { locale: dateLocale })}
                 </th>
               ))}
-              <th className="text-right font-semibold py-1.5 pl-2">{t.budgetPage.total}</th>
+              <th scope="col" className="text-right font-semibold py-1.5 pl-2">{t.budgetPage.total}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">

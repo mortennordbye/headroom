@@ -45,6 +45,10 @@ interface BankStatus {
 
 const defaultRedirect = () => `${window.location.origin}/api/bank/callback`;
 
+// Warn this many days before a bank consent expires — early enough to re-link
+// before a nightly sync silently starts failing.
+const RELINK_LEAD_DAYS = 14;
+
 // Human-readable name for one account, falling back to the bank name.
 const accountLabel = (a: BankAccount, aspsp?: string | null) => a.name || a.product || aspsp || '';
 
@@ -311,6 +315,11 @@ export function BankSyncCard() {
 
   const connections = status?.connections ?? [];
 
+  // Colour the status line by outcome: error messages read as negative, success
+  // as accent. `linkError` can carry a `(reason)` suffix, so match by prefix.
+  const errorMessages = [b.linkError, b.keyInvalid, b.syncError, b.needsRelink];
+  const messageIsError = errorMessages.some((m) => message === m || message.startsWith(`${m} `));
+
   // Explain why a connection has no accounts, using the server's diagnostic note.
   const emptyAccountsMessage = (note?: string | null) => {
     if (note && note.startsWith('fetch-failed')) return b.accountsFetchFailed.replace('{msg}', note.replace('fetch-failed: ', ''));
@@ -341,7 +350,7 @@ export function BankSyncCard() {
     return (
       <div key={key} className={`${row} flex items-center gap-1.5`} style={muted}>
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `var(${accountToken(key || current)})` }} />
-        <span>{current}{suffix}</span>
+        <span data-selectable>{current}{suffix}</span>
         {key && (
           <button
             aria-label={`${b.renameAccount} — ${current}`}
@@ -394,7 +403,16 @@ export function BankSyncCard() {
       <div className={row} style={muted}>
         {b.lastSync}: {c.lastSync ? new Date(c.lastSync).toLocaleString() : b.never}
       </div>
-      <div className={row} style={{ color: c.needsRelink ? 'var(--warning, var(--text))' : 'var(--text-2)' }}>
+      <div
+        className={row}
+        style={{
+          // Amber the expiry line once consent is within its lead-time window, so a
+          // cron-driven sync doesn't go silent right up until it's already expired.
+          color: c.needsRelink || (!c.needsRelink && (c.daysLeft ?? Infinity) <= RELINK_LEAD_DAYS)
+            ? 'var(--warning, var(--text))'
+            : 'var(--text-2)',
+        }}
+      >
         {c.needsRelink ? b.needsRelink : b.expiresIn.replace('{n}', String(c.daysLeft ?? 0))}
       </div>
     </div>
@@ -517,7 +535,7 @@ export function BankSyncCard() {
       )}
 
       {message && (
-        <p className="mt-3 text-[13px]" style={{ color: 'var(--accent)' }}>
+        <p className="mt-3 text-[13px]" style={{ color: messageIsError ? 'var(--negative)' : 'var(--accent)' }}>
           {message}
         </p>
       )}
