@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink, Pencil, AlertTriangle, BookOpen, ExternalLink, Trash2 } from 'lucide-react';
+import { Landmark, RefreshCw, KeyRound, ShieldCheck, Plus, Unlink, Pencil, AlertTriangle, BookOpen, ExternalLink, Trash2, ChevronRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
@@ -35,6 +35,7 @@ interface SyncLogEntry {
   fetched?: number;
   total?: number;
   error?: string;
+  items?: { date: string; description: string; amount: number }[];
 }
 
 interface BankStatus {
@@ -66,9 +67,10 @@ const accountLabel = (a: BankAccount, aspsp?: string | null) => a.name || a.prod
 // connect any number of banks with BankID, and sync them all. Backed by
 // /api/bank/* (server/bank.js).
 export function BankSyncCard() {
-  const { t, applyBankSync, accountLabels, setAccountLabel, dataAccounts, dailyTransactions, removeAccountData } = useFinance();
+  const { t, applyBankSync, accountLabels, setAccountLabel, dataAccounts, dailyTransactions, removeAccountData, formatCurrency } = useFinance();
   const b = t.settings.bank;
   const [status, setStatus] = useState<BankStatus | null>(null);
+  const [openSync, setOpenSync] = useState<string | null>(null);
   const [busy, setBusy] = useState<'idle' | 'connecting' | 'syncing'>('idle');
   const [uploading, setUploading] = useState(false);
   const [savingCfg, setSavingCfg] = useState(false);
@@ -545,14 +547,47 @@ export function BankSyncCard() {
             <div className="pt-1">
               <div className="text-[12px] font-medium mb-1" style={muted}>{b.syncHistory}</div>
               <ul className="space-y-0.5">
-                {syncLog.slice(0, 5).map((e, i) => (
-                  <li key={`${e.at}-${i}`} className="text-[12px] flex items-baseline gap-2" style={muted}>
-                    <span className="tabular-nums">{new Date(e.at).toLocaleString()}</span>
-                    <span style={{ color: e.ok ? 'var(--positive, var(--text-2))' : 'var(--negative)' }}>
-                      {e.ok ? b.syncOkEntry.replace('{added}', String(e.added ?? 0)) : b.syncErrEntry}
-                    </span>
+                {syncLog.slice(0, 5).map((e, i) => {
+                  const key = `${e.at}-${i}`;
+                  const hasItems = e.ok && !!e.items && e.items.length > 0;
+                  const isOpen = openSync === key;
+                  return (
+                  <li key={key} className="text-[12px]" style={muted}>
+                    <div className="flex items-baseline gap-2">
+                      <span className="tabular-nums">{new Date(e.at).toLocaleString()}</span>
+                      {hasItems ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenSync(isOpen ? null : key)}
+                          aria-expanded={isOpen}
+                          className="inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
+                          style={{ color: 'var(--positive, var(--text-2))' }}
+                        >
+                          <ChevronRight size={11} className="transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }} />
+                          {b.syncOkEntry.replace('{added}', String(e.added ?? 0))}
+                        </button>
+                      ) : (
+                        <span style={{ color: e.ok ? 'var(--positive, var(--text-2))' : 'var(--negative)' }}>
+                          {e.ok ? b.syncOkEntry.replace('{added}', String(e.added ?? 0)) : b.syncErrEntry}
+                        </span>
+                      )}
+                    </div>
+                    {hasItems && isOpen && (
+                      <ul className="mt-1 mb-1.5 ml-4 flex flex-col gap-0.5">
+                        {e.items!.map((it, j) => (
+                          <li key={j} className="flex items-baseline justify-between gap-2">
+                            <span className="flex items-baseline gap-2 min-w-0">
+                              <span className="font-mono text-[10px] text-[var(--text-3)] tabular-nums shrink-0">{it.date.slice(5, 10).replace('-', '.')}</span>
+                              <span className="truncate text-[var(--text-2)]">{it.description}</span>
+                            </span>
+                            <span className="font-mono tabular-nums shrink-0">{formatCurrency(it.amount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           )}

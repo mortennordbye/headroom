@@ -36,7 +36,6 @@ import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeSta
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
 import { monthlyCashflow } from '../lib/monthlyCashflow';
 import { savingsRateStatus } from '../lib/savingsRate';
-import { fixedExpenseTotalsByType } from '../lib/fixedExpenseTotals';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -238,6 +237,24 @@ const BudgetPage: React.FC = () => {
   // Sort biggest-first so the distribution reads as a clean ranking. Uses the
   // month's recorded expenses when time-travelling (see viewFixedExpenses).
   const sortedExpenses = [...viewFixedExpenses].sort((a, b) => b.amount - a.amount);
+
+  // Group the fixed-expense list by type so each category (Fast / Variabel /
+  // Abonnement / Forsikring) reads as its own labelled block. Every expense is
+  // still shown; only the visual grouping changes. Untyped legacy rows fall into
+  // 'fixed', matching `expenseColor` and `fixedExpenseTotalsByType`.
+  const fixedExpenseGroups = useMemo(() => {
+    const order: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance'];
+    const byType = new Map<ExpenseType, FixedExpense[]>();
+    for (const e of viewFixedExpenses) {
+      const type = e.type ?? 'fixed';
+      const bucket = byType.get(type);
+      if (bucket) bucket.push(e);
+      else byType.set(type, [e]);
+    }
+    return order
+      .map((type) => ({ type, expenses: byType.get(type) ?? [] }))
+      .filter((g) => g.expenses.length > 0);
+  }, [viewFixedExpenses]);
 
   // --- Validation helpers ---
   const parsePositiveNumber = (val: string): number | null => {
@@ -821,19 +838,28 @@ const BudgetPage: React.FC = () => {
               ))}
             </div>
           )}
-          {/* Per-type totals double as the colour key — only types with a cost
-              this month appear (e.g. "subscriptions cost you X kr/mo"). */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {fixedExpenseTotalsByType(viewFixedExpenses).map(({ type, total }) => (
-              <span key={type} className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-                <span className="w-[7px] h-[7px] rounded-[2px]" style={{ background: EXPENSE_TYPE_COLOR[type] }} />
-                {t.expenseType[type]}
-                <span className="font-mono font-medium text-[var(--text-1)]">{formatCurrency(total)}</span>
-              </span>
-            ))}
-          </div>
-          <div className="space-y-0">
-            {viewFixedExpenses.map((expense) => {
+          <div>
+            {fixedExpenseGroups.map((group) => (
+              // Each category is its own card: a coloured left edge + a tinted
+              // header band make the grouping unmistakable, and the rows live
+              // inside so a category reads as one bounded block.
+              <div
+                key={group.type}
+                className="mt-3 first:mt-0 rounded-[10px] border border-[var(--border)] overflow-hidden"
+                style={{ borderLeft: `3px solid ${EXPENSE_TYPE_COLOR[group.type]}` }}
+              >
+                <div
+                  className="flex items-center gap-2 px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider"
+                  style={{
+                    color: 'var(--text-1)',
+                    background: `color-mix(in srgb, ${EXPENSE_TYPE_COLOR[group.type]} 9%, transparent)`,
+                  }}
+                >
+                  <span className="w-[8px] h-[8px] rounded-[2px] shrink-0" style={{ background: EXPENSE_TYPE_COLOR[group.type] }} />
+                  {t.expenseType[group.type]}
+                </div>
+                <div className="px-3.5">
+                {group.expenses.map((expense) => {
               // Envelope reconciliation, shown only for a linked expense that has
               // real spend this month (keeps the list quiet for non-syncers). When
               // several expenses share a category, the shared bar renders once,
@@ -900,7 +926,10 @@ const BudgetPage: React.FC = () => {
                 {showEnvelope && <EnvelopeBar envelope={envelope} formatCurrency={formatCurrency} labels={{ left: t.envelopeLeft, over: t.envelopeOver }} />}
               </div>
               );
-            })}
+                })}
+                </div>
+              </div>
+            ))}
             <div className="pt-5 flex justify-between items-baseline">
               <span className={sectionLabel}>{t.aggregate}</span>
               <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(totalFixedExpenses)}</span>

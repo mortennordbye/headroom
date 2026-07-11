@@ -522,6 +522,10 @@ interface FinanceSettingsContextType {
    *  last dismissed it for, so it reappears once a new month begins. */
   incomeReminderDismissedMonth: string;
   dismissIncomeReminder: (monthKey: string) => void;
+  /** Budget conservative-mode warning ("income below average / irregular") —
+   *  holds the 'yyyy-MM' last dismissed, so it returns next month if still flagged. */
+  conservativeNudgeDismissedMonth: string;
+  dismissConservativeNudge: (monthKey: string) => void;
   /** Day of month (1–31) the user's salary lands; 0 = unset. On the current
    *  month, the income reminder and savings-rate warning stay quiet until this
    *  day, so the month isn't judged before the paycheck has arrived. */
@@ -574,6 +578,8 @@ interface FinanceDataContextType {
   setManualSnapshot: (monthKey: string, snapshot: BalanceSnapshot) => void;
   /** Delete a manual snapshot. Auto snapshots are left alone (they re-capture). */
   deleteManualSnapshot: (monthKey: string) => void;
+  /** Wipe all recorded history except the live current month. */
+  clearHistory: () => void;
   fixedExpenses: FixedExpense[];
   setFixedExpenses: (val: FixedExpense[]) => void;
   debts: Debt[];
@@ -798,6 +804,7 @@ export interface ExportPayload {
   onboardingCompleted?: boolean;
   assumptionsNudgeDismissed?: boolean;
   incomeReminderDismissedMonth?: string;
+  conservativeNudgeDismissedMonth?: string;
   payday?: number;
 }
 
@@ -906,6 +913,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
   const [assumptionsNudgeDismissed, setAssumptionsNudgeDismissed] = useState(false);
   const [incomeReminderDismissedMonth, setIncomeReminderDismissedMonth] = useState('');
+  const [conservativeNudgeDismissedMonth, setConservativeNudgeDismissedMonth] = useState('');
   const [payday, setPayday] = useState<number>(0);
   const [demoMode, setDemoMode] = useState(false);
   // First-run guided setup. `onboardingCompleted` is the persisted flag;
@@ -970,14 +978,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, payday,
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, payday]);
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday]);
 
   // The one place that applies a loaded/imported blob → app state (§4.2), with
   // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
@@ -1011,7 +1019,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       customTaxRatePct: setCustomTaxRatePct, employerCostConfig: setEmployerCostConfig,
       billingConfig: setBillingConfig, hiddenNavItems: setHiddenNavItems,
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
-      incomeReminderDismissedMonth: setIncomeReminderDismissedMonth, payday: setPayday,
+      incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
+      conservativeNudgeDismissedMonth: setConservativeNudgeDismissedMonth, payday: setPayday,
     };
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
@@ -1440,6 +1449,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Discard all recorded history, keeping only the live current month. Used to
+  // start the graphs clean after a change to how net worth is computed leaves
+  // older snapshots inconsistent. The current month stays correct on its own
+  // (the auto-capture effects always target it), so we preserve it rather than
+  // leave a gap until the next slice change re-captures it.
+  const clearHistory = useCallback(() => {
+    const nowKey = format(new Date(), 'yyyy-MM');
+    setNetWorthHistory(prev => (nowKey in prev ? { [nowKey]: prev[nowKey] } : {}));
+    setBalanceSnapshots(prev => (prev[nowKey] ? { [nowKey]: prev[nowKey] } : {}));
+  }, []);
+
   const totalResidual = effectiveIncome - totalFixedExpenses;
   const monthlyBudget = recommendedSpending;
   const daysInMonth = getDaysInMonth(currentMonth);
@@ -1670,6 +1690,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const dismissAssumptionsNudge = useCallback(() => setAssumptionsNudgeDismissed(true), []);
 
   const dismissIncomeReminder = useCallback((monthKey: string) => setIncomeReminderDismissedMonth(monthKey), []);
+  const dismissConservativeNudge = useCallback((monthKey: string) => setConservativeNudgeDismissedMonth(monthKey), []);
 
   const updateHomeowner = useCallback((key: keyof HomeownerData, value: number) => {
     setHomeowner(prev => ({ ...prev, [key]: value }));
@@ -2127,6 +2148,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
+    conservativeNudgeDismissedMonth, dismissConservativeNudge,
     payday, setPayday,
     formatCurrency, formatCurrencyShort,
     restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
@@ -2140,6 +2162,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
+    conservativeNudgeDismissedMonth, dismissConservativeNudge,
     payday, setPayday,
     formatCurrency, formatCurrencyShort, restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
     demoMode, toggleDemoMode,
@@ -2153,7 +2176,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip,
     netWorthHistory, balanceSnapshots,
-    setManualSnapshot, deleteManualSnapshot,
+    setManualSnapshot, deleteManualSnapshot, clearHistory,
     fixedExpenses, setFixedExpenses,
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
@@ -2179,7 +2202,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip, netWorthHistory,
-    balanceSnapshots, setManualSnapshot, deleteManualSnapshot,
+    balanceSnapshots, setManualSnapshot, deleteManualSnapshot, clearHistory,
     fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, accountLabels, setAccountLabel, applyBankSync,
     categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule, removeAccountData,

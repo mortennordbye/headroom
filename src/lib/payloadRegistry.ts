@@ -159,6 +159,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     onboardingCompleted: { group: 'reset', demo: 'preference', read: whenBoolean('onboardingCompleted'), default: true },
     assumptionsNudgeDismissed: { group: 'reset', demo: 'preference', read: whenBoolean('assumptionsNudgeDismissed'), default: false },
     incomeReminderDismissedMonth: { group: 'reset', demo: 'preference', read: whenString('incomeReminderDismissedMonth'), default: '' },
+    conservativeNudgeDismissedMonth: { group: 'reset', demo: 'preference', read: whenString('conservativeNudgeDismissedMonth'), default: '' },
     payday: { group: 'reset', demo: 'preference', read: whenNumber('payday'), default: 0 },
 
     // ── Group B: apply only when present (identical on load + import) ──

@@ -36,6 +36,10 @@ const mockCtx = {
     setBudgets: 'Set budgets', noBudgetsSet: 'No budgets', done: 'Done',
     envelopeManagedNote: 'Managed as envelopes', envelopeTracked: 'Tracked by an envelope',
     charts: { aria: { categoryTrend: 'Monthly spending by category' } },
+    budgetPage: {
+      searchPlaceholder: 'Search', searchLabel: 'Search transactions', searchClear: 'Clear',
+      searchResults: '{count} results', searchNoResults: 'No matches', relabelHint: 'Edit',
+    },
   },
   currentMonth: new Date('2026-07-15T00:00:00'),
   dailyTransactions: TRANSACTIONS,
