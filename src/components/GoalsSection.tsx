@@ -124,7 +124,15 @@ const GoalsSection: React.FC = () => {
           value: existing ? encodeSource(existing) : 'manual',
           options: sourceOptions,
         },
-        { key: 'manualCurrent', label: t.goals.manualCurrent, type: 'number', value: (existing?.manualCurrent ?? 0).toString() },
+        {
+          key: 'manualCurrent',
+          label: t.goals.manualCurrent,
+          type: 'number',
+          value: (existing?.manualCurrent ?? 0).toString(),
+          // Only relevant for a manual goal — a source-tracked goal reads its
+          // current value from the linked balance, so hide the manual entry.
+          showWhen: (v) => decodeSource(v.source).source === 'manual',
+        },
         { key: 'deadline', label: t.goals.deadline, type: 'month', value: existing?.deadline ?? '', placeholder: '2027-12' },
         { key: 'notes', label: t.goals.notes, type: 'text', value: existing?.notes ?? '' },
       ],

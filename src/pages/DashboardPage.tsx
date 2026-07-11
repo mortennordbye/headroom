@@ -9,6 +9,7 @@ import { nb, enUS } from 'date-fns/locale';
 import { useFinance, DEFAULT_GROWTH_RATES, DEFAULT_TAX_RATES, type DailyTransaction } from '../context/FinanceContext';
 import EditTransactionModal from '../components/EditTransactionModal';
 import { Card } from '../components/ui/Card';
+import { ChartSkeleton } from '../components/ui/Skeleton';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
 import { AccountBadge } from '../components/AccountBadge';
@@ -31,7 +32,7 @@ import {
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
 import { netWorthSeriesFrom } from '../lib/netWorth';
-import { lastNMonthKeys } from '../lib/date';
+import { lastNMonthKeys, currentMonthKey } from '../lib/date';
 import { sumSavings } from '../lib/equity';
 import { sumDiscretionarySpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -244,7 +245,7 @@ const DashboardPage: React.FC = () => {
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
-    const debtByYear = calcDebtBalanceByYear(debts, 15);
+    const debtByYear = calcDebtBalanceByYear(debts, 15, currentMonthKey());
     return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear, debtByYear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, assets.houseValue, assets.houseDebt, mortgageRate, mortgageTermYears, debts]);
@@ -743,7 +744,7 @@ const DashboardPage: React.FC = () => {
             <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.charts.cashflowSub}</span>
           </div>
           <div className="h-[240px] w-full mt-2">
-            <Suspense fallback={<div className="h-full w-full" />}><CashflowChart /></Suspense>
+            <Suspense fallback={<ChartSkeleton />}><CashflowChart /></Suspense>
           </div>
         </Card>
 
@@ -787,7 +788,7 @@ const DashboardPage: React.FC = () => {
           {totalFixedExpenses > 0 && (
             <>
               <div className="h-[140px] w-full mt-2">
-                <Suspense fallback={<div className="h-full w-full" />}><EmergencyFundGauge /></Suspense>
+                <Suspense fallback={<ChartSkeleton />}><EmergencyFundGauge /></Suspense>
               </div>
               <div className="text-[11px] text-center" style={{ color: 'var(--text-3)' }}>
                 {emergencyFund.shortfallToMin > 0

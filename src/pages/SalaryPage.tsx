@@ -34,6 +34,7 @@ import {
   type SalaryChangeType,
   type BonusType,
 } from '../context/FinanceContext';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import type { Translations } from '../i18n/translations';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
@@ -47,6 +48,7 @@ import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/da
 import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
+import { ChartSkeleton } from '../components/ui/Skeleton';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
 const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
@@ -88,10 +90,11 @@ const SalaryPage: React.FC = () => {
     bonuses, removeBonus,
     overtime, removeOvertime,
     hoursSnapshots, removeHoursSnapshot,
-    inflation, inflationStale,
+    inflation, inflationStale, refreshInflation,
     wageStats, wageStatsStale, payslips,
     region, customTaxRatePct, pension, annualMortgageInterest,
   } = useFinance();
+  const reduced = useReducedMotion();
   const isGeneric = region === 'generic';
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
@@ -99,6 +102,11 @@ const SalaryPage: React.FC = () => {
   const [recordEvent, setRecordEvent] = useState<{ target?: RecordEditTarget; initialType?: RecordType } | null>(null);
   // Salary-over-time card view: nominal trajectory vs real (inflation-adjusted) hourly.
   const [timelineView, setTimelineView] = useState<'nominal' | 'real'>('nominal');
+  const [refreshingInflation, setRefreshingInflation] = useState(false);
+  const handleRefreshInflation = async () => {
+    setRefreshingInflation(true);
+    try { await refreshInflation(); } finally { setRefreshingInflation(false); }
+  };
 
   const openModal = (config: ModalConfig) => setModal(config);
   const closeModal = () => setModal(null);
@@ -569,8 +577,16 @@ const SalaryPage: React.FC = () => {
             : t.salary.subtitle}
         </p>
         {inflationStale && (
-          <p className="mt-2 text-[11px]" style={{ color: 'var(--warning)' }}>
-            {t.salary.inflationOffline}
+          <p className="mt-2 text-[11px] flex items-center gap-2" style={{ color: 'var(--warning)' }}>
+            <span>{t.salary.inflationOffline}</span>
+            <button
+              type="button"
+              onClick={handleRefreshInflation}
+              disabled={refreshingInflation}
+              className="underline underline-offset-2 hover:opacity-80 transition-opacity disabled:opacity-60 disabled:no-underline"
+            >
+              {refreshingInflation ? t.salary.inflationRefreshing : t.salary.inflationRefresh}
+            </button>
           </p>
         )}
         {wageStatsStale && (
@@ -663,7 +679,7 @@ const SalaryPage: React.FC = () => {
           )}
         </div>
         <div className="h-[280px] w-full">
-          <Suspense fallback={<div className="h-full w-full" />}><MoneyFlowSankey /></Suspense>
+          <Suspense fallback={<ChartSkeleton />}><MoneyFlowSankey /></Suspense>
         </div>
       </div>
 
@@ -786,6 +802,7 @@ const SalaryPage: React.FC = () => {
                 isAnimationActive={false}
               />
               <Area
+                isAnimationActive={!reduced}
                 type="stepAfter"
                 dataKey="gross"
                 name={t.salary.grossAnnual}
@@ -854,13 +871,13 @@ const SalaryPage: React.FC = () => {
                 cursor={{ fill: CHART.surface2 }}
               />
               <ReferenceLine y={0} stroke="var(--text-3)" strokeWidth={1} />
-              <Bar dataKey="salaryPct" name={t.salaryPage.salaryIncrease} fill="var(--accent)" radius={[4, 4, 0, 0]}>
+              <Bar isAnimationActive={!reduced} dataKey="salaryPct" name={t.salaryPage.salaryIncrease} fill="var(--accent)" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="salaryPct" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--accent)' }} />
               </Bar>
-              <Bar dataKey="cpiPct" name={t.salaryPage.cpi} fill="var(--violet)" radius={[4, 4, 0, 0]}>
+              <Bar isAnimationActive={!reduced} dataKey="cpiPct" name={t.salaryPage.cpi} fill="var(--violet)" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="cpiPct" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--violet)' }} />
               </Bar>
-              <Bar dataKey="gap" name={t.salaryPage.gap} radius={[4, 4, 0, 0]}>
+              <Bar isAnimationActive={!reduced} dataKey="gap" name={t.salaryPage.gap} radius={[4, 4, 0, 0]}>
                 {yoyByYear.map((row) => (
                   <Cell key={row.year} fill={row.gap >= 0 ? 'var(--positive)' : 'var(--negative)'} />
                 ))}
@@ -952,7 +969,7 @@ const SalaryPage: React.FC = () => {
               {activeCompSeries.map((s, i) => {
                 const isLast = i === activeCompSeries.length - 1;
                 return (
-                  <Bar key={s.key} dataKey={s.key} stackId="a" name={s.name} fill={s.fill} radius={isLast ? [6, 6, 0, 0] : undefined}>
+                  <Bar isAnimationActive={!reduced} key={s.key} dataKey={s.key} stackId="a" name={s.name} fill={s.fill} radius={isLast ? [6, 6, 0, 0] : undefined}>
                     {isLast && (
                       <LabelList dataKey="total" position="top" formatter={(v) => formatAxisInt(Number(v ?? 0))} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--text-1)' }} />
                     )}
@@ -994,11 +1011,12 @@ const SalaryPage: React.FC = () => {
                 cursor={{ fill: CHART.surface2 }}
                 content={<ChartTooltip valueFormatter={(v, e) => e?.dataKey === 'hoursPerWeek' ? `${v.toFixed(1)} ${t.common.hoursPerWeekUnit}` : formatCurrency(v)} />}
               />
-              <Bar yAxisId="left" dataKey="hoursPerWeek" name={t.salaryPage.hoursPerWk} fill="url(#hoursGradient)" radius={[6, 6, 0, 0]}>
+              <Bar isAnimationActive={!reduced} yAxisId="left" dataKey="hoursPerWeek" name={t.salaryPage.hoursPerWk} fill="url(#hoursGradient)" radius={[6, 6, 0, 0]}>
                 <LabelList dataKey="hoursPerWeek" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}t`} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--warning)' }} />
               </Bar>
               <Line
                 yAxisId="right"
+                isAnimationActive={!reduced}
                 type="monotone"
                 dataKey="hourly"
                 name={t.salary.effectiveHourly}
@@ -1329,6 +1347,7 @@ interface RealHourlyChartProps {
 }
 
 const RealHourlyChart: React.FC<RealHourlyChartProps> = ({ series, formatCurrency, t }) => {
+  const reduced = useReducedMotion();
   // Two views: raw points (for chart) and CPI-anchored points (for chip stats)
   const rawData = series.filter(p => p.nominalHourly > 0);
   const data = rawData.map(p => ({
@@ -1396,8 +1415,8 @@ const RealHourlyChart: React.FC<RealHourlyChartProps> = ({ series, formatCurrenc
               cursor={{ stroke: 'var(--text-3)', strokeWidth: 1, strokeDasharray: '3 3' }}
             />
             <ReferenceLine y={first.real} stroke="var(--text-3)" strokeDasharray="2 4" label={{ value: 'baseline', position: 'insideTopLeft', fill: 'var(--text-3)', fontSize: 10 }} />
-            <Area type="monotone" dataKey="nominal" name={t.salary.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#nominalGradient)" activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--bg-card)' }} />
-            <Area type="monotone" dataKey="real" name={t.salary.real} stroke="var(--violet)" strokeWidth={2.5} strokeDasharray="5 3" fill="url(#realGradient)" activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--bg-card)' }} />
+            <Area isAnimationActive={!reduced} type="monotone" dataKey="nominal" name={t.salary.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#nominalGradient)" activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--bg-card)' }} />
+            <Area isAnimationActive={!reduced} type="monotone" dataKey="real" name={t.salary.real} stroke="var(--violet)" strokeWidth={2.5} strokeDasharray="5 3" fill="url(#realGradient)" activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--bg-card)' }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>

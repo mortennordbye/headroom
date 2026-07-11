@@ -34,10 +34,12 @@ import {
   type TransitionData,
   type HousingMode,
 } from '../context/FinanceContext';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { ProgressBar } from '../components/ui/ProgressBar';
+import { ChartSkeleton } from '../components/ui/Skeleton';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import {
@@ -610,7 +612,7 @@ const LoanPage: React.FC = () => {
               <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.ltvSub}</p>
             </div>
             <div className="h-[240px] w-full">
-              <Suspense fallback={<div className="h-full w-full" />}><LtvChart /></Suspense>
+              <Suspense fallback={<ChartSkeleton />}><LtvChart /></Suspense>
             </div>
           </div>
 
@@ -767,6 +769,7 @@ interface AmortizationAccordionProps {
 }
 
 function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, formatCurrency, principal, annualRatePct, basePayment }: AmortizationAccordionProps) {
+  const reduced = useReducedMotion();
   const [extra, setExtra] = useState(0);
   const savings = useMemo(
     () => extraPaymentSavings(principal, annualRatePct, basePayment, extra),
@@ -857,8 +860,8 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
                       return <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>{labels[value] ?? value}</span>;
                     }}
                   />
-                  <Bar dataKey="principalPaid" name={t.principalPayment} stackId="a" fill={CHART.forestLight} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="interestPaid" name={t.interestPayment} stackId="a" fill={CHART.rust} fillOpacity={0.5} radius={[3, 3, 0, 0]} />
+                  <Bar isAnimationActive={!reduced} dataKey="principalPaid" name={t.principalPayment} stackId="a" fill={CHART.forestLight} radius={[0, 0, 0, 0]} />
+                  <Bar isAnimationActive={!reduced} dataKey="interestPaid" name={t.interestPayment} stackId="a" fill={CHART.rust} fillOpacity={0.5} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

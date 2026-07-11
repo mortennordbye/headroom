@@ -28,3 +28,16 @@ export function fixedExpenseTotalsByType(expenses: FixedExpense[]): FixedExpense
     .map(type => ({ type, total: sums.get(type) ?? 0 }))
     .filter(t => t.total > 0);
 }
+
+/**
+ * Monthly essential spend for the emergency-fund runway: every fixed-expense
+ * line except `subscription`, which is discretionary (Netflix, Spotify — the
+ * things you cancel in a real emergency). Counting subscriptions understated
+ * the months a buffer covers; excluding them makes "months covered" reflect the
+ * spend you actually can't drop. Untyped legacy rows count as 'fixed' (essential).
+ */
+export function essentialMonthlyExpenses(expenses: FixedExpense[]): number {
+  return expenses
+    .filter(e => (e.type ?? 'fixed') !== 'subscription')
+    .reduce((sum, e) => sum + amount(e.amount), 0);
+}

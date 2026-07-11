@@ -19,6 +19,9 @@ interface ModalShellProps {
   children: ReactNode;
   /** Optional action row rendered after the body (outside any scrollable child). */
   footer?: ReactNode;
+  /** When true, a backdrop click is ignored so a mis-tap can't discard unsaved
+   *  edits; Escape / X / the footer buttons still close. */
+  preventBackdropClose?: boolean;
 }
 
 /**
@@ -29,6 +32,7 @@ interface ModalShellProps {
  */
 export function ModalShell({
   title, onClose, closeLabel, icon, panelClassName, describedBy, initialFocus, children, footer,
+  preventBackdropClose,
 }: ModalShellProps) {
   const dialogRef = useFocusTrap<HTMLDivElement>(onClose, initialFocus);
   const titleId = useId();
@@ -55,7 +59,7 @@ export function ModalShell({
   const content = (
     <div
       className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !preventBackdropClose) onClose(); }}
     >
       <div
         ref={dialogRef}

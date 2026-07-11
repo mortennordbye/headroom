@@ -5,6 +5,7 @@ import {
 import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 import { lastNMonthKeys } from '../../lib/date';
@@ -24,6 +25,7 @@ export default function CashflowChart() {
     // isn't account-scoped), so use nonTransferTransactions.
     nonTransferTransactions: dailyTransactions, formatCurrencyShort,
   } = useFinance();
+  const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
 
   const data = useMemo(() => {
@@ -44,9 +46,9 @@ export default function CashflowChart() {
         <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={44} />
         <Tooltip cursor={{ fill: CHART.track }} content={<ChartTooltip />} />
         <ReferenceLine y={0} stroke={CHART.rule} />
-        <Bar name={t.charts.income} dataKey="income" fill={CHART.forestLight} radius={[2, 2, 0, 0]} maxBarSize={18} />
-        <Bar name={t.charts.expenses} dataKey="expenses" fill={CHART.rust} radius={[2, 2, 0, 0]} maxBarSize={18} />
-        <Line name={t.charts.net} dataKey="net" stroke={CHART.brass} strokeWidth={2} dot={false} />
+        <Bar isAnimationActive={!reduced} name={t.charts.income} dataKey="income" fill={CHART.forestLight} radius={[2, 2, 0, 0]} maxBarSize={18} />
+        <Bar isAnimationActive={!reduced} name={t.charts.expenses} dataKey="expenses" fill={CHART.rust} radius={[2, 2, 0, 0]} maxBarSize={18} />
+        <Line isAnimationActive={!reduced} name={t.charts.net} dataKey="net" stroke={CHART.brass} strokeWidth={2} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
     </div>

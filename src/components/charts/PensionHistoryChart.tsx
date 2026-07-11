@@ -3,6 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { pensionSeriesFrom } from '../../lib/snapshotSeries';
 import { fillMonthGaps } from '../../lib/monthGrid';
 import ChartTooltip from '../ChartTooltip';
@@ -14,6 +15,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColo
  */
 export default function PensionHistoryChart() {
   const { t, lang, formatCurrency, formatCurrencyShort, balanceSnapshots } = useFinance();
+  const reduced = useReducedMotion();
   const c = t.charts;
   const dateLocale = lang === 'nb' ? nb : enUS;
 
@@ -43,8 +45,8 @@ export default function PensionHistoryChart() {
             <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={52} domain={['auto', 'auto']} />
             <Tooltip content={<ChartTooltip valueFormatter={formatCurrency} labelFormatter={(l) => String(l)} />} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Line name={c.otpLine} type="monotone" dataKey="otp" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} />
-            <Line name={c.ipsLine} type="monotone" dataKey="ips" stroke={CHART.brass} strokeWidth={2} dot={{ r: 2 }} />
+            <Line isAnimationActive={!reduced} name={c.otpLine} type="monotone" dataKey="otp" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} />
+            <Line isAnimationActive={!reduced} name={c.ipsLine} type="monotone" dataKey="ips" stroke={CHART.brass} strokeWidth={2} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>

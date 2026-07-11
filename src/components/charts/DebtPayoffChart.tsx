@@ -1,5 +1,6 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
@@ -20,6 +21,7 @@ interface DebtPayoffChartProps {
  */
 export default function DebtPayoffChart({ balances, startYear, nonMortgageDebt }: DebtPayoffChartProps) {
   const { t, formatCurrency, formatCurrencyShort } = useFinance();
+  const reduced = useReducedMotion();
 
   const current = balances[0] ?? 0;
   // First year the balance reaches 0 having been positive → the debt-free year.
@@ -69,7 +71,7 @@ export default function DebtPayoffChart({ balances, startYear, nonMortgageDebt }
             <XAxis dataKey="year" {...AXIS_PROPS} />
             <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={44} />
             <Tooltip cursor={{ stroke: CHART.rule }} content={<ChartTooltip valueFormatter={(v) => formatCurrency(v)} />} />
-            <Area type="monotone" dataKey="debt" name={t.charts.mortgageToday} stroke={CHART.rust} strokeWidth={2} fill="url(#debtGrad)" />
+            <Area isAnimationActive={!reduced} type="monotone" dataKey="debt" name={t.charts.mortgageToday} stroke={CHART.rust} strokeWidth={2} fill="url(#debtGrad)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>

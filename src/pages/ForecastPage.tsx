@@ -4,6 +4,7 @@ import {
 } from 'recharts';
 import { TrendingUp, Wallet, Activity, Flame, Scale } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import ChartTooltip from '../components/ChartTooltip';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
@@ -24,6 +25,7 @@ const ForecastPage: React.FC = () => {
     formatCurrency, region, customTaxRatePct, pension,
     recommendedInvestment, growthReturnRate, inflation, annualMortgageInterest,
   } = useFinance();
+  const reduced = useReducedMotion();
 
   // Current month in render scope so the memos below recompute if the month
   // rolls over during a long-lived session.
@@ -396,8 +398,8 @@ const ForecastPage: React.FC = () => {
               <ReferenceLine y={first.netWorth} stroke="var(--text-3)" strokeDasharray="2 4" />
               {/* Uncertainty band (bear↔bull), drawn first so the lines sit on top. */}
               <Area type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={false} activeDot={false} legendType="none" />
-              <Area type="monotone" dataKey="netWorth" name={t.forecastPage.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#forecastGradient)" />
-              <Area type="monotone" dataKey="netWorthReal" name={t.forecastPage.todaysKroner} stroke="var(--violet)" strokeWidth={2} strokeDasharray="5 3" fill="url(#forecastRealGradient)" />
+              <Area isAnimationActive={!reduced} type="monotone" dataKey="netWorth" name={t.forecastPage.nominal} stroke="var(--accent)" strokeWidth={2.5} fill="url(#forecastGradient)" />
+              <Area isAnimationActive={!reduced} type="monotone" dataKey="netWorthReal" name={t.forecastPage.todaysKroner} stroke="var(--violet)" strokeWidth={2} strokeDasharray="5 3" fill="url(#forecastRealGradient)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -422,10 +424,10 @@ const ForecastPage: React.FC = () => {
               <XAxis dataKey="yearLabel" {...AXIS_PROPS} />
               <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={52} />
               <Tooltip content={<ChartTooltip />} />
-              <Line type="monotone" dataKey="gross" name={t.forecast.grossSalary} stroke="var(--accent)" strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="net" name={t.forecast.netTakeHome} stroke="var(--positive)" strokeWidth={2.5} dot={false} />
+              <Line isAnimationActive={!reduced} type="monotone" dataKey="gross" name={t.forecast.grossSalary} stroke="var(--accent)" strokeWidth={2.5} dot={false} />
+              <Line isAnimationActive={!reduced} type="monotone" dataKey="net" name={t.forecast.netTakeHome} stroke="var(--positive)" strokeWidth={2.5} dot={false} />
               {startingMortgage > 0 && (
-                <Line type="monotone" dataKey="mortgage" name={t.forecast.mortgageRemaining} stroke="var(--negative)" strokeWidth={2} strokeDasharray="4 3" dot={false} />
+                <Line isAnimationActive={!reduced} type="monotone" dataKey="mortgage" name={t.forecast.mortgageRemaining} stroke="var(--negative)" strokeWidth={2} strokeDasharray="4 3" dot={false} />
               )}
             </LineChart>
           </ResponsiveContainer>

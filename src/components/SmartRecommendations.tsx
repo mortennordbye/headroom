@@ -101,6 +101,11 @@ export default function SmartRecommendations() {
   const [editingPct, setEditingPct] = useState(false);
   const [pctDraft, setPctDraft] = useState('');
   const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
+  // Click pins a slice so its focus persists after the pointer leaves; hover
+  // still previews. Effective focus = pinned, else hovered.
+  const [pinnedSlice, setPinnedSlice] = useState<number | null>(null);
+  const focusSlice = pinnedSlice ?? hoveredSlice;
+  const togglePin = (i: number) => setPinnedSlice(prev => (prev === i ? null : i));
   const pctInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -267,10 +272,12 @@ export default function SmartRecommendations() {
                     width: `${pct}%`,
                     background: entry.color,
                     color: 'var(--bg)',
-                    opacity: hoveredSlice === null || hoveredSlice === i ? 1 : 0.4,
+                    opacity: focusSlice === null || focusSlice === i ? 1 : 0.4,
+                    cursor: 'pointer',
                   }}
                   onMouseEnter={() => setHoveredSlice(i)}
                   onMouseLeave={() => setHoveredSlice(null)}
+                  onClick={() => togglePin(i)}
                 >
                   {pct >= 10 ? `${pct.toFixed(0)}%` : ''}
                 </div>
@@ -282,10 +289,15 @@ export default function SmartRecommendations() {
             {pieData.map((entry, i) => (
               <div
                 key={i}
+                role="button"
+                tabIndex={0}
+                aria-pressed={pinnedSlice === i}
                 className="flex items-center justify-between gap-2 cursor-pointer transition-opacity"
-                style={{ opacity: hoveredSlice === null || hoveredSlice === i ? 1 : 0.4 }}
+                style={{ opacity: focusSlice === null || focusSlice === i ? 1 : 0.4 }}
                 onMouseEnter={() => setHoveredSlice(i)}
                 onMouseLeave={() => setHoveredSlice(null)}
+                onClick={() => togglePin(i)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePin(i); } }}
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-[9px] h-[9px] rounded-[2px] shrink-0" style={{ backgroundColor: entry.color }} />

@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 import { lastNMonthKeys } from '../../lib/date';
@@ -16,6 +17,7 @@ const MONTHS = 6;
 // a series, so an all-groceries user doesn't see 11 empty legend entries.
 export default function CategoryTrendChart() {
   const { t, lang, currentMonth, visibleBudgetTransactions: dailyTransactions, formatCurrencyShort } = useFinance();
+  const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
 
   const { data, series } = useMemo(() => {
@@ -43,7 +45,7 @@ export default function CategoryTrendChart() {
           <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={44} />
           <Tooltip cursor={{ fill: CHART.track }} content={<ChartTooltip />} />
           {series.map((c, i) => (
-            <Bar key={c.key} name={t.categoryLabels[c.key]} dataKey={c.key} stackId="s" fill={c.color} maxBarSize={32}>
+            <Bar isAnimationActive={!reduced} key={c.key} name={t.categoryLabels[c.key]} dataKey={c.key} stackId="s" fill={c.color} maxBarSize={32}>
               {/* Total spent that month, printed at the top of the stack. */}
               {i === series.length - 1 && (
                 <LabelList dataKey="total" position="top" formatter={(v: unknown) => formatCurrencyShort(Number(v) || 0)} style={{ fontSize: 10, fill: CHART.textSoft, fontWeight: 600 }} />

@@ -1,5 +1,6 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import ChartTooltip from '../ChartTooltip';
 import { CHART } from '../../lib/chartColors';
 
@@ -21,6 +22,7 @@ interface AllocationDonutProps {
  */
 export default function AllocationDonut({ stocks, house, cash, crypto, pension }: AllocationDonutProps) {
   const { t, formatCurrency, formatCurrencyShort } = useFinance();
+  const reduced = useReducedMotion();
 
   const slices = [
     { name: t.charts.stocks, value: Math.max(0, stocks), color: CHART.forestLight },
@@ -45,7 +47,7 @@ export default function AllocationDonut({ stocks, house, cash, crypto, pension }
       <div role="img" aria-label={t.charts.aria.allocation} className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={slices} dataKey="value" nameKey="name" innerRadius="60%" outerRadius="88%" paddingAngle={2} stroke="none">
+            <Pie isAnimationActive={!reduced} data={slices} dataKey="value" nameKey="name" innerRadius="60%" outerRadius="88%" paddingAngle={2} stroke="none">
               {slices.map((s, i) => <Cell key={i} fill={s.color} />)}
             </Pie>
             <Tooltip content={<ChartTooltip hideLabel valueFormatter={(v) => formatCurrency(v)} />} />

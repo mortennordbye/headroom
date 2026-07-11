@@ -1,21 +1,26 @@
 import { useMemo } from 'react';
 import { RadialBarChart, RadialBar, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { calcEmergencyFundStatus } from '../../lib/calculations';
+import { essentialMonthlyExpenses } from '../../lib/fixedExpenseTotals';
 import { CHART } from '../../lib/chartColors';
 
 const STATUS_COLOR = { low: CHART.rust, adequate: CHART.brass, strong: CHART.forestLight } as const;
 
 /**
- * Emergency-fund runway as a radial gauge: months of essential (fixed) expenses
- * the buffer account covers, against the conventional 3–6 month band.
+ * Emergency-fund runway as a radial gauge: months of *essential* expenses the
+ * buffer account covers, against the conventional 3–6 month band. Discretionary
+ * subscriptions are excluded from the denominator (you'd cancel them in a real
+ * emergency), so the runway reflects the spend you actually can't drop.
  */
 export default function EmergencyFundGauge() {
-  const { t, assets, totalFixedExpenses } = useFinance();
+  const { t, assets, fixedExpenses } = useFinance();
+  const reduced = useReducedMotion();
 
   const ef = useMemo(
-    () => calcEmergencyFundStatus(assets.bufferAccount, totalFixedExpenses),
-    [assets.bufferAccount, totalFixedExpenses],
+    () => calcEmergencyFundStatus(assets.bufferAccount, essentialMonthlyExpenses(fixedExpenses)),
+    [assets.bufferAccount, fixedExpenses],
   );
 
   const finite = Number.isFinite(ef.monthsCovered);
@@ -37,7 +42,7 @@ export default function EmergencyFundGauge() {
           barSize={12}
         >
           <PolarAngleAxis type="number" domain={[0, ef.targetMonths]} angleAxisId={0} tick={false} />
-          <RadialBar dataKey="value" cornerRadius={8} background={{ fill: CHART.track }} angleAxisId={0} />
+          <RadialBar isAnimationActive={!reduced} dataKey="value" cornerRadius={8} background={{ fill: CHART.track }} angleAxisId={0} />
         </RadialBarChart>
       </ResponsiveContainer>
       </div>

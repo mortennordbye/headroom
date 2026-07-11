@@ -3,6 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { debtPaydownVsPlan } from '../../lib/debt';
 import { fillMonthGaps } from '../../lib/monthGrid';
 import ChartTooltip from '../ChartTooltip';
@@ -16,6 +17,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColo
  */
 export default function DebtPaydownVsPlanChart() {
   const { t, lang, formatCurrency, formatCurrencyShort, balanceSnapshots } = useFinance();
+  const reduced = useReducedMotion();
   const d = t.debt;
   const dateLocale = lang === 'nb' ? nb : enUS;
 
@@ -67,8 +69,8 @@ export default function DebtPaydownVsPlanChart() {
             <XAxis dataKey="month" {...AXIS_PROPS} interval="preserveStartEnd" minTickGap={28} />
             <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={52} domain={['auto', 'auto']} />
             <Tooltip content={<ChartTooltip valueFormatter={formatCurrency} labelFormatter={(l) => String(l)} />} />
-            <Line name={d.vsPlanPlan} type="monotone" dataKey="plan" stroke={CHART.rust} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
-            <Line name={d.vsPlanActual} type="monotone" dataKey="actual" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} connectNulls={false} />
+            <Line isAnimationActive={!reduced} name={d.vsPlanPlan} type="monotone" dataKey="plan" stroke={CHART.rust} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+            <Line isAnimationActive={!reduced} name={d.vsPlanActual} type="monotone" dataKey="actual" stroke={CHART.teal} strokeWidth={2} dot={{ r: 2 }} connectNulls={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
