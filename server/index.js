@@ -320,17 +320,20 @@ app.post('/api/data', (req, res) => {
 // on application/json, so it passes a binary upload straight through).
 app.post('/api/restore', express.raw({ type: () => true, limit: '50mb' }), (req, res) => {
   const buf = req.body;
-  // SQLite files begin with the literal "SQLite format 3\0".
-  if (!Buffer.isBuffer(buf) || buf.length < 16 || buf.toString('utf8', 0, 15) !== 'SQLite format 3') {
+  // express.raw yields a Buffer; guard explicitly (a missing/tampered body could
+  // be otherwise) before any Buffer operation, so the checks below are type-safe.
+  if (!Buffer.isBuffer(buf)) {
     return res.status(400).json({ error: 'not a SQLite backup file' });
   }
-  // Open a copy read-only from a temp file (better-sqlite3 opens by path). Kept
-  // in DATA_DIR (known-writable) and removed in finally.
-  const tmpPath = path.join(DATA_DIR, `.restore-${process.pid}-${req.socket.remotePort || 0}.sqlite`);
+  // SQLite files begin with the literal "SQLite format 3\0".
+  if (buf.length < 16 || buf.toString('utf8', 0, 15) !== 'SQLite format 3') {
+    return res.status(400).json({ error: 'not a SQLite backup file' });
+  }
+  // Open the uploaded database in memory, read-only — the attacker-controlled
+  // bytes never touch disk (no temp file to write or clean up).
   let src;
   try {
-    fs.writeFileSync(tmpPath, buf);
-    src = new Database(tmpPath, { readonly: true, fileMustExist: true });
+    src = new Database(buf, { readonly: true });
     const row = src.prepare("SELECT content FROM finance_data WHERE id = 'headroom'").get();
     if (!row || typeof row.content !== 'string') {
       return res.status(400).json({ error: 'backup contains no finance data' });
@@ -345,7 +348,6 @@ app.post('/api/restore', express.raw({ type: () => true, limit: '50mb' }), (req,
     res.status(400).json({ error: 'could not read the backup database' });
   } finally {
     try { if (src) src.close(); } catch { /* ignore */ }
-    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
   }
 });
 
