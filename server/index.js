@@ -320,9 +320,10 @@ app.post('/api/data', (req, res) => {
 // on application/json, so it passes a binary upload straight through).
 app.post('/api/restore', express.raw({ type: () => true, limit: '50mb' }), (req, res) => {
   const buf = req.body;
-  // express.raw yields a Buffer; guard explicitly (a missing/tampered body could
-  // be otherwise) before any Buffer operation, so the checks below are type-safe.
-  if (!Buffer.isBuffer(buf)) {
+  // express.raw yields a Buffer. Reject anything else — a parsed string/array
+  // (body-parser type tampering) or a missing body — before any length/byte
+  // inspection, so there's no array-vs-string type confusion downstream.
+  if (typeof buf !== 'object' || Array.isArray(buf) || !Buffer.isBuffer(buf)) {
     return res.status(400).json({ error: 'not a SQLite backup file' });
   }
   // SQLite files begin with the literal "SQLite format 3\0".
