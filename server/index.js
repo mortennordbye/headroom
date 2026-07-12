@@ -157,8 +157,12 @@ const cookieSecure = (req) => (req.headers['x-forwarded-proto'] || '').split(','
 // and the auth endpoints themselves are exempt so login can happen.
 const AUTH_EXEMPT = new Set(['/healthz', '/api/version', '/api/auth/status', '/api/auth/login', '/api/auth/logout']);
 app.use((req, res, next) => {
-  if (!req.path.startsWith('/api/')) return next();
-  if (AUTH_EXEMPT.has(req.path)) return next();
+  // Express routes match case-insensitively by default, so the gate must too —
+  // otherwise `/API/data` slips past a case-sensitive prefix check yet still hits
+  // the `/api/data` handler (an auth bypass). Lowercase before every comparison.
+  const path = req.path.toLowerCase();
+  if (!path.startsWith('/api/')) return next();
+  if (AUTH_EXEMPT.has(path)) return next();
   const auth = currentAuth();
   if (!auth.enabled) return next();
   if (sessions.isValid(sessionToken(req))) return next();
