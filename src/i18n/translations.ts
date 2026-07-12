@@ -1071,6 +1071,7 @@ export const translations = {
       krPerYear: 'kr/år', hoursPerYearUnit: 't/år', hourUnit: 't', hoursPerWeekUnit: 't/uke',
       recommended: 'Anbefalt', ofFixedCosts: 'av faste utgifter', flatTaxRate: 'Flat skattesats',
       weekdayInitials: ['M', 'T', 'O', 'T', 'F', 'L', 'S'],
+      monthPickerOpen: 'Åpne månedsvelger', monthPickerPrevYear: 'Forrige år', monthPickerNextYear: 'Neste år', monthPickerClear: 'Tøm',
       noFunSpending: 'Ingen morsomme utgifter enda. Legg til transaksjoner med kategori "Fun" for å spore dem her.',
     },
     validation: {
@@ -2555,6 +2556,7 @@ export const translations = {
       krPerYear: 'kr/yr', hoursPerYearUnit: 'h/yr', hourUnit: 'h', hoursPerWeekUnit: 'h/wk',
       recommended: 'Recommended', ofFixedCosts: 'of fixed costs', flatTaxRate: 'Flat tax rate',
       weekdayInitials: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+      monthPickerOpen: 'Open month picker', monthPickerPrevYear: 'Previous year', monthPickerNextYear: 'Next year', monthPickerClear: 'Clear',
       noFunSpending: 'No fun spending yet. Add transactions with category "Fun" to track them here.',
     },
     validation: {

@@ -1,6 +1,7 @@
 import { useState, useRef, useId, type Ref, type ReactNode } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { ModalShell } from './ui/ModalShell';
+import { MonthPicker } from './ui/MonthPicker';
 
 export interface ModalFieldOption {
   value: string;
@@ -10,7 +11,7 @@ export interface ModalFieldOption {
 export interface ModalField {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'checkbox' | 'month';
+  type: 'text' | 'number' | 'select' | 'checkbox' | 'month' | 'monthpicker';
   value: string;
   placeholder?: string;
   options?: ModalFieldOption[]; // required when type === 'select'
@@ -121,6 +122,14 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+              ) : field.type === 'monthpicker' ? (
+                <MonthPicker
+                  id={fieldId(field.key)}
+                  inputRef={idx === 0 ? (firstInputRef as Ref<HTMLInputElement>) : undefined}
+                  value={values[field.key]}
+                  placeholder={field.placeholder}
+                  onChange={(v) => setValues(prev => ({ ...prev, [field.key]: v }))}
+                />
               ) : (
                 <>
                   <input
