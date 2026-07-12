@@ -352,3 +352,45 @@ resurrecting or double-counting real bank transactions.
   unblock**: agreement on the gate + a confirm step in the UI. **Where**: new action
   in `src/pages/SettingsPage.tsx`, reusing `categorizeWithRules` from
   `src/lib/categorize.ts` over `dailyTransactions` in `src/context/FinanceContext.tsx`.
+
+## Property / boliglån tracking — follow-ups
+
+Shipped (2026-07): the homeowner Loan page now records the real mortgage (loan account
+label + origination `startDate`, with a derived payoff date and term-elapsed %), the
+apartment purchase (address, type, `purchasePrice`, `purchaseCosts`, borettslag
+`jointDebtShare`, move-in), and a **residence history** timeline of homes lived in
+(`Residence[]`, move-in/out + sale price/gain). New persisted `residences` array (registered
+like `salaries` in `src/lib/payloadRegistry.ts`), enriched `HomeownerData`, pure logic in
+`src/lib/property.ts` (+ tests), UI in `src/pages/LoanPage.tsx` and the new
+`src/components/ResidenceHistory.tsx`. Remaining, deliberately deferred:
+
+- **Exact bank amortization import.** The app's amortization is annual-granularity and
+  computed from (balance, rate, term); it does not import the bank's literal per-month
+  "Nedbetalingsplan" (per-row Avdrag/Renter/Omkostninger, effektiv rente, sub-year term like
+  "29 år 3 måneder"). **What would unblock**: a decision on whether to store a bank schedule
+  verbatim vs keep deriving it. **Where**: `src/lib/calculations.ts`
+  (`calcAmortizationSchedule`), `src/pages/LoanPage.tsx` (AmortizationAccordion).
+- **Serial (serie) loan type.** The engine only models annuity loans. **Where**:
+  `src/lib/calculations.ts`.
+- **Loan rate-change history.** `HomeownerData.notifiedRate`/`notifiedRateFrom` are
+  display-only (matching the bank's "Varslet nominell rente fra …"); there is no timeline of
+  past rates. **What would unblock**: agree whether a rate history feeds the schedule or is
+  informational only. **Where**: `HomeownerData` in `src/context/FinanceContext.tsx`.
+- **Unified housing-lifecycle model (the "thought-through" version).** The redesign +
+  property/history is now shown in the two owner modes (Boligeier and Kjøpe & selge, 2026-07),
+  but `residences[]` is still a parallel record, not linked to the live current-home financials
+  (`assets.houseValue`/`houseDebt`, mirrored across `homeowner`/`transition`). The coherent model
+  is: the current residence (no `moveOutDate`) *is* the current home, `housingMode` is its
+  lifecycle stage (planning → owning → selling), and completing a sale/purchase advances the
+  timeline. Deferred because it rewires the money-math mirroring (net-worth blast radius) for a
+  transition that happens rarely in a single-home app. **What would unblock**: decision to harden
+  this as a shareable product + accept the mirroring refactor. **Where**: `updateAsset`/
+  `updateHomeowner`/`updateTransition` mirroring in `src/context/FinanceContext.tsx`,
+  `src/lib/property.ts`.
+- **"Registrer flytting" (record-the-move) action.** The Kjøpe & selge flow still doesn't write
+  the move into history: selling doesn't set the old residence's `moveOutDate`/`salePrice`, and
+  buying doesn't create the new residence — the user re-enters it manually in Boligeier. A
+  one-click action in the transition summary could write both from the calculator values.
+  Deferred (chosen over automation) in favour of a clean manual log; revisit if the manual step
+  proves annoying. **Where**: transitioning block in `src/pages/LoanPage.tsx`, `residences` CRUD
+  in `src/context/FinanceContext.tsx`.

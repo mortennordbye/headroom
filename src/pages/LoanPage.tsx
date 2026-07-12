@@ -1,5 +1,4 @@
 import React, { useState, useMemo, lazy, Suspense } from 'react';
-import { Link } from 'react-router-dom';
 import {
   TrendingUp,
   Calculator,
@@ -52,6 +51,11 @@ import {
 } from '../lib/calculations';
 import { parseLocaleNumber } from '../lib/validators';
 import { extraPaymentSavings, formatMonths } from '../lib/debt';
+import { loanTimeline, currentResidence, residenceMetrics } from '../lib/property';
+import { PropertyCard, ResidenceTimeline } from '../components/ResidenceHistory';
+import { StatCard } from '../components/ui/StatCard';
+import { format, parse } from 'date-fns';
+import { nb, enUS } from 'date-fns/locale';
 
 interface ModalConfig {
   title: string;
@@ -72,6 +76,7 @@ const LoanPage: React.FC = () => {
     homeowner: liveHomeowner, updateHomeowner,
     transition: liveTransition, updateTransition,
     assets: liveAssets,
+    residences,
     grossAnnualIncome, totalDebt,
     formatCurrency,
   } = useFinance();
@@ -143,6 +148,28 @@ const LoanPage: React.FC = () => {
       onSave: (vals) => {
         const n = parseLocaleNumber(vals.value);
         if (!isNaN(n) && n >= 0) updateHomeowner(key, n);
+        closeModal();
+      },
+    });
+  };
+
+  const editHomeownerText = (label: string, key: keyof HomeownerData, current: string, placeholder?: string) => {
+    openModal({
+      title: label,
+      fields: [{ key: 'value', label, type: 'text', value: current, placeholder }],
+      onSave: (vals) => {
+        updateHomeowner(key, vals.value.trim());
+        closeModal();
+      },
+    });
+  };
+
+  const editHomeownerMonth = (label: string, key: keyof HomeownerData, current: string) => {
+    openModal({
+      title: label,
+      fields: [{ key: 'value', label, type: 'month', value: current }],
+      onSave: (vals) => {
+        updateHomeowner(key, vals.value);
         closeModal();
       },
     });
@@ -260,6 +287,16 @@ const LoanPage: React.FC = () => {
 
   const fmtNum = (n: number) => formatCurrency(Math.round(n));
   const fmtPct = (n: number) => `${n.toFixed(2)}%`;
+  const fmtMonthKey = (key?: string | null) =>
+    key ? format(parse(key.slice(0, 7), 'yyyy-MM', new Date()), 'MMM yyyy', { locale: lang === 'nb' ? nb : enUS }) : '';
+
+  // Payoff date + term elapsed/remaining, derived from the loan's start month.
+  const loanTL = loanTimeline(homeowner.startDate, homeowner.nedbetalingstid);
+
+  // Homeowner KPI tiles: equity, value, debt, LTV + purchase-vs-value metrics.
+  const propMetrics = residenceMetrics(currentResidence(residences), assets.houseValue);
+  const ltvPct = assets.houseValue > 0 ? (homeowner.currentMortgageBalance / assets.houseValue) * 100 : null;
+  const equityPct = assets.houseValue > 0 ? (houseEquity / assets.houseValue) * 100 : null;
 
   const modeOptions: { mode: HousingMode; label: string; icon: React.ReactNode }[] = [
     { mode: 'first_buyer', label: t.housingModeFirstBuyer, icon: <Key size={13} strokeWidth={2} /> },
@@ -466,6 +503,37 @@ const LoanPage: React.FC = () => {
       {/* ── HOMEOWNER ── */}
       {housingMode === 'homeowner' && (
         <>
+          {/* KPI-fliser: egenkapital, verdi, gjeld, belåningsgrad */}
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
+            <StatCard
+              accent
+              title={lp.homeEquityTitle}
+              value={fmtNum(houseEquity)}
+              sublabel={equityPct != null ? `${equityPct.toFixed(1)} % ${lp.kpiOfValue}` : undefined}
+            />
+            <StatCard
+              title={lp.propertyCurrentValue}
+              value={fmtNum(assets.houseValue)}
+              sublabel={propMetrics.gainKr != null
+                ? <span style={{ color: propMetrics.gainKr >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
+                    {propMetrics.gainKr >= 0 ? '+' : ''}{fmtNum(propMetrics.gainKr)} {lp.kpiSincePurchase}
+                  </span>
+                : undefined}
+            />
+            <StatCard
+              title={t.currentMortgageBalance}
+              value={fmtNum(homeowner.currentMortgageBalance)}
+              sublabel={homeowner.originalLoanAmount > 0
+                ? `${lp.kpiOf} ${fmtNum(homeowner.originalLoanAmount)} ${lp.kpiOriginal}`
+                : undefined}
+            />
+            <StatCard
+              title={lp.ltv}
+              value={ltvPct != null ? fmtPct(ltvPct) : '–'}
+              sublabel={loanTL.payoffDate ? `${lp.kpiPaidOff} ${fmtMonthKey(loanTL.payoffDate)}` : undefined}
+            />
+          </div>
+
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
 
             {/* Nåværende lån */}
@@ -475,6 +543,9 @@ const LoanPage: React.FC = () => {
                 <h2 className={sectionLabel}>{lp.currentLoanTitle}</h2>
               </div>
               <div className="space-y-1">
+                <LoanRow label={lp.accountLabel}
+                  value={homeowner.accountLabel || '–'}
+                  onEdit={() => editHomeownerText(lp.accountLabel, 'accountLabel', homeowner.accountLabel ?? '', lp.accountLabelPlaceholder)} />
                 <LoanRow label={t.currentMortgageBalance}
                   value={fmtNum(homeowner.currentMortgageBalance)}
                   onEdit={() => editHomeowner(t.currentMortgageBalance, 'currentMortgageBalance', homeowner.currentMortgageBalance)} />
@@ -484,9 +555,20 @@ const LoanPage: React.FC = () => {
                 <LoanRow label={lp.nominalRate}
                   value={fmtPct(homeowner.rente)}
                   onEdit={() => editHomeowner(lp.rateEditTitle, 'rente', homeowner.rente)} />
+                {homeowner.notifiedRate != null && homeowner.notifiedRate > 0 && (
+                  <LoanRow label={lp.notifiedRate}
+                    notes={homeowner.notifiedRateFrom ? `${lp.notifiedRateFrom} ${fmtMonthKey(homeowner.notifiedRateFrom)}` : undefined}
+                    value={fmtPct(homeowner.notifiedRate)} />
+                )}
                 <LoanRow label={t.yearsRemaining}
                   value={`${homeowner.nedbetalingstid} ${lp.yearsSuffix}`}
                   onEdit={() => editHomeowner(t.yearsRemaining, 'nedbetalingstid', homeowner.nedbetalingstid)} />
+                <LoanRow label={lp.loanStartDate}
+                  value={homeowner.startDate ? fmtMonthKey(homeowner.startDate) : '–'}
+                  onEdit={() => editHomeownerMonth(lp.loanStartDate, 'startDate', homeowner.startDate ?? '')} />
+                {loanTL.payoffDate && (
+                  <LoanRow label={lp.payoffDate} value={fmtMonthKey(loanTL.payoffDate)} />
+                )}
                 <LoanRow label={lp.termFee}
                   value={fmtNum(homeowner.termingebyr)}
                   onEdit={() => editHomeowner(lp.termFee, 'termingebyr', homeowner.termingebyr)} />
@@ -498,50 +580,25 @@ const LoanPage: React.FC = () => {
                 <LoanRow label={lp.ofWhichPrincipal}
                   value={fmtNum(homeownerStatus.monthlyPrincipal)} />
               </div>
+              {loanTL.elapsedPct != null && (
+                <div className="pt-1">
+                  <div className="flex justify-between text-[11px] text-[var(--text-2)] mb-1.5">
+                    <span>{lp.yearsElapsed}</span>
+                    <span className="font-mono font-medium text-[var(--text-1)]">{loanTL.elapsedPct.toFixed(0)}%</span>
+                  </div>
+                  <ProgressBar pct={loanTL.elapsedPct} color="var(--positive)" />
+                </div>
+              )}
             </div>
 
-            {/* Boligegenkapital */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
-              <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
-                <div className="flex items-center gap-2">
-                  <Home size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                  <h2 className={sectionLabel}>{lp.homeEquityTitle}</h2>
-                </div>
-                <Link
-                  to="/assets"
-                  className="text-[10px] text-[var(--text-2)] hover:text-[var(--positive)] transition-colors whitespace-nowrap"
-                >
-                  {t.editInAssets}
-                </Link>
-              </div>
-              <div className="space-y-1">
-                <LoanRow label={t.houseValue} value={fmtNum(assets.houseValue)} />
-                <LoanRow label={t.houseDebt} value={fmtNum(assets.houseDebt)} />
-                <LoanRow label={t.propertyEquity} value={fmtNum(houseEquity)} highlight />
-              </div>
-              {assets.houseValue > 0 && (
-                <div className="pt-2">
-                  <div className="flex justify-between text-[11px] text-[var(--text-2)] mb-1.5">
-                    <span>{t.equityPercent}</span>
-                    <span className="font-mono font-medium text-[var(--text-1)]">
-                      {((houseEquity / assets.houseValue) * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <ProgressBar pct={(houseEquity / assets.houseValue) * 100} color="var(--positive)" />
-                </div>
-              )}
-              {assets.houseValue > 0 && homeowner.originalLoanAmount > 0 && (
-                <div className="pt-2">
-                  <div className="flex justify-between text-[11px] text-[var(--text-2)] mb-1.5">
-                    <span>{lp.repaidOfOriginal}</span>
-                    <span className="font-mono font-medium text-[var(--text-1)]">
-                      {homeownerStatus.originalLoanRepaidPercent.toFixed(1)}%
-                    </span>
-                  </div>
-                  <ProgressBar pct={homeownerStatus.originalLoanRepaidPercent} color="var(--positive)" />
-                </div>
-              )}
-            </div>
+            {/* Bolig & kjøp */}
+            <PropertyCard currentValue={assets.houseValue} readOnly={!hist.isLive} />
+          </div>
+
+          {/* Bohistorikk — full bredde */}
+          <ResidenceTimeline readOnly={!hist.isLive} />
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
 
             {/* Skattelettelse */}
             <div className={`${card} p-5 md:p-7 space-y-5`}>
@@ -742,6 +799,13 @@ const LoanPage: React.FC = () => {
               <SummaryTile label={t.otherSaleCosts} value={fmtNum(transition.documentFee + transition.otherSaleCosts)} />
               <SummaryTile label={t.totalTransactionCosts} value={fmtNum(transitionNewLoan.totalTransactionCosts)} accent />
             </div>
+          </div>
+
+          {/* Din nåværende bolig (den du selger) + bohistorikk. Verdien er
+              salgsverdien fra salgskortet over — samme boligen du eier nå. */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
+            <PropertyCard currentValue={transition.currentHouseValue} readOnly={!hist.isLive} />
+            <ResidenceTimeline readOnly={!hist.isLive} />
           </div>
         </>
       )}
