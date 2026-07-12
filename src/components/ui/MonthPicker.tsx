@@ -4,44 +4,58 @@ import { nb, enUS } from 'date-fns/locale';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
 
+type PickerMode = 'month' | 'day';
+
 interface MonthPickerProps {
   id?: string;
-  /** Current value as 'YYYY-MM', or '' when unset. */
+  /** Current value: 'YYYY-MM' (month mode) or 'YYYY-MM-DD' (day mode), or ''. */
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  /** 'month' → year + 12-month grid; 'day' → full calendar with days. */
+  mode?: PickerMode;
   inputRef?: Ref<HTMLInputElement>;
 }
 
 const YM = /^(\d{4})-(\d{2})$/;
+const YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
+const pad = (n: number) => String(n).padStart(2, '0');
 
 /**
- * A month field you can type ('2024-09') or pick from a small calendar popover
- * (year nav + 12-month grid). Stores 'YYYY-MM'; typing passes straight through
- * so the caller's existing validation still runs on save. Styled with the app
- * tokens rather than the native month control (which renders in the browser
- * locale and clashes with the dark theme).
+ * A date field you can type or pick from a calendar popover, styled with the app
+ * tokens instead of the native control. In `month` mode it stores 'YYYY-MM'
+ * (year nav + 12-month grid); in `day` mode it stores 'YYYY-MM-DD' (month nav +
+ * day grid). Typing passes straight through, so the caller's validation still
+ * runs on save.
  */
-export function MonthPicker({ id, value, onChange, placeholder, inputRef }: MonthPickerProps) {
+export function MonthPicker({ id, value, onChange, placeholder, mode = 'month', inputRef }: MonthPickerProps) {
   const { lang, t } = useFinance();
   const c = t.common;
   const locale = lang === 'nb' ? nb : enUS;
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const match = value.match(YM);
-  const selYear = match ? Number(match[1]) : null;
-  const selMonth = match ? Number(match[2]) - 1 : null; // 0-based
+  // Parse the current value (tolerates a month-only value even in day mode).
+  const ymd = value.match(YMD);
+  const ym = value.match(YM);
+  const selYear = ymd ? Number(ymd[1]) : ym ? Number(ym[1]) : null;
+  const selMonth = ymd ? Number(ymd[2]) - 1 : ym ? Number(ym[2]) - 1 : null; // 0-based
+  const selDay = ymd ? Number(ymd[3]) : null;
 
-  const [viewYear, setViewYear] = useState<number>(selYear ?? new Date().getFullYear());
+  const now = new Date();
+  const [viewYear, setViewYear] = useState<number>(selYear ?? now.getFullYear());
+  const [viewMonth, setViewMonth] = useState<number>(selMonth ?? now.getMonth()); // 0-based
 
-  // Toggle the popover, syncing the grid to the typed value's year on open.
+  // Sync the grid to the typed value each time the popover opens.
   const toggle = () => {
-    if (!open && selYear != null) setViewYear(selYear);
+    if (!open) {
+      if (selYear != null) setViewYear(selYear);
+      if (selMonth != null) setViewMonth(selMonth);
+    }
     setOpen(o => !o);
   };
 
-  // Close when clicking outside the field+popover.
+  // Close when clicking outside the field + popover.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -51,10 +65,9 @@ export function MonthPicker({ id, value, onChange, placeholder, inputRef }: Mont
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  // Escape closes only the popover. The modal's focus trap listens for Escape
-  // with a native bubble listener on the dialog node, which would otherwise fire
-  // first and close the whole modal — so intercept in the capture phase and stop
-  // propagation before it reaches that listener.
+  // Escape closes only the popover. The modal's focus trap catches Escape with a
+  // native bubble listener on the dialog node, which would otherwise fire first
+  // and close the whole modal — intercept in the capture phase and stop it.
   useEffect(() => {
     if (!open) return;
     const onKeyCapture = (e: KeyboardEvent) => {
@@ -64,12 +77,34 @@ export function MonthPicker({ id, value, onChange, placeholder, inputRef }: Mont
     return () => document.removeEventListener('keydown', onKeyCapture, true);
   }, [open]);
 
-  const months = Array.from({ length: 12 }, (_, m) => format(new Date(2020, m, 1), 'LLL', { locale }));
-
-  const pick = (m: number) => {
-    onChange(`${viewYear}-${String(m + 1).padStart(2, '0')}`);
+  const pickMonth = (m: number) => {
+    onChange(`${viewYear}-${pad(m + 1)}`);
     setOpen(false);
   };
+  const pickDay = (d: number) => {
+    onChange(`${viewYear}-${pad(viewMonth + 1)}-${pad(d)}`);
+    setOpen(false);
+  };
+  const stepMonth = (delta: number) => {
+    const total = viewYear * 12 + viewMonth + delta;
+    setViewYear(Math.floor(total / 12));
+    setViewMonth(((total % 12) + 12) % 12);
+  };
+
+  const monthNames = Array.from({ length: 12 }, (_, m) => format(new Date(2020, m, 1), 'LLL', { locale }));
+
+  // Day grid, Monday-first (matches weekdayInitials).
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const leadBlanks = (new Date(viewYear, viewMonth, 1).getDay() + 6) % 7;
+  const dayCells: (number | null)[] = [
+    ...Array<null>(leadBlanks).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+
+  const btnBase = 'rounded-[6px] text-[12px] font-medium transition-colors';
+  const hoverIn = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => { if (!active) e.currentTarget.style.background = 'var(--bg-raised)'; };
+  const hoverOut = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => { if (!active) e.currentTarget.style.background = 'transparent'; };
+  const cellStyle = (active: boolean) => ({ background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--bg-page)' : 'var(--text-1)' });
 
   return (
     <div ref={wrapRef} className="relative">
@@ -98,46 +133,80 @@ export function MonthPicker({ id, value, onChange, placeholder, inputRef }: Mont
 
       {open && (
         <div className="absolute left-0 right-0 mt-1.5 z-20 rounded-[8px] border border-[var(--border)] bg-[var(--bg-elev)] p-3 shadow-xl">
+          {/* Header: year (month mode) or month + year (day mode), with nav. */}
           <div className="flex items-center justify-between mb-2.5">
             <button
               type="button"
               aria-label={c.monthPickerPrevYear}
-              onClick={() => setViewYear(y => y - 1)}
+              onClick={() => (mode === 'day' ? stepMonth(-1) : setViewYear(y => y - 1))}
               className="p-1 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-raised)] transition-colors"
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="text-[13px] font-mono font-semibold text-[var(--text-1)] tabular-nums">{viewYear}</span>
+            <span className="text-[13px] font-mono font-semibold text-[var(--text-1)] tabular-nums capitalize">
+              {mode === 'day' ? `${format(new Date(viewYear, viewMonth, 1), 'LLLL', { locale })} ${viewYear}` : viewYear}
+            </span>
             <button
               type="button"
               aria-label={c.monthPickerNextYear}
-              onClick={() => setViewYear(y => y + 1)}
+              onClick={() => (mode === 'day' ? stepMonth(1) : setViewYear(y => y + 1))}
               className="p-1 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-raised)] transition-colors"
             >
               <ChevronRight size={16} />
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
-            {months.map((label, m) => {
-              const active = selYear === viewYear && selMonth === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => pick(m)}
-                  className="py-2 rounded-[6px] text-[12px] font-medium capitalize transition-colors"
-                  style={{
-                    background: active ? 'var(--accent)' : 'transparent',
-                    color: active ? 'var(--bg-page)' : 'var(--text-1)',
-                  }}
-                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--bg-raised)'; }}
-                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+
+          {mode === 'day' ? (
+            <>
+              <div className="grid grid-cols-7 gap-1 mb-1">
+                {c.weekdayInitials.map((w, i) => (
+                  <span key={i} className="text-center text-[10px] font-semibold text-[var(--text-3)] py-1">{w}</span>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {dayCells.map((d, i) => d === null ? (
+                  <span key={`b${i}`} />
+                ) : (
+                  (() => {
+                    const active = selYear === viewYear && selMonth === viewMonth && selDay === d;
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => pickDay(d)}
+                        className={`${btnBase} h-8 tabular-nums`}
+                        style={cellStyle(active)}
+                        onMouseEnter={(e) => hoverIn(e, active)}
+                        onMouseLeave={(e) => hoverOut(e, active)}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })()
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="grid grid-cols-3 gap-1.5">
+              {monthNames.map((label, m) => {
+                const active = selYear === viewYear && selMonth === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => pickMonth(m)}
+                    className={`${btnBase} py-2 capitalize`}
+                    style={cellStyle(active)}
+                    onMouseEnter={(e) => hoverIn(e, active)}
+                    onMouseLeave={(e) => hoverOut(e, active)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => { onChange(''); setOpen(false); }}
