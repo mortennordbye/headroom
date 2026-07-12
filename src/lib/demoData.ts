@@ -195,11 +195,13 @@ export function getDemoData(): Partial<ExportPayload> {
     residences: [
       {
         id: 'demo-res-1', address: 'Storgata 12, Oslo', propertyType: 'borettslag',
+        dwellingType: 'leilighet', rooms: 3, sizeSqm: 68,
         purchasePrice: 3800000, purchaseCosts: 12000, jointDebtShare: 350000,
         moveInDate: monthsAgo(48), moveOutDate: null, notes: '2-roms',
       },
       {
         id: 'demo-res-2', address: 'Parkveien 3, Bergen', propertyType: 'selveier',
+        dwellingType: 'enebolig', rooms: 5, sizeSqm: 140,
         purchasePrice: 2600000, purchaseCosts: 65000,
         moveInDate: monthsAgo(120), moveOutDate: monthsAgo(48), salePrice: 3100000,
       },
