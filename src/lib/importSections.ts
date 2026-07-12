@@ -26,7 +26,7 @@ export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
     'categoryRules', 'labelRules', 'transferRules', 'categoryBudgets', 'recurringTemplates',
   ],
   assetsDebt: [
-    'debts', 'netWorthHistory', 'balanceSnapshots', 'goals',
+    'debts', 'netWorthHistory', 'balanceSnapshots', 'goals', 'residences',
   ],
   included: [
     'assets', 'pension', 'loan', 'housingMode', 'homeowner', 'transition',

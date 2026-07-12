@@ -45,6 +45,8 @@ export function getDemoData(): Partial<ExportPayload> {
     nedbetalingstid: 25,
     termingebyr: 50,
     skattefradragssats: 22,
+    accountLabel: 'Boliglån ung',
+    startDate: monthsAgo(48),
   };
   const demoTransition = {
     currentHouseValue: 4200000,
@@ -189,6 +191,19 @@ export function getDemoData(): Partial<ExportPayload> {
     homeowner: demoHomeowner,
     transition: demoTransition,
     loan: demoLoan,
+
+    residences: [
+      {
+        id: 'demo-res-1', address: 'Storgata 12, Oslo', propertyType: 'borettslag',
+        purchasePrice: 3800000, purchaseCosts: 12000, jointDebtShare: 350000,
+        moveInDate: monthsAgo(48), moveOutDate: null, notes: '2-roms',
+      },
+      {
+        id: 'demo-res-2', address: 'Parkveien 3, Bergen', propertyType: 'selveier',
+        purchasePrice: 2600000, purchaseCosts: 65000,
+        moveInDate: monthsAgo(120), moveOutDate: monthsAgo(48), salePrice: 3100000,
+      },
+    ],
 
     pension: demoPension,
 

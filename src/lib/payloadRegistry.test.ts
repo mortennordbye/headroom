@@ -24,7 +24,7 @@ import { getDemoData } from './demoData';
 import type {
   ExportPayload, Assets, LoanData, Pension, HomeownerData, TransitionData,
   FixedExpense, Debt, DailyTransaction, TransactionTemplate, BalanceSnapshot,
-  MonthlyPayslip, JobEntry, SalaryEntry, BonusEntry, OvertimeEntry, HoursSnapshot, Goal,
+  MonthlyPayslip, JobEntry, SalaryEntry, BonusEntry, OvertimeEntry, HoursSnapshot, Goal, Residence,
 } from '../context/FinanceContext';
 import type { CategoryRule } from './categorize';
 import type { LabelRule } from './labelRules';
@@ -112,6 +112,7 @@ const canonicalBonuses: BonusEntry[] = [{ id: 'bon-1', date: '2026-01-01', amoun
 const canonicalOvertime: OvertimeEntry[] = [{ id: 'ot-1', date: '2026-01-02', hours: 10, amount: 5000 }];
 const canonicalHours: HoursSnapshot[] = [{ id: 'hs-1', periodMonth: '2026-01', actualHoursPerWeek: 40 }];
 const canonicalGoals: Goal[] = [{ id: 'goal-1', name: 'Buffer', target: 100000, source: 'bufferAccount' }];
+const canonicalResidences: Residence[] = [{ id: 'res-1', address: 'Storgata 1', propertyType: 'borettslag', purchasePrice: 3800000, purchaseCosts: 12000, jointDebtShare: 350000, moveInDate: '2021-03', moveOutDate: null, salePrice: null, notes: '2-roms' }];
 
 function fullPayload(): ExportPayload {
   return {
@@ -153,6 +154,7 @@ function fullPayload(): ExportPayload {
     customCurrencyRate: 1.05,
     jobs: canonicalJobs,
     salaries: canonicalSalaries,
+    residences: canonicalResidences,
     bonuses: canonicalBonuses,
     overtime: canonicalOvertime,
     hoursSnapshots: canonicalHours,
@@ -182,21 +184,21 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 48 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(48);
+  it('registers exactly the 49 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(49);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (28) or preserve (20)', () => {
+  it('partitions every field into reset (28) or preserve (21)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
     expect(reset).toHaveLength(28);
-    expect(preserve).toHaveLength(20);
+    expect(preserve).toHaveLength(21);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([
       'lang', 'savingsTargetPercent', 'growthReturnRate', 'forecastAssumptions', 'houseGrowthRate',
       'cashGrowthRate', 'cryptoGrowthRate', 'displayCurrency', 'nokToUsd', 'customCurrencyCode',
-      'customCurrencyRate', 'jobs', 'salaries', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'region',
+      'customCurrencyRate', 'jobs', 'salaries', 'residences', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'region',
       'customTaxRatePct', 'hiddenNavItems',
     ]));
   });
