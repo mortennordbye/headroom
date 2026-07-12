@@ -5,7 +5,7 @@ import { nb, enUS } from 'date-fns/locale';
 import { Home, Plus, Edit2, Trash2, Clock } from 'lucide-react';
 import { useFinance, type Residence, type PropertyType } from '../context/FinanceContext';
 import EditModal, { type ModalField } from './EditModal';
-import { parseLocaleNumber } from '../lib/validators';
+import { parseLocaleNumber, isOptionalYearMonth } from '../lib/validators';
 import { currentResidence, residenceMetrics, sortResidences } from '../lib/property';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
@@ -39,6 +39,7 @@ interface ModalConfig {
   title: string;
   fields: ModalField[];
   onSave: (values: Record<string, string>) => void;
+  error?: string;
 }
 
 /** Shared add/edit modal for a residence. Each caller gets its own instance so
@@ -60,9 +61,9 @@ function useResidenceEditor() {
         placeholder: '0', hint: lp.propertyJointDebtHint,
         showWhen: (v) => v.propertyType === 'borettslag' || v.propertyType === 'aksjeleilighet',
       },
-      { key: 'moveInDate', label: lp.propertyMoveIn, type: 'month', value: existing?.moveInDate ?? '', hint: lp.propertyMoveInHint },
-      { key: 'moveOutDate', label: lp.propertyMoveOut, type: 'month', value: existing?.moveOutDate ?? '', hint: lp.propertyMoveOutHint },
-      { key: 'salePrice', label: lp.propertySalePrice, type: 'number', value: existing?.salePrice?.toString() ?? '', placeholder: '0', hint: lp.propertySalePriceHint, showWhen: (v) => !!v.moveOutDate },
+      { key: 'moveInDate', label: lp.propertyMoveInField, type: 'text', value: existing?.moveInDate ?? '', placeholder: '2022-07' },
+      { key: 'moveOutDate', label: lp.propertyMoveOutField, type: 'text', value: existing?.moveOutDate ?? '', placeholder: '2024-09' },
+      { key: 'salePrice', label: lp.propertySalePrice, type: 'number', value: existing?.salePrice?.toString() ?? '', placeholder: '0', hint: lp.propertySalePriceHint, showWhen: (v) => !!v.moveOutDate.trim() },
       { key: 'notes', label: lp.propertyNotes, type: 'text', value: existing?.notes ?? '', placeholder: lp.propertyNotesPlaceholder },
     ];
     setModal({
@@ -70,16 +71,23 @@ function useResidenceEditor() {
       fields,
       onSave: (vals) => {
         const address = vals.address.trim();
-        if (!address) { setModal(null); return; }
+        if (!address) { setModal(p => p && { ...p, error: lp.propertyErrAddress }); return; }
+        // Dates are typed as 'YYYY-MM' (matching the salary tracker); reject
+        // anything malformed rather than silently dropping it.
+        if (!isOptionalYearMonth(vals.moveInDate.trim()) || !isOptionalYearMonth(vals.moveOutDate.trim())) {
+          setModal(p => p && { ...p, error: lp.propertyErrDate });
+          return;
+        }
+        const moveOut = vals.moveOutDate.trim();
         const patch: Omit<Residence, 'id'> = {
           address,
           propertyType: vals.propertyType as PropertyType,
           purchasePrice: num(vals.purchasePrice),
           purchaseCosts: num(vals.purchaseCosts),
           jointDebtShare: num(vals.jointDebtShare),
-          moveInDate: vals.moveInDate || undefined,
-          moveOutDate: vals.moveOutDate || null,
-          salePrice: vals.moveOutDate ? (num(vals.salePrice) ?? null) : null,
+          moveInDate: vals.moveInDate.trim() || undefined,
+          moveOutDate: moveOut || null,
+          salePrice: moveOut ? (num(vals.salePrice) ?? null) : null,
           notes: vals.notes.trim() || undefined,
         };
         if (existing) updateResidence(existing.id, patch);
