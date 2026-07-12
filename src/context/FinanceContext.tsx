@@ -19,6 +19,8 @@ import { translations, type Language, type Translations } from '../i18n/translat
 export type { Language } from '../i18n/translations';
 import { categorizeWithRules, type CategoryRule } from '../lib/categorize';
 import type { LabelRule } from '../lib/labelRules';
+import { matchesTransferRule, type TransferRule } from '../lib/transferRules';
+import { isSpend } from '../lib/monthlyCashflow';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { findInternalTransferIds } from '../lib/transfers';
@@ -595,6 +597,9 @@ interface FinanceDataContextType {
   labelRules: LabelRule[];
   addLabelRule: (match: string, label: string) => void;
   removeLabelRule: (id: string) => void;
+  transferRules: TransferRule[];
+  addTransferRule: (match: string) => void;
+  removeTransferRule: (id: string) => void;
   removeAccountData: (accountKey: string) => void;
   // Per-account view (Budget page): grouping, current filter, and the analysed
   // transaction set (internal transfers netted out + account filter applied).
@@ -765,6 +770,8 @@ export interface ExportPayload {
   categoryRules?: CategoryRule[];
   /** User-defined display names for transactions (merchant/text → label). */
   labelRules?: LabelRule[];
+  /** User-marked "own account" destinations (merchant/text → not spending). */
+  transferRules?: TransferRule[];
   categoryBudgets?: Partial<Record<CategoryKey, number>>;
   debts?: Debt[];
   assets: Assets;
@@ -883,6 +890,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
   // Custom transaction display names (merchant/text → label), applied at render.
   const [labelRules, setLabelRules] = useState<LabelRule[]>([]);
+  // Destinations the user marked as their own account (merchant/text): payments
+  // to these are internal transfers, netted out of spend/savings-rate/charts.
+  const [transferRules, setTransferRules] = useState<TransferRule[]>([]);
   const [categoryBudgets, setCategoryBudgets] = useState<Partial<Record<CategoryKey, number>>>({});
   const [recurringTemplates, setRecurringTemplates] = useState<TransactionTemplate[]>([]);
   const [assets, setAssets] = useState<Assets>(DEFAULT_ASSETS);
@@ -972,7 +982,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // key type is `BuiltPayload` — omitting any persisted field FAILS TO COMPILE.
   const buildPayload = useCallback((): ExportPayload => derivePayload(PAYLOAD_REGISTRY, {
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
-    dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang,
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
@@ -980,7 +990,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
-    dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
@@ -1007,7 +1017,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       netWorthHistory: setNetWorthHistory, balanceSnapshots: setBalanceSnapshots,
       fixedExpenses: setFixedExpenses, dailyTransactions: setDailyTransactions,
       deletedBankIds: setDeletedBankIds, accountLabels: setAccountLabels, categoryRules: setCategoryRules,
-      labelRules: setLabelRules, categoryBudgets: setCategoryBudgets, debts: setDebts, assets: setAssets,
+      labelRules: setLabelRules, transferRules: setTransferRules, categoryBudgets: setCategoryBudgets, debts: setDebts, assets: setAssets,
       loan: setLoan, pension: setPension, recurringTemplates: setRecurringTemplates,
       housingMode: setHousingMode, homeowner: setHomeowner, transition: setTransition, lang: setLang,
       savingsTargetPercent: setSavingsTargetPercent, growthReturnRate: setGrowthReturnRate,
@@ -1489,7 +1499,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Money moved between two of the user's own connected accounts double-counts
   // as an expense + an income; net those pairs out of the budget analysis.
-  const internalTransferIds = useMemo(() => findInternalTransferIds(dailyTransactions), [dailyTransactions]);
+  const internalTransferIds = useMemo(() => {
+    // Two-legged pairs the matcher can prove automatically, plus one-legged
+    // moves to destinations the user marked as their own account (transferRules)
+    // — the payments (card/savings/loan) whose counterpart leg isn't imported.
+    const ids = findInternalTransferIds(dailyTransactions);
+    if (transferRules.length) {
+      for (const tx of dailyTransactions) {
+        if (isSpend(tx) && matchesTransferRule(tx, transferRules)) ids.add(tx.id);
+      }
+    }
+    return ids;
+  }, [dailyTransactions, transferRules]);
   // All accounts, internal transfers removed — for whole-finance surfaces (e.g.
   // the savings rate) that shouldn't be narrowed to one account.
   const nonTransferTransactions = useMemo(
@@ -1928,6 +1949,21 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setLabelRules(prev => prev.filter(r => r.id !== id));
   }, []);
 
+  // Mark a destination as an own-account transfer (merchant/text → not spending).
+  // Same-match rules are de-duped; a blank match is a no-op.
+  const addTransferRule = useCallback((match: string) => {
+    const m = match.trim();
+    if (!m) return;
+    setTransferRules(prev => [
+      ...prev.filter(r => r.match.trim().toLowerCase() !== m.toLowerCase()),
+      { id: makeId('transfer'), match: m },
+    ]);
+  }, []);
+
+  const removeTransferRule = useCallback((id: string) => {
+    setTransferRules(prev => prev.filter(r => r.id !== id));
+  }, []);
+
   // Remove all transactions belonging to one account (its key) and drop its
   // label — for clearing out an old/historical account no longer in use. The
   // tracked setter records deleted eb- ids so a sync can't resurrect them.
@@ -1999,6 +2035,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setAccountLabels({});
     setCategoryRules([]);
     setLabelRules([]);
+    setTransferRules([]);
     setCategoryBudgets({});
     setRecurringTemplates([]);
     setAssets(DEFAULT_ASSETS);
@@ -2181,7 +2218,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
     accountLabels, setAccountLabel, applyBankSync,
-    categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule, removeAccountData,
+    categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule,
+    transferRules, addTransferRule, removeTransferRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget,
     recurringTemplates, setRecurringTemplates,
@@ -2205,7 +2243,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     balanceSnapshots, setManualSnapshot, deleteManualSnapshot, clearHistory,
     fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, accountLabels, setAccountLabel, applyBankSync,
-    categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule, removeAccountData,
+    categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule,
+    transferRules, addTransferRule, removeTransferRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget, recurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,

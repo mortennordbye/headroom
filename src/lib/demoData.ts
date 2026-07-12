@@ -159,6 +159,7 @@ export function getDemoData(): Partial<ExportPayload> {
     accountLabels: {},
     categoryRules: [],
     labelRules: [],
+    transferRules: [],
     employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG,
     billingConfig: DEFAULT_BILLING_CONFIG,
 

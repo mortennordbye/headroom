@@ -3,6 +3,7 @@ import EditModal, { type ModalField } from './EditModal';
 import { useFinance, type DailyTransaction } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
 import { isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
+import { matchesTransferRule } from '../lib/transferRules';
 
 /**
  * The single transaction editor, shared by the Budget ledger and the Dashboard
@@ -14,7 +15,7 @@ import { isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 export default function EditTransactionModal({ tx, onClose }: { tx: DailyTransaction; onClose: () => void }) {
   const {
     t, fixedExpenses, setFixedExpenses, dailyTransactions, setDailyTransactions,
-    addCategoryRule, addLabelRule,
+    addCategoryRule, addLabelRule, transferRules, addTransferRule, removeTransferRule,
   } = useFinance();
   const [error, setError] = useState<string | undefined>();
 
@@ -34,6 +35,14 @@ export default function EditTransactionModal({ tx, onClose }: { tx: DailyTransac
     ...fixedExpenses.map(e => ({ value: e.id, label: e.name })),
   ];
 
+  // Rules already marking this transaction's destination as an own-account move,
+  // so the "own account" toggle reflects (and can clear) the current state.
+  const ownAccountRules = transferRules.filter(r => {
+    const m = (r.match ?? '').trim().toLowerCase();
+    return m && hay.includes(m);
+  });
+  const isOwnAccount = matchesTransferRule(tx, transferRules);
+
   const fields: ModalField[] = [
     { key: 'description', label: t.editDescription, type: 'text', value: description },
     { key: 'amount', label: t.editAmount, type: 'number', value: amount.toString() },
@@ -43,6 +52,9 @@ export default function EditTransactionModal({ tx, onClose }: { tx: DailyTransac
       { value: 'income', label: t.txIncome },
     ] },
     { key: 'mapExpense', label: t.budgetPage.mapToFixedExpense, type: 'select', value: prevMapped?.id ?? '', options: expenseOptions, hint: t.budgetPage.mapToFixedExpenseHint },
+    // Own-account transfer: only meaningful for an outflow (money leaving to one
+    // of your accounts). Hidden on income rows, which never count as spend anyway.
+    ...(kind === 'income' ? [] : [{ key: 'ownAccount', label: t.budgetPage.markOwnAccount, type: 'checkbox' as const, value: isOwnAccount ? 'true' : 'false', hint: t.budgetPage.markOwnAccountHint }]),
     { key: 'rememberRule', label: t.budgetPage.rememberRule, type: 'checkbox', value: 'false', hint: t.budgetPage.rememberRuleHint },
     { key: 'ruleMatch', label: t.budgetPage.ruleMatch, type: 'text', value: merchant || description },
   ];
@@ -65,6 +77,11 @@ export default function EditTransactionModal({ tx, onClose }: { tx: DailyTransac
       const newName = vals.description.trim();
       if (newName && newName !== description) addLabelRule(vals.ruleMatch.trim(), newName);
     }
+    // Own-account toggle: add a transfer rule when newly ticked (so this and every
+    // matching row drops out of spend), or clear the matching rule(s) when unticked.
+    const nowOwn = vals.ownAccount === 'true';
+    if (nowOwn && !isOwnAccount && vals.ruleMatch.trim()) addTransferRule(vals.ruleMatch.trim());
+    else if (!nowOwn && isOwnAccount) ownAccountRules.forEach(r => removeTransferRule(r.id));
     // Map to a fixed expense: set the chosen expense's match pattern (and clear a
     // previous mapping) so only these transactions draw it down.
     const newMap = vals.mapExpense;

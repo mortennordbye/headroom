@@ -337,3 +337,18 @@ resurrecting or double-counting real bank transactions.
   when a connection is removed. **Where**: `src/context/FinanceContext.tsx`
   (`deletedBankIds`, `setDailyTransactionsTracked`), consumed by
   `mergeTransactions` in `server/bank.js`.
+
+- **Re-categorize auto-sourced `transfers` rows in bulk.** **What**: a Settings
+  maintenance action that re-runs `categorize()` over transactions whose
+  `categorySource` is auto (never user-edited), so historical rows filed under
+  `transfers` by an older keyword table get re-filed to their correct category
+  (e.g. `Brekkelia Borettslag` → `housing`, which the current table already ranks
+  above `transfers`). **Why deferred**: the own-account transfer-rule feature
+  (see `src/lib/transferRules.ts`) already fixes the spend/savings-rate distortion;
+  the remaining issue is only cosmetic category labels, which the existing per-row
+  relabel flow (EditTransactionModal → `addCategoryRule`) can already fix. A bulk
+  re-categorize must strictly gate on `categorySource === 'auto'` to avoid
+  clobbering manual categorizations, and that guard needs care/testing. **What would
+  unblock**: agreement on the gate + a confirm step in the UI. **Where**: new action
+  in `src/pages/SettingsPage.tsx`, reusing `categorizeWithRules` from
+  `src/lib/categorize.ts` over `dailyTransactions` in `src/context/FinanceContext.tsx`.

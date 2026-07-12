@@ -131,6 +131,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     accountLabels: { group: 'reset', demo: 'personal', read: whenDefined('accountLabels'), default: {} },
     categoryRules: { group: 'reset', demo: 'personal', read: whenDefined('categoryRules'), default: [] },
     labelRules: { group: 'reset', demo: 'personal', read: whenDefined('labelRules'), default: [] },
+    transferRules: { group: 'reset', demo: 'personal', read: whenDefined('transferRules'), default: [] },
     categoryBudgets: { group: 'reset', demo: 'personal', read: whenDefined('categoryBudgets'), default: {} },
     debts: { group: 'reset', demo: 'personal', read: whenTruthy('debts'), default: [] },
     assets: {

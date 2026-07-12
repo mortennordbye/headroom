@@ -65,6 +65,7 @@ const DashboardPage: React.FC = () => {
     totalFixedExpenses,
     dailyData,
     dailyTransactions,
+    nonTransferTransactions,
     labelRules,
     incomeSeries,
     currentMonth,
@@ -232,7 +233,9 @@ const DashboardPage: React.FC = () => {
   const categoryDeltas = useMemo(() => {
     const monthStr = format(currentMonth, 'yyyy-MM');
     const prevMonthStr = format(subMonths(currentMonth, 1), 'yyyy-MM');
-    const rows = categoryMoM(dailyTransactions, monthStr, prevMonthStr)
+    // Internal transfers netted out (same set the Budget page uses) so a card
+    // payment or savings move isn't shown as a top spending category.
+    const rows = categoryMoM(nonTransferTransactions, monthStr, prevMonthStr)
       .filter(r => r.current > 0)
       .slice(0, 5);
     const max = rows[0]?.current ?? 1;
@@ -242,7 +245,7 @@ const DashboardPage: React.FC = () => {
       deltaPct: r.pct,
       pctOfMax: (r.current / max) * 100,
     }));
-  }, [dailyTransactions, currentMonth]);
+  }, [nonTransferTransactions, currentMonth]);
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {

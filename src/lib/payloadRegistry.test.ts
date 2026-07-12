@@ -28,6 +28,7 @@ import type {
 } from '../context/FinanceContext';
 import type { CategoryRule } from './categorize';
 import type { LabelRule } from './labelRules';
+import type { TransferRule } from './transferRules';
 
 // ── Injection defaults for the registry. Recognizable (all-9s) so the reset
 // test can assert a 'reset' object field dropped to exactly this value. ──
@@ -103,6 +104,7 @@ const canonicalDebts: Debt[] = [{ id: 'debt-1', name: 'Studielån', type: 'stude
 const canonicalTemplates: TransactionTemplate[] = [{ id: 'rt-1', description: 'Kaffe', amount: 49, category: 'dining' }];
 const canonicalCategoryRules: CategoryRule[] = [{ id: 'cr-1', match: 'rema', category: 'groceries' }];
 const canonicalLabelRules: LabelRule[] = [{ id: 'lr-1', match: 'rema', label: 'Rema 1000' }];
+const canonicalTransferRules: TransferRule[] = [{ id: 'tr-1', match: 'morrow bank' }];
 const canonicalPayslips: Record<string, MonthlyPayslip> = { '2026-01': { gross: 60000, net: 42000, tax: 18000, base: 58000 } };
 const canonicalJobs: JobEntry[] = [{ id: 'job-1', startDate: '2024-01', endDate: null, employer: 'E', role: 'R', contractedHoursPerWeek: 37.5 }];
 const canonicalSalaries: SalaryEntry[] = [{ id: 'sal-1', jobId: 'job-1', effectiveDate: '2024-01', grossAnnual: 700000, changeType: 'initial' }];
@@ -124,6 +126,7 @@ function fullPayload(): ExportPayload {
     accountLabels: { 'ab12:u1': 'My Card' },
     categoryRules: canonicalCategoryRules,
     labelRules: canonicalLabelRules,
+    transferRules: canonicalTransferRules,
     categoryBudgets: { groceries: 4000 },
     debts: canonicalDebts,
     assets: canonicalAssets,
@@ -179,15 +182,15 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 47 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(47);
+  it('registers exactly the 48 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(48);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (27) or preserve (20)', () => {
+  it('partitions every field into reset (28) or preserve (20)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
-    expect(reset).toHaveLength(27);
+    expect(reset).toHaveLength(28);
     expect(preserve).toHaveLength(20);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([
