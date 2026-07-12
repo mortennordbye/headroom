@@ -61,8 +61,8 @@ function useResidenceEditor() {
         placeholder: '0', hint: lp.propertyJointDebtHint,
         showWhen: (v) => v.propertyType === 'borettslag' || v.propertyType === 'aksjeleilighet',
       },
-      { key: 'moveInDate', label: lp.propertyMoveInField, type: 'text', value: existing?.moveInDate ?? '', placeholder: '2022-07' },
-      { key: 'moveOutDate', label: lp.propertyMoveOutField, type: 'text', value: existing?.moveOutDate ?? '', placeholder: '2024-09' },
+      { key: 'moveInDate', label: lp.propertyMoveInField, type: 'monthpicker', value: existing?.moveInDate ?? '', placeholder: '2022-07' },
+      { key: 'moveOutDate', label: lp.propertyMoveOutField, type: 'monthpicker', value: existing?.moveOutDate ?? '', placeholder: '2024-09' },
       { key: 'salePrice', label: lp.propertySalePrice, type: 'number', value: existing?.salePrice?.toString() ?? '', placeholder: '0', hint: lp.propertySalePriceHint, showWhen: (v) => !!v.moveOutDate.trim() },
       { key: 'notes', label: lp.propertyNotes, type: 'text', value: existing?.notes ?? '', placeholder: lp.propertyNotesPlaceholder },
     ];
