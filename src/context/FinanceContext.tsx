@@ -261,7 +261,11 @@ export interface HomeownerData {
   notifiedRateFrom?: string;
 }
 
+/** Ownership form (eierform). */
 export type PropertyType = 'selveier' | 'borettslag' | 'aksjeleilighet' | 'other';
+
+/** Physical dwelling type (boligtype) — drives the icon shown for the home. */
+export type DwellingType = 'leilighet' | 'enebolig' | 'rekkehus' | 'tomannsbolig' | 'hytte' | 'other';
 
 /** A home the user has owned/lived in. The entry with no `moveOutDate` is the
  *  current home (drives purchase-vs-value metrics); earlier entries form the
@@ -269,11 +273,14 @@ export type PropertyType = 'selveier' | 'borettslag' | 'aksjeleilighet' | 'other
 export interface Residence {
   id: string;
   address: string;
-  propertyType?: PropertyType;
+  propertyType?: PropertyType;  // eierform (selveier/borettslag/…)
+  dwellingType?: DwellingType;  // boligtype (leilighet/enebolig/…)
+  rooms?: number;               // antall rom
+  sizeSqm?: number;             // størrelse i m² (BRA/primærrom)
   purchasePrice?: number;       // kjøpesum
   purchaseCosts?: number;       // omkostninger (dokumentavgift/tinglysing)
   jointDebtShare?: number;      // fellesgjeld ved kjøp (borettslag)
-  moveInDate?: string;          // 'YYYY-MM' (overtakelse/innflytting)
+  moveInDate?: string;          // 'YYYY-MM' or 'YYYY-MM-DD' (overtakelse/innflytting)
   moveOutDate?: string | null;  // null/absent = current home
   salePrice?: number | null;    // set when sold
   notes?: string;

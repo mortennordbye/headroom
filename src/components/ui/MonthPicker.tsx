@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
+import { normalizeMonthOrDay } from '../../lib/dateInput';
 
 type PickerMode = 'month' | 'day';
 
@@ -118,6 +119,10 @@ export function MonthPicker({ id, value, onChange, placeholder, mode = 'month', 
           inputMode="numeric"
           autoComplete="off"
           onChange={(e) => onChange(e.target.value)}
+          // On blur, tidy common typing into canonical form (2022-7-15 →
+          // 2022-07-15, 15.07.2022 → 2022-07-15). Leave genuinely unparseable
+          // input untouched so the caller's save-time error can surface.
+          onBlur={() => { const n = normalizeMonthOrDay(value, mode); if (n !== null && n !== value) onChange(n); }}
           className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[6px] pl-4 pr-11 py-3 text-[14px] font-mono text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--positive)] placeholder:text-[var(--text-2)] placeholder:font-sans"
         />
         <button
