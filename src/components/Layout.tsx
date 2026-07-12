@@ -125,7 +125,7 @@ const Layout: React.FC = () => {
         style={{ background: 'var(--bg)', borderColor: 'var(--rule)' }}
       >
         {/* Brand — ceiling/clearance mark (a ring bisected by a hairline) + serif wordmark */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 md:flex-1 md:min-w-0">
           <span
             className="relative grid place-items-center w-[18px] h-[18px] rounded-full shrink-0"
             style={{ border: '1px solid var(--brass)' }}
@@ -140,14 +140,14 @@ const Layout: React.FC = () => {
         </div>
 
         {/* Underline tabs — desktop only */}
-        <nav className="hidden md:flex items-center gap-7">
+        <nav className="hidden md:flex items-center gap-7 shrink-0">
           {NAV_ITEMS.filter(item => isVisible(item.path)).map(item => (
             <NavButton key={item.path} to={item.path} label={t.nav[item.key]} />
           ))}
         </nav>
 
         {/* Right cluster: month picker (month-scoped pages) or static "as of today" marker */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 md:flex-1 md:min-w-0 md:justify-end">
           {/* Setup guide — desktop header (mobile uses the "More" sheet entry to
               avoid crowding the month picker). Always available so the tour can
               be (re)started with data too. */}
