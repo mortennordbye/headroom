@@ -241,7 +241,7 @@ function preserveUserFields(incoming) {
   if (!blob) return incoming;
   const stored = blob.content;
   const out = { ...incoming };
-  for (const field of ['accountLabels', 'categoryRules', 'labelRules', 'categoryBudgets', 'deletedBankIds']) {
+  for (const field of ['accountLabels', 'categoryRules', 'labelRules', 'transferRules', 'categoryBudgets', 'deletedBankIds']) {
     const hasStored = stored[field] && (Array.isArray(stored[field]) ? stored[field].length : Object.keys(stored[field]).length);
     if (incoming[field] === undefined && hasStored) {
       console.log(`[data] preserving stored ${field} (incoming payload omitted it)`);
