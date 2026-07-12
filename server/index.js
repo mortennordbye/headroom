@@ -1,5 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
@@ -134,11 +135,17 @@ function currentAuth() {
 const SESSION_COOKIE = 'hr_session';
 const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 const sessions = createSessionStore(SESSION_TTL_MS);
-// In-memory login throttle (per process; a restart clears it — harmless for a
-// single-user app, same rationale as the SSB cooldown above).
-const MAX_LOGIN_ATTEMPTS = 8;
-const LOGIN_LOCKOUT_MS = 5 * 60 * 1000;
-const loginThrottle = { count: 0, until: 0 };
+
+// Rate limiting. Single-user, so a global bucket (one keyGenerator) is the right
+// model — no per-IP keying, which also sidesteps proxy/X-Forwarded-For concerns.
+// A generous ceiling on the whole API (only trips on a pathological flood — the
+// debounced autosave stays far below it) plus a strict guard on the auth
+// mutations to blunt password brute-forcing.
+const globalKey = () => 'single-user';
+const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 2000, keyGenerator: globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, keyGenerator: globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
+app.use('/api/', apiLimiter);
+app.use(['/api/auth/login', '/api/auth/config'], authLimiter);
 
 const sessionToken = (req) => parseCookies(req.headers.cookie)[SESSION_COOKIE];
 // Set Secure only when the request actually arrived over TLS (the app itself is
@@ -168,17 +175,12 @@ app.get('/api/auth/status', (req, res) => {
 });
 
 app.post('/api/auth/login', (req, res) => {
-  const now = Date.now();
-  if (loginThrottle.until > now) return res.status(429).json({ error: 'too many attempts' });
   const auth = currentAuth();
   if (!auth.enabled) return res.json({ ok: true }); // nothing to log into
   const password = req.body && req.body.password;
   if (!password || !auth.verify(password)) {
-    loginThrottle.count += 1;
-    if (loginThrottle.count >= MAX_LOGIN_ATTEMPTS) { loginThrottle.until = now + LOGIN_LOCKOUT_MS; loginThrottle.count = 0; }
     return res.status(401).json({ error: 'invalid password' });
   }
-  loginThrottle.count = 0;
   const token = sessions.create();
   res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, token, { maxAge: SESSION_TTL_MS / 1000, secure: cookieSecure(req) }));
   res.json({ ok: true });

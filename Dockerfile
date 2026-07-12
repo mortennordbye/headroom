@@ -19,6 +19,7 @@ RUN apk add --no-cache --virtual .build-deps python3 make g++ \
   && npm ci --omit=dev \
   && apk del .build-deps
 COPY server/index.js ./
+COPY server/auth.js ./
 COPY server/seed.js ./
 COPY server/ssb.js ./
 COPY server/bank.js ./
