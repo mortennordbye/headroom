@@ -413,8 +413,8 @@ const SalaryPage: React.FC = () => {
     const fields: ModalField[] = [
       { key: 'employer', label: t.salary.employer, type: 'text', value: existing?.employer ?? '', suggestions: employerSuggestions },
       { key: 'role', label: t.salary.role, type: 'text', value: existing?.role ?? '', suggestions: roleSuggestions },
-      { key: 'startDate', label: t.salary.startDate, type: 'text', value: existing?.startDate ?? '', placeholder: '2023-08' },
-      { key: 'endDate', label: t.salary.endDate, type: 'text', value: existing?.endDate ?? '', placeholder: '2024-09' },
+      { key: 'startDate', label: t.salary.startDate, type: 'monthpicker', pickerMode: 'month', value: existing?.startDate ?? '', placeholder: '2023-08' },
+      { key: 'endDate', label: t.salary.endDate, type: 'monthpicker', pickerMode: 'month', value: existing?.endDate ?? '', placeholder: '2024-09' },
       { key: 'contractedHoursPerWeek', label: t.salary.contractedHours, type: 'number', value: (existing?.contractedHoursPerWeek ?? 37.5).toString() },
       { key: 'onCallAnnual', label: t.salary.onCallAnnual, type: 'number', value: (existing?.onCallAnnual ?? '').toString(), placeholder: '0' },
     ];

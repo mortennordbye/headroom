@@ -133,7 +133,7 @@ const GoalsSection: React.FC = () => {
           // current value from the linked balance, so hide the manual entry.
           showWhen: (v) => decodeSource(v.source).source === 'manual',
         },
-        { key: 'deadline', label: t.goals.deadline, type: 'month', value: existing?.deadline ?? '', placeholder: '2027-12' },
+        { key: 'deadline', label: t.goals.deadline, type: 'monthpicker', pickerMode: 'month', value: existing?.deadline ?? '', placeholder: '2027-12' },
         { key: 'notes', label: t.goals.notes, type: 'text', value: existing?.notes ?? '' },
       ],
       onSave: (vals) => {

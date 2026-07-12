@@ -2,6 +2,7 @@ import { useState, useRef, useId, type Ref, type ReactNode } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { ModalShell } from './ui/ModalShell';
 import { MonthPicker } from './ui/MonthPicker';
+import { normalizeMonthOrDay } from '../lib/dateInput';
 
 export interface ModalFieldOption {
   value: string;
@@ -58,7 +59,17 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(values);
+    // Canonicalise month-picker fields (2022-7-15 → 2022-07-15, 15.07.2022 →
+    // 2022-07-15) so each caller's own validation sees a tidy value. Genuinely
+    // unparseable input is left as-is for the caller to reject.
+    const canonical = { ...values };
+    for (const f of fields) {
+      if (f.type === 'monthpicker') {
+        const n = normalizeMonthOrDay(canonical[f.key], f.pickerMode ?? 'month');
+        if (n !== null) canonical[f.key] = n;
+      }
+    }
+    onSave(canonical);
   };
 
   return (
