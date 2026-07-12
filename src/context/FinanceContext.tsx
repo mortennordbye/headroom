@@ -551,6 +551,14 @@ interface FinanceSettingsContextType {
   resetGuide: () => void;
   completeOnboarding: () => void;
   dataLoadFailed: boolean;
+  /** Optional password auth (default off). `authRequired` gates the whole app
+   *  behind the login screen; `authEnabled`/`authSource` drive the Settings UI. */
+  authRequired: boolean;
+  authEnabled: boolean;
+  authSource: 'env' | 'app' | 'none';
+  login: (password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  setAuthConfig: (enabled: boolean, password?: string) => Promise<{ ok: boolean; error?: string }>;
   /** True when the most recent save failed and changes are pending a retry. */
   saveFailed: boolean;
   /** Briefly true right after a change was persisted — drives the transient "saved" tick. */
@@ -933,6 +941,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // data from the backend (which demo mode never overwrites).
   const demoSnapshot = useRef<Partial<ExportPayload> | null>(null);
   const [dataLoadFailed, setDataLoadFailed] = useState(false);
+  // Optional password auth. `authRequired` = a request came back 401 and the user
+  // must log in; `authEnabled`/`authSource` reflect /api/auth/status for Settings.
+  const [authRequired, setAuthRequired] = useState(false);
+  const [authEnabled, setAuthEnabled] = useState(false);
+  const [authSource, setAuthSource] = useState<'env' | 'app' | 'none'>('none');
   const [saveFailed, setSaveFailed] = useState(false);
   // Briefly flipped true after a successful persist to flash a "saved" tick.
   const [justSaved, setJustSaved] = useState(false);
@@ -1040,6 +1053,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
         try {
           const r = await fetch('/api/data');
+          // Auth on + no valid session → show the login screen, don't retry as a
+          // load failure (and never mark loaded, so autosave can't clobber).
+          if (r.status === 401) { if (!cancelled) setAuthRequired(true); return; }
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           const data = await r.json();
           if (cancelled) return;
@@ -1068,6 +1084,52 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     load();
     return () => { cancelled = true; };
   }, [applyPayload]);
+
+  // Auth status (independent of the data load): tells the Settings UI whether a
+  // password is set and from where, and gates the app if a session is required.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/status')
+      .then(r => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (cancelled || !s) return;
+        setAuthEnabled(!!s.authEnabled);
+        setAuthSource(s.source ?? 'none');
+        if (s.authEnabled && !s.authenticated) setAuthRequired(true);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // A successful login/logout reloads the page: the cookie is now set (or cleared)
+  // so re-running the whole load with it is simpler and more robust than surgically
+  // re-fetching, and it replays any changes that were pending behind a 401.
+  const login = useCallback(async (password: string): Promise<boolean> => {
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }),
+      });
+      if (r.ok) { window.location.reload(); return true; }
+      return false;
+    } catch { return false; }
+  }, []);
+
+  const logout = useCallback(async (): Promise<void> => {
+    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+    window.location.reload();
+  }, []);
+
+  const setAuthConfig = useCallback(async (enabled: boolean, password?: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const r = await fetch('/api/auth/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled, password }),
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); return { ok: false, error: e.error }; }
+      const s = await fetch('/api/auth/status').then(x => (x.ok ? x.json() : null)).catch(() => null);
+      if (s) { setAuthEnabled(!!s.authEnabled); setAuthSource(s.source ?? 'none'); }
+      return { ok: true };
+    } catch { return { ok: false }; }
+  }, []);
 
   // Fetch SSB wage statistics when region is Norway. Hidden in generic mode.
   useEffect(() => {
@@ -1172,6 +1234,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           setSaveFailed(false);
           setDataReloaded(true);
         }
+        return;
+      }
+      if (res.status === 401) {
+        // Session expired mid-use. Keep the pending changes (don't clear
+        // saveDirty) and gate the app; a re-login + reload replays them.
+        setAuthRequired(true);
         return;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2155,7 +2223,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     demoMode, toggleDemoMode,
     onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,
     startOnboarding, resetGuide, completeOnboarding,
-    dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded,
+    dataLoadFailed, authRequired, authEnabled, authSource, login, logout, setAuthConfig,
+    saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded,
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     currentMonth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
@@ -2168,7 +2237,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     demoMode, toggleDemoMode,
     onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,
     startOnboarding, resetGuide, completeOnboarding,
-    dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded,
+    dataLoadFailed, authRequired, authEnabled, authSource, login, logout, setAuthConfig,
+    saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded,
   ]);
 
   const dataValue = useMemo<FinanceDataContextType>(() => ({

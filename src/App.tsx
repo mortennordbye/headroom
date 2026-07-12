@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { FinanceProvider, useFinance } from './context/FinanceContext';
+import { FinanceProvider, useFinance, useFinanceSettings } from './context/FinanceContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import UpdatePrompt from './components/UpdatePrompt';
 import CatchupPrompt from './components/CatchupPrompt';
+import LoginScreen from './components/LoginScreen';
 import Layout from './components/Layout';
 import { Skeleton } from './components/ui/Skeleton';
 
@@ -37,29 +38,39 @@ function RouteFallback() {
   );
 }
 
+// Gates the whole app behind the login screen when the server requires a password
+// and there's no valid session. Must live inside the provider to read auth state.
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { authRequired } = useFinanceSettings();
+  if (authRequired) return <LoginScreen />;
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <FinanceProvider>
-      <ErrorBoundary>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Suspense fallback={<RouteFallback />}><DashboardPage /></Suspense>} />
-              <Route path="budget" element={<Suspense fallback={<RouteFallback />}><BudgetPage /></Suspense>} />
-              {/* Dashboard moved from /overview to the index; keep the old path working. */}
-              <Route path="overview" element={<Navigate to="/" replace />} />
-              <Route path="assets" element={<Suspense fallback={<RouteFallback />}><AssetPage /></Suspense>} />
-              <Route path="loan" element={<Suspense fallback={<RouteFallback />}><LoanPage /></Suspense>} />
-              <Route path="salary" element={<Suspense fallback={<RouteFallback />}><SalaryPage /></Suspense>} />
-              <Route path="forecast" element={<Suspense fallback={<RouteFallback />}><ForecastPage /></Suspense>} />
-              <Route path="pension" element={<Suspense fallback={<RouteFallback />}><PensionPage /></Suspense>} />
-              <Route path="employer-cost" element={<Suspense fallback={<RouteFallback />}><EmployerCostPage /></Suspense>} />
-              <Route path="year" element={<Suspense fallback={<RouteFallback />}><YearReviewPage /></Suspense>} />
-              <Route path="settings" element={<Suspense fallback={<RouteFallback />}><SettingsPage /></Suspense>} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </ErrorBoundary>
+      <AuthGate>
+        <ErrorBoundary>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Suspense fallback={<RouteFallback />}><DashboardPage /></Suspense>} />
+                <Route path="budget" element={<Suspense fallback={<RouteFallback />}><BudgetPage /></Suspense>} />
+                {/* Dashboard moved from /overview to the index; keep the old path working. */}
+                <Route path="overview" element={<Navigate to="/" replace />} />
+                <Route path="assets" element={<Suspense fallback={<RouteFallback />}><AssetPage /></Suspense>} />
+                <Route path="loan" element={<Suspense fallback={<RouteFallback />}><LoanPage /></Suspense>} />
+                <Route path="salary" element={<Suspense fallback={<RouteFallback />}><SalaryPage /></Suspense>} />
+                <Route path="forecast" element={<Suspense fallback={<RouteFallback />}><ForecastPage /></Suspense>} />
+                <Route path="pension" element={<Suspense fallback={<RouteFallback />}><PensionPage /></Suspense>} />
+                <Route path="employer-cost" element={<Suspense fallback={<RouteFallback />}><EmployerCostPage /></Suspense>} />
+                <Route path="year" element={<Suspense fallback={<RouteFallback />}><YearReviewPage /></Suspense>} />
+                <Route path="settings" element={<Suspense fallback={<RouteFallback />}><SettingsPage /></Suspense>} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </ErrorBoundary>
+      </AuthGate>
       <UpdatePrompt />
       <CatchupPrompt />
     </FinanceProvider>

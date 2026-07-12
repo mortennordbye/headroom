@@ -6,6 +6,7 @@ const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
 const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
+const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie } = require('./auth');
 const pkg = require('./package.json');
 
 // Build identity. CI passes the commit SHA as BUILD_SHA (see Dockerfile / the
@@ -104,6 +105,112 @@ db.exec(`
 if (!db.prepare('PRAGMA table_info(finance_data)').all().some((c) => c.name === 'rev')) {
   db.exec('ALTER TABLE finance_data ADD COLUMN rev INTEGER NOT NULL DEFAULT 0');
 }
+
+// Optional password auth config (single row). Kept OUT of the user data blob so
+// the client's whole-blob autosave can't clobber it and the hash never leaks into
+// exports/backups. See server/auth.js for the precedence (env > this > off).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS auth_config (
+    id TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    salt TEXT,
+    hash TEXT
+  );
+`);
+const authGetStmt = db.prepare('SELECT enabled, salt, hash FROM auth_config WHERE id = ?');
+const authWriteStmt = db.prepare(
+  'INSERT INTO auth_config (id, enabled, salt, hash) VALUES (@id, @enabled, @salt, @hash) ' +
+  'ON CONFLICT(id) DO UPDATE SET enabled = @enabled, salt = @salt, hash = @hash'
+);
+function readAuthConfig() {
+  const row = authGetStmt.get('auth');
+  return row ? { enabled: !!row.enabled, salt: row.salt, hash: row.hash } : null;
+}
+// The effective auth mode right now (env override beats the stored config).
+function currentAuth() {
+  return resolveAuth(process.env, readAuthConfig());
+}
+
+const SESSION_COOKIE = 'hr_session';
+const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+const sessions = createSessionStore(SESSION_TTL_MS);
+// In-memory login throttle (per process; a restart clears it — harmless for a
+// single-user app, same rationale as the SSB cooldown above).
+const MAX_LOGIN_ATTEMPTS = 8;
+const LOGIN_LOCKOUT_MS = 5 * 60 * 1000;
+const loginThrottle = { count: 0, until: 0 };
+
+const sessionToken = (req) => parseCookies(req.headers.cookie)[SESSION_COOKIE];
+// Set Secure only when the request actually arrived over TLS (the app itself is
+// served plain-HTTP behind a TLS-terminating proxy).
+const cookieSecure = (req) => (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+
+// Gate /api/* when auth is on. Static assets and the SPA shell stay public (they
+// hold no personal data — the login screen renders from them); health, version
+// and the auth endpoints themselves are exempt so login can happen.
+const AUTH_EXEMPT = new Set(['/healthz', '/api/version', '/api/auth/status', '/api/auth/login', '/api/auth/logout']);
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  if (AUTH_EXEMPT.has(req.path)) return next();
+  const auth = currentAuth();
+  if (!auth.enabled) return next();
+  if (sessions.isValid(sessionToken(req))) return next();
+  return res.status(401).json({ error: 'authentication required' });
+});
+
+app.get('/api/auth/status', (req, res) => {
+  const auth = currentAuth();
+  res.json({
+    authEnabled: auth.enabled,
+    authenticated: !auth.enabled || sessions.isValid(sessionToken(req)),
+    source: auth.source,
+  });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const now = Date.now();
+  if (loginThrottle.until > now) return res.status(429).json({ error: 'too many attempts' });
+  const auth = currentAuth();
+  if (!auth.enabled) return res.json({ ok: true }); // nothing to log into
+  const password = req.body && req.body.password;
+  if (!password || !auth.verify(password)) {
+    loginThrottle.count += 1;
+    if (loginThrottle.count >= MAX_LOGIN_ATTEMPTS) { loginThrottle.until = now + LOGIN_LOCKOUT_MS; loginThrottle.count = 0; }
+    return res.status(401).json({ error: 'invalid password' });
+  }
+  loginThrottle.count = 0;
+  const token = sessions.create();
+  res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, token, { maxAge: SESSION_TTL_MS / 1000, secure: cookieSecure(req) }));
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  sessions.destroy(sessionToken(req));
+  res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, '', { maxAge: 0, secure: cookieSecure(req) }));
+  res.json({ ok: true });
+});
+
+// Enable/disable + set the app-level password. Refused when env-forced. Reachable
+// unauthenticated only while auth is off (the gate lets it through to bootstrap);
+// once on, it needs a valid session like any other protected route.
+app.post('/api/auth/config', (req, res) => {
+  if (process.env.AUTH_PASSWORD) return res.status(409).json({ error: 'auth is managed by server environment' });
+  const { enabled, password } = req.body || {};
+  if (enabled) {
+    if (!password || String(password).length < 4) return res.status(400).json({ error: 'password too short' });
+    const { salt, hash } = hashPassword(String(password));
+    authWriteStmt.run({ id: 'auth', enabled: 1, salt, hash });
+    // Log the enabler in (they just set the password) so turning auth on doesn't
+    // immediately bounce them to the login screen.
+    const token = sessions.create();
+    res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, token, { maxAge: SESSION_TTL_MS / 1000, secure: cookieSecure(req) }));
+  } else {
+    authWriteStmt.run({ id: 'auth', enabled: 0, salt: null, hash: null });
+    sessions.clear(); // disabling logs everyone out
+    res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, '', { maxAge: 0, secure: cookieSecure(req) }));
+  }
+  res.json({ ok: true });
+});
 
 const getStmt = db.prepare('SELECT content, rev FROM finance_data WHERE id = ?');
 const writeStmt = db.prepare(
