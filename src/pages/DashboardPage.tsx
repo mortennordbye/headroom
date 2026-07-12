@@ -19,7 +19,7 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import HistoryManagerModal from '../components/HistoryManagerModal';
 import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear,
-  calcEmergencyFundStatus, calcDebtToIncome,
+  calcEmergencyFundStatus, calcDebtToIncome, bufferRecommendation,
 } from '../lib/calculations';
 import { calcDebtBalanceByYear } from '../lib/debt';
 import GoalsSection from '../components/GoalsSection';
@@ -42,6 +42,7 @@ import { isCategoryKey } from '../lib/categories';
 
 const CashflowChart = lazy(() => import('../components/charts/CashflowChart'));
 const EmergencyFundGauge = lazy(() => import('../components/charts/EmergencyFundGauge'));
+const BufferBuilderDialog = lazy(() => import('../components/BufferBuilderDialog'));
 
 // Assumed growth applied to each projected (future) month's income bar (~2%/month).
 const PROJECTED_INCOME_GROWTH = 1.02;
@@ -76,6 +77,7 @@ const DashboardPage: React.FC = () => {
     netCrypto,
     houseEquity,
     assets,
+    goals,
     netWorthHistory,
     balanceSnapshots,
     savingsTargetPercent,
@@ -127,6 +129,12 @@ const DashboardPage: React.FC = () => {
 
   // ─── Financial-resilience metrics ───
   const emergencyFund = calcEmergencyFundStatus(assets.bufferAccount, totalFixedExpenses);
+  const [bufferDialogOpen, setBufferDialogOpen] = useState(false);
+  // Recommended contribution + the target to build toward: an existing buffer Goal
+  // if set, else the 3-month minimum (current buffer + its shortfall to that band).
+  const bufferRec = bufferRecommendation(emergencyFund);
+  const bufferGoal = goals.find(g => g.source === 'bufferAccount' && g.target > 0);
+  const recommendedBufferTarget = bufferGoal?.target ?? Math.round(assets.bufferAccount + emergencyFund.shortfallToMin);
   const debtToIncome = calcDebtToIncome(assets.houseDebt + totalDebt, grossAnnualIncome);
 
   // ─── How many market assumptions are still on their default value ───
@@ -802,6 +810,22 @@ const DashboardPage: React.FC = () => {
                   ? `${formatCurrency(emergencyFund.shortfallToMin)} ${t.dashboardPage.shortOf} ${emergencyFund.minMonths} ${t.common.moAbbr}`
                   : t.dashboardPage.withinRange}
               </div>
+              {emergencyFund.status === 'low' && (
+                <div className="mt-1.5 flex flex-col items-center gap-1.5">
+                  <p className="text-[11px] text-center leading-snug" style={{ color: 'var(--accent)' }}>
+                    {t.dashboardPage.bufferRecommend
+                      .replace('{amount}', formatCurrency(bufferRec.suggestedMonthly))
+                      .replace('{months}', String(emergencyFund.minMonths))}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setBufferDialogOpen(true)}
+                    className="text-[11px] font-semibold px-3 py-1.5 rounded-[8px] text-[var(--forest)] bg-[color-mix(in_srgb,var(--forest)_12%,transparent)] hover:bg-[color-mix(in_srgb,var(--forest)_20%,transparent)] transition-colors"
+                  >
+                    {t.dashboardPage.bufferAddButton}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </Card>
@@ -944,6 +968,15 @@ const DashboardPage: React.FC = () => {
         <HistoryManagerModal onClose={() => setHistoryOpen(false)} />
       )}
       {editingTx && <EditTransactionModal tx={editingTx} onClose={() => setEditingTx(null)} />}
+      {bufferDialogOpen && (
+        <Suspense fallback={null}>
+          <BufferBuilderDialog
+            recommendedMonthly={bufferRec.suggestedMonthly}
+            recommendedTarget={recommendedBufferTarget}
+            onClose={() => setBufferDialogOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

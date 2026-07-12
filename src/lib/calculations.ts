@@ -171,6 +171,29 @@ export function calcEmergencyFundStatus(
   return { monthsCovered, minMonths, targetMonths, status, shortfallToMin };
 }
 
+export interface BufferRecommendation {
+  /** 'build' while below the minimum band; 'maintain' once at/above it. */
+  action: 'build' | 'maintain';
+  /** Monthly set-aside that closes the shortfall over `horizonMonths`, rounded up
+   *  to a whole 100 kr. 0 when nothing is needed. This is the figure to route to
+   *  the buffer account as a monthly fixed expense. */
+  suggestedMonthly: number;
+  horizonMonths: number;
+}
+
+/**
+ * Turn an emergency-fund status into one actionable number: the monthly amount
+ * that would close the gap to the minimum band over `horizonMonths`. Rounds up to
+ * a clean 100 kr so the reserve reaches the minimum within the horizon rather than
+ * a hair under. Returns 'maintain' (0) once the buffer is already at/above min.
+ */
+export function bufferRecommendation(ef: EmergencyFundResult, horizonMonths: number = 12): BufferRecommendation {
+  const months = Math.max(1, horizonMonths);
+  if (!(ef.shortfallToMin > 0)) return { action: 'maintain', suggestedMonthly: 0, horizonMonths: months };
+  const suggestedMonthly = Math.ceil(ef.shortfallToMin / months / 100) * 100;
+  return { action: 'build', suggestedMonthly, horizonMonths: months };
+}
+
 export type DebtToIncomeStatus = 'healthy' | 'moderate' | 'high';
 
 export interface DebtToIncomeResult {
