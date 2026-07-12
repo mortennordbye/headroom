@@ -100,6 +100,26 @@ function serializeCookie(name, value, { maxAge, secure } = {}) {
   return c;
 }
 
+/**
+ * Build the `/api/*` auth gate middleware. The path is lowercased before every
+ * comparison because Express matches routes case-insensitively by default — a
+ * case-sensitive check let `/API/data` skip the gate yet still reach the
+ * `/api/data` handler (an auth bypass). Pure factory (deps injected) so the gate
+ * logic is unit-testable without booting Express.
+ */
+function makeAuthGate({ exempt, currentAuth, isValidSession, tokenFromReq }) {
+  const exemptSet = new Set([...exempt].map((p) => p.toLowerCase()));
+  return (req, res, next) => {
+    const path = (req.path || '').toLowerCase();
+    if (!path.startsWith('/api/')) return next();   // static / SPA shell stays public
+    if (exemptSet.has(path)) return next();
+    const auth = currentAuth();
+    if (!auth.enabled) return next();
+    if (isValidSession(tokenFromReq(req))) return next();
+    return res.status(401).json({ error: 'authentication required' });
+  };
+}
+
 module.exports = {
   hashPassword,
   verifyPassword,
@@ -108,4 +128,5 @@ module.exports = {
   createSessionStore,
   parseCookies,
   serializeCookie,
+  makeAuthGate,
 };

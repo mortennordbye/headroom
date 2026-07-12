@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   hashPassword, verifyPassword, safeEqual, resolveAuth, createSessionStore,
-  parseCookies, serializeCookie,
+  parseCookies, serializeCookie, makeAuthGate,
 } from './auth.js';
 
 describe('hashPassword / verifyPassword', () => {
@@ -67,6 +67,57 @@ describe('createSessionStore', () => {
   it('expires tokens past their TTL', () => {
     const s = createSessionStore(-1); // already expired
     expect(s.isValid(s.create())).toBe(false);
+  });
+});
+
+describe('makeAuthGate', () => {
+  const EXEMPT = ['/healthz', '/api/version', '/api/auth/status', '/api/auth/login', '/api/auth/logout'];
+  // A gate with auth ON, where only the token 'good' is a valid session.
+  const gate = makeAuthGate({
+    exempt: EXEMPT,
+    currentAuth: () => ({ enabled: true }),
+    isValidSession: (tok) => tok === 'good',
+    tokenFromReq: (req) => req.token,
+  });
+  // Run the gate against a fake req; returns 'next' or the status it blocked with.
+  const run = (path, token) => {
+    let outcome = null;
+    const res = { status(c) { outcome = c; return this; }, json() { return this; } };
+    gate({ path, token }, res, () => { outcome = 'next'; });
+    return outcome;
+  };
+
+  it('blocks a protected API route without a valid session', () => {
+    expect(run('/api/data')).toBe(401);
+    expect(run('/api/data', 'bad')).toBe(401);
+    expect(run('/api/data', 'good')).toBe('next');
+  });
+
+  it('blocks case-variant paths too (regression: case-insensitive routing bypass)', () => {
+    // Express matches `/API/data` to the `/api/data` handler, so the gate must
+    // also treat it as protected — a case-sensitive check was an auth bypass.
+    expect(run('/API/data')).toBe(401);
+    expect(run('/Api/Data')).toBe(401);
+    expect(run('/API/DATA', 'bad')).toBe(401);
+    expect(run('/API/data', 'good')).toBe('next');
+  });
+
+  it('lets non-API and exempt paths through (any case)', () => {
+    expect(run('/index.html')).toBe('next');
+    expect(run('/healthz')).toBe('next');
+    expect(run('/HEALTHZ')).toBe('next');
+    expect(run('/api/auth/login')).toBe('next');
+    expect(run('/API/AUTH/LOGIN')).toBe('next');
+  });
+
+  it('is a no-op when auth is disabled', () => {
+    const off = makeAuthGate({
+      exempt: EXEMPT, currentAuth: () => ({ enabled: false }),
+      isValidSession: () => false, tokenFromReq: () => undefined,
+    });
+    let outcome = null;
+    off({ path: '/api/data' }, { status(c) { outcome = c; return this; }, json() { return this; } }, () => { outcome = 'next'; });
+    expect(outcome).toBe('next');
   });
 });
 

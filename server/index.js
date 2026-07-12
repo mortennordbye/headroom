@@ -7,7 +7,7 @@ const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
 const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
-const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie } = require('./auth');
+const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
 const pkg = require('./package.json');
 
 // Build identity. CI passes the commit SHA as BUILD_SHA (see Dockerfile / the
@@ -155,19 +155,13 @@ const cookieSecure = (req) => (req.headers['x-forwarded-proto'] || '').split(','
 // Gate /api/* when auth is on. Static assets and the SPA shell stay public (they
 // hold no personal data — the login screen renders from them); health, version
 // and the auth endpoints themselves are exempt so login can happen.
-const AUTH_EXEMPT = new Set(['/healthz', '/api/version', '/api/auth/status', '/api/auth/login', '/api/auth/logout']);
-app.use((req, res, next) => {
-  // Express routes match case-insensitively by default, so the gate must too —
-  // otherwise `/API/data` slips past a case-sensitive prefix check yet still hits
-  // the `/api/data` handler (an auth bypass). Lowercase before every comparison.
-  const path = req.path.toLowerCase();
-  if (!path.startsWith('/api/')) return next();
-  if (AUTH_EXEMPT.has(path)) return next();
-  const auth = currentAuth();
-  if (!auth.enabled) return next();
-  if (sessions.isValid(sessionToken(req))) return next();
-  return res.status(401).json({ error: 'authentication required' });
-});
+const AUTH_EXEMPT = ['/healthz', '/api/version', '/api/auth/status', '/api/auth/login', '/api/auth/logout'];
+app.use(makeAuthGate({
+  exempt: AUTH_EXEMPT,
+  currentAuth,
+  isValidSession: (token) => sessions.isValid(token),
+  tokenFromReq: sessionToken,
+}));
 
 app.get('/api/auth/status', (req, res) => {
   const auth = currentAuth();
@@ -664,12 +658,19 @@ if (fs.existsSync(DIST)) {
   app.get(/.*/, (req, res) => res.sendFile(path.join(DIST, 'index.html')));
 }
 
-// Rotating on-disk backups (see backup.js). BACKUP_INTERVAL_HOURS=0 disables it.
-const backupSchedule = startBackupSchedule(db, DATA_DIR, {
-  intervalHours: parseCount(process.env.BACKUP_INTERVAL_HOURS, 24),
-  keep: parseCount(process.env.BACKUP_KEEP, 7),
-});
-if (backupSchedule) console.log(`[backup] rotating snapshots enabled → ${backupSchedule.dir}`);
+// Start the listener + on-disk backups only when run directly (node index.js).
+// When required (integration tests import the app for supertest), skip both so
+// no port is bound and no backup timer/files are created.
+if (require.main === module) {
+  // Rotating on-disk backups (see backup.js). BACKUP_INTERVAL_HOURS=0 disables it.
+  const backupSchedule = startBackupSchedule(db, DATA_DIR, {
+    intervalHours: parseCount(process.env.BACKUP_INTERVAL_HOURS, 24),
+    keep: parseCount(process.env.BACKUP_KEEP, 7),
+  });
+  if (backupSchedule) console.log(`[backup] rotating snapshots enabled → ${backupSchedule.dir}`);
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`API running on :${PORT}`));
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => console.log(`API running on :${PORT}`));
+}
+
+module.exports = app;
