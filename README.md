@@ -120,7 +120,7 @@ make seed-local               # optional: seed ./data with demo data
 
 ## Security
 
-Headroom has **no login** — it's built for single-user self-hosting, and anyone who can reach the port can read and overwrite your entire financial picture. So there are exactly **two safe ways to run it:**
+Headroom has **no login by default** (there's an [optional password](#optional-password) below) — it's built for single-user self-hosting, and anyone who can reach the port can otherwise read and overwrite your entire financial picture. So there are exactly **two safe ways to run it:**
 
 1. **Local only (default).** The port binds to `127.0.0.1` (loopback), so the app is reachable only from the machine it runs on. This is the recommended setup for a laptop.
 2. **In a locked-down homelab, reached over a private tunnel.** Host it on a home server and get to it through **WireGuard**, **Tailscale**, or a VPN — nothing is exposed to the public internet, and only your own devices (including your phone) can reach it.
@@ -130,6 +130,15 @@ Headroom has **no login** — it's built for single-user self-hosting, and anyon
 Only change the port binding to `0.0.0.0` (all interfaces) if you understand that this exposes unauthenticated access to everyone who can reach that network.
 
 **Optional hardening:** set `ALLOWED_HOSTS` (see [Configuration](#configuration)) to reject requests whose `Host` header isn't one you expect — a small guard against DNS-rebinding. It's off by default so the app works behind any hostname without configuration.
+
+### Optional password
+
+A single shared password can gate the app (single-user, so it's one password — not user accounts). **Off by default.** Two ways to turn it on:
+
+- **In the app:** Settings → **Access** → set a password. Stored only as a `scrypt` hash.
+- **Via environment:** set `AUTH_PASSWORD` (e.g. a Kubernetes Secret). This forces auth on and takes precedence over the in-app setting, which then shows as "managed by server". Unset it to hand control back to the app.
+
+Sessions last 90 days (an httpOnly cookie). Health checks (`/healthz`) stay open. This gates the app's API — it is **not** a substitute for the reverse-proxy / VPN options above, and a password sent over plain `http://` on an untrusted network is weak, so only rely on it behind HTTPS. If you forget the password: unset `AUTH_PASSWORD`, or clear the `auth_config` row in the SQLite DB (or delete the DB to start fresh).
 
 ## Use it on your phone
 
@@ -160,6 +169,7 @@ All optional — the defaults are sensible and nothing needs to be set.
 | `DATA_DIR` | `/data` (in Docker) | Where the SQLite database is stored. |
 | `PORT` | `3001` | Port the server listens on inside the container. |
 | `ALLOWED_HOSTS` | _(unset — all hosts allowed)_ | Comma-separated hostname allowlist, e.g. `finance.example.com,localhost`. When unset, no host filtering is applied. |
+| `AUTH_PASSWORD` | _(unset — auth off)_ | When set, forces the [optional password](#optional-password) on with this password, overriding the in-app Settings toggle. |
 
 ## Data persistence
 
@@ -195,7 +205,7 @@ Both paths open a **preview** first, where you pick which sections to restore (i
 
 ### HTTP API
 
-The app is a thin JSON API over the single-blob store (no per-field endpoints). It's **unauthenticated** by design (single-user, loopback-bound — see [Security](#security)); don't expose it to an untrusted network. The endpoints the UI drives:
+The app is a thin JSON API over the single-blob store (no per-field endpoints). It's **unauthenticated by default** (single-user, loopback-bound — see [Security](#security)) unless you enable the [optional password](#optional-password); either way, don't expose it to an untrusted network. The endpoints the UI drives:
 
 | Method & path | Purpose |
 |---------------|---------|

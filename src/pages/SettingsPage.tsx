@@ -48,6 +48,7 @@ import { provenanceOf } from '../lib/provenance';
 import { parseLocaleNumber } from '../lib/validators';
 import { BankSyncCard } from '../components/BankSyncCard';
 import { CategoryRules } from '../components/CategoryRules';
+import { AuthSettings } from '../components/AuthSettings';
 import HistoryManagerModal from '../components/HistoryManagerModal';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
@@ -304,6 +305,8 @@ export default function SettingsPage() {
 
         {/* ──── Custom rules (span 12) ──── */}
         <CategoryRules />
+
+        <AuthSettings />
 
         {/* ──── Currency (span 7) ──── */}
         <Card padding="lg" className="md:col-span-7">
