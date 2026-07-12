@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { useEffect, useRef, useState, type Ref, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -16,6 +16,8 @@ interface MonthPickerProps {
   /** 'month' → year + 12-month grid; 'day' → full calendar with days. */
   mode?: PickerMode;
   inputRef?: Ref<HTMLInputElement>;
+  /** Forwarded to the text input (e.g. Enter-to-save in custom modals). */
+  onKeyDown?: (e: ReactKeyboardEvent<HTMLInputElement>) => void;
 }
 
 const YM = /^(\d{4})-(\d{2})$/;
@@ -29,7 +31,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
  * day grid). Typing passes straight through, so the caller's validation still
  * runs on save.
  */
-export function MonthPicker({ id, value, onChange, placeholder, mode = 'month', inputRef }: MonthPickerProps) {
+export function MonthPicker({ id, value, onChange, placeholder, mode = 'month', inputRef, onKeyDown }: MonthPickerProps) {
   const { lang, t } = useFinance();
   const c = t.common;
   const locale = lang === 'nb' ? nb : enUS;
@@ -119,6 +121,7 @@ export function MonthPicker({ id, value, onChange, placeholder, mode = 'month', 
           inputMode="numeric"
           autoComplete="off"
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
           // On blur, tidy common typing into canonical form (2022-7-15 →
           // 2022-07-15, 15.07.2022 → 2022-07-15). Leave genuinely unparseable
           // input untouched so the caller's save-time error can surface.

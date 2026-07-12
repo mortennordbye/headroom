@@ -167,7 +167,7 @@ const LoanPage: React.FC = () => {
   const editHomeownerMonth = (label: string, key: keyof HomeownerData, current: string) => {
     openModal({
       title: label,
-      fields: [{ key: 'value', label, type: 'month', value: current }],
+      fields: [{ key: 'value', label, type: 'monthpicker', pickerMode: 'month', value: current, placeholder: '2022-07' }],
       onSave: (vals) => {
         updateHomeowner(key, vals.value);
         closeModal();

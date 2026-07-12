@@ -61,7 +61,7 @@ export default function DebtSection() {
     { key: 'minPayment', label: d.minPayment, type: 'number', value: val.minPayment != null ? String(val.minPayment) : '' },
     // Lånekassen interest-free/deferred month — only meaningful for student loans.
     {
-      key: 'interestFreeUntil', label: d.interestFreeLabel, type: 'month',
+      key: 'interestFreeUntil', label: d.interestFreeLabel, type: 'monthpicker', pickerMode: 'month',
       value: val.interestFreeUntil ?? '', hint: d.interestFreeHint,
       showWhen: (v) => v.type === 'student',
     },
