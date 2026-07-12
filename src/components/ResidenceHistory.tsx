@@ -51,18 +51,19 @@ function useResidenceEditor() {
 
   const openEditor = (existing?: Residence) => {
     const fields: ModalField[] = [
-      { key: 'address', label: lp.propertyAddress, type: 'text', value: existing?.address ?? '', placeholder: 'Storgata 1, Oslo' },
+      { key: 'address', label: lp.propertyAddress, type: 'text', value: existing?.address ?? '', placeholder: 'Storgata 1, Oslo', hint: lp.propertyAddressHint },
       { key: 'propertyType', label: lp.propertyType, type: 'select', value: existing?.propertyType ?? 'selveier', options: typeOptions },
-      { key: 'purchasePrice', label: lp.propertyPurchasePrice, type: 'number', value: existing?.purchasePrice?.toString() ?? '' },
-      { key: 'purchaseCosts', label: lp.propertyPurchaseCosts, type: 'number', value: existing?.purchaseCosts?.toString() ?? '' },
+      { key: 'purchasePrice', label: lp.propertyPurchasePrice, type: 'number', value: existing?.purchasePrice?.toString() ?? '', placeholder: '3800000', hint: lp.propertyPurchasePriceHint },
+      { key: 'purchaseCosts', label: lp.propertyPurchaseCosts, type: 'number', value: existing?.purchaseCosts?.toString() ?? '', placeholder: '0', hint: lp.propertyPurchaseCostsHint },
       {
         key: 'jointDebtShare', label: lp.propertyJointDebt, type: 'number', value: existing?.jointDebtShare?.toString() ?? '',
+        placeholder: '0', hint: lp.propertyJointDebtHint,
         showWhen: (v) => v.propertyType === 'borettslag' || v.propertyType === 'aksjeleilighet',
       },
-      { key: 'moveInDate', label: lp.propertyMoveIn, type: 'month', value: existing?.moveInDate ?? '' },
-      { key: 'moveOutDate', label: lp.propertyMoveOut, type: 'month', value: existing?.moveOutDate ?? '', hint: lp.propertyPeriodNow },
-      { key: 'salePrice', label: lp.propertySalePrice, type: 'number', value: existing?.salePrice?.toString() ?? '', showWhen: (v) => !!v.moveOutDate },
-      { key: 'notes', label: lp.propertyNotes, type: 'text', value: existing?.notes ?? '' },
+      { key: 'moveInDate', label: lp.propertyMoveIn, type: 'month', value: existing?.moveInDate ?? '', hint: lp.propertyMoveInHint },
+      { key: 'moveOutDate', label: lp.propertyMoveOut, type: 'month', value: existing?.moveOutDate ?? '', hint: lp.propertyMoveOutHint },
+      { key: 'salePrice', label: lp.propertySalePrice, type: 'number', value: existing?.salePrice?.toString() ?? '', placeholder: '0', hint: lp.propertySalePriceHint, showWhen: (v) => !!v.moveOutDate },
+      { key: 'notes', label: lp.propertyNotes, type: 'text', value: existing?.notes ?? '', placeholder: lp.propertyNotesPlaceholder },
     ];
     setModal({
       title: existing ? lp.propertyEditTitle : lp.propertyAddTitle,
