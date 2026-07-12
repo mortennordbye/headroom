@@ -307,6 +307,9 @@ const BudgetPage: React.FC = () => {
       const acc = (assets.savingsAccounts ?? []).find(s => s.id === e.savingsAccountId);
       return acc ? `${t.expenseDestination.savings}: ${acc.name}` : t.expenseDestination.targetMissing;
     }
+    if (e.destinationKind === 'bufferAccount') {
+      return t.expenseDestination.buffer;
+    }
     if (e.destinationKind === 'debt') {
       const d = debts.find(x => x.id === e.debtId);
       return d ? `${t.expenseDestination.debt}: ${d.name}` : t.expenseDestination.targetMissing;

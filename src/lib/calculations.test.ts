@@ -6,6 +6,7 @@ import {
   calcMortgageBalanceByYear,
   calcRecommendations,
   calcEmergencyFundStatus,
+  bufferRecommendation,
   calcDebtToIncome,
   calcBorrowingCapacity,
   calcNetSaleProceeds,
@@ -107,6 +108,28 @@ describe('calcEmergencyFundStatus', () => {
 
   it('reports the shortfall to the minimum band', () => {
     expect(calcEmergencyFundStatus(20_000, 10_000).shortfallToMin).toBe(10_000);
+  });
+});
+
+describe('bufferRecommendation', () => {
+  it('suggests a monthly set-aside that closes the shortfall over the horizon, rounded up to 100', () => {
+    const ef = calcEmergencyFundStatus(20_000, 10_000); // shortfall 10 000 to reach 3 mo
+    const r = bufferRecommendation(ef, 12);
+    expect(r.action).toBe('build');
+    expect(r.suggestedMonthly).toBe(900);               // ceil(10000/12/100)*100 = 900
+    expect(r.horizonMonths).toBe(12);
+  });
+
+  it('maintains (0) once the buffer is at or above the minimum', () => {
+    const r = bufferRecommendation(calcEmergencyFundStatus(40_000, 10_000));
+    expect(r.action).toBe('maintain');
+    expect(r.suggestedMonthly).toBe(0);
+  });
+
+  it('floors the horizon at 1 month so it never divides by zero', () => {
+    const r = bufferRecommendation(calcEmergencyFundStatus(0, 10_000), 0);
+    expect(r.horizonMonths).toBe(1);
+    expect(r.suggestedMonthly).toBe(30_000);            // full 3-mo shortfall in one month
   });
 });
 

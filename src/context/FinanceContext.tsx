@@ -24,6 +24,7 @@ import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Rec
 import { findInternalTransferIds } from '../lib/transfers';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { computeAutomationPostings, type AutomationRule, type AutomationState, type ResolvedPosting } from '../lib/automation';
+import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType } from '../lib/debt';
 import { dedupeBankTransactions } from '../lib/bankDedup';
@@ -86,9 +87,14 @@ export interface FixedExpense {
    *  guard. Set to the current month when a destination is first assigned, so the
    *  first move happens the NEXT month. */
   lastPostedMonth?: string;
+  /** Only for a `bufferAccount` destination created from the emergency-fund
+   *  recommendation: the buffer balance at which this contribution has done its
+   *  job and self-removes. Presence marks a "buffer builder"; once
+   *  `assets.bufferAccount` reaches it, the expense is deleted automatically. */
+  bufferTargetAmount?: number;
 }
 
-export type ExpenseDestinationKind = 'savingsAccount' | 'mortgage' | 'debt';
+export type ExpenseDestinationKind = 'savingsAccount' | 'bufferAccount' | 'mortgage' | 'debt';
 
 // Non-mortgage debts (studielån, forbrukslån, kredittkort, …). Modeled separately
 // from the mortgage (which lives in Assets.houseDebt) and reduce net worth.
@@ -1788,11 +1794,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // effect and the confirm/decline handlers share one source).
   const automationState = useMemo<AutomationState>(() => ({
     savings: Object.fromEntries((assets.savingsAccounts ?? []).map(s => [s.id, s.balance])),
+    buffer: assets.bufferAccount,
     mortgage: assets.houseDebt,
     mortgageRate: housingMode === 'homeowner' ? homeowner.rente : loan.rente,
     debts: Object.fromEntries(debts.map(d => [d.id, { balance: d.balance, rate: d.rate }])),
     housingMode,
-  }), [assets.savingsAccounts, assets.houseDebt, housingMode, homeowner.rente, loan.rente, debts]);
+  }), [assets.savingsAccounts, assets.bufferAccount, assets.houseDebt, housingMode, homeowner.rente, loan.rente, debts]);
 
   // Apply a resolved posting's absolute new balance to the right slice. Debt
   // writes are batched by the caller (a single setDebts) to avoid stale-closure
@@ -1803,6 +1810,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     for (const p of postings) {
       if (p.targetKind === 'savingsAccount' && p.savingsAccountId) {
         updateSavingsAccount(p.savingsAccountId, { balance: p.newBalance });
+      } else if (p.targetKind === 'bufferAccount') {
+        updateAsset('bufferAccount', p.newBalance);
       } else if (p.targetKind === 'mortgage') {
         // updateHomeowner mirrors the balance into assets.houseDebt + transition.
         updateHomeowner('currentMortgageBalance', p.newBalance);
@@ -1812,7 +1821,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       }
     }
     if (hasDebtPatch) setDebts(debts.map(d => (d.id in debtPatch ? { ...d, balance: debtPatch[d.id] } : d)));
-  }, [updateSavingsAccount, updateHomeowner, debts]);
+  }, [updateSavingsAccount, updateAsset, updateHomeowner, debts]);
 
   // Stamp lastPostedMonth on the posted expenses.
   const stampPosted = useCallback((ids: Set<string>, month: string) => {
@@ -1831,6 +1840,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const multi = postings.filter(p => p.monthsDue >= 2);
     const nextPending: PendingCatchup[] = multi.map(p => {
       const base = p.targetKind === 'savingsAccount' ? (automationState.savings[p.savingsAccountId!] ?? 0)
+        : p.targetKind === 'bufferAccount' ? automationState.buffer
         : p.targetKind === 'mortgage' ? automationState.mortgage
         : (automationState.debts[p.debtId!]?.balance ?? 0);
       return {
@@ -1873,6 +1883,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     stampPosted(new Set([expenseId]), currentMonth);
     setPendingCatchups(prev => prev.filter(p => p.expenseId !== expenseId));
   }, [automationRules, automationState, applyPostingBalances, stampPosted]);
+
+  // A buffer-builder contribution (created from the emergency-fund recommendation)
+  // self-removes once the buffer reaches its target. Watching the balance — not
+  // just monthly postings — means a manual top-up also completes it. Only ever
+  // deletes flagged buffer builders; other expenses are never touched.
+  useEffect(() => {
+    if (!loaded.current) return;
+    const done = bufferBuilderIdsToRemove(fixedExpenses, assets.bufferAccount);
+    if (done.length === 0) return;
+    const drop = new Set(done);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFixedExpenses(prev => prev.filter(e => !drop.has(e.id)));
+  }, [fixedExpenses, assets.bufferAccount]);
 
   // Set (or clear, with null / ≤0) a category's monthly budget cap.
   const setCategoryBudget = useCallback((category: CategoryKey, amount: number | null) => {

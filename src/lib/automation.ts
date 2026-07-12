@@ -13,7 +13,7 @@
 // balance/rate snapshot and returns resolved absolute new balances.
 import { addMonthsKey, monthsBetween } from './date';
 
-export type AutomationTargetKind = 'savingsAccount' | 'mortgage' | 'debt';
+export type AutomationTargetKind = 'savingsAccount' | 'bufferAccount' | 'mortgage' | 'debt';
 export type HousingMode = 'first_buyer' | 'homeowner' | 'transitioning';
 
 // A destination-bearing fixed expense projected to the shape the runner needs.
@@ -31,6 +31,7 @@ export interface AutomationRule {
 /** Live balances/rates the runner needs to resolve absolute new values. */
 export interface AutomationState {
   savings: Record<string, number>;                       // by savingsAccountId
+  buffer: number;                                        // assets.bufferAccount (the single emergency-fund scalar)
   mortgage: number;                                      // assets.houseDebt (the mirrored balance)
   mortgageRate: number;                                  // annual %, homeowner.rente | loan.rente by mode
   debts: Record<string, { balance: number; rate: number }>; // by debtId; rate is annual %
@@ -90,6 +91,7 @@ export function computeAutomationPostings(
   const debts: Record<string, { balance: number; rate: number }> =
     Object.fromEntries(Object.entries(state.debts).map(([id, d]) => [id, { ...d }]));
   let mortgage = state.mortgage;
+  let buffer = state.buffer;
 
   const out: ResolvedPosting[] = [];
   for (const rule of rules) {
@@ -104,6 +106,10 @@ export function computeAutomationPostings(
       if (!rule.savingsAccountId || !(rule.savingsAccountId in savings)) continue;
       newBalance = Math.round(savings[rule.savingsAccountId] + rule.amount * monthsDue);
       savings[rule.savingsAccountId] = newBalance;
+    } else if (rule.targetKind === 'bufferAccount') {
+      // Single emergency-fund scalar — grows like a savings account, no id needed.
+      newBalance = Math.round(buffer + rule.amount * monthsDue);
+      buffer = newBalance;
     } else if (rule.targetKind === 'mortgage') {
       if (state.housingMode === 'first_buyer') continue; // no mortgage exists in this mode
       const res = applyAmortization(mortgage, state.mortgageRate, rule.amount, monthsDue);

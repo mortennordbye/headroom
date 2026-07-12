@@ -13,6 +13,7 @@ const rule = (over: Partial<AutomationRule> = {}): AutomationRule => ({
 
 const state = (over: Partial<AutomationState> = {}): AutomationState => ({
   savings: { 'sav-1': 1000 },
+  buffer: 20_000,
   mortgage: 1_000_000,
   mortgageRate: 5,
   debts: { 'debt-1': { balance: 50_000, rate: 12 } },
@@ -54,6 +55,33 @@ describe('computeAutomationPostings — savings', () => {
 
   it('skips (without stamping) a savings rule whose account was deleted', () => {
     expect(computeAutomationPostings([rule({ lastPostedMonth: '2026-06', savingsAccountId: 'gone' })], state(), '2026-07')).toHaveLength(0);
+  });
+});
+
+describe('computeAutomationPostings — buffer account', () => {
+  const buf = (over: Partial<AutomationRule> = {}) =>
+    rule({ targetKind: 'bufferAccount', savingsAccountId: undefined, ...over });
+
+  it('grows the single buffer scalar by amount × monthsDue', () => {
+    const [p] = computeAutomationPostings([buf({ lastPostedMonth: '2026-06' })], state(), '2026-07');
+    expect(p.targetKind).toBe('bufferAccount');
+    expect(p.monthsDue).toBe(1);
+    expect(p.newBalance).toBe(20_500);          // 20 000 + 1×500
+    expect(p.savingsAccountId).toBeUndefined();
+  });
+
+  it('catches up missed months into the buffer', () => {
+    const [p] = computeAutomationPostings([buf({ lastPostedMonth: '2026-04' })], state(), '2026-07');
+    expect(p.newBalance).toBe(21_500);          // 20 000 + 3×500
+  });
+
+  it('two buffer rules stack in the same month (no clobber)', () => {
+    const [a, b] = computeAutomationPostings(
+      [buf({ id: 'b1', lastPostedMonth: '2026-06' }), buf({ id: 'b2', amount: 1000, lastPostedMonth: '2026-06' })],
+      state(), '2026-07',
+    );
+    expect(a.newBalance).toBe(20_500);          // 20 000 + 500
+    expect(b.newBalance).toBe(21_500);          // + 1000, stacked on the first
   });
 });
 

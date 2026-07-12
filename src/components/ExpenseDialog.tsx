@@ -30,16 +30,26 @@ const input = 'w-full bg-[var(--bg-raised)] border border-[var(--border)] rounde
 export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
   const { t, assets, debts, housingMode, formatCurrency } = useFinance();
   const savings = assets.savingsAccounts ?? [];
+  // Save targets: the emergency-fund buffer (always available, a single scalar)
+  // plus every named savings account. BUFFER_ID is a sentinel — real savings ids
+  // never collide with it.
+  const BUFFER_ID = '__buffer__';
+  const saveOptions = [
+    { v: BUFFER_ID, l: t.expenseDestination.buffer },
+    ...savings.map(s => ({ v: s.id, l: `${t.expenseDestination.savings}: ${s.name}` })),
+  ];
 
   const [name, setName] = useState(expense?.name ?? '');
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
   const [type, setType] = useState<ExpenseType>(expense?.type ?? 'fixed');
   const [flow, setFlow] = useState<Flow>(
-    expense?.destinationKind === 'savingsAccount' ? 'save'
+    expense?.destinationKind === 'savingsAccount' || expense?.destinationKind === 'bufferAccount' ? 'save'
       : expense?.destinationKind === 'mortgage' || expense?.destinationKind === 'debt' ? 'debt'
         : 'none',
   );
-  const [savingsId, setSavingsId] = useState(expense?.savingsAccountId ?? savings[0]?.id ?? '');
+  const [savingsId, setSavingsId] = useState(
+    expense?.destinationKind === 'bufferAccount' ? BUFFER_ID : expense?.savingsAccountId ?? saveOptions[0].v,
+  );
   const debtOptions = [
     ...(housingMode !== 'first_buyer' ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }] : []),
     ...debts.map(d => ({ v: `debt:${d.id}`, l: `${t.expenseDestination.debt}: ${d.name}` })),
@@ -60,7 +70,7 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
   ];
 
   const targetName =
-    flow === 'save' ? (savings.find(s => s.id === savingsId)?.name ?? '')
+    flow === 'save' ? (savingsId === BUFFER_ID ? t.expenseDestination.buffer : savings.find(s => s.id === savingsId)?.name ?? '')
       : debtTarget === 'mortgage' ? t.expenseDestination.mortgage
         : debts.find(d => `debt:${d.id}` === debtTarget)?.name ?? '';
 
@@ -72,7 +82,8 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     let destinationKind: ExpenseDestinationKind | undefined;
     let savingsAccountId: string | undefined;
     let debtId: string | undefined;
-    if (flow === 'save' && savingsId) { destinationKind = 'savingsAccount'; savingsAccountId = savingsId; }
+    if (flow === 'save' && savingsId === BUFFER_ID) destinationKind = 'bufferAccount';
+    else if (flow === 'save' && savingsId) { destinationKind = 'savingsAccount'; savingsAccountId = savingsId; }
     else if (flow === 'debt' && debtTarget === 'mortgage') destinationKind = 'mortgage';
     else if (flow === 'debt' && debtTarget.startsWith('debt:')) { destinationKind = 'debt'; debtId = debtTarget.slice(5); }
 
@@ -175,21 +186,15 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
 
           {flow === 'save' && (
             <div className="mt-3">
-              {savings.length === 0 ? (
-                <p className="text-[12px] text-[var(--warning)]">{t.expenseDialog.noSavings}</p>
-              ) : (
-                <>
-                  <div className="relative">
-                    <select className={selectCls} value={savingsId} onChange={e => setSavingsId(e.target.value)}>
-                      {savings.map(s => <option key={s.id} value={s.id}>{`${t.expenseDestination.savings}: ${s.name}`}</option>)}
-                    </select>
-                    <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-2)]" />
-                  </div>
-                  <Explainer text={t.expenseDialog.explainSave
-                    .replace('{amount}', formatCurrency(parseLocaleNumber(amount) || 0))
-                    .replace('{target}', targetName)} />
-                </>
-              )}
+              <div className="relative">
+                <select className={selectCls} value={savingsId} onChange={e => setSavingsId(e.target.value)}>
+                  {saveOptions.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                </select>
+                <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-2)]" />
+              </div>
+              <Explainer text={t.expenseDialog.explainSave
+                .replace('{amount}', formatCurrency(parseLocaleNumber(amount) || 0))
+                .replace('{target}', targetName)} />
             </div>
           )}
 
