@@ -5,7 +5,7 @@ import { nb, enUS } from 'date-fns/locale';
 import { Home, Plus, Edit2, Trash2, Clock } from 'lucide-react';
 import { useFinance, type Residence, type PropertyType } from '../context/FinanceContext';
 import EditModal, { type ModalField } from './EditModal';
-import { parseLocaleNumber, isOptionalYearMonth } from '../lib/validators';
+import { parseLocaleNumber, isValidYearMonth, isValidYearMonthDay } from '../lib/validators';
 import { currentResidence, residenceMetrics, sortResidences } from '../lib/property';
 
 const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
@@ -16,11 +16,21 @@ const num = (s: string): number | undefined => {
   return isNaN(n) ? undefined : n;
 };
 
-function useMonthFormatter() {
+/** Accept an empty value, a 'YYYY-MM' month, or a 'YYYY-MM-DD' day. */
+const isOptionalDate = (s: string): boolean => {
+  const v = s.trim();
+  return v === '' || isValidYearMonth(v) || isValidYearMonthDay(v);
+};
+
+/** Format a 'YYYY-MM' or 'YYYY-MM-DD' key for display, showing the day when set. */
+function useDateFormatter() {
   const { lang } = useFinance();
   const locale = lang === 'nb' ? nb : enUS;
-  return (key?: string | null): string =>
-    key ? format(parse(key.slice(0, 7), 'yyyy-MM', new Date()), 'MMM yyyy', { locale }) : '';
+  return (key?: string | null): string => {
+    if (!key) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(key)) return format(parse(key, 'yyyy-MM-dd', new Date()), 'd. MMM yyyy', { locale });
+    return format(parse(key.slice(0, 7), 'yyyy-MM', new Date()), 'MMM yyyy', { locale });
+  };
 }
 
 function useTypeOptions() {
@@ -61,8 +71,8 @@ function useResidenceEditor() {
         placeholder: '0', hint: lp.propertyJointDebtHint,
         showWhen: (v) => v.propertyType === 'borettslag' || v.propertyType === 'aksjeleilighet',
       },
-      { key: 'moveInDate', label: lp.propertyMoveInField, type: 'monthpicker', value: existing?.moveInDate ?? '', placeholder: '2022-07' },
-      { key: 'moveOutDate', label: lp.propertyMoveOutField, type: 'monthpicker', value: existing?.moveOutDate ?? '', placeholder: '2024-09' },
+      { key: 'moveInDate', label: lp.propertyMoveInField, type: 'monthpicker', pickerMode: 'day', value: existing?.moveInDate ?? '', placeholder: '2022-07-15' },
+      { key: 'moveOutDate', label: lp.propertyMoveOutField, type: 'monthpicker', pickerMode: 'day', value: existing?.moveOutDate ?? '', placeholder: '2024-09-01' },
       { key: 'salePrice', label: lp.propertySalePrice, type: 'number', value: existing?.salePrice?.toString() ?? '', placeholder: '0', hint: lp.propertySalePriceHint, showWhen: (v) => !!v.moveOutDate.trim() },
       { key: 'notes', label: lp.propertyNotes, type: 'text', value: existing?.notes ?? '', placeholder: lp.propertyNotesPlaceholder },
     ];
@@ -72,9 +82,9 @@ function useResidenceEditor() {
       onSave: (vals) => {
         const address = vals.address.trim();
         if (!address) { setModal(p => p && { ...p, error: lp.propertyErrAddress }); return; }
-        // Dates are typed as 'YYYY-MM' (matching the salary tracker); reject
+        // Dates accept a month ('YYYY-MM') or a full day ('YYYY-MM-DD'); reject
         // anything malformed rather than silently dropping it.
-        if (!isOptionalYearMonth(vals.moveInDate.trim()) || !isOptionalYearMonth(vals.moveOutDate.trim())) {
+        if (!isOptionalDate(vals.moveInDate) || !isOptionalDate(vals.moveOutDate)) {
           setModal(p => p && { ...p, error: lp.propertyErrDate });
           return;
         }
@@ -112,7 +122,7 @@ interface PropertyCardProps {
 export function PropertyCard({ currentValue, readOnly }: PropertyCardProps) {
   const { t, residences, formatCurrency } = useFinance();
   const lp = t.loanPage;
-  const fmtMonth = useMonthFormatter();
+  const fmtDate = useDateFormatter();
   const { label: typeLabel } = useTypeOptions();
   const { openEditor, modalEl } = useResidenceEditor();
 
@@ -151,7 +161,7 @@ export function PropertyCard({ currentValue, readOnly }: PropertyCardProps) {
           {current.jointDebtShare != null && current.jointDebtShare > 0 && (
             <PropRow label={lp.propertyJointDebt} value={formatCurrency(current.jointDebtShare)} />
           )}
-          {current.moveInDate && <PropRow label={lp.propertyMoveIn} value={fmtMonth(current.moveInDate)} />}
+          {current.moveInDate && <PropRow label={lp.propertyMoveIn} value={fmtDate(current.moveInDate)} />}
           <PropRow label={lp.propertyCurrentValue} value={formatCurrency(Math.round(currentValue))} highlight />
           {metrics.gainKr != null && (
             <PropRow
@@ -190,7 +200,7 @@ interface ResidenceTimelineProps {
 export function ResidenceTimeline({ readOnly }: ResidenceTimelineProps) {
   const { t, residences, removeResidence, formatCurrency } = useFinance();
   const lp = t.loanPage;
-  const fmtMonth = useMonthFormatter();
+  const fmtDate = useDateFormatter();
   const { openEditor, modalEl } = useResidenceEditor();
   const sorted = sortResidences(residences);
 
@@ -216,7 +226,7 @@ export function ResidenceTimeline({ readOnly }: ResidenceTimelineProps) {
           <div className="absolute left-[7px] top-2 bottom-2 w-px" style={{ background: 'var(--border)' }} />
           {sorted.map((r) => {
             const isCurrent = r.moveOutDate == null || r.moveOutDate === '';
-            const period = `${fmtMonth(r.moveInDate) || '—'} → ${isCurrent ? lp.propertyPeriodNow : fmtMonth(r.moveOutDate)}`;
+            const period = `${fmtDate(r.moveInDate) || '—'} → ${isCurrent ? lp.propertyPeriodNow : fmtDate(r.moveOutDate)}`;
             const gain = r.salePrice != null && r.purchasePrice != null ? r.salePrice - r.purchasePrice : null;
             return (
               <div key={r.id} className="relative flex items-start justify-between gap-3 py-2.5 group">

@@ -17,6 +17,8 @@ export interface ModalField {
   options?: ModalFieldOption[]; // required when type === 'select'
   suggestions?: string[];       // text fields only — populates a <datalist> for autocomplete
   hint?: string;                // optional helper text rendered under the field
+  /** For type === 'monthpicker': 'month' (YYYY-MM) or 'day' (YYYY-MM-DD). */
+  pickerMode?: 'month' | 'day';
   /** Show this field only when the predicate holds for the current values
    *  (e.g. a manual-amount field that's irrelevant once a source is picked).
    *  Hidden fields keep their value in state; they're just not rendered. */
@@ -128,6 +130,7 @@ export default function EditModal({ title, fields, onSave, onCancel, cancelLabel
                   inputRef={idx === 0 ? (firstInputRef as Ref<HTMLInputElement>) : undefined}
                   value={values[field.key]}
                   placeholder={field.placeholder}
+                  mode={field.pickerMode ?? 'month'}
                   onChange={(v) => setValues(prev => ({ ...prev, [field.key]: v }))}
                 />
               ) : (
