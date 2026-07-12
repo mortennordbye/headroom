@@ -16,6 +16,15 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { key: 'savingsRate' },
   { key: 'emergencyFund' },
   { key: 'effectiveRate' },
+  { key: 'inflation' },
+  { key: 'compoundInterest' },
+  { key: 'realReturn' },
+  { key: 'liquidity' },
+  { key: 'grossNet' },
+  { key: 'annuityLoan' },
+  { key: 'termPayment' },
+  { key: 'amortizationPeriod' },
+  { key: 'stressTest' },
   { key: 'feriepenger', no: true },
   { key: 'trinnskatt', no: true },
   { key: 'trygdeavgift', no: true },
@@ -25,6 +34,11 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { key: 'otp', no: true },
   { key: 'ips', no: true },
   { key: 'bsu', no: true },
+  { key: 'alminneligInntekt', no: true },
+  { key: 'personinntekt', no: true },
+  { key: 'gjeldsgrad', no: true },
+  { key: 'ask', no: true },
+  { key: 'mellomfinansiering', no: true },
 ];
 
 /** The terms visible for a region, in display order. */
