@@ -12,6 +12,7 @@ import { DEBT_TYPES } from '../../lib/debt';
 import PayslipImportModal from '../PayslipImportModal';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { ProgressBar } from '../ui/ProgressBar';
+import { MonthPicker } from '../ui/MonthPicker';
 import { parseLocaleNumber, isValidYearMonth } from '../../lib/validators';
 import { CATEGORIES, isCategoryKey } from '../../lib/categories';
 import {
@@ -472,7 +473,7 @@ function JobSalaryAdder() {
       </div>
       <div className="space-y-1.5">
         <label className={microLabel} style={{ color: 'var(--text-2)' }}>{o.fields.startMonth}</label>
-        <input value={start} onChange={e => setStart(e.target.value)} placeholder="2026-07" className={`${inputCls} font-mono`} style={inputStyle} />
+        <MonthPicker mode="month" value={start} onChange={setStart} placeholder="2026-07" />
       </div>
       <div className="space-y-1.5">
         <label className={microLabel} style={{ color: 'var(--text-2)' }}>{o.fields.grossAnnual}</label>
@@ -481,7 +482,7 @@ function JobSalaryAdder() {
       <Collapsible label={o.advancedSettings}>
         <div className="space-y-1.5">
           <label className={microLabel} style={{ color: 'var(--text-2)' }}>{t.salary.endDate}</label>
-          <input value={end} onChange={e => setEnd(e.target.value)} placeholder="2028-06" className={`${inputCls} font-mono`} style={inputStyle} />
+          <MonthPicker mode="month" value={end} onChange={setEnd} placeholder="2028-06" />
         </div>
         <div className="flex gap-2">
           <div className="flex-1 space-y-1.5">

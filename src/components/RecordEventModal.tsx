@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { ModalShell } from './ui/ModalShell';
+import { MonthPicker } from './ui/MonthPicker';
+import { normalizeMonthOrDay } from '../lib/dateInput';
 import {
   useFinance,
   type SalaryEntry, type SalaryChangeType,
@@ -138,22 +140,24 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
 
   const handleSave = () => {
     if (entity === 'salary') {
-      if (!isValidYearMonth(effectiveDate)) return setError(t.salaryPage.errInvalidDateMonth);
+      const eff = normalizeMonthOrDay(effectiveDate, 'month');
+      if (eff === null || !isValidYearMonth(eff)) return setError(t.salaryPage.errInvalidDateMonth);
       if (newGross == null || newGross < 0) return setError(t.salaryPage.errSalaryPositive);
       const payload = {
         jobId,
-        effectiveDate,
+        effectiveDate: eff,
         grossAnnual: newGross,
         changeType: editing ? salaryChangeType : (selType as SalaryChangeType),
         notes: notes.trim() || undefined,
       };
       if (sTarget) updateSalary(sTarget.id, payload); else addSalary(payload);
     } else if (entity === 'bonus') {
-      if (!isValidYearMonthDay(bonusDate)) return setError(t.salaryPage.errInvalidDateDay);
+      const bd = normalizeMonthOrDay(bonusDate, 'day');
+      if (bd === null || !isValidYearMonthDay(bd)) return setError(t.salaryPage.errInvalidDateDay);
       if (!isNonNegativeNumber(bonusAmount)) return setError(t.salaryPage.errAmountPositive);
       const payload = {
         jobId: jobId || undefined,
-        date: bonusDate,
+        date: bd,
         amount: parseLocaleNumber(bonusAmount),
         type: bonusType,
         includeInBudget: bonusInclude || undefined,
@@ -161,11 +165,12 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
       };
       if (bTarget) updateBonus(bTarget.id, payload); else addBonus(payload);
     } else if (entity === 'overtime') {
-      if (!isValidYearMonthDay(otDate)) return setError(t.salaryPage.errInvalidDateDay);
+      const od = normalizeMonthOrDay(otDate, 'day');
+      if (od === null || !isValidYearMonthDay(od)) return setError(t.salaryPage.errInvalidDateDay);
       if (!isNonNegativeNumber(otHours) || !isNonNegativeNumber(otAmount)) return setError(t.salaryPage.errHoursAmountPositive);
       const payload = {
         jobId: jobId || undefined,
-        date: otDate,
+        date: od,
         hours: parseLocaleNumber(otHours),
         amount: parseLocaleNumber(otAmount),
         includeInBudget: otInclude || undefined,
@@ -173,11 +178,12 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
       };
       if (oTarget) updateOvertime(oTarget.id, payload); else addOvertime(payload);
     } else {
-      if (!isValidYearMonth(hoursMonth)) return setError(t.salaryPage.errInvalidMonth);
+      const hm = normalizeMonthOrDay(hoursMonth, 'month');
+      if (hm === null || !isValidYearMonth(hm)) return setError(t.salaryPage.errInvalidMonth);
       if (!isNonNegativeNumber(hoursValue)) return setError(t.salaryPage.errHoursPositiveShort);
       const payload = {
         jobId: jobId || undefined,
-        periodMonth: hoursMonth,
+        periodMonth: hm,
         actualHoursPerWeek: parseLocaleNumber(hoursValue),
         notes: notes.trim() || undefined,
       };
@@ -276,8 +282,8 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
         {entity === 'salary' && (<>
           <div className="space-y-1.5">
             <label htmlFor="re-eff" className={labelClass}>{t.salary.effectiveDate}</label>
-            <input id="re-eff" ref={firstRef} type="text" value={effectiveDate} placeholder="2024-04"
-              onChange={(e) => setEffectiveDate(e.target.value)} onKeyDown={onKeyDown} className={inputMono} />
+            <MonthPicker id="re-eff" inputRef={firstRef} mode="month" value={effectiveDate} placeholder="2024-04"
+              onChange={setEffectiveDate} onKeyDown={onKeyDown} />
           </div>
           {jobs.length > 1 && jobField}
           <div className="space-y-1.5">
@@ -321,8 +327,8 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
         {entity === 'bonus' && (<>
           <div className="space-y-1.5">
             <label htmlFor="re-bd" className={labelClass}>{t.salary.bonusDate}</label>
-            <input id="re-bd" ref={firstRef} type="text" value={bonusDate} placeholder="2024-06-15"
-              onChange={(e) => setBonusDate(e.target.value)} onKeyDown={onKeyDown} className={inputMono} />
+            <MonthPicker id="re-bd" inputRef={firstRef} mode="day" value={bonusDate} placeholder="2024-06-15"
+              onChange={setBonusDate} onKeyDown={onKeyDown} />
           </div>
           {jobs.length > 1 && jobField}
           <div className="space-y-1.5">
@@ -342,8 +348,8 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
         {entity === 'overtime' && (<>
           <div className="space-y-1.5">
             <label htmlFor="re-od" className={labelClass}>{t.salary.overtimeDate}</label>
-            <input id="re-od" ref={firstRef} type="text" value={otDate} placeholder="2024-06-15"
-              onChange={(e) => setOtDate(e.target.value)} onKeyDown={onKeyDown} className={inputMono} />
+            <MonthPicker id="re-od" inputRef={firstRef} mode="day" value={otDate} placeholder="2024-06-15"
+              onChange={setOtDate} onKeyDown={onKeyDown} />
           </div>
           {jobs.length > 1 && jobField}
           <div className="flex gap-2">
@@ -363,8 +369,8 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
         {entity === 'hours' && (<>
           <div className="space-y-1.5">
             <label htmlFor="re-hm" className={labelClass}>{t.salary.periodMonth}</label>
-            <input id="re-hm" ref={firstRef} type="text" value={hoursMonth} placeholder="2024-06"
-              onChange={(e) => setHoursMonth(e.target.value)} onKeyDown={onKeyDown} className={inputMono} />
+            <MonthPicker id="re-hm" inputRef={firstRef} mode="month" value={hoursMonth} placeholder="2024-06"
+              onChange={setHoursMonth} onKeyDown={onKeyDown} />
           </div>
           {jobs.length > 1 && jobField}
           <div className="space-y-1.5">
