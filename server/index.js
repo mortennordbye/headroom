@@ -99,6 +99,14 @@ db.exec(`
   );
 `);
 
+// SSB replaced KPI table 03013 (2015=100) with 14700 (2025=100) in Feb 2026.
+// Cached cpi_index values from the old table are on a different base and would
+// corrupt cross-month ratios if mixed with the new series, so purge them once.
+// user_version tracks this migration (0 = pre-switch volumes).
+if (db.pragma('user_version', { simple: true }) < 1) {
+  db.exec('DELETE FROM inflation_cache; PRAGMA user_version = 1;');
+}
+
 // Optimistic-concurrency revision. Existing volumes predate the column, so add
 // it if missing (SQLite has no ADD COLUMN IF NOT EXISTS). Every write bumps rev;
 // a POST carrying a stale rev is rejected (409) instead of clobbering a newer
