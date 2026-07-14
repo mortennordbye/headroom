@@ -4,10 +4,10 @@ import { describe, it, expect } from 'vitest';
 import { parseCpiJsonStat2, buildV2Url, withYoy, monthsInRange } from '../../server/ssb.js';
 
 // Minimal json-stat2 shape shared by PxWebApi v1 and v2 for this query:
-// Konsumgrp and ContentsCode pinned to one value, Tid the only real dimension.
+// VareTjenesteGrp and ContentsCode pinned to one value, Tid the only real dimension.
 const jsonStat2 = (index: Record<string, number>, value: (number | null)[]) => ({
   dimension: {
-    Konsumgrp: { category: { index: { TOTAL: 0 } } },
+    VareTjenesteGrp: { category: { index: { '00': 0 } } },
     ContentsCode: { category: { index: { KpiIndMnd: 0 } } },
     Tid: { category: { index } },
   },
@@ -43,8 +43,8 @@ describe('buildV2Url', () => {
   it('pins all three dimensions and uses top() time selection, unencoded', () => {
     const url = buildV2Url(24);
     expect(url).toBe(
-      'https://data.ssb.no/api/pxwebapi/v2/tables/03013/data?lang=no&outputFormat=json-stat2'
-      + '&valueCodes[Konsumgrp]=TOTAL&valueCodes[ContentsCode]=KpiIndMnd&valueCodes[Tid]=top(24)',
+      'https://data.ssb.no/api/pxwebapi/v2/tables/14700/data?lang=no&outputFormat=json-stat2'
+      + '&valueCodes[VareTjenesteGrp]=00&valueCodes[ContentsCode]=KpiIndMnd&valueCodes[Tid]=top(24)',
     );
   });
 });
