@@ -1,5 +1,5 @@
 # Stage 1: build frontend
-FROM node:22-slim AS frontend-build
+FROM node:22-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS frontend-build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: production
-FROM node:22-alpine
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
 WORKDIR /app
 # su-exec lets the entrypoint drop from root to `node` after fixing volume perms.
 RUN apk add --no-cache su-exec
@@ -22,6 +22,11 @@ COPY server/index.js ./
 COPY server/auth.js ./
 COPY server/seed.js ./
 COPY server/ssb.js ./
+COPY server/boligPrices.js ./
+COPY server/norgesBank.js ./
+COPY server/postnummer.js ./
+# postnummer.js reads ./data/postnummer.tsv relative to its own dir (/app).
+COPY server/data ./data
 COPY server/bank.js ./
 COPY server/backup.js ./
 COPY server/docker-entrypoint.sh ./
