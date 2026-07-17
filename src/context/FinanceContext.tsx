@@ -12,6 +12,7 @@ import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculatio
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
+import type { SecondHomeScenario } from '../lib/secondHome';
 import { getDemoData } from '../lib/demoData';
 import { translations, type Language, type Translations } from '../i18n/translations';
 
@@ -698,6 +699,10 @@ interface FinanceDataContextType {
   addResidence: (entry: Omit<Residence, 'id'>) => string;
   updateResidence: (id: string, patch: Partial<Omit<Residence, 'id'>>) => void;
   removeResidence: (id: string) => void;
+  secondHomeScenarios: SecondHomeScenario[];
+  addSecondHomeScenario: (entry: Omit<SecondHomeScenario, 'id'>) => string;
+  updateSecondHomeScenario: (id: string, patch: Partial<Omit<SecondHomeScenario, 'id'>>) => void;
+  removeSecondHomeScenario: (id: string) => void;
   jobs: JobEntry[];
   addJob: (job: Omit<JobEntry, 'id'>) => string;
   updateJob: (id: string, patch: Partial<Omit<JobEntry, 'id'>>) => void;
@@ -868,6 +873,7 @@ export interface ExportPayload {
   homeowner?: HomeownerData;
   transition?: TransitionData;
   residences?: Residence[];
+  secondHomeScenarios?: SecondHomeScenario[];
   lang?: Language;
   currentMonth?: string;
   savingsTargetPercent?: number;
@@ -985,6 +991,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [homeowner, setHomeowner] = useState<HomeownerData>(DEFAULT_HOMEOWNER);
   const [transition, setTransition] = useState<TransitionData>(DEFAULT_TRANSITION);
   const [residences, setResidences] = useState<Residence[]>([]);
+  const [secondHomeScenarios, setSecondHomeScenarios] = useState<SecondHomeScenario[]>([]);
   const [growthReturnRate, setGrowthReturnRate] = useState<number>(DEFAULT_GROWTH_RATES.growthReturnRate);
   const [forecastAssumptions, setForecastAssumptions] = useState<ForecastAssumptions>(DEFAULT_FORECAST_ASSUMPTIONS);
   const [houseGrowthRate, setHouseGrowthRate] = useState<number>(DEFAULT_GROWTH_RATES.houseGrowthRate);
@@ -1078,7 +1085,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const buildPayload = useCallback((): ExportPayload => derivePayload(PAYLOAD_REGISTRY, {
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
-    housingMode, homeowner, transition, residences, lang,
+    housingMode, homeowner, transition, residences, secondHomeScenarios, lang,
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
@@ -1086,7 +1093,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
-    housingMode, homeowner, transition, residences, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
+    housingMode, homeowner, transition, residences, secondHomeScenarios, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
@@ -1114,7 +1121,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       deletedBankIds: setDeletedBankIds, accountLabels: setAccountLabels, categoryRules: setCategoryRules,
       labelRules: setLabelRules, transferRules: setTransferRules, categoryBudgets: setCategoryBudgets, debts: setDebts, assets: setAssets,
       loan: setLoan, pension: setPension, recurringTemplates: setRecurringTemplates,
-      housingMode: setHousingMode, homeowner: setHomeowner, transition: setTransition, residences: setResidences, lang: setLang,
+      housingMode: setHousingMode, homeowner: setHomeowner, transition: setTransition, residences: setResidences,
+      secondHomeScenarios: setSecondHomeScenarios, lang: setLang,
       savingsTargetPercent: setSavingsTargetPercent, growthReturnRate: setGrowthReturnRate,
       forecastAssumptions: setForecastAssumptions,
       houseGrowthRate: setHouseGrowthRate, cashGrowthRate: setCashGrowthRate, cryptoGrowthRate: setCryptoGrowthRate,
@@ -1978,6 +1986,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const hoursCrud = useMemo(() => makeCrud<HoursSnapshot>(setHoursSnapshots, 'hrs'), []);
   const goalsCrud = useMemo(() => makeCrud<Goal>(setGoals, 'goal'), []);
   const residencesCrud = useMemo(() => makeCrud<Residence>(setResidences, 'res'), []);
+  const secondHomeCrud = useMemo(() => makeCrud<SecondHomeScenario>(setSecondHomeScenarios, 'sh'), []);
 
   const addJob = jobsCrud.add;
   const updateJob = jobsCrud.update;
@@ -1994,6 +2003,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const addResidence = residencesCrud.add;
   const updateResidence = residencesCrud.update;
   const removeResidence = residencesCrud.remove;
+
+  const addSecondHomeScenario = secondHomeCrud.add;
+  const updateSecondHomeScenario = secondHomeCrud.update;
+  const removeSecondHomeScenario = secondHomeCrud.remove;
 
   const addBonus = bonusesCrud.add;
   const updateBonus = bonusesCrud.update;
@@ -2476,6 +2489,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     loan, updateLoan, pension, updatePension,
     housingMode, setHousingMode: changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,
+    secondHomeScenarios, addSecondHomeScenario, updateSecondHomeScenario, removeSecondHomeScenario,
     jobs, addJob, updateJob, removeJob,
     salaries, addSalary, updateSalary, removeSalary,
     bonuses, addBonus, updateBonus, removeBonus,
@@ -2503,6 +2517,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     loan, updateLoan, pension, updatePension, housingMode,
     changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,
+    secondHomeScenarios, addSecondHomeScenario, updateSecondHomeScenario, removeSecondHomeScenario,
     jobs, addJob, updateJob, removeJob, salaries, addSalary, updateSalary, removeSalary,
     bonuses, addBonus, updateBonus, removeBonus, overtime, addOvertime, updateOvertime,
     removeOvertime, hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,

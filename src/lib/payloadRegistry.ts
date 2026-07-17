@@ -178,13 +178,20 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     jobs: { group: 'preserve', demo: 'personal', read: whenArray('jobs') },
     salaries: { group: 'preserve', demo: 'personal', read: whenArray('salaries') },
     residences: { group: 'preserve', demo: 'personal', read: whenArray('residences') },
+    secondHomeScenarios: { group: 'preserve', demo: 'personal', read: whenArray('secondHomeScenarios') },
     bonuses: { group: 'preserve', demo: 'personal', read: whenArray('bonuses') },
     overtime: { group: 'preserve', demo: 'personal', read: whenArray('overtime') },
     hoursSnapshots: { group: 'preserve', demo: 'personal', read: whenArray('hoursSnapshots') },
     goals: { group: 'preserve', demo: 'personal', read: whenArray('goals') },
     region: { group: 'preserve', demo: 'preference', read: whenOneOf('region', ['no', 'generic']) },
     customTaxRatePct: { group: 'preserve', demo: 'preference', read: whenNumber('customTaxRatePct') },
-    hiddenNavItems: { group: 'preserve', demo: 'preference', read: whenArray('hiddenNavItems') },
+    // Migrate the pre-rename '/loan' path to '/bolig' so a hidden tab stays hidden.
+    hiddenNavItems: {
+      group: 'preserve', demo: 'preference',
+      read: (data) => (Array.isArray(data.hiddenNavItems)
+        ? (data.hiddenNavItems.map((p) => (p === '/loan' ? '/bolig' : p)))
+        : ABSENT),
+    },
   };
 }
 

@@ -30,7 +30,7 @@ import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
 const MONTH_SCOPED_ROUTES = ['/', '/budget'];
 // Balance pages: the same header picker drives the time machine (steps only
 // through recorded snapshot months, read-only) instead of `currentMonth`.
-const BALANCE_SCOPED_ROUTES = ['/assets', '/loan', '/pension'];
+const BALANCE_SCOPED_ROUTES = ['/assets', '/bolig', '/pension'];
 // Pages with no time dimension at all hide the time marker entirely.
 const HIDE_TIME_MARKER_ROUTES = ['/settings', '/year'];
 

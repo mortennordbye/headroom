@@ -50,7 +50,7 @@ chip and a reset-to-auto control; overrides are page-local (reset on reload, lik
 EmployerCost), and history (read-only) views fall back to the month's stored `loan` snapshot.
 The current home's value/mortgage are now hard-mirrored across `assets` ↔ `homeowner` ↔
 `transition` in `updateAsset`/`updateHomeowner`/`updateTransition` (previously only
-assets↔homeowner, only in homeowner mode). Code: `src/pages/LoanPage.tsx`,
+assets↔homeowner, only in homeowner mode). Code: `src/pages/BoligPage.tsx`,
 `src/context/FinanceContext.tsx`. Remaining:
 
 - **`skattefradragssats` (interest tax-deduction %) is still duplicated** — an editable copy
@@ -58,7 +58,7 @@ assets↔homeowner, only in homeowner mode). Code: `src/pages/LoanPage.tsx`,
   per-loan choice. Promote to one shared source (a Settings value or a `TAX_PARAMS` constant)
   so the two can't diverge. Deferred because it's a persisted-shape change (touches
   `LoanData`/`HomeownerData`, defaults, sanitize, export/import, demo). **Where**:
-  `src/context/FinanceContext.tsx` (`DEFAULT_LOAN`/`DEFAULT_HOMEOWNER`), `src/pages/LoanPage.tsx`.
+  `src/context/FinanceContext.tsx` (`DEFAULT_LOAN`/`DEFAULT_HOMEOWNER`), `src/pages/BoligPage.tsx`.
 - **Loan-input overrides don't persist across reloads** — matches EmployerCost, and is fine
   for a what-if calculator, but if we later want a "sticky" manual salary/debt on the Loan
   page it needs a persisted `number | null` override model (or a `touched` set) rather than
@@ -361,7 +361,7 @@ apartment purchase (address, type, `purchasePrice`, `purchaseCosts`, borettslag
 `jointDebtShare`, move-in), and a **residence history** timeline of homes lived in
 (`Residence[]`, move-in/out + sale price/gain). New persisted `residences` array (registered
 like `salaries` in `src/lib/payloadRegistry.ts`), enriched `HomeownerData`, pure logic in
-`src/lib/property.ts` (+ tests), UI in `src/pages/LoanPage.tsx` and the new
+`src/lib/property.ts` (+ tests), UI in `src/pages/BoligPage.tsx` and the new
 `src/components/ResidenceHistory.tsx`. Remaining, deliberately deferred:
 
 - **Exact bank amortization import.** The app's amortization is annual-granularity and
@@ -369,7 +369,7 @@ like `salaries` in `src/lib/payloadRegistry.ts`), enriched `HomeownerData`, pure
   "Nedbetalingsplan" (per-row Avdrag/Renter/Omkostninger, effektiv rente, sub-year term like
   "29 år 3 måneder"). **What would unblock**: a decision on whether to store a bank schedule
   verbatim vs keep deriving it. **Where**: `src/lib/calculations.ts`
-  (`calcAmortizationSchedule`), `src/pages/LoanPage.tsx` (AmortizationAccordion).
+  (`calcAmortizationSchedule`), `src/pages/BoligPage.tsx` (AmortizationAccordion).
 - **Serial (serie) loan type.** The engine only models annuity loans. **Where**:
   `src/lib/calculations.ts`.
 - **Loan rate-change history.** `HomeownerData.notifiedRate`/`notifiedRateFrom` are
@@ -392,5 +392,43 @@ like `salaries` in `src/lib/payloadRegistry.ts`), enriched `HomeownerData`, pure
   buying doesn't create the new residence — the user re-enters it manually in Boligeier. A
   one-click action in the transition summary could write both from the calculator values.
   Deferred (chosen over automation) in favour of a clean manual log; revisit if the manual step
-  proves annoying. **Where**: transitioning block in `src/pages/LoanPage.tsx`, `residences` CRUD
+  proves annoying. **Where**: transitioning block in `src/pages/BoligPage.tsx`, `residences` CRUD
   in `src/context/FinanceContext.tsx`.
+
+## Sekundærbolig (second-home) tool — deferred items
+
+Shipped (2026-07): the `/loan` page became a **Bolig hub** (`/bolig`, old path redirects) with
+a tab strip between the existing mortgage tools ("Boliglån") and a new **Sekundærbolig**
+planner. The planner models buy-to-rent and renovate-and-refinance (BRRR) with the Norwegian
+tax picture (rental-income tax 22% of net, interest deduction, formuesskatt at 100% valuation,
+capital-gains 22% on a modelled sale). Named scenarios persist in the blob
+(`secondHomeScenarios`, backup/restore/export). Scenarios can be flagged `committed` to stack
+into a **portfolio** summary (cumulative debt vs 5×-income headroom, combined cashflow, equity
+tied up) so buying home 2 → 3 → 4 scales, plus a cross-scenario **comparison table**. Pure
+engine `src/lib/secondHome.ts` (+ tests: `calcPortfolio`/`summarizeScenario`); UI in
+`src/pages/bolig/SecondHomePanel.tsx`; hub in `src/pages/BoligPage.tsx`.
+
+Remaining / intentionally out of v1:
+
+- **`MIN_EQUITY_SHARE = 0.15` in `src/lib/calculations.ts` is stale** (the utlånsforskrift floor
+  is now 10% / 90% LTV since Jan 2025). Left unchanged because it powers the existing
+  first-buyer `calcBorrowingCapacity` and changing it would silently alter that tool's output.
+  The second-home planner sidesteps it with its own adjustable `equityShare` (default 0.25 =
+  bank practice). **What would unblock**: a deliberate review of the first-buyer tool's numbers
+  against the current regulation. **Where**: `src/lib/calculations.ts` (`MIN_EQUITY_SHARE`),
+  `src/pages/BoligPage.tsx` first-buyer block.
+- **Tax model is a deliberate simplification** (disclosed in-UI). Not modelled: short-term /
+  Airbnb rental (taxed on 85% of income over 10k, different regime); the owner-occupied
+  tax-free rental rule (renting <50% of your primary home); full-household formuesskatt
+  (bunnfradrag, spouse split, the automated 25%/100% ligningsverdi); capital-gains *benefit*
+  on a modelled loss; botid exemption on a secondary that was once a primary. **Where**:
+  `src/lib/secondHome.ts` (`calcRentalIncomeTax`, `calcWealthTaxImpact`, `calcPropertyCapitalGains`).
+- **BRRR ARV is a manual input** with a sensible default (= purchase price). The plan noted an
+  "estimate ARV from SSB kr/m²" affordance (reusing `estimatedPropertyValue` + the
+  `PropertyValueEstimate` pattern) — not wired in v1 because the scenario carries no
+  postcode/size. **What would unblock**: add postcode + m² to the scenario (or link a
+  `Residence`), then call `loadKvmpris`. **Where**: `src/pages/bolig/SecondHomePanel.tsx`,
+  `src/lib/propertyEstimate.ts`.
+- **Scenarios aren't snapshotted into the time machine.** They're forward-looking and render
+  always-live, independent of `useBalanceHistory` (unlike the mortgage tools). Fine by design;
+  noted in case historical scenario tracking is ever wanted.

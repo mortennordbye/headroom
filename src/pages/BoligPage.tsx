@@ -55,6 +55,7 @@ import { loanTimeline, currentResidence, residenceMetrics } from '../lib/propert
 import { PropertyCard, ResidenceTimeline } from '../components/ResidenceHistory';
 import { PropertyValueEstimate } from '../components/PropertyValueEstimate';
 import { StatCard } from '../components/ui/StatCard';
+import SecondHomePanel from './bolig/SecondHomePanel';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 
@@ -70,7 +71,7 @@ const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[v
 const LtvChart = lazy(() => import('../components/charts/LtvChart'));
 const PaydownVsPlanChart = lazy(() => import('../components/charts/PaydownVsPlanChart'));
 
-const LoanPage: React.FC = () => {
+const BoligPage: React.FC = () => {
   const {
     t, lang, loan: liveLoan, updateLoan,
     housingMode: liveHousingMode, setHousingMode,
@@ -82,6 +83,9 @@ const LoanPage: React.FC = () => {
     formatCurrency,
     policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
   } = useFinance();
+  // Hub tab: the mortgage tools ('boliglaan') vs. the second-home planner
+  // ('sekundaerbolig'). View state only — not persisted.
+  const [hubTab, setHubTab] = useState<'boliglaan' | 'sekundaerbolig'>('boliglaan');
   const [refreshingPolicyRate, setRefreshingPolicyRate] = useState(false);
   const handleRefreshPolicyRate = async () => {
     setRefreshingPolicyRate(true);
@@ -317,12 +321,51 @@ const LoanPage: React.FC = () => {
       ? t.loanPage.homeownerSubtitle
       : t.loanPage.transitioningSubtitle;
 
+  const hubTabs = [
+    { id: 'boliglaan' as const, label: t.boligPage.hubMortgage, icon: <Building2 size={14} strokeWidth={1.75} /> },
+    { id: 'sekundaerbolig' as const, label: t.boligPage.hubSecondHome, icon: <Key size={14} strokeWidth={1.75} /> },
+  ];
+
   return (
     <>
-    <div
-      className={`space-y-6 md:space-y-7 pb-8 ${hist.isLive ? '' : 'pointer-events-none select-none'}`}
-      style={{ opacity: hist.isLive ? 1 : 0.92 }}
-    >
+    <div className="space-y-6 md:space-y-7 pb-8">
+
+      {/* Bolig hub — switch between the mortgage tools and the second-home planner */}
+      <div
+        className="inline-flex p-1 rounded-[8px] border flex-wrap gap-1"
+        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
+        role="tablist"
+        aria-label={t.boligPage.hubLabel}
+      >
+        {hubTabs.map(({ id, label, icon }) => {
+          const active = hubTab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => setHubTab(id)}
+              role="tab"
+              aria-selected={active}
+              className="flex items-center gap-2 px-4 h-8 rounded-[6px] text-[12px] font-medium transition-colors"
+              style={{
+                background: active ? 'var(--text-1)' : 'transparent',
+                color: active ? 'var(--bg-page)' : 'var(--text-2)',
+                fontWeight: active ? 600 : 500,
+              }}
+            >
+              {icon}
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {hubTab === 'sekundaerbolig' ? (
+        <SecondHomePanel />
+      ) : (
+      <div
+        className={`space-y-6 md:space-y-7 ${hist.isLive ? '' : 'pointer-events-none select-none'}`}
+        style={{ opacity: hist.isLive ? 1 : 0.92 }}
+      >
 
       {/* Hero header */}
       <header data-tour="loan-hero" className="max-w-4xl">
@@ -844,6 +887,8 @@ const LoanPage: React.FC = () => {
       )}
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
+      </div>
+      )}
     </div>
     </>
   );
@@ -1095,4 +1140,4 @@ function SummaryTile({ label, value, accent }: SummaryTileProps) {
   );
 }
 
-export default LoanPage;
+export default BoligPage;

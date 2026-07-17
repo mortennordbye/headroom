@@ -222,7 +222,7 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
   { id: 'dashboard', group: 'learn', kind: 'learn', route: '/', target: 'dashboard-hero', fields: [] },
   { id: 'salary', group: 'learn', kind: 'learn', route: '/salary', target: 'salary-overview', fields: [] },
   { id: 'forecast', group: 'learn', kind: 'learn', route: '/forecast', target: 'forecast-hero', fields: [] },
-  { id: 'loan', group: 'learn', kind: 'learn', route: '/loan', target: 'loan-hero', fields: [] },
+  { id: 'loan', group: 'learn', kind: 'learn', route: '/bolig', target: 'loan-hero', fields: [] },
   { id: 'settings', group: 'learn', kind: 'learn', route: '/settings', target: 'settings-all', fields: [] },
 ];
 
