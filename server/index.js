@@ -5,6 +5,9 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
+const { fetchKvmpris, dwellingToBoligtype } = require('./boligPrices');
+const { lookupPostnr } = require('./postnummer');
+const { fetchPolicyRate } = require('./norgesBank');
 const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
@@ -95,6 +98,20 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS inflation_cache (
     month TEXT PRIMARY KEY,
     cpi_index REAL NOT NULL,
+    fetched_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS kvmpris_cache (
+    region TEXT NOT NULL,
+    boligtype TEXT NOT NULL,
+    quarter TEXT NOT NULL,
+    price REAL,
+    sales REAL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (region, boligtype, quarter)
+  );
+  CREATE TABLE IF NOT EXISTS policy_rate_cache (
+    period TEXT PRIMARY KEY,
+    rate REAL NOT NULL,
     fetched_at TEXT NOT NULL
   );
 `);
@@ -256,6 +273,23 @@ const inflationLatest = db.prepare(
   'SELECT MAX(fetched_at) AS latest FROM inflation_cache'
 );
 
+const kvmprisGet = db.prepare(
+  'SELECT quarter, price, sales, fetched_at AS fetchedAt FROM kvmpris_cache WHERE region = ? AND boligtype = ? ORDER BY quarter ASC'
+);
+const kvmprisUpsert = db.prepare(
+  'INSERT OR REPLACE INTO kvmpris_cache (region, boligtype, quarter, price, sales, fetched_at) VALUES (?, ?, ?, ?, ?, ?)'
+);
+
+const policyRateGetAll = db.prepare(
+  'SELECT period, rate, fetched_at AS fetchedAt FROM policy_rate_cache ORDER BY period ASC'
+);
+const policyRateUpsert = db.prepare(
+  'INSERT OR REPLACE INTO policy_rate_cache (period, rate, fetched_at) VALUES (?, ?, ?)'
+);
+const policyRateLatest = db.prepare(
+  'SELECT MAX(fetched_at) AS latest FROM policy_rate_cache'
+);
+
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 30 * ONE_DAY_MS;
 // Upstream-attempt throttle: at most one SSB call per hour, regardless of
@@ -266,6 +300,14 @@ const CACHE_TTL_MS = 30 * ONE_DAY_MS;
 // granting one fresh attempt is harmless.
 const SSB_ATTEMPT_COOLDOWN_MS = 60 * 60 * 1000;
 let lastSsbAttemptAt = 0;
+// Per-query throttle for the kvmpris endpoint, keyed by `region:boligtype`.
+// A single shared timestamp (like inflation's) would let the first fetch block
+// every *other* kommune/type combo for an hour — but each combo is a distinct
+// SSB query. Keyed instead: each combo may attempt once per hour, and a broken
+// or empty one can't hammer SSB. Bounded by kommuner×boligtypes (~1.8k keys).
+const kvmprisAttemptAt = new Map();
+// Independent throttle for the Norges Bank policy-rate endpoint.
+let lastPolicyRateAttemptAt = 0;
 
 function monthCount(fromMonth, toMonth) {
   const [fy, fm] = fromMonth.split('-').map(Number);
@@ -514,6 +556,107 @@ app.get('/api/inflation', async (req, res) => {
     .filter(p => p.month >= from);
 
   res.json({ points, stale, count: points.length });
+});
+
+// Average square-metre price + number of sales for the kommune a postnummer
+// belongs to, for one dwelling type (SSB table 14310). Backs the Loan page
+// "estimated value" card. Same cache/cooldown/serve-stale shape as inflation.
+app.get('/api/kvmpris', async (req, res) => {
+  const postnr = String(req.query.postnr || '').match(/^\d{4}$/) ? req.query.postnr : null;
+  if (!postnr) {
+    return res.status(400).json({ error: 'postnr must be 4 digits' });
+  }
+  const entry = lookupPostnr(postnr);
+  if (!entry) {
+    return res.status(404).json({ error: 'unknown postnummer' });
+  }
+  const region = entry.kommunenr;
+  const boligtype = dwellingToBoligtype(String(req.query.type || ''));
+
+  const cached = kvmprisGet.all(region, boligtype);
+  const latestAt = cached.reduce((max, r) => Math.max(max, Date.parse(r.fetchedAt) || 0), 0);
+  const ageMs = Date.now() - latestAt;
+  const needsRefresh = cached.length === 0 || ageMs > CACHE_TTL_MS;
+  const force = req.query.force === '1';
+  const attemptKey = `${region}:${boligtype}`;
+  const lastAttempt = kvmprisAttemptAt.get(attemptKey) || 0;
+
+  let stale = false;
+  if (needsRefresh && (force || Date.now() - lastAttempt > SSB_ATTEMPT_COOLDOWN_MS)) {
+    kvmprisAttemptAt.set(attemptKey, Date.now());
+    try {
+      const points = await fetchKvmpris(region, boligtype);
+      const now = new Date().toISOString();
+      const tx = db.transaction((pts) => {
+        for (const p of pts) kvmprisUpsert.run(region, boligtype, p.quarter, p.price, p.sales, now);
+      });
+      tx(points);
+    } catch (err) {
+      console.warn(`[kvmpris] SSB fetch failed, serving cache (next attempt in ${Math.round(SSB_ATTEMPT_COOLDOWN_MS / 60000)} min):`, err.message);
+      stale = true;
+    }
+  } else if (needsRefresh) {
+    stale = true;
+  }
+
+  const rows = kvmprisGet.all(region, boligtype);
+  const points = rows.map((r) => ({ quarter: r.quarter, price: r.price, sales: r.sales }));
+  const withPrice = points.filter((p) => typeof p.price === 'number');
+  const latest = withPrice.length ? withPrice[withPrice.length - 1] : null;
+
+  res.json({
+    region,
+    poststed: entry.poststed,
+    boligtype,
+    points,
+    latestPrice: latest ? latest.price : null,
+    latestSales: latest ? latest.sales : null,
+    latestQuarter: latest ? latest.quarter : null,
+    stale,
+    count: points.length,
+  });
+});
+
+// Norges Bank key policy rate (styringsrente). Backs the Loan page compare-rate
+// card. Same cache/cooldown/serve-stale shape as inflation, but a single global
+// series so one shared attempt timer is correct here.
+app.get('/api/policyrate', async (req, res) => {
+  const cached = policyRateGetAll.all();
+  const latestRow = policyRateLatest.get();
+  const latestAt = latestRow?.latest ? Date.parse(latestRow.latest) : 0;
+  const ageMs = Date.now() - latestAt;
+  const needsRefresh = cached.length === 0 || ageMs > CACHE_TTL_MS;
+  const force = req.query.force === '1';
+
+  let stale = false;
+  if (needsRefresh && (force || Date.now() - lastPolicyRateAttemptAt > SSB_ATTEMPT_COOLDOWN_MS)) {
+    lastPolicyRateAttemptAt = Date.now();
+    try {
+      const points = await fetchPolicyRate();
+      const now = new Date().toISOString();
+      const tx = db.transaction((pts) => {
+        for (const p of pts) policyRateUpsert.run(p.period, p.rate, now);
+      });
+      tx(points);
+    } catch (err) {
+      console.warn(`[policyrate] Norges Bank fetch failed, serving cache (next attempt in ${Math.round(SSB_ATTEMPT_COOLDOWN_MS / 60000)} min):`, err.message);
+      stale = true;
+    }
+  } else if (needsRefresh) {
+    stale = true;
+  }
+
+  const rows = policyRateGetAll.all();
+  const points = rows.map((r) => ({ period: r.period, rate: r.rate }));
+  const current = points.length ? points[points.length - 1] : null;
+
+  res.json({
+    points,
+    current: current ? current.rate : null,
+    asOf: current ? current.period : null,
+    stale,
+    count: points.length,
+  });
 });
 
 // ── SSB wage statistics ──────────────────────────────────────────

@@ -95,6 +95,7 @@ function useResidenceEditor() {
       { key: 'propertyType', label: lp.propertyType, type: 'select', value: existing?.propertyType ?? 'selveier', options: typeOptions },
       { key: 'rooms', label: lp.propertyRooms, type: 'number', value: existing?.rooms?.toString() ?? '', placeholder: '3' },
       { key: 'sizeSqm', label: lp.propertySizeSqm, type: 'number', value: existing?.sizeSqm?.toString() ?? '', placeholder: '68' },
+      { key: 'postalCode', label: lp.propertyPostalCode, type: 'text', value: existing?.postalCode ?? '', placeholder: '0575', hint: lp.propertyPostalCodeHint },
       { key: 'purchasePrice', label: lp.propertyPurchasePrice, type: 'number', value: existing?.purchasePrice?.toString() ?? '', placeholder: '3800000', hint: lp.propertyPurchasePriceHint },
       { key: 'purchaseCosts', label: lp.propertyPurchaseCosts, type: 'number', value: existing?.purchaseCosts?.toString() ?? '', placeholder: '0', hint: lp.propertyPurchaseCostsHint },
       {
@@ -128,6 +129,7 @@ function useResidenceEditor() {
           dwellingType: vals.dwellingType as DwellingType,
           rooms: num(vals.rooms),
           sizeSqm: num(vals.sizeSqm),
+          postalCode: vals.postalCode.trim() || undefined,
           purchasePrice: num(vals.purchasePrice),
           purchaseCosts: num(vals.purchaseCosts),
           jointDebtShare: num(vals.jointDebtShare),

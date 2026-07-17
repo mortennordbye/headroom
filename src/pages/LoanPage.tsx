@@ -53,6 +53,7 @@ import { parseLocaleNumber } from '../lib/validators';
 import { extraPaymentSavings, formatMonths } from '../lib/debt';
 import { loanTimeline, currentResidence, residenceMetrics } from '../lib/property';
 import { PropertyCard, ResidenceTimeline } from '../components/ResidenceHistory';
+import { PropertyValueEstimate } from '../components/PropertyValueEstimate';
 import { StatCard } from '../components/ui/StatCard';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
@@ -79,7 +80,13 @@ const LoanPage: React.FC = () => {
     residences,
     grossAnnualIncome, totalDebt,
     formatCurrency,
+    policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
   } = useFinance();
+  const [refreshingPolicyRate, setRefreshingPolicyRate] = useState(false);
+  const handleRefreshPolicyRate = async () => {
+    setRefreshingPolicyRate(true);
+    try { await refreshPolicyRate(); } finally { setRefreshingPolicyRate(false); }
+  };
   const lp = t.loanPage;
 
   // Time machine: when viewing a past month, render that month's snapshot (read-only).
@@ -593,6 +600,9 @@ const LoanPage: React.FC = () => {
 
             {/* Bolig & kjøp */}
             <PropertyCard currentValue={assets.houseValue} readOnly={!hist.isLive} />
+
+            {/* Estimert markedsverdi (SSB kvadratmeterpris) */}
+            <PropertyValueEstimate residence={currentResidence(residences)} currentValue={assets.houseValue} />
           </div>
 
           {/* Bohistorikk — full bredde */}
@@ -629,6 +639,13 @@ const LoanPage: React.FC = () => {
               </p>
               <div className="space-y-1">
                 <LoanRow label={lp.yourRate} value={fmtPct(homeowner.rente)} />
+                {policyRate != null && (
+                  <>
+                    <LoanRow label={lp.policyRateLabel} value={fmtPct(policyRate)} />
+                    <LoanRow label={lp.rateSpreadLabel}
+                      value={`${homeowner.rente - policyRate >= 0 ? '+' : ''}${fmtPct(homeowner.rente - policyRate)}`} />
+                  </>
+                )}
                 <LoanRow label={lp.remainingDebt} value={fmtNum(homeowner.currentMortgageBalance)} />
                 <LoanRow label={lp.ltv}
                   value={assets.houseValue > 0
@@ -636,6 +653,22 @@ const LoanPage: React.FC = () => {
                     : '–'}
                   highlight />
               </div>
+              {policyRateStale && (
+                <p className="text-[11px] flex items-center gap-2" style={{ color: 'var(--warning)' }}>
+                  <span>{lp.policyRateOffline}</span>
+                  <button
+                    type="button"
+                    onClick={handleRefreshPolicyRate}
+                    disabled={refreshingPolicyRate}
+                    className="underline underline-offset-2 hover:opacity-80 transition-opacity disabled:opacity-60 disabled:no-underline"
+                  >
+                    {refreshingPolicyRate ? lp.policyRateRefreshing : lp.policyRateRefresh}
+                  </button>
+                </p>
+              )}
+              {policyRate != null && policyRateAsOf && (
+                <p className="text-[11px] text-[var(--text-3)]">{lp.policyRateSource} {policyRateAsOf}</p>
+              )}
               <a
                 href="https://www.forbrukerradet.no/finansportalen/bank/lan/boliglan"
                 target="_blank"
