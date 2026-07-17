@@ -277,6 +277,7 @@ export interface Residence {
   dwellingType?: DwellingType;  // boligtype (leilighet/enebolig/…)
   rooms?: number;               // antall rom
   sizeSqm?: number;             // størrelse i m² (BRA/primærrom)
+  postalCode?: string;          // postnummer — resolves to a kommune for the SSB value estimate
   purchasePrice?: number;       // kjøpesum
   purchaseCosts?: number;       // omkostninger (dokumentavgift/tinglysing)
   jointDebtShare?: number;      // fellesgjeld ved kjøp (borettslag)
@@ -393,6 +394,23 @@ export interface InflationPoint {
   month: string;                  // 'YYYY-MM'
   cpiIndex: number;
   yoyPercent: number;
+}
+
+/** One quarter of SSB table 14310 (avg m² price + number of sales) for a kommune. */
+export interface KvmprisPoint {
+  quarter: string;                // 'YYYYKn' e.g. '2026K2'
+  price: number | null;           // avg NOK per m² (null when SSB has no cell)
+  sales: number | null;           // number of sales that quarter
+}
+
+/** Result of an SSB square-metre-price lookup for one residence. */
+export interface KvmprisData {
+  poststed: string;               // place name for the postnummer (display)
+  points: KvmprisPoint[];         // quarterly trend, ascending
+  latestPrice: number | null;     // most recent non-null price/m²
+  latestSales: number | null;
+  latestQuarter: string | null;
+  stale: boolean;
 }
 
 export type GoalSource = 'manual' | 'bsu' | 'savings' | 'savingsAccount' | 'totalEquity' | 'portfolio' | 'bufferAccount';
@@ -717,6 +735,19 @@ interface FinanceDataContextType {
   inflationStale: boolean;
   /** Force a fresh SSB inflation fetch, bypassing the server's attempt cooldown. */
   refreshInflation: () => Promise<void>;
+  /** SSB square-metre-price lookup for the current residence, or null. */
+  kvmpris: KvmprisData | null;
+  kvmprisStale: boolean;
+  /** Load the SSB m² price for a postnummer + dwelling type (deduped by key). */
+  loadKvmpris: (postnr?: string, type?: string, force?: boolean) => Promise<void>;
+  /** Force a fresh SSB m² fetch for the last-loaded residence. */
+  refreshKvmpris: () => Promise<void>;
+  /** Norges Bank key policy rate (styringsrente), percent, or null. */
+  policyRate: number | null;
+  policyRateAsOf: string | null;
+  policyRateStale: boolean;
+  /** Force a fresh Norges Bank policy-rate fetch. */
+  refreshPolicyRate: () => Promise<void>;
   wageStats: WageStatPoint[];
   wageStatsStale: boolean;
   importAll: (data: Partial<ExportPayload>) => void;
@@ -967,6 +998,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [inflation, setInflation] = useState<InflationPoint[]>([]);
   const [inflationStale, setInflationStale] = useState<boolean>(false);
+  const [kvmpris, setKvmpris] = useState<KvmprisData | null>(null);
+  const [kvmprisStale, setKvmprisStale] = useState<boolean>(false);
+  const lastKvmprisKey = useRef<string | null>(null);
+  const [policyRate, setPolicyRate] = useState<number | null>(null);
+  const [policyRateAsOf, setPolicyRateAsOf] = useState<string | null>(null);
+  const [policyRateStale, setPolicyRateStale] = useState<boolean>(false);
   const [wageStats, setWageStats] = useState<WageStatPoint[]>([]);
   const [wageStatsStale, setWageStatsStale] = useState<boolean>(false);
   const [region, setRegion] = useState<Region>('no');
@@ -1228,6 +1265,67 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // A manual refresh forces past the server's per-hour SSB attempt cooldown.
   const refreshInflation = useCallback(() => loadInflation(true), [loadInflation]);
 
+  // SSB square-metre price for a residence's kommune (via its postnummer) and
+  // dwelling type. Unlike inflation this is per-residence, so the loader takes
+  // the postnummer + type and dedups on that key to avoid refetching on every
+  // render. `force` bypasses the dedup and the server's per-query cooldown.
+  const loadKvmpris = useCallback(async (postnr?: string, type?: string, force = false) => {
+    const clean = (postnr || '').replace(/\D/g, '');
+    if (clean.length !== 4) {
+      setKvmpris(null);
+      setKvmprisStale(false);
+      lastKvmprisKey.current = null;
+      return;
+    }
+    const key = `${clean}:${type || ''}`;
+    if (!force && key === lastKvmprisKey.current) return;
+    lastKvmprisKey.current = key;
+    try {
+      const r = await fetch(`/api/kvmpris?postnr=${clean}&type=${encodeURIComponent(type || '')}${force ? '&force=1' : ''}`);
+      if (!r.ok) {
+        // Unknown postnummer or a server error — no estimate to show.
+        setKvmpris(null);
+        setKvmprisStale(false);
+        return;
+      }
+      const data = await r.json();
+      setKvmpris({
+        poststed: data.poststed ?? '',
+        points: Array.isArray(data.points) ? data.points : [],
+        latestPrice: typeof data.latestPrice === 'number' ? data.latestPrice : null,
+        latestSales: typeof data.latestSales === 'number' ? data.latestSales : null,
+        latestQuarter: data.latestQuarter ?? null,
+        stale: Boolean(data.stale),
+      });
+      setKvmprisStale(Boolean(data.stale));
+    } catch {
+      setKvmprisStale(true);
+    }
+  }, []);
+
+  const refreshKvmpris = useCallback(() => {
+    const key = lastKvmprisKey.current;
+    if (!key) return Promise.resolve();
+    const [postnr, type] = key.split(':');
+    return loadKvmpris(postnr, type, true);
+  }, [loadKvmpris]);
+
+  // Norges Bank key policy rate (styringsrente) — a single global series.
+  const loadPolicyRate = useCallback(async (force = false) => {
+    try {
+      const r = await fetch(`/api/policyrate${force ? '?force=1' : ''}`);
+      if (!r.ok) { setPolicyRateStale(true); return; }
+      const data = await r.json();
+      setPolicyRate(typeof data.current === 'number' ? data.current : null);
+      setPolicyRateAsOf(data.asOf ?? null);
+      setPolicyRateStale(Boolean(data.stale));
+    } catch {
+      setPolicyRateStale(true);
+    }
+  }, []);
+
+  const refreshPolicyRate = useCallback(() => loadPolicyRate(true), [loadPolicyRate]);
+
   useEffect(() => {
     if (region !== 'no') {
       // Intentional reset of fetched data when leaving Norway region.
@@ -1238,6 +1336,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
     void loadInflation(false);
   }, [region, loadInflation]);
+
+  useEffect(() => {
+    if (region !== 'no') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPolicyRate(null);
+      setPolicyRateAsOf(null);
+      setPolicyRateStale(false);
+      return;
+    }
+    void loadPolicyRate(false);
+  }, [region, loadPolicyRate]);
 
   // Auto-save plumbing. The save is debounced (a slider drag or paging the month
   // picker would otherwise fire dozens of full-state POSTs), in-flight requests
@@ -2376,6 +2485,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     pendingCatchups, confirmCatchup, declineCatchup,
     employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
     inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
+    kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris,
+    policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
     importAll, buildPayload, resetAll,
     restoreAssetTaxDefaults, restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   }), [
@@ -2399,6 +2510,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     pendingCatchups, confirmCatchup, declineCatchup,
     employerCostConfig, updateEmployerCostConfig,
     billingConfig, updateBillingConfig, inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
+    kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris,
+    policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
     importAll, buildPayload, resetAll, restoreAssetTaxDefaults,
     restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   ]);

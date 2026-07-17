@@ -195,7 +195,7 @@ export function getDemoData(): Partial<ExportPayload> {
     residences: [
       {
         id: 'demo-res-1', address: 'Storgata 12, Oslo', propertyType: 'borettslag',
-        dwellingType: 'leilighet', rooms: 3, sizeSqm: 68,
+        dwellingType: 'leilighet', rooms: 3, sizeSqm: 68, postalCode: '0575',
         purchasePrice: 3800000, purchaseCosts: 12000, jointDebtShare: 350000,
         moveInDate: monthsAgo(48), moveOutDate: null, notes: '2-roms',
       },
