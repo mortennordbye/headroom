@@ -65,6 +65,7 @@ export function summarizeExport(p: Partial<ExportPayload>): SummarySection[] {
         { key: 'netWorthMonths', kind: 'count', count: keys(p.netWorthHistory) },
         { key: 'balanceSnapshots', kind: 'count', count: keys(p.balanceSnapshots) },
         { key: 'goals', kind: 'count', count: len(p.goals) },
+        { key: 'secondHomeScenarios', kind: 'count', count: len(p.secondHomeScenarios) },
       ],
     },
     {

@@ -75,6 +75,16 @@ const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
   fixedExpenses: { amount: 0 },
   dailyTransactions: { amount: 0 },
   debts: { balance: 0, rate: 0, minPayment: 0 },
+  // Second-home scenarios are flat by design so every numeric input is coerced
+  // here (non-numeric keys — id/name/strategy — pass through untouched).
+  secondHomeScenarios: {
+    purchasePrice: 0, dokumentavgiftPct: 0, tinglysingsgebyr: 0, otherPurchaseCosts: 0,
+    equityShare: 0, mortgageRatePct: 0, termYears: 0,
+    monthlyRent: 0, vacancyPct: 0, monthlyOperatingCosts: 0, deductibleCostsAnnual: 0,
+    renovationCost: 0, afterRepairValue: 0, refinanceLtvPct: 0,
+    holdYears: 0, annualAppreciationPct: 0, saleAgentFeePct: 0, documentedImprovements: 0,
+    marginalWealthTaxPct: 0,
+  },
 };
 
 // Schemas (default objects) for the nested numeric objects, keyed by their

@@ -235,5 +235,26 @@ export function getDemoData(): Partial<ExportPayload> {
       { id: 'demo-goal-2', name: 'Oppussing', target: 150000, source: 'manual', manualCurrent: 40000 },
       { id: 'demo-goal-3', name: 'Sommerferie', target: 50000, source: 'savingsAccount', savingsAccountId: 'demo-sav-2' },
     ],
+
+    secondHomeScenarios: [
+      {
+        id: 'demo-sh-1', name: 'Utleieleilighet', strategy: 'rent',
+        purchasePrice: 3800000, dokumentavgiftPct: 2.5, tinglysingsgebyr: 585, otherPurchaseCosts: 0,
+        equityShare: 0.25, mortgageRatePct: 5.5, termYears: 25,
+        monthlyRent: 14500, vacancyPct: 5, monthlyOperatingCosts: 2800, deductibleCostsAnnual: 33600,
+        renovationCost: 0, afterRepairValue: 3800000, refinanceLtvPct: 75,
+        holdYears: 10, annualAppreciationPct: 3, saleAgentFeePct: 3, documentedImprovements: 0,
+        marginalWealthTaxPct: 0.85, committed: true,
+      },
+      {
+        id: 'demo-sh-2', name: 'Oppussingsprosjekt', strategy: 'brrr',
+        purchasePrice: 2600000, dokumentavgiftPct: 2.5, tinglysingsgebyr: 585, otherPurchaseCosts: 0,
+        equityShare: 0.25, mortgageRatePct: 5.7, termYears: 25,
+        monthlyRent: 12000, vacancyPct: 5, monthlyOperatingCosts: 2200, deductibleCostsAnnual: 26400,
+        renovationCost: 400000, afterRepairValue: 3400000, refinanceLtvPct: 75,
+        holdYears: 8, annualAppreciationPct: 3, saleAgentFeePct: 3, documentedImprovements: 400000,
+        marginalWealthTaxPct: 0.85, committed: false,
+      },
+    ],
   };
 }

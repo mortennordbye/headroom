@@ -11,7 +11,7 @@ import { Skeleton } from './components/ui/Skeleton';
 // Code-split per route: each page bundle is fetched only when navigated to.
 const BudgetPage = lazy(() => import('./pages/BudgetPage'));
 const AssetPage = lazy(() => import('./pages/AssetPage'));
-const LoanPage = lazy(() => import('./pages/LoanPage'));
+const BoligPage = lazy(() => import('./pages/BoligPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const SalaryPage = lazy(() => import('./pages/SalaryPage'));
@@ -59,7 +59,9 @@ function App() {
                 {/* Dashboard moved from /overview to the index; keep the old path working. */}
                 <Route path="overview" element={<Navigate to="/" replace />} />
                 <Route path="assets" element={<Suspense fallback={<RouteFallback />}><AssetPage /></Suspense>} />
-                <Route path="loan" element={<Suspense fallback={<RouteFallback />}><LoanPage /></Suspense>} />
+                <Route path="bolig" element={<Suspense fallback={<RouteFallback />}><BoligPage /></Suspense>} />
+                {/* Loan page became the Bolig hub; keep the old path working. */}
+                <Route path="loan" element={<Navigate to="/bolig" replace />} />
                 <Route path="salary" element={<Suspense fallback={<RouteFallback />}><SalaryPage /></Suspense>} />
                 <Route path="forecast" element={<Suspense fallback={<RouteFallback />}><ForecastPage /></Suspense>} />
                 <Route path="pension" element={<Suspense fallback={<RouteFallback />}><PensionPage /></Suspense>} />

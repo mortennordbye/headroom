@@ -15,7 +15,7 @@ import {
 export const ALWAYS_VISIBLE_NAV = '/settings';
 
 /** Routes surfaced inside the "Mer" sheet on mobile (everything past the 4 primary tabs). */
-export const MORE_ROUTES = ['/forecast', '/pension', '/employer-cost', '/year', '/loan', '/settings'];
+export const MORE_ROUTES = ['/forecast', '/pension', '/employer-cost', '/year', '/bolig', '/settings'];
 
 export interface NavItem {
   path: string;
@@ -30,7 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/salary', key: 'salary', icon: <LineChartIcon size={20} strokeWidth={1.75} /> },
   { path: '/budget', key: 'budget', icon: <BarChart3 size={20} strokeWidth={1.75} /> },
   { path: '/assets', key: 'assets', icon: <TrendingUp size={20} strokeWidth={1.75} /> },
-  { path: '/loan', key: 'loan', icon: <Building2 size={20} strokeWidth={1.75} /> },
+  { path: '/bolig', key: 'loan', icon: <Building2 size={20} strokeWidth={1.75} /> },
   { path: '/pension', key: 'pension', icon: <Briefcase size={20} strokeWidth={1.75} /> },
   { path: '/forecast', key: 'forecast', icon: <Activity size={20} strokeWidth={1.75} /> },
   { path: '/employer-cost', key: 'employerCost', icon: <Receipt size={20} strokeWidth={1.75} /> },

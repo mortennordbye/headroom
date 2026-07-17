@@ -29,6 +29,7 @@ import type {
 import type { CategoryRule } from './categorize';
 import type { LabelRule } from './labelRules';
 import type { TransferRule } from './transferRules';
+import type { SecondHomeScenario } from './secondHome';
 
 // ── Injection defaults for the registry. Recognizable (all-9s) so the reset
 // test can assert a 'reset' object field dropped to exactly this value. ──
@@ -113,6 +114,15 @@ const canonicalOvertime: OvertimeEntry[] = [{ id: 'ot-1', date: '2026-01-02', ho
 const canonicalHours: HoursSnapshot[] = [{ id: 'hs-1', periodMonth: '2026-01', actualHoursPerWeek: 40 }];
 const canonicalGoals: Goal[] = [{ id: 'goal-1', name: 'Buffer', target: 100000, source: 'bufferAccount' }];
 const canonicalResidences: Residence[] = [{ id: 'res-1', address: 'Storgata 1', propertyType: 'borettslag', purchasePrice: 3800000, purchaseCosts: 12000, jointDebtShare: 350000, moveInDate: '2021-03', moveOutDate: null, salePrice: null, notes: '2-roms' }];
+const canonicalSecondHome: SecondHomeScenario[] = [{
+  id: 'sh-1', name: 'Utleie', strategy: 'rent',
+  purchasePrice: 4000000, dokumentavgiftPct: 2.5, tinglysingsgebyr: 585, otherPurchaseCosts: 0,
+  equityShare: 0.25, mortgageRatePct: 5.5, termYears: 25,
+  monthlyRent: 15000, vacancyPct: 5, monthlyOperatingCosts: 3000, deductibleCostsAnnual: 36000,
+  renovationCost: 0, afterRepairValue: 4000000, refinanceLtvPct: 75,
+  holdYears: 10, annualAppreciationPct: 3, saleAgentFeePct: 3, documentedImprovements: 0,
+  marginalWealthTaxPct: 0.85,
+}];
 
 function fullPayload(): ExportPayload {
   return {
@@ -155,6 +165,7 @@ function fullPayload(): ExportPayload {
     jobs: canonicalJobs,
     salaries: canonicalSalaries,
     residences: canonicalResidences,
+    secondHomeScenarios: canonicalSecondHome,
     bonuses: canonicalBonuses,
     overtime: canonicalOvertime,
     hoursSnapshots: canonicalHours,
@@ -184,21 +195,21 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 49 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(49);
+  it('registers exactly the 50 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(50);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (28) or preserve (21)', () => {
+  it('partitions every field into reset (28) or preserve (22)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
     expect(reset).toHaveLength(28);
-    expect(preserve).toHaveLength(21);
+    expect(preserve).toHaveLength(22);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([
       'lang', 'savingsTargetPercent', 'growthReturnRate', 'forecastAssumptions', 'houseGrowthRate',
       'cashGrowthRate', 'cryptoGrowthRate', 'displayCurrency', 'nokToUsd', 'customCurrencyCode',
-      'customCurrencyRate', 'jobs', 'salaries', 'residences', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'region',
+      'customCurrencyRate', 'jobs', 'salaries', 'residences', 'secondHomeScenarios', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'region',
       'customTaxRatePct', 'hiddenNavItems',
     ]));
   });
