@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, Home, Hammer, ArrowRight, Info, Layers } from 'lucide-react';
+import { Plus, Trash2, Home, Hammer, ArrowRight, Info, Layers, AlertTriangle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -22,6 +22,8 @@ import {
   stressRate,
   calcPortfolio,
   summarizeScenario,
+  calcRealBorrowingCapacity,
+  DEFAULT_RENTAL_BANK_FACTOR,
   type SecondHomeScenario,
   type SecondHomeStrategy,
 } from '../../lib/secondHome';
@@ -42,6 +44,17 @@ const SecondHomePanel: React.FC = () => {
 
   const [selectedId, setSelectedId] = useState<string | null>(secondHomeScenarios[0]?.id ?? null);
   const scenario = secondHomeScenarios.find((s) => s.id === selectedId) ?? secondHomeScenarios[0] ?? null;
+
+  // Real-borrowing-capacity knobs. Household-level stress-test inputs, seeded from
+  // the app's own data (base salary, liquid assets) and kept as session-only local
+  // state — they are what-if levers, not persisted scenario fields. `null` liquid =
+  // "use the app-derived figure below" until the user overrides it.
+  const [baseSalary, setBaseSalary] = useState(() => Math.round(grossAnnualIncome));
+  const [bonus, setBonus] = useState(0);
+  const [includeBonus, setIncludeBonus] = useState(false);
+  const [rentFactorPct, setRentFactorPct] = useState(Math.round(DEFAULT_RENTAL_BANK_FACTOR * 100));
+  const [creditFrames, setCreditFrames] = useState(0);
+  const [liquidOverride, setLiquidOverride] = useState<number | null>(null);
 
   const pct = (n: number) => `${n.toFixed(1)} %`;
 
@@ -72,7 +85,9 @@ const SecondHomePanel: React.FC = () => {
     const loanAmount = isBrrr ? brrr.maxRefiLoan : s.purchasePrice * (1 - clamp(s.equityShare, 0, 1));
     const marketValue = isBrrr ? brrr.arv : s.purchasePrice;
     const cashflow = calcRentalCashflow(s, loanAmount);
-    const dti = calcDebtToIncome(totalDebt + loanAmount, grossAnnualIncome);
+    // DTI counts ALL debt: the existing home mortgage (assets.houseDebt), other
+    // non-mortgage debt, and this new loan — matching the Dashboard's DTI.
+    const dti = calcDebtToIncome(assets.houseDebt + totalDebt + loanAmount, grossAnnualIncome);
     const ltv = marketValue > 0 ? (loanAmount / marketValue) * 100 : 0;
     const stressPct = stressRate(s.mortgageRatePct);
     const stressedMonthly = calcMonthlyPayment(loanAmount, stressPct, s.termYears);
@@ -97,9 +112,28 @@ const SecondHomePanel: React.FC = () => {
       }));
 
     return { purchaseCosts, brrr, isBrrr, loanAmount, marketValue, cashflow, dti, ltv, stressPct, stressedMonthly, wealth, projectedSale, gains, interestDeductionValue, equity, cashNeeded, sensitivity };
-  }, [scenario, totalDebt, grossAnnualIncome]);
+  }, [scenario, totalDebt, grossAnnualIncome, assets.houseDebt]);
 
   const liquid = useMemo(() => sumSavings(assets) + assets.bufferAccount + computeEquityBreakdown(assets).netInvestment, [assets]);
+  const liquidValue = liquidOverride ?? Math.round(liquid);
+
+  // The bank's real 5×-income check for the selected scenario.
+  const borrowCap = useMemo(() => {
+    if (!scenario || !derived) return null;
+    return calcRealBorrowingCapacity({
+      baseAnnualSalary: baseSalary,
+      bonusAnnual: bonus,
+      includeBonus,
+      grossAnnualRent: scenario.monthlyRent * 12,
+      rentalBankFactor: rentFactorPct / 100,
+      existingMortgage: assets.houseDebt,
+      otherDebt: totalDebt,
+      creditFrames,
+      newLoan: derived.loanAmount,
+      cashRequired: derived.cashNeeded,
+      liquidAssets: liquidValue,
+    });
+  }, [scenario, derived, baseSalary, bonus, includeBonus, rentFactorPct, creditFrames, assets.houseDebt, totalDebt, liquidValue]);
 
   // Portfolio aggregate (owning home 2, 3, 4…) + the cross-scenario comparison.
   const portfolio = useMemo(
@@ -363,6 +397,109 @@ const SecondHomePanel: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Real borrowing capacity — the full 5×-income check + liquidity */}
+          {borrowCap && (
+            <div className={`${card} p-6 space-y-5`}>
+              <div>
+                <h2 className={sectionLabel}>{bp.borrowCap.title}</h2>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{bp.borrowCap.subtitle}</p>
+              </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Income build-up */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>{bp.borrowCap.incomeTitle}</h3>
+                    <button
+                      onClick={() => setIncludeBonus((v) => !v)}
+                      role="switch"
+                      aria-checked={includeBonus}
+                      className="px-2.5 h-7 rounded-[6px] text-[11px] font-medium border transition-colors"
+                      style={{
+                        background: includeBonus ? 'var(--accent-bg)' : 'transparent',
+                        color: includeBonus ? 'var(--accent)' : 'var(--text-3)',
+                        borderColor: 'var(--border)',
+                      }}
+                    >
+                      {bp.borrowCap.includeBonus}
+                    </button>
+                  </div>
+                  <NumberRow label={bp.borrowCap.baseSalary} value={baseSalary} onCommit={setBaseSalary} suffix="kr" />
+                  <NumberRow label={bp.borrowCap.bonus} value={bonus} onCommit={setBonus} suffix="kr" />
+                  <NumberRow label={bp.borrowCap.rentFactor} value={rentFactorPct} onCommit={setRentFactorPct} suffix="%" />
+                  <Row label={bp.borrowCap.acceptedRent} value={`+ ${formatCurrency(Math.round(borrowCap.acceptedRentalIncome))}`} />
+                  <div className="pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                    <Row label={bp.borrowCap.totalIncome} value={formatCurrency(Math.round(borrowCap.totalAcceptedIncome))} strong />
+                  </div>
+                </div>
+
+                {/* Debt build-up */}
+                <div className="space-y-3">
+                  <h3 className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>{bp.borrowCap.debtTitle}</h3>
+                  <Row label={bp.borrowCap.existingMortgage} value={formatCurrency(Math.round(assets.houseDebt))} />
+                  <Row label={bp.borrowCap.otherDebt} value={formatCurrency(Math.round(totalDebt))} />
+                  <NumberRow label={bp.borrowCap.creditFrames} value={creditFrames} onCommit={setCreditFrames} suffix="kr" />
+                  <Row label={bp.borrowCap.newLoan} value={`+ ${formatCurrency(Math.round(derived.loanAmount))}`} />
+                  <div className="pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                    <Row label={bp.borrowCap.debtAfter} value={formatCurrency(Math.round(borrowCap.totalDebtAfter))} strong />
+                  </div>
+                </div>
+              </div>
+
+              {/* Verdict */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                <div className="space-y-1 min-w-[220px] flex-1">
+                  <Row label={bp.borrowCap.maxDebt} value={formatCurrency(Math.round(borrowCap.maxTotalDebt))} />
+                  <Row
+                    label={bp.borrowCap.remaining}
+                    value={formatCurrency(Math.round(borrowCap.remainingCapacity))}
+                  />
+                </div>
+                <div className="flex flex-col items-end gap-1.5">
+                  <DeltaChip tone={borrowCap.loanFits ? 'positive' : 'negative'}>
+                    {borrowCap.loanFits ? bp.borrowCap.fits : bp.borrowCap.over}
+                  </DeltaChip>
+                  <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    {bp.borrowCap.dtiAfter}: <span className="font-mono">{borrowCap.dtiAfterPurchase.toFixed(1)}×</span> / 5×
+                  </div>
+                </div>
+              </div>
+
+              {/* Liquidity check */}
+              <div
+                className="rounded-[8px] border p-4 space-y-3"
+                style={{ background: 'var(--surface-2)', borderColor: borrowCap.hasEnoughCash ? 'var(--border)' : 'var(--negative)' }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>{bp.borrowCap.liquidityTitle}</h3>
+                  <DeltaChip tone={borrowCap.hasEnoughCash ? 'positive' : 'negative'} size="sm">
+                    {borrowCap.hasEnoughCash ? bp.borrowCap.enoughCash : bp.borrowCap.insufficient}
+                  </DeltaChip>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[13px]" style={{ color: 'var(--text-2)' }}>{bp.borrowCap.cashRequired}</span>
+                  <span
+                    className="text-[15px] font-mono font-medium tabular-nums"
+                    style={{ color: borrowCap.hasEnoughCash ? 'var(--text-1)' : 'var(--negative)' }}
+                  >
+                    {formatCurrency(Math.round(derived.cashNeeded))}
+                  </span>
+                </div>
+                <NumberRow label={bp.borrowCap.liquidAssets} value={liquidValue} onCommit={setLiquidOverride} suffix="kr" />
+                {!borrowCap.hasEnoughCash && (
+                  <div className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--negative)' }}>
+                    <AlertTriangle size={13} className="shrink-0" />
+                    {bp.borrowCap.insufficient} · {formatCurrency(Math.round(borrowCap.liquidityGap))}
+                  </div>
+                )}
+              </div>
+
+              <p className="text-[11px] leading-[1.5]" style={{ color: 'var(--text-3)' }}>
+                {bp.borrowCap.rentCaveat} {bp.borrowCap.note}
+              </p>
+            </div>
+          )}
 
           {/* Sensitivity chart */}
           <div className={`${card} p-6`}>

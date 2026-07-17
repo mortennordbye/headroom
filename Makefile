@@ -1,4 +1,7 @@
-.PHONY: build up down restart clean seed seed-reset seed-local logs backup
+.PHONY: build up down restart clean seed seed-reset seed-local logs backup mcp mcp-install mcp-uninstall
+
+# Origin of the running app the MCP server reads/writes (override: make mcp-install HEADROOM_URL=...)
+HEADROOM_URL ?= http://localhost:8080
 
 # Build images and bring everything up (rebuilds if already running)
 build:
@@ -62,3 +65,26 @@ logs:
 # Remove build artifacts
 clean:
 	rm -rf dist
+
+# Run the MCP server in the foreground (for manual testing over stdio).
+mcp:
+	@HEADROOM_URL=$(HEADROOM_URL) npm run mcp
+
+# Register the MCP server with Claude Code (local scope, this project only).
+# Requires the `claude` CLI (Claude Code). Start the app first (`make up`).
+# For Claude Desktop, add the JSON snippet in mcp/README.md instead.
+mcp-install:
+	@command -v claude >/dev/null 2>&1 || { \
+	  echo "  'claude' CLI not found. Install Claude Code, or wire it up manually — see mcp/README.md."; \
+	  exit 1; }
+	@command -v npx >/dev/null 2>&1 || { echo "  npm/npx not found. Run 'npm install' first."; exit 1; }
+	claude mcp add headroom --scope local --env HEADROOM_URL=$(HEADROOM_URL) -- npx tsx $(CURDIR)/mcp/server.ts
+	@echo ""
+	@echo "  Registered 'headroom' MCP server (HEADROOM_URL=$(HEADROOM_URL))."
+	@echo "  Restart Claude Code, then ask it for a financial overview. Details: mcp/README.md"
+	@echo ""
+
+# Remove the MCP server registration.
+mcp-uninstall:
+	@claude mcp remove headroom --scope local 2>/dev/null || claude mcp remove headroom 2>/dev/null || true
+	@echo "  Removed 'headroom' MCP server."

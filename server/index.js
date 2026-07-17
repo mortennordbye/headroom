@@ -114,6 +114,15 @@ db.exec(`
     rate REAL NOT NULL,
     fetched_at TEXT NOT NULL
   );
+  -- Rolling per-write history of the finance blob, kept IN the volume (separate
+  -- from the blob itself, like auth/caches). A fine-grained undo/restore net on
+  -- top of the coarse nightly .sqlite backups: every committed revision is
+  -- snapshotted here and pruned to the newest DATA_HISTORY_LIMIT.
+  CREATE TABLE IF NOT EXISTS finance_history (
+    rev INTEGER PRIMARY KEY,
+    ts TEXT NOT NULL,
+    content TEXT NOT NULL
+  );
 `);
 
 // SSB replaced KPI table 03013 (2015=100) with 14700 (2025=100) in Feb 2026.
@@ -242,10 +251,38 @@ const writeStmt = db.prepare(
   'INSERT INTO finance_data (id, content, rev) VALUES (@id, @content, @rev) ' +
   'ON CONFLICT(id) DO UPDATE SET content = @content, rev = @rev'
 );
+// How many recent revisions of the finance blob to retain in finance_history.
+const DATA_HISTORY_LIMIT = 20;
+const historyInsertStmt = db.prepare(
+  'INSERT OR REPLACE INTO finance_history (rev, ts, content) VALUES (?, ?, ?)'
+);
+// Prune all but the newest N revisions.
+const historyPruneStmt = db.prepare(
+  'DELETE FROM finance_history WHERE rev NOT IN (SELECT rev FROM finance_history ORDER BY rev DESC LIMIT ?)'
+);
+const historyListStmt = db.prepare(
+  'SELECT rev, ts, LENGTH(content) AS bytes FROM finance_history ORDER BY rev DESC'
+);
+const historyGetStmt = db.prepare('SELECT rev, ts, content FROM finance_history WHERE rev = ?');
+
+// Snapshot a committed revision of the finance blob into the rolling history and
+// prune to the retention limit. Best-effort: a history failure must never fail
+// the actual save, so it's guarded.
+function appendHistory(rev, content) {
+  try {
+    historyInsertStmt.run(rev, new Date().toISOString(), content);
+    historyPruneStmt.run(DATA_HISTORY_LIMIT);
+  } catch (err) {
+    console.warn('[history] failed to record revision', rev, err.message);
+  }
+}
+
 // Persist `content` for `id`, bumping rev from `prevRev`. Returns the new rev.
+// Writes to the primary 'headroom' blob are snapshotted into finance_history.
 function writeBlob(id, content, prevRev) {
   const rev = (prevRev ?? 0) + 1;
   writeStmt.run({ id, content, rev });
+  if (id === 'headroom') appendHistory(rev, content);
   return rev;
 }
 
@@ -466,6 +503,47 @@ app.post('/api/data', (req, res) => {
   const rev = writeBlob('headroom', content, stored ? stored.rev : 0);
   res.set('X-Data-Rev', String(rev));
   res.json({ ok: true, rev });
+});
+
+// Rolling revision history (in-volume undo net). Protected like the rest of /api.
+// GET /api/history            → recent revisions, newest first (metadata only).
+app.get('/api/history', (_req, res) => {
+  res.json({ revisions: historyListStmt.all(), limit: DATA_HISTORY_LIMIT });
+});
+
+// GET /api/history/:rev       → the full finance blob as it was at that revision.
+app.get('/api/history/:rev', (req, res) => {
+  const row = historyGetStmt.get(Number(req.params.rev));
+  if (!row) return res.status(404).json({ error: 'no such revision' });
+  let content;
+  try {
+    content = JSON.parse(row.content);
+  } catch {
+    return res.status(500).json({ error: 'stored revision is corrupt' });
+  }
+  res.json({ rev: row.rev, ts: row.ts, content });
+});
+
+// POST /api/history/:rev/restore → re-commit a past revision as the new current
+// state (itself recorded in history, so a restore is reversible). Faithful
+// rollback: the historical bytes are written verbatim after a shape check, with
+// no bank-reconcile so the exact old state is what you get back.
+app.post('/api/history/:rev/restore', (req, res) => {
+  const row = historyGetStmt.get(Number(req.params.rev));
+  if (!row) return res.status(404).json({ error: 'no such revision' });
+  let content;
+  try {
+    content = JSON.parse(row.content);
+  } catch {
+    return res.status(500).json({ error: 'stored revision is corrupt' });
+  }
+  if (!isValidFinancePayload(content)) {
+    return res.status(422).json({ error: 'revision is not a valid finance payload' });
+  }
+  const stored = getStmt.get('headroom');
+  const rev = writeBlob('headroom', row.content, stored ? stored.rev : 0);
+  res.set('X-Data-Rev', String(rev));
+  res.json({ ok: true, rev, restoredFrom: row.rev });
 });
 
 // In-app restore from a SQLite backup file (what `make backup` copies out), so

@@ -18,7 +18,7 @@
  *   • capital gains: 22% on (sale − purchase − improvements − sale costs), no
  *     botid exemption for a pure rental secondary home.
  */
-import { calcAmortizationSchedule, calcDebtToIncome, STRESS_TEST_ADD_PCT } from './calculations';
+import { calcAmortizationSchedule, calcDebtToIncome, MAX_DEBT_TO_INCOME, STRESS_TEST_ADD_PCT } from './calculations';
 import { TAX_PARAMS, TAX_YEAR } from './norwegianTax';
 
 /** Capital-income rate (skatt på alminnelig inntekt), as a percent — 22 today. */
@@ -26,6 +26,14 @@ export const CAPITAL_INCOME_RATE_PCT = TAX_PARAMS[TAX_YEAR].skattAlminneligRate 
 
 /** Stress-test floor the lending rule requires: contract rate +3pp, minimum 7%. */
 export const STRESS_TEST_MIN_PCT = 7;
+
+/**
+ * Share of gross rent a bank typically credits toward the 5×-income cap. Banks
+ * vary a lot here (and many exclude rent from the *subject* property entirely, or
+ * for a property with no letting history), so this is only a default the user can
+ * adjust — not a guarantee. ~0.85 approximates the common "10 of 12 months" haircut.
+ */
+export const DEFAULT_RENTAL_BANK_FACTOR = 0.85;
 
 export type SecondHomeStrategy = 'rent' | 'brrr';
 
@@ -379,5 +387,83 @@ export function calcPortfolio(
     combinedMonthlyCashflow,
     borrowingHeadroom: dti.borrowingHeadroom,
     dtiRatio: dti.ratio,
+  };
+}
+
+// ── Real borrowing capacity (the full 5×-income picture) ────────────────────
+
+export interface RealBorrowingCapacityInput {
+  /** Gross annual base salary (bonus excluded). */
+  baseAnnualSalary: number;
+  /** Gross annual bonus, only counted when `includeBonus` is true. */
+  bonusAnnual: number;
+  includeBonus: boolean;
+  /** Gross annual rent for THIS property (monthlyRent × 12). */
+  grossAnnualRent: number;
+  /** Share of gross rent the bank credits toward income (0..1). See DEFAULT_RENTAL_BANK_FACTOR. */
+  rentalBankFactor: number;
+  /** Existing home mortgage already carried (assets.houseDebt). */
+  existingMortgage: number;
+  /** Other non-mortgage debt (consumer, student, credit-card balances). */
+  otherDebt: number;
+  /** Granted credit frames counted IN FULL by the bank (kredittkort/rammekreditt limits). */
+  creditFrames: number;
+  /** The new loan this purchase adds. */
+  newLoan: number;
+  /** Cash needed up front (equity + purchase costs, + renovation for BRRR). */
+  cashRequired: number;
+  /** Liquid assets available to cover the cash need. */
+  liquidAssets: number;
+}
+
+export interface RealBorrowingCapacity {
+  acceptedRentalIncome: number; // grossAnnualRent × factor
+  totalAcceptedIncome: number; // base (+ bonus) + accepted rent
+  maxTotalDebt: number; // income × 5
+  existingDebtLoad: number; // mortgage + other debt + credit frames (pre-purchase)
+  remainingCapacity: number; // maxTotalDebt − existingDebtLoad (may be negative)
+  totalDebtAfter: number; // existingDebtLoad + newLoan
+  loanFits: boolean; // newLoan ≤ remainingCapacity
+  capacityAfterPurchase: number; // remainingCapacity − newLoan
+  dtiAfterPurchase: number; // totalDebtAfter ÷ income (0 when no income)
+  liquidityGap: number; // cashRequired − liquidAssets (>0 ⇒ short)
+  hasEnoughCash: boolean;
+}
+
+/**
+ * The bank's real lending check for a secondary-home purchase: total accepted
+ * income × 5 is the debt ceiling, against which ALL debt counts — the existing
+ * mortgage, other debt, credit frames (counted at their full granted limit, not
+ * the drawn balance) and the new loan. Optionally credits part of the rent toward
+ * income (bank practice varies; see DEFAULT_RENTAL_BANK_FACTOR). This is the DTI
+ * cap only — pair it with the stress-test serviceability check (`stressRate`) for
+ * the full picture, and with the liquidity check below for the cash side.
+ */
+export function calcRealBorrowingCapacity(i: RealBorrowingCapacityInput): RealBorrowingCapacity {
+  const base = Math.max(0, i.baseAnnualSalary);
+  const bonus = i.includeBonus ? Math.max(0, i.bonusAnnual) : 0;
+  const factor = Math.min(1, Math.max(0, i.rentalBankFactor));
+  const acceptedRentalIncome = Math.max(0, i.grossAnnualRent) * factor;
+  const totalAcceptedIncome = base + bonus + acceptedRentalIncome;
+  const maxTotalDebt = totalAcceptedIncome * MAX_DEBT_TO_INCOME;
+  const existingDebtLoad =
+    Math.max(0, i.existingMortgage) + Math.max(0, i.otherDebt) + Math.max(0, i.creditFrames);
+  const remainingCapacity = maxTotalDebt - existingDebtLoad;
+  const newLoan = Math.max(0, i.newLoan);
+  const totalDebtAfter = existingDebtLoad + newLoan;
+  const cashRequired = Math.max(0, i.cashRequired);
+  const liquidAssets = Math.max(0, i.liquidAssets);
+  return {
+    acceptedRentalIncome,
+    totalAcceptedIncome,
+    maxTotalDebt,
+    existingDebtLoad,
+    remainingCapacity,
+    totalDebtAfter,
+    loanFits: newLoan <= remainingCapacity,
+    capacityAfterPurchase: remainingCapacity - newLoan,
+    dtiAfterPurchase: totalAcceptedIncome > 0 ? totalDebtAfter / totalAcceptedIncome : 0,
+    liquidityGap: cashRequired - liquidAssets,
+    hasEnoughCash: liquidAssets >= cashRequired,
   };
 }

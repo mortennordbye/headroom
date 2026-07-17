@@ -3,6 +3,9 @@ import {
   DEFAULT_SECOND_HOME_SCENARIO,
   CAPITAL_INCOME_RATE_PCT,
   calcPurchaseCosts,
+  calcRealBorrowingCapacity,
+  DEFAULT_RENTAL_BANK_FACTOR,
+  type RealBorrowingCapacityInput,
   calcRentalIncomeTax,
   calcRentalCashflow,
   calcWealthTaxImpact,
@@ -211,5 +214,69 @@ describe('calcPortfolio', () => {
     expect(p.committedCount).toBe(0);
     expect(p.totalLoan).toBe(0);
     expect(p.combinedMonthlyCashflow).toBe(0);
+  });
+});
+
+describe('calcRealBorrowingCapacity', () => {
+  const base: RealBorrowingCapacityInput = {
+    baseAnnualSalary: 800_000,
+    bonusAnnual: 100_000,
+    includeBonus: false,
+    grossAnnualRent: 180_000, // 15k/mo
+    rentalBankFactor: DEFAULT_RENTAL_BANK_FACTOR, // 0.85
+    existingMortgage: 3_200_000,
+    otherDebt: 0,
+    creditFrames: 110_000,
+    newLoan: 3_000_000,
+    cashRequired: 1_100_000,
+    liquidAssets: 1_500_000,
+  };
+
+  it('credits rent at the bank factor and applies the 5× cap on all debt', () => {
+    const r = calcRealBorrowingCapacity(base);
+    expect(r.acceptedRentalIncome).toBeCloseTo(153_000, 0); // 180k × 0.85
+    expect(r.totalAcceptedIncome).toBeCloseTo(953_000, 0); // base + accepted rent (bonus excluded)
+    expect(r.maxTotalDebt).toBeCloseTo(4_765_000, 0); // × 5
+    expect(r.existingDebtLoad).toBe(3_310_000); // mortgage + credit frames (full limit)
+    expect(r.remainingCapacity).toBeCloseTo(1_455_000, 0);
+    expect(r.loanFits).toBe(false); // 3.0M > 1.455M remaining
+  });
+
+  it('counts credit frames at their full limit, not the drawn balance', () => {
+    const withFrame = calcRealBorrowingCapacity(base);
+    const noFrame = calcRealBorrowingCapacity({ ...base, creditFrames: 0 });
+    expect(noFrame.remainingCapacity - withFrame.remainingCapacity).toBe(110_000);
+  });
+
+  it('including the bonus raises capacity by 5× the bonus', () => {
+    const off = calcRealBorrowingCapacity(base);
+    const on = calcRealBorrowingCapacity({ ...base, includeBonus: true });
+    expect(on.maxTotalDebt - off.maxTotalDebt).toBeCloseTo(500_000, 0); // 100k × 5
+  });
+
+  it('a modest loan fits and reports the DTI after purchase', () => {
+    const r = calcRealBorrowingCapacity({ ...base, newLoan: 1_000_000, creditFrames: 0 });
+    expect(r.loanFits).toBe(true);
+    // (3.2M + 1.0M) / 953k ≈ 4.41×
+    expect(r.dtiAfterPurchase).toBeCloseTo((3_200_000 + 1_000_000) / 953_000, 4);
+  });
+
+  it('flags a liquidity shortfall when cash needed exceeds liquid assets', () => {
+    const short = calcRealBorrowingCapacity({ ...base, cashRequired: 2_000_000, liquidAssets: 1_500_000 });
+    expect(short.hasEnoughCash).toBe(false);
+    expect(short.liquidityGap).toBe(500_000);
+    const ok = calcRealBorrowingCapacity({ ...base, cashRequired: 1_000_000, liquidAssets: 1_500_000 });
+    expect(ok.hasEnoughCash).toBe(true);
+    expect(ok.liquidityGap).toBe(-500_000);
+  });
+
+  it('guards zero income (no divide-by-zero in DTI)', () => {
+    const r = calcRealBorrowingCapacity({
+      ...base, baseAnnualSalary: 0, includeBonus: false, grossAnnualRent: 0,
+    });
+    expect(r.totalAcceptedIncome).toBe(0);
+    expect(r.maxTotalDebt).toBe(0);
+    expect(r.dtiAfterPurchase).toBe(0);
+    expect(r.loanFits).toBe(false);
   });
 });
