@@ -3,7 +3,11 @@ export function calcMonthlyPayment(principal: number, annualRate: number, years:
   const n = years * 12;
   if (n <= 0) return 0; // guard: a 0/negative term has no payment schedule (avoids Infinity/NaN)
   if (monthlyRate === 0) return principal / n;
-  return principal * monthlyRate / (1 - Math.pow(1 + monthlyRate, -n));
+  const payment = principal * monthlyRate / (1 - Math.pow(1 + monthlyRate, -n));
+  // A subnormal rate can round (1 + monthlyRate) back to 1, underflowing the
+  // denominator to 0 (→ NaN/Infinity). At that point the loan is effectively
+  // interest-free, so fall back to the straight-line payment.
+  return Number.isFinite(payment) ? payment : principal / n;
 }
 
 // Norwegian mortgage-lending limits (utlånsforskriften):
