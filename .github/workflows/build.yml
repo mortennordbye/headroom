@@ -33,6 +33,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The mcp/ integration tests spawn the real Express server, which needs the
+      # server package's own deps (better-sqlite3, express) installed.
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
       - name: Typecheck
         run: npx tsc -b
 

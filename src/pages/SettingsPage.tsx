@@ -49,6 +49,7 @@ import { parseLocaleNumber } from '../lib/validators';
 import { BankSyncCard } from '../components/BankSyncCard';
 import { CategoryRules } from '../components/CategoryRules';
 import { AuthSettings } from '../components/AuthSettings';
+import { RestorePointsCard } from '../components/RestorePointsCard';
 import HistoryManagerModal from '../components/HistoryManagerModal';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
@@ -61,6 +62,8 @@ const EXPORT_VERSION = 1;
 export default function SettingsPage() {
   const {
     t,
+    aiContext,
+    setAiContext,
     lang,
     setLang,
     displayCurrency,
@@ -909,6 +912,28 @@ export default function SettingsPage() {
               {t.historyManager.open}
             </Button>
           </div>
+        </Card>
+
+        {/* ──── Restore points — per-write revision history (span 12) ──── */}
+        <RestorePointsCard />
+
+        {/* ──── Context notes for the AI assistant (span 12) ──── */}
+        <Card padding="lg" className="md:col-span-12" data-tour="settings-ai-context">
+          <SectionLabel icon={<Sparkles />}>{t.settings.aiContextSection.title}</SectionLabel>
+          <p className="mt-1 mb-4 text-[13px]" style={{ color: 'var(--text-3)' }}>
+            {t.settings.aiContextSection.desc}
+          </p>
+          <textarea
+            value={aiContext}
+            onChange={(e) => setAiContext(e.target.value)}
+            placeholder={t.settings.aiContextSection.placeholder}
+            rows={5}
+            className="w-full rounded-[8px] p-3 text-[14px] leading-[1.6] outline-none border resize-y"
+            style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+          />
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
+            {t.settings.aiContextSection.hint}
+          </p>
         </Card>
 
         {/* ──── Danger zone (span 12) ──── */}

@@ -573,6 +573,9 @@ interface FinanceSettingsContextType {
   setRegion: (r: Region) => void;
   customTaxRatePct: number;
   setCustomTaxRatePct: (v: number) => void;
+  /** Free-text notes about the user's plans / long-term goals (AI context). */
+  aiContext: string;
+  setAiContext: (v: string) => void;
   hiddenNavItems: string[];
   toggleNavItem: (path: string) => void;
   /** Dashboard "market assumptions still on defaults" nudge — dismissed for good. */
@@ -902,6 +905,10 @@ export interface ExportPayload {
   incomeReminderDismissedMonth?: string;
   conservativeNudgeDismissedMonth?: string;
   payday?: number;
+  /** Free-text context the user (or an AI assistant) keeps about their plans and
+   *  long-term goals — e.g. "want to start my own company in ~3 years". Purely
+   *  narrative; not used in any calculation, exposed to the MCP server for context. */
+  aiContext?: string;
 }
 
 export interface DailyDataEntry {
@@ -1022,6 +1029,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [incomeReminderDismissedMonth, setIncomeReminderDismissedMonth] = useState('');
   const [conservativeNudgeDismissedMonth, setConservativeNudgeDismissedMonth] = useState('');
   const [payday, setPayday] = useState<number>(0);
+  const [aiContext, setAiContext] = useState('');
   const [demoMode, setDemoMode] = useState(false);
   // First-run guided setup. `onboardingCompleted` is the persisted flag;
   // `onboardingActive` (not persisted) is whether the tour overlay is showing.
@@ -1090,14 +1098,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday,
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday]);
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext]);
 
   // The one place that applies a loaded/imported blob → app state (§4.2), with
   // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
@@ -1134,6 +1142,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
       incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
       conservativeNudgeDismissedMonth: setConservativeNudgeDismissedMonth, payday: setPayday,
+      aiContext: setAiContext,
     };
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
@@ -2323,6 +2332,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setGoals([]);
     setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
     setBillingConfig(DEFAULT_BILLING_CONFIG);
+    setAiContext('');
     // A full wipe is effectively a fresh start — re-run the guided setup from the top.
     setOnboardingCompleted(false);
     setAssumptionsNudgeDismissed(false);
@@ -2442,6 +2452,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
     region, setRegion, customTaxRatePct, setCustomTaxRatePct,
+    aiContext, setAiContext,
     hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
@@ -2457,7 +2468,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     currentMonth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
-    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, hiddenNavItems, toggleNavItem,
+    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, aiContext, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
     conservativeNudgeDismissedMonth, dismissConservativeNudge,

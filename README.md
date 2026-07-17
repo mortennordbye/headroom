@@ -102,6 +102,7 @@ Because you re-attach the same `-v headroom_data:/data` volume (Option A) or reu
 | `make down` | Stop all containers |
 | `make restart` | Restart without rebuilding |
 | `make backup` | Copy the SQLite database to `./backups/` (timestamped) |
+| `make mcp-install` | Register the [AI access (MCP)](#ai-access-mcp) server with Claude Code |
 
 ## Local development (without Docker)
 
@@ -117,6 +118,33 @@ make seed-local               # optional: seed ./data with demo data
 ```
 
 `npm test` runs the Vitest suite; `npm run lint` runs ESLint.
+
+## AI access (MCP)
+
+Headroom ships a local [Model Context Protocol](https://modelcontextprotocol.io) server
+(`mcp/`) that lets an AI assistant (Claude Desktop, Claude Code, …) read your financial
+data, compute insights, and make guarded changes. It runs on **your machine over stdio**
+and talks to the running app's local API — nothing is exposed to the network.
+
+- **Numbers match the app** — the tools reuse Headroom's own tested `src/lib` math.
+- **Writes are safe** — every change goes through the same `/api/data` guards as the UI
+  (validation, optimistic-concurrency `rev`, whole-blob preserve) and touches exactly one
+  slice, so it can't quietly drop the rest of your data.
+
+Set it up (with the app running via `make up`):
+
+```bash
+make mcp-install                 # registers it with Claude Code (this project)
+# override the app URL if needed:
+make mcp-install HEADROOM_URL=http://localhost:3001
+```
+
+Then restart Claude Code and ask it something like *"give me a financial overview"* or
+*"where can I improve my budget?"*. For Claude Desktop, or the full tool list and env
+options, see [`mcp/README.md`](mcp/README.md). Remove it with `make mcp-uninstall`.
+
+If the app has the [optional password](#optional-password) enabled, set
+`HEADROOM_PASSWORD` in the MCP server's env so it can authenticate.
 
 ## Security
 

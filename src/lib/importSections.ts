@@ -35,7 +35,7 @@ export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
     'cashGrowthRate', 'cryptoGrowthRate', 'displayCurrency', 'nokToUsd',
     'customCurrencyCode', 'customCurrencyRate', 'region', 'customTaxRatePct',
     'hiddenNavItems', 'onboardingCompleted', 'assumptionsNudgeDismissed',
-    'incomeReminderDismissedMonth', 'conservativeNudgeDismissedMonth', 'payday',
+    'incomeReminderDismissedMonth', 'conservativeNudgeDismissedMonth', 'payday', 'aiContext',
   ],
 };
 

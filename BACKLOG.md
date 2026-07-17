@@ -2,6 +2,52 @@
 
 Items deferred from prior work. When an item is finished, remove it.
 
+## Second-home "Real borrowing capacity" — deferred bits (shipped 2026-07)
+
+Shipped: a tested `calcRealBorrowingCapacity` (`src/lib/secondHome.ts`) + a "Real borrowing
+capacity (5×)" section in `src/pages/bolig/SecondHomePanel.tsx` — income build-up (base + optional
+bonus + rent at an adjustable bank factor), full debt build-up (existing mortgage + other debt +
+credit frames at full limit + new loan), the 5× verdict, and a liquidity (cash-required vs liquid)
+warning. Also fixed the panel's serviceability DTI to include `assets.houseDebt`. Deferred:
+
+- **Borrowing-capacity knobs are session-only.** base salary, bonus + include-toggle, rent factor,
+  credit frames and the liquid-assets override are local React state (seeded from app data), not
+  persisted — they reset on reload. **Why:** they're what-if stress levers; persisting them means a
+  new blob object threaded through every payload site (payloadRegistry + FinanceContext build/apply/
+  import/demo + Settings export). **What would unblock:** decide they're worth persisting, then add a
+  single `boligAssumptions` object across those sites. **Where:** `src/pages/bolig/SecondHomePanel.tsx`,
+  `src/lib/payloadRegistry.ts`, `src/context/FinanceContext.tsx`.
+- **Credit-card *limits* vs balances is a whole-app debt-model gap.** The 5× rule counts the full
+  granted credit frame, but the core `debts` model stores drawn balance only. The new section takes a
+  manual `creditFrames` figure as a stopgap; a proper fix adds a `creditLimit` to the Debt shape and
+  uses it wherever debt feeds a lending check. **Where:** `src/context/FinanceContext.tsx` (`Debt`),
+  `src/lib/debt.ts`, DTI call-sites (`DashboardPage.tsx`, `SecondHomePanel.tsx`).
+
+## MCP server — known gaps (shipped v1, 2026-07)
+
+Shipped: a local stdio MCP server (`mcp/`) exposing read/insight tools and guarded
+read-modify-write tools over the app's `/api/data`. Deferred:
+
+- **Spending analysis is gross of own-account transfers.** `get_spending_analysis`
+  (`mcp/derive.ts` `spendingAnalysis`) runs `spendByCategory`/`budgetProgress` on raw
+  `dailyTransactions` (matching the app's cashflow charts, which also use raw txs), so it
+  does NOT apply `transferRules` exclusion or the enveloped-category filter the app's
+  `CategoryBudgets` view uses. **Why deferred:** the transfer-aware view is assembled in
+  `FinanceContext` (`internalTransferIds` → `nonTransferTransactions`/`visibleBudgetTransactions`),
+  which can't be imported into the Node MCP process without dragging in React. **What would
+  unblock:** extract the transfer-rule → excluded-id logic into a pure `src/lib` helper, then
+  call it in `mcp/derive.ts`. **Where:** `mcp/derive.ts`, `src/context/FinanceContext.tsx`
+  (transfer id derivation), `src/lib/transferRules.ts`.
+- **`yearReview` not exposed as a tool.** The plan listed annual review under
+  `get_recommendations`; v1 ships `computeHistoryInsights` there but not `yearReview`
+  (`src/lib/yearReview.ts`), which needs a `YearReviewInput` assembled from
+  transactions/incomeByMonth/payslips/snapshots. **What would unblock:** add a `get_year_review`
+  tool that builds `YearReviewInput` (mirroring `availableReportYears`'s caller). **Where:**
+  `mcp/derive.ts`, `mcp/tools/read.ts`, `src/lib/yearReview.ts`.
+- **Remote/HTTP transport not built.** v1 is local stdio only (per the chosen scope). A
+  claude.ai web connector would need an HTTP MCP endpoint gated behind the app's auth
+  (`AUTH_PLAN.md`) + TLS. **Where:** would build on `mcp/` sharing `derive.ts`/`client.ts`.
+
 ## Scenario bands on the other projection charts
 
 Shipped (2026-07): bear/base/bull uncertainty bands (return ±3pp) on the **Forecast**
