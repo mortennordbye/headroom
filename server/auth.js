@@ -58,9 +58,14 @@ function resolveAuth(env, stored) {
   return { enabled: false, source: 'none', verify: () => false };
 }
 
-/** In-memory session store: opaque tokens → expiry. Single-process only. */
-function createSessionStore(ttlMs) {
-  const sessions = new Map(); // token → expiresAt (ms epoch)
+/**
+ * Session store over opaque tokens → expiry. `store` is any object exposing the
+ * Map subset used here (`get`/`set`/`delete`/`clear`); it defaults to an in-memory
+ * Map (single-process, lost on restart). Pass a persistent-backed store (e.g.
+ * SQLite) to keep sessions alive across restarts so users aren't logged out.
+ */
+function createSessionStore(ttlMs, store = new Map()) {
+  const sessions = store; // token → expiresAt (ms epoch)
   return {
     create() {
       const token = crypto.randomBytes(32).toString('hex');

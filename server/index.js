@@ -168,7 +168,32 @@ function currentAuth() {
 
 const SESSION_COOKIE = 'hr_session';
 const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
-const sessions = createSessionStore(SESSION_TTL_MS);
+
+// Sessions live in the data volume (like auth_config) so a container restart no
+// longer logs everyone out. Opaque tokens only — no personal data — separate from
+// the user blob so the client's autosave can't touch them and they never export.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+  );
+`);
+const sessGetStmt = db.prepare('SELECT expires_at AS exp FROM sessions WHERE token = ?');
+const sessSetStmt = db.prepare(
+  'INSERT INTO sessions (token, expires_at) VALUES (?, ?) ' +
+  'ON CONFLICT(token) DO UPDATE SET expires_at = excluded.expires_at',
+);
+const sessDelStmt = db.prepare('DELETE FROM sessions WHERE token = ?');
+const sessClearStmt = db.prepare('DELETE FROM sessions');
+const sessPruneStmt = db.prepare('DELETE FROM sessions WHERE expires_at <= ?');
+sessPruneStmt.run(Date.now()); // drop anything already expired on boot
+const sessionStore = {
+  get: (token) => sessGetStmt.get(token)?.exp,
+  set: (token, exp) => { sessSetStmt.run(token, exp); },
+  delete: (token) => { sessDelStmt.run(token); },
+  clear: () => { sessClearStmt.run(); },
+};
+const sessions = createSessionStore(SESSION_TTL_MS, sessionStore);
 
 // Rate limiting. Single-user, so a global bucket (one keyGenerator) is the right
 // model — no per-IP keying, which also sidesteps proxy/X-Forwarded-For concerns.
