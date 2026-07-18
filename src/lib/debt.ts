@@ -314,3 +314,19 @@ export const DEBT_TYPES: DebtType[] = ['student', 'consumer', 'credit_card', 'ot
 export function sumDebtByType(debts: Debt[], type: DebtType): number {
   return debts.reduce((s, d) => (d.type === type ? s + Math.max(0, d.balance) : s), 0);
 }
+
+/**
+ * Total debt as it counts toward Norway's lending rule (gjeldsgrad / 5× income
+ * cap). A revolving credit line with a granted `creditLimit` counts at its full
+ * frame (innvilget kredittramme), not the drawn balance — so a card with a 100k
+ * limit and 20k drawn counts 100k. Every other line, and any card without a
+ * recorded limit, counts at its outstanding balance. This is distinct from the
+ * net-worth `totalDebt` (which always uses the drawn balance).
+ */
+export function lendingDebtTotal(debts: Debt[]): number {
+  return debts.reduce((s, d) => {
+    const bal = Math.max(0, finite(d.balance));
+    const frame = Math.max(0, finite(d.creditLimit));
+    return s + Math.max(bal, frame);
+  }, 0);
+}

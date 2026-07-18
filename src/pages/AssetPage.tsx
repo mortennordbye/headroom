@@ -222,6 +222,10 @@ const AssetPage: React.FC = () => {
     [assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm]
   );
   const debtByYear = useMemo(() => calcDebtBalanceByYear(debts, 15, currentMonthKey()), [debts]);
+  const mortgageBalances = useMemo(
+    () => calcMortgageBalanceByYear(assets.houseDebt, projMortgageRate, projMortgageTerm, 15),
+    [assets.houseDebt, projMortgageRate, projMortgageTerm],
+  );
   const projectionData = useMemo(
     () => calcNetWorthProjectionByBucket(
       { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity },
@@ -230,8 +234,9 @@ const AssetPage: React.FC = () => {
       15,
       houseByYear,
       debtByYear,
+      { mortgageByYear: mortgageBalances, region },
     ),
-    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, projGrowthReturn, cryptoGrowthRate, cashGrowthRate, projHouseGrowth, houseByYear, debtByYear]
+    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, projGrowthReturn, cryptoGrowthRate, cashGrowthRate, projHouseGrowth, houseByYear, debtByYear, mortgageBalances, region]
   );
 
   const editRate = (label: string, current: number, onCommit: (v: number) => void) => {
@@ -253,10 +258,6 @@ const AssetPage: React.FC = () => {
   const liquidWealth = netInvestment + netCrypto + cashTotal;
   const lockedWealth = houseEquity + pensionTotal;
   const projectionStartYear = new Date().getFullYear();
-  const mortgageBalances = useMemo(
-    () => calcMortgageBalanceByYear(assets.houseDebt, projMortgageRate, projMortgageTerm, 15),
-    [assets.houseDebt, projMortgageRate, projMortgageTerm],
-  );
   return (
     <>
     <div

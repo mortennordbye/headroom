@@ -21,7 +21,7 @@ import {
   calcRecommendations,
   calcHomeownerMortgageStatus,
 } from '../src/lib/calculations';
-import { planPayoff, extraPaymentSavings, sumDebtByType, type PayoffStrategy } from '../src/lib/debt';
+import { planPayoff, extraPaymentSavings, sumDebtByType, lendingDebtTotal, type PayoffStrategy } from '../src/lib/debt';
 import { essentialMonthlyExpenses, fixedExpenseTotalsByType } from '../src/lib/fixedExpenseTotals';
 import { monthlyCashflow } from '../src/lib/monthlyCashflow';
 import { savingsRateStatus } from '../src/lib/savingsRate';
@@ -91,8 +91,9 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
   const gross = grossAnnualIncome(blob, monthKey);
   const nonMortgageDebt = totalNonMortgageDebt(blob);
   const breakdown = computeEquityBreakdown(blob.assets);
-  // DTI includes the mortgage: DashboardPage.tsx:138.
-  const dti = calcDebtToIncome(blob.assets.houseDebt + nonMortgageDebt, gross);
+  // DTI includes the mortgage and counts revolving lines at their full credit
+  // frame (capacityDebt), mirroring DashboardPage.tsx.
+  const dti = calcDebtToIncome(blob.assets.houseDebt + lendingDebtTotal(blob.debts ?? []), gross);
   const hasMortgage = blob.assets.houseDebt > 0;
   const mortgage = hasMortgage
     ? calcHomeownerMortgageStatus(

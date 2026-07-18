@@ -17,11 +17,16 @@ warning. Also fixed the panel's serviceability DTI to include `assets.houseDebt`
   import/demo + Settings export). **What would unblock:** decide they're worth persisting, then add a
   single `boligAssumptions` object across those sites. **Where:** `src/pages/bolig/SecondHomePanel.tsx`,
   `src/lib/payloadRegistry.ts`, `src/context/FinanceContext.tsx`.
-- **Credit-card *limits* vs balances is a whole-app debt-model gap.** The 5× rule counts the full
-  granted credit frame, but the core `debts` model stores drawn balance only. The new section takes a
-  manual `creditFrames` figure as a stopgap; a proper fix adds a `creditLimit` to the Debt shape and
-  uses it wherever debt feeds a lending check. **Where:** `src/context/FinanceContext.tsx` (`Debt`),
-  `src/lib/debt.ts`, DTI call-sites (`DashboardPage.tsx`, `SecondHomePanel.tsx`).
+- **Credit-card *limits* vs balances — DONE (2026-07).** `Debt` gained an optional `creditLimit`
+  (the granted frame); `lendingDebtTotal` in `src/lib/debt.ts` counts a limited line at its full
+  frame (falling back to the balance when no limit is recorded or the drawn amount exceeds it), and
+  FinanceContext exposes it as `capacityDebt` alongside the net-worth `totalDebt`. Wired into the
+  lending checks: Dashboard gjeldsgrad, the Loan first-buyer `Låneevne` auto-fill (`BoligPage`), the
+  second-home `calcPortfolio` headroom, and the MCP `overview` DTI (`mcp/derive.ts`). Editor field +
+  i18n in `DebtSection`; sanitize + demo updated. Remaining: the second-home planner's *detailed*
+  `calcRealBorrowingCapacity` still uses drawn `totalDebt` plus its own manual `creditFrames` row
+  (kept to avoid double-counting the frame). Could later auto-seed that `creditFrames` field from the
+  sum of recorded `creditLimit`s and drop the manual entry. **Where:** `src/pages/bolig/SecondHomePanel.tsx`.
 
 ## MCP server — known gaps (shipped v1, 2026-07)
 
@@ -127,11 +132,20 @@ raise/savings/return/inflation sliders from the user's salary CAGR, `recommended
   the 20% BSU income-tax credit isn't in `calcNorwegianTax`. Needs a new contribution input +
   a capped credit term in the tax engine. **Where**: `src/lib/norwegianTax.ts`,
   `src/pages/AssetPage.tsx`.
-- **Wealth tax (formuesskatt) absent.** No `formuesskatt` calc anywhere; for net wealth above
-  the ~1.76M threshold it's ~0.85–1.1%/yr of recurring tax missing from Forecast/Dashboard
-  projections and Pengestrøm. Needs a new calc (threshold/rate inputs, valuation discounts) and
-  wiring into the projections. **Where**: new `src/lib/`, `src/pages/ForecastPage.tsx`,
-  `src/pages/AssetPage.tsx`.
+- **Wealth tax (formuesskatt) in projections — DONE (2026-07).** `calcWealthTax`
+  (`src/lib/norwegianTax.ts`, valuation discounts + bunnfradrag + brackets) is now folded into the
+  forward projections as a recurring annual drag, region-guarded to `'no'` and a no-op below the
+  bunnfradrag. Bucket engine (`calcNetWorthProjectionByBucket`) gained a `WealthTaxProjectionConfig`
+  ({mortgageByYear, region}) — computes the tax per year from that year's composition (home market
+  value recovered as equity + mortgage) and pays it out of the liquid buckets, so it compounds; this
+  covers **Dashboard 15y + Assets Growth** (shared engine). The **Forecast** (`projectForecast`,
+  blended-scalar engine) threads the starting composition in and deducts the tax from net worth each
+  year, with the bear/bull bands fed `contribution − wealthTax` so they stay consistent. Unit-tested
+  (6 bucket + 3 forecast cases). Remaining simplifications (deliberate, documented in code):
+  single-person bunnfradrag (no spousal doubling); the forecast splits financial assets into
+  shares-vs-other by *today's* ratio (home valuation stays exact); Pengestrøm (current-month cashflow)
+  still doesn't show a wealth-tax line — only the projections do. **Where**: `src/lib/calculations.ts`,
+  `src/lib/forecastProjection.ts`, `src/pages/{ForecastPage,DashboardPage,AssetPage}.tsx`.
 
 ## Live SSB wage statistics
 

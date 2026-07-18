@@ -84,9 +84,9 @@ export function getDemoData(): Partial<ExportPayload> {
   };
   const demoDebts: Debt[] = [
     { id: 'demo-debt-1', name: 'Studielån (Lånekassen)', type: 'student', balance: 284000, rate: 4.9, minPayment: 3200 },
-    { id: 'demo-debt-2', name: 'Kredittkort', type: 'credit_card', balance: 24500, rate: 22.9, minPayment: 1500 },
+    { id: 'demo-debt-2', name: 'Kredittkort', type: 'credit_card', balance: 24500, rate: 22.9, minPayment: 1500, creditLimit: 75000 },
     { id: 'demo-debt-3', name: 'Forbrukslån', type: 'consumer', balance: 55000, rate: 12.5, minPayment: 2500 },
-    { id: 'demo-debt-4', name: 'Kredittkort (betales månedlig)', type: 'credit_card', balance: 18000, rate: 0, minPayment: 0, revolving: true },
+    { id: 'demo-debt-4', name: 'Kredittkort (betales månedlig)', type: 'credit_card', balance: 18000, rate: 0, minPayment: 0, revolving: true, creditLimit: 50000 },
   ];
   const demoFixedExpenses: ExportPayload['fixedExpenses'] = [
     { id: 'demo-fx-1', name: 'Huslån', amount: 16500, type: 'fixed' },

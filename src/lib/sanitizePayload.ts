@@ -74,7 +74,7 @@ const NUMBER_RECORDS = ['monthlyIncomes', 'netWorthHistory', 'categoryBudgets'] 
 const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
   fixedExpenses: { amount: 0 },
   dailyTransactions: { amount: 0 },
-  debts: { balance: 0, rate: 0, minPayment: 0 },
+  debts: { balance: 0, rate: 0, minPayment: 0, creditLimit: 0 },
   // Second-home scenarios are flat by design so every numeric input is coerced
   // here (non-numeric keys — id/name/strategy — pass through untouched).
   secondHomeScenarios: {

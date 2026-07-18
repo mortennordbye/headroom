@@ -37,7 +37,7 @@ const SecondHomePanel: React.FC = () => {
   const {
     t, formatCurrency,
     secondHomeScenarios, addSecondHomeScenario, updateSecondHomeScenario, removeSecondHomeScenario,
-    grossAnnualIncome, totalDebt, assets,
+    grossAnnualIncome, totalDebt, capacityDebt, assets,
     policyRate, houseGrowthRate,
   } = useFinance();
   const bp = t.boligPage;
@@ -136,9 +136,12 @@ const SecondHomePanel: React.FC = () => {
   }, [scenario, derived, baseSalary, bonus, includeBonus, rentFactorPct, creditFrames, assets.houseDebt, totalDebt, liquidValue]);
 
   // Portfolio aggregate (owning home 2, 3, 4…) + the cross-scenario comparison.
+  // Portfolio headroom is a lending check (cumulative debt vs 5× income), so it
+  // counts the full credit frame via `capacityDebt`. The detailed real-borrowing
+  // build-up above keeps `totalDebt` because it has its own manual `creditFrames` row.
   const portfolio = useMemo(
-    () => calcPortfolio(secondHomeScenarios, grossAnnualIncome, totalDebt),
-    [secondHomeScenarios, grossAnnualIncome, totalDebt],
+    () => calcPortfolio(secondHomeScenarios, grossAnnualIncome, capacityDebt),
+    [secondHomeScenarios, grossAnnualIncome, capacityDebt],
   );
   const comparison = useMemo(
     () => secondHomeScenarios.map((s) => ({ s, sum: summarizeScenario(s) })),

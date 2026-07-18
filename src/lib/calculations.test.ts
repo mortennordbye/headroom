@@ -316,4 +316,52 @@ describe('calcNetWorthProjectionByBucket', () => {
     expect(p.every(pt => pt.debt === 0)).toBe(true);
     expect(p[0].total).toBe(1_170_000);
   });
+
+  it('leaves wealthTax at 0 and total unchanged when no config is passed', () => {
+    const p = calcNetWorthProjectionByBucket(start, 0, rates, 2);
+    expect(p.every(pt => pt.wealthTax === 0)).toBe(true);
+  });
+
+  describe('wealth-tax drag', () => {
+    const zero = { stocks: 0, crypto: 0, cash: 0, house: 0 };
+    // 3M in listed shares → valued at 80% = 2.4M, 0.64M above the 1.76M bunnfradrag
+    // → 6 400/yr at the first bracket (1.0%).
+    const rich = { stocks: 3_000_000, crypto: 0, cash: 0, house: 0 };
+
+    it('assesses tax on the valued wealth above the bunnfradrag and pays it from the pot', () => {
+      const p = calcNetWorthProjectionByBucket(rich, 0, zero, 2, undefined, undefined, {
+        mortgageByYear: [0, 0, 0], region: 'no',
+      });
+      expect(p[0].wealthTax).toBe(6_400);          // 0.64M × 1.0%
+      expect(p[0].total).toBe(3_000_000);          // year 0 = today, pre-deduction
+      expect(p[1].total).toBe(2_993_600);          // last year's 6 400 left the pot
+      expect(p[1].wealthTax).toBe(6_349);          // reassessed on the smaller base
+    });
+
+    it('is a no-op below the bunnfradrag', () => {
+      const modest = { stocks: 1_000_000, crypto: 0, cash: 0, house: 0 }; // valued 0.8M < 1.76M
+      const p = calcNetWorthProjectionByBucket(modest, 0, zero, 2, undefined, undefined, {
+        mortgageByYear: [0, 0, 0], region: 'no',
+      });
+      expect(p.every(pt => pt.wealthTax === 0)).toBe(true);
+      expect(p[2].total).toBe(1_000_000);
+    });
+
+    it('is a no-op outside the Norwegian region', () => {
+      const p = calcNetWorthProjectionByBucket(rich, 0, zero, 2, undefined, undefined, {
+        mortgageByYear: [0, 0, 0], region: 'generic',
+      });
+      expect(p.every(pt => pt.wealthTax === 0)).toBe(true);
+      expect(p.every(pt => pt.total === 3_000_000)).toBe(true);
+    });
+
+    it('recovers the home market value from equity + mortgage', () => {
+      // 17M equity + 3M mortgage = 20M market value → valued 10M×25% + 10M×70% = 9.5M,
+      // less 3M debt = 6.5M net wealth; 4.74M above bunnfradrag × 1.0% = 47 400.
+      const p = calcNetWorthProjectionByBucket(zero, 0, zero, 0, [17_000_000], [0], {
+        mortgageByYear: [3_000_000], region: 'no',
+      });
+      expect(p[0].wealthTax).toBe(47_400);
+    });
+  });
 });
