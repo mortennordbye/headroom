@@ -68,6 +68,17 @@ describe('createSessionStore', () => {
     const s = createSessionStore(-1); // already expired
     expect(s.isValid(s.create())).toBe(false);
   });
+
+  it('persists tokens through a provided store across a restart', () => {
+    const backing = new Map(); // stands in for the SQLite-backed store
+    const before = createSessionStore(60_000, backing);
+    const token = before.create();
+    // Simulate a restart: a fresh store over the SAME backing (as SQLite would be).
+    const after = createSessionStore(60_000, backing);
+    expect(after.isValid(token)).toBe(true);
+    after.clear();
+    expect(after.isValid(token)).toBe(false);
+  });
 });
 
 describe('makeAuthGate', () => {
