@@ -17,6 +17,7 @@ import {
   updateFixedExpense,
   updateAssumptions,
   setAiContext,
+  setProfile,
 } from './mutations';
 
 // Run a builder on a fresh clone; return the before-snapshot, the mutated blob, and the diff.
@@ -120,6 +121,15 @@ const cases: {
     mutate: (b) => setAiContext(b, { text: 'New plan: sabbatical in 2028.' }),
     assertChange: (b) => expect(b.aiContext).toBe('New plan: sabbatical in 2028.'),
   },
+  {
+    name: 'set_profile (single field, preserves the other)',
+    touched: ['profile'],
+    mutate: (b) => setProfile(b, { name: 'Sam Roe' }),
+    assertChange: (b) => {
+      expect(b.profile?.name).toBe('Sam Roe');
+      expect(b.profile?.birthDate).toBe('1990-05-01'); // untouched
+    },
+  },
 ];
 
 describe('write builders preserve all other data', () => {
@@ -162,5 +172,8 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
   });
   it('update_assumptions with no fields throws', () => {
     expect(() => updateAssumptions(structuredClone(fullFixture()), {})).toThrow(/no assumption/);
+  });
+  it('set_profile with no fields throws', () => {
+    expect(() => setProfile(structuredClone(fullFixture()), {})).toThrow(/no profile/);
   });
 });

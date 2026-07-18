@@ -122,6 +122,9 @@ export function fullFixture(): ExportPayload {
     employerCostConfig: { feriepengesatsPct: 12, payrollTaxPct: 14.1, overheadAnnual: 50000, overheadPct: 0 },
     billingConfig: { workHoursPerYear: 1950, utilizationPct: 80, billableHoursOverride: null, targetMarginPct: 20, hoursPerDay: 7.5 },
 
+    // --- profile ---
+    profile: { name: 'Alex Doe', birthDate: '1990-05-01' },
+
     // --- goals ---
     goals: [
       { id: 'g1', name: 'Down payment', target: 600000, source: 'bufferAccount' },

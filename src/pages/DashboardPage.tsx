@@ -94,6 +94,7 @@ const DashboardPage: React.FC = () => {
     region,
     assumptionsNudgeDismissed,
     dismissAssumptionsNudge,
+    profile,
   } = useFinance();
   // Month names must follow the UI language (BudgetPage does the same).
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -312,7 +313,7 @@ const DashboardPage: React.FC = () => {
       {/* Hero header */}
       <header data-tour="dashboard-hero" className="max-w-4xl">
         <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
-          {t.dashboardPage.goodAfternoon}
+          {profile.name ? `${t.dashboardPage.goodAfternoon}, ${profile.name}` : t.dashboardPage.goodAfternoon}
         </div>
         <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
           <>{t.dashboardPage.heroA} <em className="italic" style={{ color: 'var(--brass)' }}>headroom</em>.<br className="hidden md:inline" /> {t.dashboardPage.heroB}</>

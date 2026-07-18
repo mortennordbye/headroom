@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf, lastNMonthKeys, isBeforePayday } from './date';
+import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf, lastNMonthKeys, isBeforePayday, ageFromBirthDate } from './date';
+
+describe('ageFromBirthDate', () => {
+  const now = new Date(2026, 6, 18); // 2026-07-18
+
+  it('counts whole years, respecting whether the birthday has passed this year', () => {
+    expect(ageFromBirthDate('1990-05-01', now)).toBe(36); // birthday already passed
+    expect(ageFromBirthDate('1990-09-01', now)).toBe(35); // birthday not yet this year
+    expect(ageFromBirthDate('1990-07-18', now)).toBe(36); // birthday is today
+  });
+
+  it('returns null for absent, unparseable, or future dates', () => {
+    expect(ageFromBirthDate(undefined, now)).toBeNull();
+    expect(ageFromBirthDate('', now)).toBeNull();
+    expect(ageFromBirthDate('not-a-date', now)).toBeNull();
+    expect(ageFromBirthDate('2030-01-01', now)).toBeNull();
+  });
+});
 
 describe('monthKeyFromDate', () => {
   it('formats a date as a local yyyy-MM key with zero-padding', () => {

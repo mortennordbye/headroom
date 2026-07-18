@@ -14,6 +14,7 @@ import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import type { SecondHomeScenario } from '../lib/secondHome';
 import { getDemoData } from '../lib/demoData';
+import { type Profile, DEFAULT_PROFILE, birthYearFrom } from '../lib/profile';
 import { translations, type Language, type Translations } from '../i18n/translations';
 
 // Re-exported so existing consumers can keep importing these from the context.
@@ -579,6 +580,10 @@ interface FinanceSettingsContextType {
   /** Free-text notes about the user's plans / long-term goals (AI context). */
   aiContext: string;
   setAiContext: (v: string) => void;
+  /** Optional user profile (name, birthday). Mostly extra context for the AI;
+   *  the birthday is also the single source for the pension birth year. */
+  profile: Profile;
+  updateProfile: (patch: Partial<Profile>) => void;
   hiddenNavItems: string[];
   toggleNavItem: (path: string) => void;
   /** Dashboard "market assumptions still on defaults" nudge — dismissed for good. */
@@ -915,6 +920,7 @@ export interface ExportPayload {
    *  long-term goals — e.g. "want to start my own company in ~3 years". Purely
    *  narrative; not used in any calculation, exposed to the MCP server for context. */
   aiContext?: string;
+  profile?: Profile;
 }
 
 export interface DailyDataEntry {
@@ -1036,6 +1042,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [conservativeNudgeDismissedMonth, setConservativeNudgeDismissedMonth] = useState('');
   const [payday, setPayday] = useState<number>(0);
   const [aiContext, setAiContext] = useState('');
+  const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [demoMode, setDemoMode] = useState(false);
   // First-run guided setup. `onboardingCompleted` is the persisted flag;
   // `onboardingActive` (not persisted) is whether the tour overlay is showing.
@@ -1104,14 +1111,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext,
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext]);
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile]);
 
   // The one place that applies a loaded/imported blob → app state (§4.2), with
   // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
@@ -1148,7 +1155,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
       incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
       conservativeNudgeDismissedMonth: setConservativeNudgeDismissedMonth, payday: setPayday,
-      aiContext: setAiContext,
+      aiContext: setAiContext, profile: setProfile,
     };
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
@@ -1941,6 +1948,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setPension(prev => ({ ...prev, [key]: value }));
   }, []);
 
+  // Profile is the single source for the pension birth year: setting the birthday
+  // writes the derived year through to `pension.birthYear`, so every existing
+  // pension reader keeps working unchanged.
+  const updateProfile = useCallback((patch: Partial<Profile>) => {
+    setProfile(prev => ({ ...prev, ...patch }));
+    if ('birthDate' in patch) {
+      const year = birthYearFrom(patch.birthDate);
+      if (year) setPension(prev => ({ ...prev, birthYear: year }));
+    }
+  }, []);
+
   const updateEmployerCostConfig = useCallback((key: keyof EmployerCostConfig, value: number) => {
     setEmployerCostConfig(prev => ({ ...prev, [key]: value }));
   }, []);
@@ -2464,6 +2482,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
     region, setRegion, customTaxRatePct, setCustomTaxRatePct,
     aiContext, setAiContext,
+    profile, updateProfile,
     hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
@@ -2480,7 +2499,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     currentMonth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
-    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, aiContext, hiddenNavItems, toggleNavItem,
+    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, aiContext, profile, updateProfile, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
     conservativeNudgeDismissedMonth, dismissConservativeNudge,

@@ -205,3 +205,114 @@ export function calcNorwegianTax(
     effectiveRatePct,
   };
 }
+
+// ─────────────────────────── Formuesskatt (wealth tax) ───────────────────────
+//
+// Approximate Norwegian net-wealth tax. Net wealth = valued assets − debt; tax
+// applies to the slice above the personal deduction (bunnfradrag). Assets are
+// valued at official rates (verdsettingsrabatt): a primary residence at 25% of
+// market value (70% on the part above 10M), listed shares/funds at 80%, and
+// everything else (deposits, crypto, BSU, buffer) at full value.
+//
+// Simplifications (a "good-enough" estimate, not a tax return): single-person
+// bunnfradrag (no spousal doubling), and full debt is deducted (the proportional
+// gjeldsreduksjon for discount-valued assets is not modelled, so this slightly
+// over-states deductible debt / under-states tax for the wealthy).
+
+export interface WealthTaxParams {
+  /** Personal deduction per person — net wealth below this is untaxed. */
+  bunnfradrag: number;
+  /** Rate brackets on net wealth: `from` is the NOK lower bound (first = bunnfradrag). */
+  brackets: Array<{ from: number; rate: number }>;
+  /** Primary residence: valued at `primaryHomeRate` up to `primaryHomeHighThreshold`, then `primaryHomeHighRate`. */
+  primaryHomeRate: number;
+  primaryHomeHighThreshold: number;
+  primaryHomeHighRate: number;
+  /** Listed shares & equity funds valuation rate (aksjerabatt). */
+  sharesRate: number;
+}
+
+export const WEALTH_TAX_PARAMS: Record<number, WealthTaxParams> = {
+  2025: {
+    bunnfradrag: 1_760_000,
+    brackets: [
+      { from: 1_760_000, rate: 0.010 },
+      { from: 20_700_000, rate: 0.011 },
+    ],
+    primaryHomeRate: 0.25,
+    primaryHomeHighThreshold: 10_000_000,
+    primaryHomeHighRate: 0.70,
+    sharesRate: 0.80,
+  },
+  // Formuesskatt figures carried forward from 2025 (thresholds unchanged in the
+  // adopted 2026 budget); update if Stortinget revises them.
+  2026: {
+    bunnfradrag: 1_760_000,
+    brackets: [
+      { from: 1_760_000, rate: 0.010 },
+      { from: 20_700_000, rate: 0.011 },
+    ],
+    primaryHomeRate: 0.25,
+    primaryHomeHighThreshold: 10_000_000,
+    primaryHomeHighRate: 0.70,
+    sharesRate: 0.80,
+  },
+};
+
+const WEALTH_PARAMS = WEALTH_TAX_PARAMS[TAX_YEAR] ?? WEALTH_TAX_PARAMS[2025];
+
+export interface WealthTaxComponents {
+  /** Market value of the primary residence (valued at 25% / 70%). */
+  primaryHomeValue: number;
+  /** Listed shares & equity funds market value (valued at 80%). */
+  shares: number;
+  /** Deposits, crypto, BSU, buffer — everything valued at 100%. */
+  otherAssets: number;
+  /** Total deductible debt (mortgage + non-mortgage). */
+  debt: number;
+}
+
+export interface WealthTaxBreakdown {
+  /** Assets after valuation discounts. */
+  valuedAssets: number;
+  /** Valued assets − debt, floored at 0. */
+  netWealth: number;
+  bunnfradrag: number;
+  /** Net wealth above the bunnfradrag (the taxed slice). */
+  taxableBase: number;
+  /** Annual formuesskatt. */
+  tax: number;
+  /** tax ÷ net wealth, as a percent (0 when there's no net wealth). */
+  effectiveRatePct: number;
+}
+
+function valuePrimaryHome(marketValue: number, P: WealthTaxParams): number {
+  const v = Math.max(0, marketValue);
+  if (v <= P.primaryHomeHighThreshold) return v * P.primaryHomeRate;
+  return P.primaryHomeHighThreshold * P.primaryHomeRate + (v - P.primaryHomeHighThreshold) * P.primaryHomeHighRate;
+}
+
+/**
+ * Annual Norwegian wealth tax (formuesskatt) on a household's net wealth. See the
+ * section header for the valuation rules and simplifications.
+ */
+export function calcWealthTax(c: WealthTaxComponents, year: number = TAX_YEAR): WealthTaxBreakdown {
+  const P = WEALTH_TAX_PARAMS[year] ?? WEALTH_PARAMS;
+  const valuedAssets =
+    valuePrimaryHome(c.primaryHomeValue, P) +
+    Math.max(0, c.shares) * P.sharesRate +
+    Math.max(0, c.otherAssets);
+  const netWealth = Math.max(0, valuedAssets - Math.max(0, c.debt));
+  const taxableBase = Math.max(0, netWealth - P.bunnfradrag);
+  // Each bracket taxes the slice of net wealth between its `from` and the next
+  // bracket's `from`; the first bracket starts at the bunnfradrag.
+  let tax = 0;
+  for (let i = 0; i < P.brackets.length; i++) {
+    const from = P.brackets[i].from;
+    if (netWealth <= from) break;
+    const to = P.brackets[i + 1]?.from ?? Infinity;
+    tax += (Math.min(netWealth, to) - from) * P.brackets[i].rate;
+  }
+  const effectiveRatePct = netWealth > 0 ? (tax / netWealth) * 100 : 0;
+  return { valuedAssets, netWealth, bunnfradrag: P.bunnfradrag, taxableBase, tax, effectiveRatePct };
+}

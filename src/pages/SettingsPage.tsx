@@ -28,6 +28,7 @@ import {
   History,
   CalendarClock,
   Bell,
+  User,
 } from 'lucide-react';
 import {
   useFinance,
@@ -50,6 +51,7 @@ import { DeltaChip } from '../components/ui/DeltaChip';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { provenanceOf } from '../lib/provenance';
+import { ageFromBirthDate } from '../lib/date';
 import { parseLocaleNumber } from '../lib/validators';
 import { BankSyncCard } from '../components/BankSyncCard';
 import { CategoryRules } from '../components/CategoryRules';
@@ -70,6 +72,9 @@ export default function SettingsPage() {
     t,
     aiContext,
     setAiContext,
+    profile,
+    updateProfile,
+    jobs,
     lang,
     setLang,
     displayCurrency,
@@ -116,6 +121,12 @@ export default function SettingsPage() {
     restoreGrowthRateDefaults();
     setSavingsTargetPercent(DEFAULT_SAVINGS_TARGET_PCT);
   };
+
+  // Profile card derivations: age from the birthday, and the current job read
+  // from the active (open-ended) job on the Salary page — displayed, not stored.
+  const profileAge = ageFromBirthDate(profile.birthDate);
+  const activeJob = jobs.find(j => !j.endDate);
+  const currentJob = activeJob ? [activeJob.role, activeJob.employer].filter(Boolean).join(' · ') : '';
 
   // Snapshot of the app's current persisted state — drives the export breakdown
   // and the "current → incoming" comparison shown in the import preview.
@@ -316,6 +327,87 @@ export default function SettingsPage() {
 
       {/* Bento grid */}
       <div data-tour="settings-all" className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* ═══════ About you ═══════ */}
+        <GroupHeading>{t.settings.groups.profile}</GroupHeading>
+
+        {/* ──── Profile (span 12) ──── */}
+        <Card padding="lg" className="md:col-span-12">
+          <SectionLabel icon={<User />}>{t.settings.profileSection.title}</SectionLabel>
+          <p className="mt-1 mb-4 text-[13px]" style={{ color: 'var(--text-3)' }}>
+            {t.settings.profileSection.desc}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: 'var(--text-2)' }}>
+                {t.settings.profileSection.name}
+              </label>
+              <input
+                type="text"
+                value={profile.name ?? ''}
+                onChange={(e) => updateProfile({ name: e.target.value })}
+                placeholder={t.settings.profileSection.namePlaceholder}
+                className="w-full rounded-[8px] px-3 h-10 text-[14px] outline-none border"
+                style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: 'var(--text-2)' }}>
+                {t.settings.profileSection.birthday}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={profile.birthDate ?? ''}
+                  onChange={(e) => updateProfile({ birthDate: e.target.value || undefined })}
+                  className="w-full rounded-[8px] px-3 h-10 text-[14px] outline-none border"
+                  style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+                />
+                {profileAge !== null && (
+                  <span
+                    className="shrink-0 inline-flex items-center px-2.5 h-7 rounded-[6px] text-[12px] font-semibold tabular-nums"
+                    style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
+                  >
+                    {profileAge} {t.settings.profileSection.ageSuffix}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div
+            className="mt-5 pt-4 border-t flex items-center justify-between gap-3 flex-wrap"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-2)' }}>
+                {t.settings.profileSection.currentJob}
+              </div>
+              <div className="mt-1 text-[14px]" style={{ color: currentJob ? 'var(--text-1)' : 'var(--text-3)' }}>
+                {currentJob || t.settings.profileSection.currentJobEmpty}
+              </div>
+            </div>
+            <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>{t.settings.profileSection.editOnSalary}</span>
+          </div>
+        </Card>
+
+        {/* ──── Context notes for the AI assistant (span 12) ──── */}
+        <Card padding="lg" className="md:col-span-12" data-tour="settings-ai-context">
+          <SectionLabel icon={<Sparkles />}>{t.settings.aiContextSection.title}</SectionLabel>
+          <p className="mt-1 mb-4 text-[13px]" style={{ color: 'var(--text-3)' }}>
+            {t.settings.aiContextSection.desc}
+          </p>
+          <textarea
+            value={aiContext}
+            onChange={(e) => setAiContext(e.target.value)}
+            placeholder={t.settings.aiContextSection.placeholder}
+            rows={5}
+            className="w-full rounded-[8px] p-3 text-[14px] leading-[1.6] outline-none border resize-y"
+            style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+          />
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
+            {t.settings.aiContextSection.hint}
+          </p>
+        </Card>
+
         {/* ═══════ Preferences ═══════ */}
         <GroupHeading>{t.settings.groups.preferences}</GroupHeading>
 
@@ -902,25 +994,6 @@ export default function SettingsPage() {
 
         {/* ──── Restore points — per-write revision history (span 12) ──── */}
         <RestorePointsCard />
-
-        {/* ──── Context notes for the AI assistant (span 12) ──── */}
-        <Card padding="lg" className="md:col-span-12" data-tour="settings-ai-context">
-          <SectionLabel icon={<Sparkles />}>{t.settings.aiContextSection.title}</SectionLabel>
-          <p className="mt-1 mb-4 text-[13px]" style={{ color: 'var(--text-3)' }}>
-            {t.settings.aiContextSection.desc}
-          </p>
-          <textarea
-            value={aiContext}
-            onChange={(e) => setAiContext(e.target.value)}
-            placeholder={t.settings.aiContextSection.placeholder}
-            rows={5}
-            className="w-full rounded-[8px] p-3 text-[14px] leading-[1.6] outline-none border resize-y"
-            style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
-          />
-          <p className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {t.settings.aiContextSection.hint}
-          </p>
-        </Card>
 
         {/* ═══════ Security ═══════ */}
         <GroupHeading>{t.settings.groups.security}</GroupHeading>
