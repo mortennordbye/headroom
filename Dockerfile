@@ -1,9 +1,18 @@
+# syntax=docker/dockerfile:1
+
 # Stage 1: build frontend
 FROM node:22-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS frontend-build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
-COPY . .
+# Cache-mount the npm download dir so a rebuild (or a lockfile change) reuses
+# already-fetched tarballs instead of re-downloading them.
+RUN --mount=type=cache,target=/root/.npm npm ci
+# Copy ONLY the frontend build inputs (not `.`), so editing server/, mcp/ or docs
+# doesn't invalidate this layer and force a full `npm run build` every time. The
+# build reads src/, public/, index.html, the tsconfigs and the vite config.
+COPY tsconfig*.json vite.config.ts index.html ./
+COPY src ./src
+COPY public ./public
 RUN npm run build
 
 # Stage 2: production
@@ -15,7 +24,8 @@ COPY server/package*.json ./
 # better-sqlite3 compiles a native addon; install the toolchain only for the
 # duration of `npm ci`, then drop it so it doesn't bloat the image or widen the
 # attack surface (the compiled .node binary persists).
-RUN apk add --no-cache --virtual .build-deps python3 make g++ \
+RUN --mount=type=cache,target=/root/.npm \
+    apk add --no-cache --virtual .build-deps python3 make g++ \
   && npm ci --omit=dev \
   && apk del .build-deps
 COPY server/index.js ./

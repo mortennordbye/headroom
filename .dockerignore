@@ -21,5 +21,7 @@ screenshots/
 AUDIT.md
 FEATURES.md
 BACKLOG.md
-*.test.ts
-*.test.tsx
+# Tests are never shipped and some reach into server/ — exclude them at any depth
+# so the image build doesn't compile them (the bare `*.test.ts` only matched root).
+**/*.test.ts
+**/*.test.tsx
