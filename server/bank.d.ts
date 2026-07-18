@@ -16,6 +16,9 @@ export interface MappedTransaction {
   // across a re-sync (see mergeTransactions).
   category?: string;
   categorySource?: 'auto' | 'manual';
+  // Provisional (not yet booked). Present only when pending import is enabled;
+  // a booked twin later evicts it (see evictSupersededPending).
+  pending?: boolean;
 }
 
 export interface MapOptions {
@@ -33,7 +36,9 @@ export function mapEBTransaction(tx: any, opts?: MapOptions): MappedTransaction;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapEBTransactions(txs: any[], opts?: MapOptions): MappedTransaction[];
 export function mergeTransactions(a: MappedTransaction[], b: MappedTransaction[], deletedIds?: string[]): MappedTransaction[];
+export function evictSupersededPending(txs: MappedTransaction[]): MappedTransaction[];
 export function dropStaleBareTwins(txs: MappedTransaction[]): MappedTransaction[];
+export function lastSyncAgeMs(nowMs?: number): number;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string; iban?: string };
 

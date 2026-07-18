@@ -7,6 +7,8 @@ import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import ChartTooltip from '../components/ChartTooltip';
 import { ProgressBar } from '../components/ui/ProgressBar';
+import { Card } from '../components/ui/Card';
+import { SectionLabel } from '../components/ui/SectionLabel';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { prepayVsInvest } from '../lib/prepayVsInvest';
@@ -17,9 +19,6 @@ import { pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
 import { currentMonthKey, addMonthsKey } from '../lib/date';
 import { formatAxisInt } from '../lib/format';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const ForecastPage: React.FC = () => {
   const {
@@ -230,11 +229,11 @@ const ForecastPage: React.FC = () => {
       </header>
 
       {/* Control panel */}
-      <div className={`${card} p-5 md:p-7 space-y-5`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-5">
         <div className="flex items-center justify-between gap-2 pb-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
             <Activity size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-            <h3 className={sectionLabel}>{t.forecastPage.assumptions}</h3>
+            <SectionLabel>{t.forecastPage.assumptions}</SectionLabel>
           </div>
           <button
             onClick={toggleCompare}
@@ -249,7 +248,7 @@ const ForecastPage: React.FC = () => {
           </button>
         </div>
 
-        {compareOn && <div className={sectionLabel} style={{ color: 'var(--accent)' }}>{t.forecast.scenarioA}</div>}
+        {compareOn && <SectionLabel style={{ color: 'var(--accent)' }}>{t.forecast.scenarioA}</SectionLabel>}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <SliderInput label={t.forecast.raiseAssumption} value={effA.raisePct} onChange={(v) => setA({ raisePct: v })} min={0} max={15} step={0.5} suffix="%" />
           <SliderInput label={t.forecast.savingsRateAssumption} value={effA.savingsPct} onChange={(v) => setA({ savingsPct: v })} min={0} max={70} step={5} suffix="%" />
@@ -261,7 +260,7 @@ const ForecastPage: React.FC = () => {
         {compareOn && (
           <>
             <div className="pt-1 border-t border-[var(--border)]" />
-            <div className={sectionLabel} style={{ color: 'var(--brass)' }}>{t.forecast.scenarioB}</div>
+            <SectionLabel style={{ color: 'var(--brass)' }}>{t.forecast.scenarioB}</SectionLabel>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <SliderInput label={t.forecast.raiseAssumption} value={effB.raisePct} onChange={(v) => setB({ raisePct: v })} min={0} max={15} step={0.5} suffix="%" accent="var(--brass)" />
               <SliderInput label={t.forecast.savingsRateAssumption} value={effB.savingsPct} onChange={(v) => setB({ savingsPct: v })} min={0} max={70} step={5} suffix="%" accent="var(--brass)" />
@@ -285,7 +284,7 @@ const ForecastPage: React.FC = () => {
             )}
           </>
         )}
-      </div>
+      </Card>
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
@@ -332,10 +331,10 @@ const ForecastPage: React.FC = () => {
 
       {/* Financial independence (FIRE) tile */}
       {fire && (
-        <div className={`${card} p-5 md:p-7 space-y-4`}>
+        <Card padding="none" className="p-5 md:p-7 space-y-4">
           <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
             <Flame size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-            <h3 className={sectionLabel}>{t.forecast.fireTitle}</h3>
+            <SectionLabel>{t.forecast.fireTitle}</SectionLabel>
           </div>
           <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.fireDesc}</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
@@ -370,15 +369,15 @@ const ForecastPage: React.FC = () => {
             </div>
             <ProgressBar pct={fire.progressPct} color="var(--accent)" />
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Prepay vs invest */}
       {prepay && (
-        <div className={`${card} p-5 md:p-7 space-y-4`}>
+        <Card padding="none" className="p-5 md:p-7 space-y-4">
           <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
             <Scale size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-            <h3 className={sectionLabel}>{t.forecast.prepayTitle}</h3>
+            <SectionLabel>{t.forecast.prepayTitle}</SectionLabel>
           </div>
           <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.prepayDesc}</p>
           <div className="max-w-xs">
@@ -409,14 +408,14 @@ const ForecastPage: React.FC = () => {
               .replace('{years}', String(years))}
           </div>
           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.forecast.prepayNote}</p>
-        </div>
+        </Card>
       )}
 
       {/* Net worth projection chart */}
-      <div className={`${card} p-5 md:p-7 space-y-4`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-4">
         <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
           <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{t.forecast.forecastChart}</h3>
+          <SectionLabel>{t.forecast.forecastChart}</SectionLabel>
         </div>
         <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.forecastChartDesc}</p>
         <div className="h-[320px] w-full">
@@ -456,13 +455,13 @@ const ForecastPage: React.FC = () => {
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--violet)' }} />{t.forecastPage.todaysKroner}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)', opacity: 0.25 }} />{t.forecastPage.band}</div>
         </div>
-      </div>
+      </Card>
 
       {/* Salary chart */}
-      <div className={`${card} p-5 md:p-7 space-y-4`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-4">
         <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
           <Wallet size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{t.forecast.salaryChart}</h3>
+          <SectionLabel>{t.forecast.salaryChart}</SectionLabel>
         </div>
         <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.salaryChartDesc}</p>
         <div className="h-[300px] w-full">
@@ -485,7 +484,7 @@ const ForecastPage: React.FC = () => {
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--positive)' }} />{t.forecast.netTakeHome}</div>
           {startingMortgage > 0 && <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--negative)' }} />{t.forecast.mortgageRemaining}</div>}
         </div>
-      </div>
+      </Card>
     </div>
   );
 };
@@ -506,7 +505,7 @@ interface SliderInputProps {
 const SliderInput: React.FC<SliderInputProps> = ({ label, value, onChange, min, max, step, suffix, accent = 'var(--accent)' }) => (
   <div className="space-y-2">
     <div className="flex items-baseline justify-between gap-2">
-      <span className={sectionLabel}>{label}</span>
+      <SectionLabel>{label}</SectionLabel>
       <span className="font-mono text-[13px] font-semibold" style={{ color: accent }}>
         {value}{suffix}
       </span>
@@ -544,8 +543,8 @@ interface SummaryTileProps {
 const SummaryTile: React.FC<SummaryTileProps> = ({ label, now, then, thenLabel, subThen, color }) => {
   const { t } = useFinance();
   return (
-    <div className={`${card} p-4 md:p-5 space-y-1.5`}>
-      <div className={sectionLabel}>{label}</div>
+    <Card padding="none" className="p-4 md:p-5 space-y-1.5">
+      <SectionLabel>{label}</SectionLabel>
       <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
         {then}
       </div>
@@ -554,7 +553,7 @@ const SummaryTile: React.FC<SummaryTileProps> = ({ label, now, then, thenLabel, 
         {t.forecastPage.now} · {now}
       </div>
       {subThen && <div className="text-[10px] font-mono" style={{ color: 'var(--violet)' }}>{subThen}</div>}
-    </div>
+    </Card>
   );
 };
 

@@ -4,9 +4,8 @@ import { AlertTriangle, TrendingUp, Edit2, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
 import { ProgressBar } from './ui/ProgressBar';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+import { Card } from './ui/Card';
+import { SectionLabel } from './ui/SectionLabel';
 
 // Category roles (shared by the pills, allocation strip and legend).
 const ROLE_FIXED = 'var(--teal)';
@@ -163,7 +162,7 @@ export default function SmartRecommendations() {
   const slicePct = (v: number) => (pieTotal > 0 ? (v / pieTotal) * 100 : 0);
 
   return (
-    <div data-tour="budget-plan" className={`${card} p-5 md:p-7`}>
+    <Card data-tour="budget-plan" padding="none" className="p-5 md:p-7">
       {conservativeMode && conservativeNudgeDismissedMonth !== format(currentMonth, 'yyyy-MM') && (
         <div className="mb-4 flex items-center gap-2 border bg-[var(--warning-bg)] border-[color-mix(in_srgb,var(--warning)_30%,transparent)] rounded-[6px] px-4 py-2.5 text-[12px] text-[var(--warning)] font-medium">
           <AlertTriangle size={13} className="shrink-0" />
@@ -185,7 +184,7 @@ export default function SmartRecommendations() {
         <div>
           <div className="flex items-center gap-2">
             <TrendingUp size={13} className="text-[var(--text-2)]" />
-            <h2 className={sectionLabel}>{t.smartRecommendations}</h2>
+            <SectionLabel>{t.smartRecommendations}</SectionLabel>
           </div>
           {recordedMonthCount > 0 && (
             <p className="text-[11px] text-[var(--text-2)] mt-1 ml-5">
@@ -325,6 +324,6 @@ export default function SmartRecommendations() {
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

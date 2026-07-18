@@ -62,3 +62,36 @@ export function dedupeBankTransactions(txs: DailyTransaction[]): DailyTransactio
     return resc && t.categorySource !== 'manual' ? { ...t, ...resc } : t;
   });
 }
+
+// TWIN: `evictSupersededPending` in server/bank.js (CJS) is a byte-equivalent
+// copy — change both or neither. Drops a provisional (pending) row once its
+// BOOKED twin arrives, so the two ids for the same transaction don't double-count.
+// Match is conservative (same account, |amount|, direction, within a few days);
+// a manual category on the dropped pending row is rescued onto the survivor.
+const PENDING_SUPERSEDE_DAYS = 6;
+export function evictSupersededPending(txs: DailyTransaction[]): DailyTransaction[] {
+  const pendings = txs.filter((t) => t.pending);
+  if (pendings.length === 0) return txs;
+  const booked = txs.filter((t) => !t.pending);
+  const dropped = new Set<string>();
+  const rescue = new Map<string, Pick<DailyTransaction, 'category' | 'categorySource'>>();
+  for (const p of pendings) {
+    const match = booked.find(
+      (b) => (b.account || '') === (p.account || '')
+        && (b.kind || 'expense') === (p.kind || 'expense')
+        && Math.abs(b.amount - p.amount) < 0.005
+        && Math.abs((Date.parse(b.date) - Date.parse(p.date)) / 864e5) <= PENDING_SUPERSEDE_DAYS,
+    );
+    if (match) {
+      dropped.add(p.id);
+      if (p.categorySource === 'manual' && p.category != null) rescue.set(match.id, { category: p.category, categorySource: p.categorySource });
+    }
+  }
+  if (dropped.size === 0) return txs;
+  return txs
+    .filter((t) => !dropped.has(t.id))
+    .map((t) => {
+      const r = rescue.get(t.id);
+      return r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+    });
+}

@@ -31,6 +31,12 @@ const ENV_KEY_SECRET = process.env.EB_KEY_SECRET || '';
 // UI setting stored in eb-config.json. Must be HTTPS and registered on the app.
 const ENV_REDIRECT = process.env.EB_REDIRECT || '';
 
+// Import not-yet-booked (PDNG) rows so very recent spending is visible before it
+// books. Default on — safe because a booked row supersedes its pending twin via
+// evictSupersededPending on every merge/save. Set EB_INCLUDE_PENDING=0/false/off
+// to keep the old booked-only behaviour.
+const INCLUDE_PENDING = !/^(0|false|no|off)$/i.test(process.env.EB_INCLUDE_PENDING || '');
+
 const EB_ID_PREFIX = 'eb-';
 
 // --- low-level API client ---------------------------------------------------
@@ -374,6 +380,9 @@ function mapEBTransaction(tx, opts = {}) {
     ...(opts.account ? { account: opts.account } : {}),
     ...(opts.bank ? { bank: opts.bank } : {}),
     ...(opts.accountName ? { accountName: opts.accountName } : {}),
+    // Provisional until the bank books it (only present when includePending let
+    // this row through). A booked twin later evicts it — see evictSupersededPending.
+    ...(tx.status && tx.status !== 'BOOK' ? { pending: true } : {}),
   };
 }
 
@@ -446,6 +455,48 @@ function dropStaleBareTwins(txs) {
   });
 }
 
+// A pending row and its later BOOKED version can coexist with different ids: a
+// pending row often lacks an entry_reference (so it takes the date|amount|desc
+// fallback id) or dates off value_date, while the booked one dates off
+// booking_date and may gain a reference. Once the booked twin arrives, drop the
+// pending row it superseded so the ledger doesn't double-count. Match is
+// conservative — same account, same |amount|, same direction, booking within a
+// few days — and a manual category on the dropped pending row is rescued onto
+// the booked survivor. Amount drift (tips, forex) isn't matched: a rare pending
+// row then lingers until manually removed, which is safer than fuzzy matching in
+// a money app.
+//
+// TWIN: `evictSupersededPending` in src/lib/bankDedup.ts (TS/ESM) is a
+// byte-equivalent copy — the server can't import from src/, so change both or
+// neither.
+const PENDING_SUPERSEDE_DAYS = 6;
+function evictSupersededPending(txs) {
+  const pendings = txs.filter((t) => t.pending);
+  if (pendings.length === 0) return txs;
+  const booked = txs.filter((t) => !t.pending);
+  const dropped = new Set();
+  const rescue = new Map();
+  for (const p of pendings) {
+    const match = booked.find(
+      (b) => (b.account || '') === (p.account || '')
+        && (b.kind || 'expense') === (p.kind || 'expense')
+        && Math.abs(b.amount - p.amount) < 0.005
+        && Math.abs((Date.parse(b.date) - Date.parse(p.date)) / 864e5) <= PENDING_SUPERSEDE_DAYS,
+    );
+    if (match) {
+      dropped.add(p.id);
+      if (p.categorySource === 'manual' && p.category != null) rescue.set(match.id, { category: p.category, categorySource: p.categorySource });
+    }
+  }
+  if (dropped.size === 0) return txs;
+  return txs
+    .filter((t) => !dropped.has(t.id))
+    .map((t) => {
+      const r = rescue.get(t.id);
+      return r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+    });
+}
+
 function mergeTransactions(existing, incoming, deletedIds = []) {
   const deleted = new Set(deletedIds);
   // A row the user soft-deleted in the UI must not come back on the next sync.
@@ -462,7 +513,7 @@ function mergeTransactions(existing, incoming, deletedIds = []) {
       byId.set(t.id, t);
     }
   }
-  return dropStaleBareTwins([...byId.values()]);
+  return evictSupersededPending(dropStaleBareTwins([...byId.values()]));
 }
 
 // --- high-level flow used by the routes -------------------------------------
@@ -688,6 +739,7 @@ async function fetchMappedTransactions() {
         const raw = await fetchTransactions(acc.uid, from);
         mapped = mapped.concat(
           mapEBTransactions(raw, {
+            includePending: INCLUDE_PENDING,
             idPrefix: c.idPrefix,
             account: accountKey(c, acc),
             bank: c.aspsp || undefined,
@@ -766,14 +818,29 @@ function recordSync(outcome = {}) {
   writeStore(store);
 }
 
+// Age in ms of the most recent successful sync across all connections, or
+// Infinity when nothing has ever synced. Lets the scheduler delay its first tick
+// so frequent restarts don't re-sync early (mirrors backup.js's newestAgeMs).
+function lastSyncAgeMs(nowMs = Date.now()) {
+  const store = readStore();
+  let newest = 0;
+  for (const c of store.connections) {
+    const t = c.last_sync ? Date.parse(c.last_sync) : 0;
+    if (Number.isFinite(t) && t > newest) newest = t;
+  }
+  return newest ? nowMs - newest : Infinity;
+}
+
 module.exports = {
   EB_ID_PREFIX,
   // pure helpers (tested)
   mapEBTransaction,
   mapEBTransactions,
   mergeTransactions,
+  evictSupersededPending,
   dropStaleBareTwins,
   normalizeAccount,
+  lastSyncAgeMs,
   // flow
   getAspsps,
   startLink,

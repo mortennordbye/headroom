@@ -45,15 +45,14 @@ import { bsuStatus } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
 import { formatAxisInt } from '../lib/format';
 import { ProgressBar } from '../components/ui/ProgressBar';
+import { Card } from '../components/ui/Card';
+import { SectionLabel } from '../components/ui/SectionLabel';
 
 interface ModalConfig {
   title: string;
   fields: ModalField[];
   onSave: (values: Record<string, string>) => void;
 }
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 // Stable fallback for snapshots recorded before debts were historized, so the
 // history-mode memo deps don't churn on a fresh [] every render.
@@ -281,11 +280,11 @@ const AssetPage: React.FC = () => {
         {/* Left column */}
         <div className="space-y-4 md:space-y-6">
           {/* Market Positions */}
-          <div data-tour="market-positions" className={`${card} p-5 md:p-7 space-y-5`}>
+          <Card data-tour="market-positions" padding="none" className="p-5 md:p-7 space-y-5">
             <div className="flex items-center justify-between gap-2 pb-4 border-b border-[var(--border)]">
               <div className="flex items-center gap-2">
                 <BarChart2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h3 className={sectionLabel}>{t.marketPositions}</h3>
+                <SectionLabel>{t.marketPositions}</SectionLabel>
               </div>
               <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreAssetTaxDefaults} />
             </div>
@@ -322,13 +321,13 @@ const AssetPage: React.FC = () => {
                 <span className="font-mono text-[var(--positive)]">{formatCurrency(netInvestment)}</span>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Real Estate */}
-          <div data-tour="real-estate" className={`${card} p-5 md:p-7 space-y-5`}>
+          <Card data-tour="real-estate" padding="none" className="p-5 md:p-7 space-y-5">
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
               <Home size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-              <h3 className={sectionLabel}>{t.realEstate}</h3>
+              <SectionLabel>{t.realEstate}</SectionLabel>
             </div>
             <div className="space-y-0">
               <AssetRow
@@ -349,13 +348,13 @@ const AssetPage: React.FC = () => {
                 <span className="font-mono text-[var(--positive)]">{formatCurrency(houseEquity)}</span>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Pension wealth (locked — not in totalEquity) */}
-          <div data-tour="pension" className={`${card} p-5 md:p-7 space-y-5`}>
+          <Card data-tour="pension" padding="none" className="p-5 md:p-7 space-y-5">
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
               <Briefcase size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-              <h3 className={sectionLabel}>{t.pensionWealth}</h3>
+              <SectionLabel>{t.pensionWealth}</SectionLabel>
             </div>
             <div className="space-y-0">
               <AssetRow
@@ -378,16 +377,16 @@ const AssetPage: React.FC = () => {
                 {t.assetPage.pensionLockedNote}
               </p>
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Right column */}
         <div className="space-y-4 md:space-y-6">
           {/* Cash Reserves */}
-          <div data-tour="cash-reserves" className={`${card} p-5 md:p-7 space-y-5`}>
+          <Card data-tour="cash-reserves" padding="none" className="p-5 md:p-7 space-y-5">
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
               <PiggyBank size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-              <h3 className={sectionLabel}>{t.cashReserves}</h3>
+              <SectionLabel>{t.cashReserves}</SectionLabel>
             </div>
             <div className="space-y-0">
               <AssetRow
@@ -445,13 +444,13 @@ const AssetPage: React.FC = () => {
                 icon={<Shield size={12} className="text-[var(--text-2)]" />}
               />
             </div>
-          </div>
+          </Card>
 
           {/* Crypto */}
-          <div data-tour="crypto" className={`${card} p-5 md:p-7 space-y-5`}>
+          <Card data-tour="crypto" padding="none" className="p-5 md:p-7 space-y-5">
             <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
               <Bitcoin size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-              <h3 className={sectionLabel}>{t.crypto}</h3>
+              <SectionLabel>{t.crypto}</SectionLabel>
             </div>
             <div className="space-y-0">
               <AssetRow
@@ -485,7 +484,7 @@ const AssetPage: React.FC = () => {
                 <span className="font-mono text-[var(--positive)]">{formatCurrency(netCrypto)}</span>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Total Equity Hero — flat panel set apart by a brass hairline */}
           <div
@@ -536,9 +535,9 @@ const AssetPage: React.FC = () => {
 
       {/* Wealth tax (formuesskatt) — Norway only */}
       {region === 'no' && (
-        <div className={`${card} p-5 md:p-7`}>
+        <Card padding="none" className="p-5 md:p-7">
           <div className="flex items-baseline justify-between gap-3 flex-wrap pb-4 border-b border-[var(--border)]">
-            <h3 className={sectionLabel}>{t.wealthTax.title}</h3>
+            <SectionLabel>{t.wealthTax.title}</SectionLabel>
             <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>{TAX_YEAR}</span>
           </div>
           <div className="mt-5 flex items-end justify-between gap-4 flex-wrap">
@@ -575,14 +574,14 @@ const AssetPage: React.FC = () => {
             </div>
           </div>
           <p className="mt-4 text-[11px] leading-[1.5]" style={{ color: 'var(--text-3)' }}>{t.wealthTax.note}</p>
-        </div>
+        </Card>
       )}
 
       {/* Allocation snapshot + liquidity split */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-stretch">
-        <div className={`${card} p-5 md:p-7 flex flex-col`}>
+        <Card padding="none" className="p-5 md:p-7 flex flex-col">
           <div className="pb-4 border-b border-[var(--border)]">
-            <h3 className={sectionLabel}>{t.charts.allocationTitle}</h3>
+            <SectionLabel>{t.charts.allocationTitle}</SectionLabel>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.allocationSub}</p>
           </div>
           <div className="flex-1 min-h-[260px] w-full mt-4">
@@ -590,10 +589,10 @@ const AssetPage: React.FC = () => {
               <AllocationDonut stocks={netInvestment} house={houseEquity} cash={cashTotal} crypto={netCrypto} pension={pensionTotal} />
             </Suspense>
           </div>
-        </div>
-        <div className={`${card} p-5 md:p-7 flex flex-col`}>
+        </Card>
+        <Card padding="none" className="p-5 md:p-7 flex flex-col">
           <div className="pb-4 border-b border-[var(--border)]">
-            <h3 className={sectionLabel}>{t.charts.liquidLockedTitle}</h3>
+            <SectionLabel>{t.charts.liquidLockedTitle}</SectionLabel>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.liquidLockedSub}</p>
           </div>
           <div className="flex-1 flex flex-col justify-center mt-6">
@@ -601,7 +600,7 @@ const AssetPage: React.FC = () => {
               <LiquidLockedBar liquid={liquidWealth} locked={lockedWealth} />
             </Suspense>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Debt (non-mortgage) — a live editor/planner, so it has no historical
@@ -609,9 +608,9 @@ const AssetPage: React.FC = () => {
       {hist.isLive && <DebtSection />}
 
       {/* Mortgage payoff over time */}
-      <div className={`${card} p-5 md:p-7 space-y-4`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-4">
         <div className="pb-4 border-b border-[var(--border)]">
-          <h3 className={sectionLabel}>{t.charts.debtPayoffTitle}</h3>
+          <SectionLabel>{t.charts.debtPayoffTitle}</SectionLabel>
           <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.debtPayoffSub}</p>
         </div>
         <div className="h-[300px] md:h-[340px] w-full">
@@ -619,29 +618,29 @@ const AssetPage: React.FC = () => {
             <DebtPayoffChart balances={mortgageBalances} startYear={projectionStartYear} nonMortgageDebt={totalDebt} />
           </Suspense>
         </div>
-      </div>
+      </Card>
 
       {/* Net-worth composition over time */}
-      <div className={`${card} p-5 md:p-7 space-y-4`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-4">
         <div className="pb-4 border-b border-[var(--border)]">
-          <h3 className={sectionLabel}>{t.charts.compositionTitle}</h3>
+          <SectionLabel>{t.charts.compositionTitle}</SectionLabel>
           <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.compositionSub}</p>
         </div>
         <div className="h-[260px] md:h-[300px] w-full">
           <Suspense fallback={<ChartSkeleton />}><NetWorthCompositionChart /></Suspense>
         </div>
         <EquityHistoryTable />
-      </div>
+      </Card>
 
       {/* Per-account savings history (renders only when ≥2 months recorded) */}
       <Suspense fallback={null}><SavingsHistoryChart /></Suspense>
 
       {/* Growth Projection */}
-      <div data-tour="growth-projection" className={`${card} p-5 md:p-7 space-y-5`}>
+      <Card data-tour="growth-projection" padding="none" className="p-5 md:p-7 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
             <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-            <h3 className={sectionLabel}>{t.growthProjection}</h3>
+            <SectionLabel>{t.growthProjection}</SectionLabel>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-mono flex-wrap" style={{ color: 'var(--text-2)' }}>
             <RateChip label={t.bucketStocks} value={growthReturnRate} onClick={() => editRate(t.settings.growthReturnRate, growthReturnRate, setGrowthReturnRate)} />
@@ -654,17 +653,17 @@ const AssetPage: React.FC = () => {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-[13px]">
           <div>
-            <div className={sectionLabel + ' mb-1'}>{t.assetPage.now}</div>
+            <SectionLabel className="mb-1">{t.assetPage.now}</SectionLabel>
             <div className="font-mono font-semibold text-[var(--text-1)]">{formatCurrency(projectionData[0]?.total ?? netWorth)}</div>
           </div>
           <div>
-            <div className={sectionLabel + ' mb-1'}>{t.assetPage.inFiveYears}</div>
+            <SectionLabel className="mb-1">{t.assetPage.inFiveYears}</SectionLabel>
             <div className="font-mono font-semibold text-[var(--positive)]">
               {formatCurrency(projectionData[5]?.total ?? 0)}
             </div>
           </div>
           <div>
-            <div className={sectionLabel + ' mb-1'}>{t.assetPage.inFifteenYears}</div>
+            <SectionLabel className="mb-1">{t.assetPage.inFifteenYears}</SectionLabel>
             <div className="font-mono font-semibold text-[var(--positive)]">
               {formatCurrency(projectionData[15]?.total ?? 0)}
             </div>
@@ -728,7 +727,7 @@ const AssetPage: React.FC = () => {
         <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
           {t.assetPage.projectionNotePre}{formatCurrency(annualSavings)}{t.assetPage.projectionNotePost}
         </p>
-      </div>
+      </Card>
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
       {pendingSavingsDelete && (

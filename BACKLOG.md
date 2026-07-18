@@ -123,9 +123,24 @@ raise/savings/return/inflation sliders from the user's salary CAGR, `recommended
 
 ## Polish items noticed during the restyle
 
-- **Per-file `card` and `sectionLabel` string constants** still exist in `AssetPage`, `BudgetPage`, `LoanPage`, `SmartRecommendations`, `FunBudget`. Functional but the new `Card` and `SectionLabel` primitives in `src/components/ui/` would consolidate them. Dashboard is already using the primitives. (Cosmetic; deferred — a broad JSX churn across many render sites with only visual verification to catch regressions.)
+Shipped (2026-07):
+- **Card / SectionLabel consolidation** — the per-file `card`/`sectionLabel` class-string
+  constants are gone; all 13 files that carried them (`AssetPage`, `BudgetPage`, `BoligPage`,
+  `SalaryPage`, `ForecastPage`, `SmartRecommendations`, `FunBudget`, `PropertyValueEstimate`,
+  `DebtSection`, `ResidenceHistory`, `GoalsSection`, `charts/PaydownVsPlanChart`,
+  `bolig/SecondHomePanel`) now use the shared `<Card>`/`<SectionLabel>` primitives
+  (`src/components/ui/`), matching Dashboard. Per-site padding was preserved via
+  `padding="none"`; the labels adopt the canonical primitive style (`font-semibold`,
+  `tracking-[0.14em]`, `var(--text-3)`). Verified in Docker across all pages (0 console errors).
+  Note: icon+label pairs were left as tag-swaps (icon sibling) rather than folded into
+  SectionLabel's `icon` prop, to avoid shrinking the 13–14px header icons to the slot's 12px.
+- **`BudgetDistributionChart` now uses the shared `ChartTooltip`** — `ChartTooltip` gained
+  optional, backward-compatible `title` (bold primary-text header), `extra` (a dim footer line),
+  and `hideNames` props; the chart's hand-rolled tooltip was replaced with it. **Where**:
+  `src/components/ChartTooltip.tsx`, `src/components/BudgetDistributionChart.tsx`.
+
+Remaining:
 - **`isDarkMode` field in `ExportPayload`** was removed from the producer side, but old JSON exports from before the dark-mode removal still carry the field. The importer ignores it gracefully — no action needed unless we want to clean very old export files.
-- **`BudgetDistributionChart` hand-rolls its own tooltip card** (`src/components/BudgetDistributionChart.tsx`) instead of the shared `ChartTooltip`. **Why deferred**: it's not a clean drop-in — its card uses `d.name` as a bold title (not `ChartTooltip`'s dot+name+value row) and adds a "`{pct}% of fixed costs`" line the shared component has no slot for; serving it needs an "extra line"/footer slot on `ChartTooltip` plus a layout variant, and the visual change needs a Docker/browser smoke-test. Kept out of the §8.10 payload-registry PR to keep that persistence refactor's diff clean. **Unblock**: add an optional `extra?: ReactNode` (or `footer`) render slot to `ChartTooltip` and a header-title variant, then verify the Budget "Fordelingsanalyse" tooltip in demo mode. **Where**: `src/components/BudgetDistributionChart.tsx:~43-59`, `src/components/ChartTooltip.tsx`. (Audit §8.10 secondary note.)
 
 ## Job-centric salary tracking — phase 2
 
@@ -217,9 +232,15 @@ data volume. Remaining:
     text, `EditModal` gained a `checkbox` field type), managed in `src/components/CategoryRules.tsx`
     on the Budget page. Wired through every persist site. Match is a case-insensitive substring;
     a stronger matcher (regex / anchored / by account field) could follow if needed.
-- **Cron isn't installed by anything.** The daily `curl` schedule is documented in
-  `scripts/enable-banking/README.md` but must be added to the homelab crontab (or a Docker
-  sidecar) by hand. Consider shipping a compose service / entrypoint hook.
+- **Scheduled sync — shipped (2026-07).** An optional in-process scheduler
+  (`server/bankSync.js`, `startBankSyncSchedule`) now runs the sync inside the single `node`
+  process (mirroring `server/backup.js`), gated by `BANK_SYNC_INTERVAL_HOURS` (default `0` =
+  off). No cron to install, no compose sidecar, and no self-POST to the unauthenticated
+  `/api/bank/sync` — the shared `runBankSync` in `server/index.js` is called directly. First
+  tick is delayed by `bank.lastSyncAgeMs` so restarts don't re-sync early; timers are unref'd.
+  The manual "Sync now" button and any external cron (`scripts/enable-banking/README.md`) still
+  work. **Where**: `server/bankSync.js`, `server/index.js` (`runBankSync`), `Dockerfile` (copies
+  `bankSync.js`).
 - **Managed encryption key is co-located.** The key is always AES-256-GCM encrypted at rest;
   without `EB_KEY_SECRET` the app manages its own key in `$DATA_DIR/eb-master.key` (chmod 600),
   which guards against the key file leaking in isolation but not a full-volume breach (the
@@ -231,8 +252,16 @@ data volume. Remaining:
   write-only and validated, but on a network-reachable deploy anyone could overwrite the
   redirect/key (integrity/DoS, not disclosure) or read `/api/data`. Gate behind app auth /
   reverse-proxy / VPN. Tracked with §1.3 / the no-auth posture. **Where**: `server/index.js`.
-- **Pending rows excluded.** `mapEBTransactions` drops `PDNG` (they churn until booked); very
-  recent spending is invisible until it books. Revisit if the lag matters.
+- **Pending rows — shipped (2026-07).** `mapEBTransactions` now imports not-yet-booked (`PDNG`)
+  rows (default on; `EB_INCLUDE_PENDING=0/false/off` disables), stamping `pending: true` and a
+  muted Clock marker in the Budget ledger. The stale-duplicate risk (a pending row and its later
+  booked twin carry different ids) is handled by `evictSupersededPending` — a pure fn run in
+  `mergeTransactions` **and** the POST `/api/data` reconcile (so a stale tab can't resurrect the
+  pending twin), with a byte-equivalent client twin in `src/lib/bankDedup.ts`. Match is
+  conservative (same account, `|amount|`, direction, within 6 days) and rescues a manual category
+  onto the survivor. Deliberate gap: **amount drift** (tips, forex) isn't matched, so a rare
+  pending row lingers until manually removed — safer than fuzzy amount matching in a money app.
+  **Where**: `server/bank.js`, `src/lib/bankDedup.ts`, `src/pages/BudgetPage.tsx`.
 - **`out/` + `.cert/` leftovers** from the retired CLI prototype live under
   `scripts/enable-banking/` (gitignored, `out/` holds a real-data dump). Safe to delete.
 
@@ -268,8 +297,11 @@ data volume. Remaining:
     rows stay in the ledger, marked (⇄, muted).
 
   Deferred / notes:
-  - **Transfer netting is Budget-scoped** — the Dashboard spend charts (`InsightBanner`,
-    `CashflowChart`) still count transfers. Extend if it matters.
+  - **Transfer netting on the Dashboard — done.** `InsightBanner`, `CashflowChart`, and
+    `SavingsRateChart` consume `nonTransferTransactions` (whole-finance, transfers excluded but
+    not account-scoped — correct, since income/cashflow span all accounts). The Budget category
+    surfaces use `visibleBudgetTransactions` (also account-scoped). No surface still counts
+    transfers.
   - **Transfer detection is a heuristic** — a genuine same-amount expense+income within 3 days on
     two accounts could be wrongly netted. Mitigated by the ambiguity skip and by keeping the rows
     visible (marked) in the ledger. Stronger signals (own-IBAN match / transfer keywords) would

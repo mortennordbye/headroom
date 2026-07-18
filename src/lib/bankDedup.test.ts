@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { DailyTransaction } from '../context/FinanceContext';
-import { dedupeBankTransactions } from './bankDedup';
+import { dedupeBankTransactions, evictSupersededPending } from './bankDedup';
 
 const tx = (over: Partial<DailyTransaction>): DailyTransaction => ({
   id: 'x', date: '2026-06-28', description: 'REMA 1000', amount: 100, kind: 'expense', ...over,
@@ -63,5 +63,39 @@ describe('dedupeBankTransactions', () => {
     // is dropped as a stale twin (the survivor keeps the prefixed id).
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe('eb-a1b2c3d4-5678');
+  });
+});
+
+// Twin of evictSupersededPending in server/bank.js — these mirror the cases in
+// bank.test.ts so the two implementations stay in lockstep.
+describe('evictSupersededPending', () => {
+  const p = (over: Partial<DailyTransaction>): DailyTransaction => ({
+    id: 'p', date: '2026-04-05', description: 'REMA 1000', amount: 249.9, kind: 'expense', account: 'a:1', pending: true, ...over,
+  });
+  const b = (over: Partial<DailyTransaction>): DailyTransaction => ({
+    id: 'b', date: '2026-04-06', description: 'REMA 1000', amount: 249.9, kind: 'expense', account: 'a:1', ...over,
+  });
+
+  it('drops a pending row superseded by a booked twin', () => {
+    expect(evictSupersededPending([p({}), b({})]).map((t) => t.id)).toEqual(['b']);
+  });
+
+  it('keeps a pending row with no booked twin, and is a no-op without pending rows', () => {
+    expect(evictSupersededPending([p({})]).map((t) => t.id)).toEqual(['p']);
+    const booked = [b({ id: 'b1' }), b({ id: 'b2', amount: 10 })];
+    expect(evictSupersededPending(booked)).toBe(booked);
+  });
+
+  it('does not evict on differing amount, account, or far-apart dates', () => {
+    expect(evictSupersededPending([p({}), b({ amount: 250 })])).toHaveLength(2);
+    expect(evictSupersededPending([p({}), b({ account: 'a:2' })])).toHaveLength(2);
+    expect(evictSupersededPending([p({}), b({ date: '2026-04-20' })])).toHaveLength(2);
+  });
+
+  it('rescues a manual category from the dropped pending row onto its survivor', () => {
+    const out = evictSupersededPending([p({ category: 'groceries', categorySource: 'manual' }), b({})]);
+    expect(out).toHaveLength(1);
+    expect(out[0].category).toBe('groceries');
+    expect(out[0].categorySource).toBe('manual');
   });
 });

@@ -16,6 +16,7 @@ import {
   ListChecks,
   Repeat,
   TrendingDown,
+  Clock,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import { AccountBadge } from '../components/AccountBadge';
@@ -50,6 +51,8 @@ import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
 import ConfirmModal from '../components/ConfirmModal';
 import { UndoToast } from '../components/ui/UndoToast';
 import { StatCard } from '../components/ui/StatCard';
+import { Card } from '../components/ui/Card';
+import { SectionLabel } from '../components/ui/SectionLabel';
 
 // Recharts (~150 KB gz) is lazy-loaded so it stays off the first-paint critical
 // path of the default (Budget) route; it's precached after the first visit.
@@ -76,9 +79,6 @@ const EXPENSE_TYPE_COLOR: Record<ExpenseType, string> = {
   insurance: CHART.rust,    // insurance
 };
 const expenseColor = (type?: ExpenseType) => EXPENSE_TYPE_COLOR[type ?? 'fixed'];
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)] font-semibold';
 
 // Envelope draw-down status → colour token (under = healthy, near = caution, over = alert).
 const ENVELOPE_STATUS_COLOR: Record<EnvelopeStatus, string> = {
@@ -723,7 +723,7 @@ const BudgetPage: React.FC = () => {
 
       {/* Imported payslip for this month */}
       {monthPayslip && (
-        <div className={`${card} p-5 md:p-6`}>
+        <Card padding="none" className="p-5 md:p-6">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-[var(--border)]">
             <div className="flex items-center gap-2">
               <FileUp size={14} className="text-[var(--text-2)]" />
@@ -752,16 +752,16 @@ const BudgetPage: React.FC = () => {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       <SmartRecommendations />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
         {/* Fixed Expenses */}
-        <div data-tour="fixed-expenses" className={`lg:col-span-1 ${card} p-5 md:p-7 space-y-5`}>
+        <Card data-tour="fixed-expenses" padding="none" className="lg:col-span-1 p-5 md:p-7 space-y-5">
           <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
-            <h2 className={sectionLabel}>{t.fixedCosts}</h2>
+            <SectionLabel>{t.fixedCosts}</SectionLabel>
             {!expensesReadOnly && (
               <button
                 onClick={() => openExpenseDialog()}
@@ -934,7 +934,7 @@ const BudgetPage: React.FC = () => {
               </div>
             ))}
             <div className="pt-5 flex justify-between items-baseline">
-              <span className={sectionLabel}>{t.aggregate}</span>
+              <SectionLabel>{t.aggregate}</SectionLabel>
               <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(totalFixedExpenses)}</span>
             </div>
             {totalMonthlyDebtService > 0 && (
@@ -944,13 +944,13 @@ const BudgetPage: React.FC = () => {
               </div>
             )}
           </div>
-        </div>
+        </Card>
 
         {/* Charts */}
-        <div className={`lg:col-span-2 ${card} p-5 md:p-7 flex flex-col gap-5`}>
-          <h2 className={`${sectionLabel} pb-4 border-b border-[var(--border)]`}>
+        <Card padding="none" className="lg:col-span-2 p-5 md:p-7 flex flex-col gap-5">
+          <SectionLabel className="pb-4 border-b border-[var(--border)]">
             {t.distributionAnalysis}
-          </h2>
+          </SectionLabel>
           <div className="flex-1 min-h-[280px] md:min-h-[340px] w-full">
             <Suspense fallback={<ChartSkeleton />}>
               <BudgetDistributionChart
@@ -966,22 +966,22 @@ const BudgetPage: React.FC = () => {
 
           {/* Category dashboard — spend per category with MoM + drill-in */}
           <div className="pt-2 pb-3 border-t border-[var(--border)] flex items-center justify-between gap-3">
-            <span className={sectionLabel}>{t.spendingByCategory}</span>
+            <SectionLabel>{t.spendingByCategory}</SectionLabel>
             {accountFilterSelect}
           </div>
           <CategoryBreakdown onEditTransaction={(tx) => setEditingTx(tx)} />
 
           {/* Multi-month spending trend by category */}
-          <div className={`${sectionLabel} pt-5 pb-3 border-t border-[var(--border)]`}>
+          <SectionLabel className="pt-5 pb-3 border-t border-[var(--border)]">
             {t.spendingTrend} · {t.trendMonths}
-          </div>
+          </SectionLabel>
           <CategoryTrendChart />
 
           {/* Per-category monthly budgets */}
           <div className="pt-5 border-t border-[var(--border)]">
             <CategoryBudgets />
           </div>
-        </div>
+        </Card>
       </div>
 
       <MonthlyAccountSpend />
@@ -990,9 +990,9 @@ const BudgetPage: React.FC = () => {
 
       {/* Savings rate + spending heatmap */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <div className={`${card} p-5 md:p-7 flex flex-col`}>
+        <Card padding="none" className="p-5 md:p-7 flex flex-col">
           <div className="pb-4 mb-2 border-b border-[var(--border)]">
-            <h2 className={sectionLabel}>{t.charts.savingsRateTitle}</h2>
+            <SectionLabel>{t.charts.savingsRateTitle}</SectionLabel>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.savingsRateSub}</p>
           </div>
           {savingsWarning && savingsWarning.belowTarget && savingsWarning.months >= 2 && !beforePayday && (
@@ -1013,18 +1013,18 @@ const BudgetPage: React.FC = () => {
           <div className="flex-1 min-h-[240px] w-full">
             <Suspense fallback={<ChartSkeleton />}><SavingsRateChart /></Suspense>
           </div>
-        </div>
-        <div className={`${card} p-5 md:p-7`}>
+        </Card>
+        <Card padding="none" className="p-5 md:p-7">
           <div className="pb-4 mb-4 border-b border-[var(--border)]">
-            <h2 className={sectionLabel}>{t.charts.heatmapTitle}</h2>
+            <SectionLabel>{t.charts.heatmapTitle}</SectionLabel>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.heatmapSub}</p>
           </div>
           <Suspense fallback={<ChartSkeleton className="h-[240px] w-full" />}><SpendingHeatmap /></Suspense>
-        </div>
+        </Card>
       </div>
 
       {/* Daily Tracker */}
-      <div className={`${card} overflow-hidden`}>
+      <Card padding="none" className="overflow-hidden">
         <div className={`px-5 py-4 md:px-7 md:py-5 flex items-center justify-between ${logOpen ? 'border-b border-[var(--border)]' : ''}`}>
           <button
             onClick={() => setLogOpen(o => !o)}
@@ -1036,7 +1036,7 @@ const BudgetPage: React.FC = () => {
               className="text-[var(--text-2)] transition-transform group-hover:text-[var(--text-1)]"
               style={{ transform: logOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}
             />
-            <h2 className={sectionLabel}>{t.operationalLog}</h2>
+            <SectionLabel>{t.operationalLog}</SectionLabel>
           </button>
           <div className="flex items-center gap-2">
             {logOpen && totalSpentThisMonth > 0 && (
@@ -1140,9 +1140,10 @@ const BudgetPage: React.FC = () => {
                   {day.transactions.filter(rowMatch).map((tx) => {
                     const coveredBy = envelopeNameFor(tx);
                     const isTransfer = internalTransferIds.has(tx.id);
+                    const isPending = Boolean(tx.pending);
                     const isSelected = selected.has(tx.id);
                     return (
-                    <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer ? 'opacity-60' : ''}`}>
+                    <span key={tx.id} title={isPending ? t.budgetPage.pending : isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer || isPending ? 'opacity-60' : ''}`}>
                       {selectMode && (
                         <button type="button" onClick={() => toggleSelect(tx.id)} aria-label={txDisplayName(tx, labelRules)} aria-pressed={isSelected} className="text-[var(--accent)] shrink-0">
                           {isSelected ? <CheckSquare size={13} /> : <Square size={13} className="text-[var(--text-3)]" />}
@@ -1153,6 +1154,7 @@ const BudgetPage: React.FC = () => {
                       )}
                       <span>{txDisplayName(tx, labelRules)}</span>
                       {isTransfer && <ArrowLeftRight size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.internalTransfer} />}
+                      {isPending && <Clock size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.pending} />}
                       <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                       {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
@@ -1181,7 +1183,7 @@ const BudgetPage: React.FC = () => {
           ))}
 
           <div className="p-4 flex justify-between items-center bg-[var(--bg-raised)]">
-            <span className={sectionLabel}>{t.endPeriodSurplus}</span>
+            <SectionLabel>{t.endPeriodSurplus}</SectionLabel>
             <span className={`text-[15px] font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[var(--accent)]' : 'text-[var(--negative)]'}`}>
               {formatCurrency(dailyData[dailyData.length - 1]?.balance || 0)}
             </span>
@@ -1211,9 +1213,10 @@ const BudgetPage: React.FC = () => {
                       {day.transactions.filter(rowMatch).map((tx) => {
                         const coveredBy = envelopeNameFor(tx);
                         const isTransfer = internalTransferIds.has(tx.id);
+                        const isPending = Boolean(tx.pending);
                         const isSelected = selected.has(tx.id);
                         return (
-                        <span key={tx.id} title={isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer ? 'opacity-60' : ''}`}>
+                        <span key={tx.id} title={isPending ? t.budgetPage.pending : isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer || isPending ? 'opacity-60' : ''}`}>
                           {selectMode && (
                             <button type="button" onClick={() => toggleSelect(tx.id)} aria-label={txDisplayName(tx, labelRules)} aria-pressed={isSelected} className="text-[var(--accent)] shrink-0">
                               {isSelected ? <CheckSquare size={14} /> : <Square size={14} className="text-[var(--text-3)]" />}
@@ -1224,6 +1227,7 @@ const BudgetPage: React.FC = () => {
                           )}
                           <span>{txDisplayName(tx, labelRules)}</span>
                           {isTransfer && <ArrowLeftRight size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.internalTransfer} />}
+                          {isPending && <Clock size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.pending} />}
                           <AccountBadge tx={tx} size="xs" />
                           <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
                           {coveredBy && <Wallet size={11} className="text-[var(--accent)] shrink-0" aria-hidden />}
@@ -1289,7 +1293,7 @@ const BudgetPage: React.FC = () => {
           </table>
         </div>
         </>)}
-      </div>
+      </Card>
 
       {/* Quick-add FAB (mobile, current month): log today's spend without
           expanding and scrolling the tracker. Hidden while selecting rows. */}

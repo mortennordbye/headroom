@@ -10,6 +10,7 @@ const { lookupPostnr } = require('./postnummer');
 const { fetchPolicyRate } = require('./norgesBank');
 const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
+const { startBankSyncSchedule } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
 const pkg = require('./package.json');
 
@@ -519,7 +520,11 @@ app.post('/api/data', (req, res) => {
   // deletedBankIds). Drop them again here, or the blob keeps the dupes and the
   // client/server ping-pong on every save.
   if (Array.isArray(merged.dailyTransactions)) {
-    merged.dailyTransactions = bank.dropStaleBareTwins(merged.dailyTransactions);
+    // dropStaleBareTwins: converge legacy bare/prefixed id twins.
+    // evictSupersededPending: reconcile re-adds a stored booked row a stale tab
+    // dropped, which could sit beside the pending twin that tab still holds —
+    // drop the superseded pending row so it doesn't resurrect on save.
+    merged.dailyTransactions = bank.evictSupersededPending(bank.dropStaleBareTwins(merged.dailyTransactions));
   }
   const content = JSON.stringify(merged);
   if (content.length > SIZE_WARN_BYTES) {
@@ -856,12 +861,16 @@ app.get('/api/bank/callback', async (req, res) => {
   }
 });
 
-// Fetch new transactions and merge them into the finance blob.
-app.post('/api/bank/sync', async (_req, res) => {
+// Fetch new bank rows and merge them into the finance blob. Shared by the manual
+// POST /api/bank/sync route and the optional scheduled sync (bankSync.js), so
+// both take the same merge/record path. Records the outcome (success or failure)
+// to the rolling sync log, then returns a summary or rethrows. A missing blob
+// throws `.noBlob` (the app was never opened) and is not logged as a failure.
+async function runBankSync() {
   try {
     const mapped = await bank.fetchMappedTransactions();
     const stored = readBlob();
-    if (!stored) return res.status(409).json({ error: 'no finance data yet — open the app first' });
+    if (!stored) { const e = new Error('no finance data yet — open the app first'); e.noBlob = true; throw e; }
     const blob = stored.content;
     const existing = Array.isArray(blob.dailyTransactions) ? blob.dailyTransactions : [];
     const before = existing.length;
@@ -869,27 +878,31 @@ app.post('/api/bank/sync', async (_req, res) => {
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
     blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds);
     // Bump rev so *other* open tabs see the change and refetch the freshly-synced
-    // rows. We return the new rev so the tab that triggered the sync can adopt it
-    // and not treat its own sync as a conflicting external change.
-    const newRev = writeBlob('headroom', JSON.stringify(blob), stored.rev);
+    // rows. The caller returns the new rev so the tab that triggered the sync can
+    // adopt it and not treat its own sync as a conflicting external change.
+    const rev = writeBlob('headroom', JSON.stringify(blob), stored.rev);
     const added = blob.dailyTransactions.length - before;
     const total = blob.dailyTransactions.length;
     // The rows genuinely new this sync (id not in the prior ledger), so the
     // Settings sync-history can list *what* was pulled in, not just how many.
     const items = blob.dailyTransactions.filter((tx) => !existingIds.has(tx.id));
     bank.recordSync({ ok: true, added, fetched: mapped.length, total, items });
-    res.set('X-Data-Rev', String(newRev));
-    res.json({
-      ok: true,
-      fetched: mapped.length,
-      added,
-      total,
-      dailyTransactions: blob.dailyTransactions,
-      rev: newRev,
-    });
+    return { added, fetched: mapped.length, total, dailyTransactions: blob.dailyTransactions, rev };
   } catch (err) {
-    // Log the failed attempt too, so a silent cron failure is visible in-app.
-    try { bank.recordSync({ ok: false, error: err.message }); } catch { /* store write best-effort */ }
+    // Log the failed attempt too, so a silent (cron or manual) failure is visible
+    // in-app — except a missing blob, which just means the app isn't set up yet.
+    if (!err.noBlob) { try { bank.recordSync({ ok: false, error: err.message }); } catch { /* store write best-effort */ } }
+    throw err;
+  }
+}
+
+app.post('/api/bank/sync', async (_req, res) => {
+  try {
+    const r = await runBankSync();
+    res.set('X-Data-Rev', String(r.rev));
+    res.json({ ok: true, fetched: r.fetched, added: r.added, total: r.total, dailyTransactions: r.dailyTransactions, rev: r.rev });
+  } catch (err) {
+    if (err.noBlob) return res.status(409).json({ error: err.message });
     if (err.needsRelink) return res.status(409).json({ error: err.message, needsRelink: true });
     console.error('[bank] sync failed:', err.message);
     res.status(500).json({ error: err.message });
@@ -922,6 +935,16 @@ if (require.main === module) {
     keep: parseCount(process.env.BACKUP_KEEP, 7),
   });
   if (backupSchedule) console.log(`[backup] rotating snapshots enabled → ${backupSchedule.dir}`);
+
+  // Optional in-process bank sync (see bankSync.js). BANK_SYNC_INTERVAL_HOURS=0
+  // (default) disables it; the manual "Sync now" button and any external cron
+  // still work regardless.
+  const bankSyncSchedule = startBankSyncSchedule({
+    intervalHours: parseCount(process.env.BANK_SYNC_INTERVAL_HOURS, 0),
+    runSync: runBankSync,
+    lastSyncAgeMs: bank.lastSyncAgeMs,
+  });
+  if (bankSyncSchedule) console.log(`[bank] scheduled sync enabled → every ${bankSyncSchedule.intervalHours}h`);
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`API running on :${PORT}`));

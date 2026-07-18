@@ -11,9 +11,8 @@ import { amortize, planPayoff, formatMonths, DEBT_TYPES, type PayoffStrategy } f
 import { currentMonthKey } from '../lib/date';
 import { parseLocaleNumber, isValidYearMonth } from '../lib/validators';
 import DebtPaydownVsPlanChart from './charts/DebtPaydownVsPlanChart';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+import { Card } from './ui/Card';
+import { SectionLabel } from './ui/SectionLabel';
 
 // Debt-type role colours (CHART token mirrors — reused for swatches and the chart).
 const DEBT_TYPE_COLOR: Record<DebtType, string> = {
@@ -117,11 +116,11 @@ export default function DebtSection() {
   const fmtAxis = (v: number) => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v));
 
   return (
-    <div data-tour="debt" className={`${card} p-5 md:p-7 space-y-5`}>
+    <Card data-tour="debt" padding="none" className="p-5 md:p-7 space-y-5">
       <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
           <Landmark size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h2 className={sectionLabel}>{d.title}</h2>
+          <SectionLabel>{d.title}</SectionLabel>
         </div>
         <button onClick={openAdd} className="text-[var(--accent)] hover:opacity-70 transition-opacity" aria-label={d.add}>
           <PlusCircle size={18} strokeWidth={2} />
@@ -175,7 +174,7 @@ export default function DebtSection() {
               );
             })}
             <div className="pt-4 flex justify-between items-baseline">
-              <span className={sectionLabel}>{d.sum}</span>
+              <SectionLabel>{d.sum}</SectionLabel>
               <span className="text-xl font-bold font-mono" style={{ color: 'var(--negative)' }}>−{formatCurrency(totalDebt)}</span>
             </div>
           </div>
@@ -183,7 +182,7 @@ export default function DebtSection() {
           {/* Payoff planner */}
           <div className="pt-5 border-t border-[var(--border)] space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className={sectionLabel}>{d.planner}</h3>
+              <SectionLabel>{d.planner}</SectionLabel>
               <div className="inline-flex p-1 rounded-[8px] border" style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)' }}>
                 {(['avalanche', 'snowball'] as PayoffStrategy[]).map(s => (
                   <button key={s} onClick={() => setStrategy(s)}
@@ -249,7 +248,7 @@ export default function DebtSection() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
-    </div>
+    </Card>
   );
 }
 
