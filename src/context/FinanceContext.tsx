@@ -453,6 +453,9 @@ export const DEFAULT_GROWTH_RATES = {
   cryptoGrowthRate: 0,
 };
 
+export const DEFAULT_SAVINGS_TARGET_PCT = 20;
+export const DEFAULT_NOK_TO_USD = 0.093;
+
 // eslint-disable-next-line react-refresh/only-export-components -- shared default, single source of truth
 export const DEFAULT_TAX_RATES = {
   stockTaxRate: 37.84,
@@ -589,6 +592,9 @@ interface FinanceSettingsContextType {
    *  holds the 'yyyy-MM' last dismissed, so it returns next month if still flagged. */
   conservativeNudgeDismissedMonth: string;
   dismissConservativeNudge: (monthKey: string) => void;
+  /** Re-enable every dismissed in-app tip/nudge (assumptions, income reminder,
+   *  conservative warning) so they can show again — the inverse of the dismissals. */
+  restoreDismissedTips: () => void;
   /** Day of month (1–31) the user's salary lands; 0 = unset. On the current
    *  month, the income reminder and savings-rate warning stay quiet until this
    *  day, so the month isn't judged before the paycheck has arrived. */
@@ -953,7 +959,7 @@ const FinanceDerivedContext = createContext<FinanceDerivedContextType | undefine
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<Language>('nb');
   const [displayCurrency, setDisplayCurrency] = useState<'NOK' | 'USD' | 'custom'>('NOK');
-  const [nokToUsd, setNokToUsdState] = useState<number>(0.093);
+  const [nokToUsd, setNokToUsdState] = useState<number>(DEFAULT_NOK_TO_USD);
   const [customCurrencyCode, setCustomCurrencyCode] = useState<string>('');
   const [customCurrencyRate, setCustomCurrencyRate] = useState<number>(1);
 
@@ -971,7 +977,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [payslips, setPayslips] = useState<Record<string, MonthlyPayslip>>({});
   const [netWorthHistory, setNetWorthHistory] = useState<Record<string, number>>({});
   const [balanceSnapshots, setBalanceSnapshots] = useState<Record<string, BalanceSnapshot>>({});
-  const [savingsTargetPercent, setSavingsTargetPercent] = useState<number>(20);
+  const [savingsTargetPercent, setSavingsTargetPercent] = useState<number>(DEFAULT_SAVINGS_TARGET_PCT);
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(DEFAULT_FIXED_EXPENSES);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
@@ -1951,6 +1957,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const dismissIncomeReminder = useCallback((monthKey: string) => setIncomeReminderDismissedMonth(monthKey), []);
   const dismissConservativeNudge = useCallback((monthKey: string) => setConservativeNudgeDismissedMonth(monthKey), []);
+  const restoreDismissedTips = useCallback(() => {
+    setAssumptionsNudgeDismissed(false);
+    setIncomeReminderDismissedMonth('');
+    setConservativeNudgeDismissedMonth('');
+  }, []);
 
   const updateHomeowner = useCallback((key: keyof HomeownerData, value: number | string) => {
     setHomeowner(prev => ({ ...prev, [key]: value }));
@@ -2457,6 +2468,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
     conservativeNudgeDismissedMonth, dismissConservativeNudge,
+    restoreDismissedTips,
     payday, setPayday,
     formatCurrency, formatCurrencyShort,
     restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
@@ -2472,6 +2484,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
     conservativeNudgeDismissedMonth, dismissConservativeNudge,
+    restoreDismissedTips,
     payday, setPayday,
     formatCurrency, formatCurrencyShort, restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
     demoMode, toggleDemoMode,

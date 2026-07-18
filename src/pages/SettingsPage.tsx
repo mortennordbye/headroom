@@ -26,6 +26,8 @@ import {
   Minus,
   ArrowRight,
   History,
+  CalendarClock,
+  Bell,
 } from 'lucide-react';
 import {
   useFinance,
@@ -33,22 +35,26 @@ import {
   type ExportPayload,
   DEFAULT_GROWTH_RATES,
   DEFAULT_TAX_RATES,
+  DEFAULT_SAVINGS_TARGET_PCT,
+  DEFAULT_NOK_TO_USD,
 } from '../context/FinanceContext';
 import { summarizeExport, totalRecords, type SummaryItem } from '../lib/exportSummary';
 import { IMPORT_SECTIONS, filterPayloadToSections, type ImportSectionKey } from '../lib/importSections';
 import { formatBytes } from '../lib/format';
-import { NAV_ITEMS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
+import { NAV_GROUPS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { Button } from '../components/ui/Button';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { DeltaChip } from '../components/ui/DeltaChip';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { provenanceOf } from '../lib/provenance';
 import { parseLocaleNumber } from '../lib/validators';
 import { BankSyncCard } from '../components/BankSyncCard';
 import { CategoryRules } from '../components/CategoryRules';
 import { AuthSettings } from '../components/AuthSettings';
+import { PaydayField } from '../components/PaydayField';
 import { RestorePointsCard } from '../components/RestorePointsCard';
 import HistoryManagerModal from '../components/HistoryManagerModal';
 
@@ -95,12 +101,21 @@ export default function SettingsPage() {
     toggleDemoMode,
     startOnboarding,
     resetGuide,
+    restoreDismissedTips,
     hiddenNavItems,
     toggleNavItem,
     importAll,
     buildPayload,
     resetAll,
   } = useFinance();
+
+  // "Restore defaults" for the whole Assumptions card resets the growth rates
+  // AND the savings target that sits alongside them (the context helper only
+  // covers the growth rates).
+  const restoreAssumptions = () => {
+    restoreGrowthRateDefaults();
+    setSavingsTargetPercent(DEFAULT_SAVINGS_TARGET_PCT);
+  };
 
   // Snapshot of the app's current persisted state — drives the export breakdown
   // and the "current → incoming" comparison shown in the import preview.
@@ -301,44 +316,33 @@ export default function SettingsPage() {
 
       {/* Bento grid */}
       <div data-tour="settings-all" className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        {/* ──── Bank sync (span 12) ──── */}
-        {/* Hidden during a demo: "Sync now" would pull the real ledger into the
-            visible demo state, which is exactly what demo mode exists to prevent. */}
-        {!demoMode && <BankSyncCard />}
-
-        {/* ──── Custom rules (span 12) ──── */}
-        <CategoryRules />
-
-        <AuthSettings />
+        {/* ═══════ Preferences ═══════ */}
+        <GroupHeading>{t.settings.groups.preferences}</GroupHeading>
 
         {/* ──── Currency (span 7) ──── */}
         <Card padding="lg" className="md:col-span-7">
-          <SectionLabel icon={<Coins />}>{t.settings.currency}</SectionLabel>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <SectionLabel icon={<Coins />}>{t.settings.currency}</SectionLabel>
+            <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={() => setNokToUsd(DEFAULT_NOK_TO_USD)} />
+          </div>
           <p className="mt-2 text-[13px]" style={{ color: 'var(--text-2)' }}>
             {t.settings.currencyDesc}
           </p>
 
           {/* Segmented control */}
-          <div
-            className="mt-5 inline-flex p-1 rounded-[8px] border"
-            style={{ background: 'var(--surface-3)', borderColor: 'var(--border)' }}
+          <SegmentedControl
             role="radiogroup"
-            aria-label={t.settings.currency}
-          >
-            <SegBtn active={displayCurrency === 'NOK'} onClick={() => setDisplayCurrency('NOK')}>
-              NOK
-            </SegBtn>
-            <SegBtn active={displayCurrency === 'USD'} onClick={() => setDisplayCurrency('USD')}>
-              USD
-            </SegBtn>
-            <SegBtn
-              active={displayCurrency === 'custom'}
-              disabled={!customCurrencyCode}
-              onClick={() => customCurrencyCode && setDisplayCurrency('custom')}
-            >
-              {customCurrencyCode || '— custom —'}
-            </SegBtn>
-          </div>
+            className="mt-5"
+            bg="var(--surface-3)"
+            ariaLabel={t.settings.currency}
+            value={displayCurrency}
+            onChange={setDisplayCurrency}
+            items={[
+              { value: 'NOK', label: 'NOK' },
+              { value: 'USD', label: 'USD' },
+              { value: 'custom', label: customCurrencyCode || '— custom —', disabled: !customCurrencyCode },
+            ]}
+          />
 
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* USD rate */}
@@ -544,12 +548,12 @@ export default function SettingsPage() {
             {t.settings.navVisibilityDesc}
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
-            {NAV_ITEMS.filter(item => item.path !== ALWAYS_VISIBLE_NAV).map(item => {
-              const visible = !hiddenNavItems.includes(item.path);
+            {NAV_GROUPS.filter(group => group.primary !== ALWAYS_VISIBLE_NAV).map(group => {
+              const visible = !hiddenNavItems.includes(group.primary);
               return (
                 <button
-                  key={item.path}
-                  onClick={() => toggleNavItem(item.path)}
+                  key={group.primary}
+                  onClick={() => toggleNavItem(group.primary)}
                   aria-pressed={visible}
                   className="inline-flex items-center gap-2 px-4 h-9 rounded-[6px] border text-[13px] font-medium transition-colors"
                   style={{
@@ -559,23 +563,26 @@ export default function SettingsPage() {
                   }}
                 >
                   {visible ? <Eye size={14} /> : <EyeOff size={14} />}
-                  {t.nav[item.key]}
+                  {t.nav[group.key]}
                 </button>
               );
             })}
           </div>
         </Card>
 
-        {/* ──── Display preferences (span 12) ──── */}
+        {/* ═══════ Assumptions ═══════ */}
+        <GroupHeading>{t.settings.groups.assumptions}</GroupHeading>
+
+        {/* ──── Growth & savings (span 12) ──── */}
         <Card padding="lg" className="md:col-span-12">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <SectionLabel icon={<Sliders />}>{t.settings.display}</SectionLabel>
+              <SectionLabel icon={<Sliders />}>{t.settings.growthSavings}</SectionLabel>
               <p className="mt-2 text-[13px]" style={{ color: 'var(--text-2)' }}>
-                {t.settings.displayDesc}
+                {t.settings.growthSavingsDesc}
               </p>
             </div>
-            <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreGrowthRateDefaults} />
+            <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreAssumptions} />
           </div>
 
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -587,6 +594,7 @@ export default function SettingsPage() {
               max={100}
               step={1}
               suffix="%"
+              badge={<ProvenanceBadge kind={provenanceOf(savingsTargetPercent, DEFAULT_SAVINGS_TARGET_PCT)} />}
             />
             <RangeRow
               label={t.settings.growthReturnRate}
@@ -634,51 +642,29 @@ export default function SettingsPage() {
           </p>
         </Card>
 
-        {/* ──── Demo mode (span 12) ──── */}
+        {/* ──── Payday (span 12) ──── */}
         <Card padding="lg" className="md:col-span-12">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <SectionLabel icon={<MonitorPlay />}>{t.settings.demoTitle}</SectionLabel>
+              <SectionLabel icon={<CalendarClock />}>{t.settings.payday}</SectionLabel>
               <p className="mt-2 text-[13px] max-w-2xl" style={{ color: 'var(--text-2)' }}>
-                {t.settings.demoDesc}
+                {t.settings.paydayDesc}
               </p>
             </div>
-            {demoMode && (
-              <span
-                className="text-[12px] font-semibold px-3 py-1 rounded-[4px]"
-                style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
-              >
-                {t.settings.demoActive}
-              </span>
-            )}
-          </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button
-              variant={demoMode ? 'secondary' : 'primary'}
-              size="md"
-              leadingIcon={<MonitorPlay />}
-              onClick={toggleDemoMode}
-            >
-              {demoMode ? t.settings.demoDeactivate : t.settings.demoActivate}
-            </Button>
-            <Button
-              variant="secondary"
-              size="md"
-              leadingIcon={<Sparkles />}
-              onClick={() => startOnboarding('hub')}
-            >
-              {t.onboarding.replay}
-            </Button>
-            <Button
-              variant="secondary"
-              size="md"
-              leadingIcon={<RotateCcw />}
-              onClick={resetGuide}
-            >
-              {t.onboarding.resetGuide}
-            </Button>
+            <PaydayField />
           </div>
         </Card>
+
+        {/* ═══════ Data & integrations ═══════ */}
+        <GroupHeading>{t.settings.groups.data}</GroupHeading>
+
+        {/* ──── Bank sync (span 12) ──── */}
+        {/* Hidden during a demo: "Sync now" would pull the real ledger into the
+            visible demo state, which is exactly what demo mode exists to prevent. */}
+        {!demoMode && <BankSyncCard />}
+
+        {/* ──── Custom rules (span 12) ──── */}
+        <CategoryRules />
 
         {/* ──── Data management (span 12) ──── */}
         <Card padding="lg" className="md:col-span-12" data-tour="settings-data">
@@ -936,6 +922,68 @@ export default function SettingsPage() {
           </p>
         </Card>
 
+        {/* ═══════ Security ═══════ */}
+        <GroupHeading>{t.settings.groups.security}</GroupHeading>
+
+        <AuthSettings />
+
+        {/* ═══════ Advanced ═══════ */}
+        <GroupHeading>{t.settings.groups.advanced}</GroupHeading>
+
+        {/* ──── Demo mode (span 12) ──── */}
+        <Card padding="lg" className="md:col-span-12">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <SectionLabel icon={<MonitorPlay />}>{t.settings.demoTitle}</SectionLabel>
+              <p className="mt-2 text-[13px] max-w-2xl" style={{ color: 'var(--text-2)' }}>
+                {t.settings.demoDesc}
+              </p>
+            </div>
+            {demoMode && (
+              <span
+                className="text-[12px] font-semibold px-3 py-1 rounded-[4px]"
+                style={{ background: 'var(--violet-bg)', color: 'var(--violet)' }}
+              >
+                {t.settings.demoActive}
+              </span>
+            )}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button
+              variant={demoMode ? 'secondary' : 'primary'}
+              size="md"
+              leadingIcon={<MonitorPlay />}
+              onClick={toggleDemoMode}
+            >
+              {demoMode ? t.settings.demoDeactivate : t.settings.demoActivate}
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              leadingIcon={<Sparkles />}
+              onClick={() => startOnboarding('hub')}
+            >
+              {t.onboarding.replay}
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              leadingIcon={<RotateCcw />}
+              onClick={resetGuide}
+            >
+              {t.onboarding.resetGuide}
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              leadingIcon={<Bell />}
+              onClick={restoreDismissedTips}
+            >
+              {t.settings.restoreTips}
+            </Button>
+          </div>
+        </Card>
+
         {/* ──── Danger zone (span 12) ──── */}
         <Card padding="lg" className="md:col-span-12">
           <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -1021,32 +1069,18 @@ export default function SettingsPage() {
 
 // ───────────── small helpers ─────────────
 
-function SegBtn({
-  active,
-  disabled,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+/** Full-width group divider that clusters the bento cards into labelled sections. */
+function GroupHeading({ children }: { children: ReactNode }) {
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      disabled={disabled}
-      onClick={onClick}
-      className="px-4 h-8 text-[12px] font-semibold rounded-[6px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-      style={{
-        background: active ? 'var(--text-1)' : 'transparent',
-        color: active ? 'var(--bg-page)' : 'var(--text-2)',
-      }}
-    >
-      {children}
-    </button>
+    <div className="md:col-span-12 mt-5 first:mt-0 mb-1 flex items-center gap-3">
+      <span
+        className="text-[12px] uppercase tracking-[0.16em] font-semibold whitespace-nowrap"
+        style={{ color: 'var(--accent)' }}
+      >
+        {children}
+      </span>
+      <span className="flex-1 h-px" style={{ background: 'var(--rule)' }} aria-hidden />
+    </div>
   );
 }
 
