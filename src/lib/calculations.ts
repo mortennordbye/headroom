@@ -14,17 +14,17 @@ export function calcMonthlyPayment(principal: number, annualRate: number, years:
 
 // Norwegian mortgage-lending limits (utlånsforskriften):
 //  • debt ≤ 5× gross annual income (minus existing debt), and
-//  • equity ≥ 15% of the purchase price (i.e. LTV ≤ 85%).
+//  • equity ≥ 10% of the purchase price (i.e. LTV ≤ 90%) — the floor since Jan 2025.
 // The affordable price is the lower of the two caps. We also surface the monthly
 // payment stress-tested at +3pp, the servicing check the same rules require.
 export const MAX_DEBT_TO_INCOME = 5;
-export const MIN_EQUITY_SHARE = 0.15; // 15% equity → 85% LTV
+export const MIN_EQUITY_SHARE = 0.10; // 10% equity → 90% LTV
 export const STRESS_TEST_ADD_PCT = 3; // +3 percentage points
 
 export interface BorrowingCapacity {
   maxDebt: number;            // 5× income − existing debt (debt-to-income cap), floored at 0
   maxPriceFromDebt: number;   // maxDebt + equity
-  maxPriceFromLtv: number;    // equity / 0.15 (the 15%-equity / 85%-LTV cap)
+  maxPriceFromLtv: number;    // equity / 0.10 (the 10%-equity / 90%-LTV cap)
   maxPrice: number;           // the binding (lower) of the two
   ltvBound: boolean;          // true when the equity cap binds rather than the income cap
   debtAtMaxPrice: number;     // actual mortgage needed at maxPrice (maxPrice − equity)
@@ -43,7 +43,7 @@ export function calcBorrowingCapacity(
   const eq = Math.max(0, equity);
   const maxDebt = Math.max(0, MAX_DEBT_TO_INCOME * income - Math.max(0, existingDebt));
   const maxPriceFromDebt = maxDebt + eq;
-  const maxPriceFromLtv = eq / MIN_EQUITY_SHARE; // eq must be ≥ 15% of price
+  const maxPriceFromLtv = eq / MIN_EQUITY_SHARE; // eq must be ≥ 10% of price
   const maxPrice = Math.min(maxPriceFromDebt, maxPriceFromLtv);
   const ltvBound = maxPriceFromLtv < maxPriceFromDebt;
   const debtAtMaxPrice = Math.max(0, maxPrice - eq);

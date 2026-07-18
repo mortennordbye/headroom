@@ -17,6 +17,7 @@
 import type { ExportPayload } from '../context/FinanceContext';
 import { DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from './employerCost';
 import { DEFAULT_FORECAST_ASSUMPTIONS } from './forecastProjection';
+import { DEFAULT_BOLIG_ASSUMPTIONS } from './secondHome';
 import { DEFAULT_PROFILE } from './profile';
 import { dedupeBankTransactions } from './bankDedup';
 import { migrateSavingsAccounts, migrateSnapshotSavings } from './savingsMigration';
@@ -182,6 +183,10 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     salaries: { group: 'preserve', demo: 'personal', read: whenArray('salaries') },
     residences: { group: 'preserve', demo: 'personal', read: whenArray('residences') },
     secondHomeScenarios: { group: 'preserve', demo: 'personal', read: whenArray('secondHomeScenarios') },
+    boligAssumptions: {
+      group: 'reset', demo: 'personal', default: DEFAULT_BOLIG_ASSUMPTIONS,
+      read: mergedWith('boligAssumptions', DEFAULT_BOLIG_ASSUMPTIONS),
+    },
     bonuses: { group: 'preserve', demo: 'personal', read: whenArray('bonuses') },
     overtime: { group: 'preserve', demo: 'personal', read: whenArray('overtime') },
     hoursSnapshots: { group: 'preserve', demo: 'personal', read: whenArray('hoursSnapshots') },

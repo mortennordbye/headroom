@@ -135,6 +135,31 @@ export function registerReadTools(server: McpServer) {
   );
 
   server.registerTool(
+    'get_year_review',
+    {
+      title: 'Annual review',
+      description:
+        'Consolidated year-in-review for a calendar year: total income, tax paid, savings rate, top spending categories, and net-worth change. Own-account transfers are netted out and the year is capped at the current month. Omit `year` for the most recent year with data; `availableYears` lists the choices.',
+      inputSchema: {
+        year: z
+          .number()
+          .int()
+          .optional()
+          .describe('Calendar year, e.g. 2025. Defaults to the most recent year with data.'),
+      },
+      annotations: { title: 'Annual review', ...readOnly },
+    },
+    async ({ year }) => {
+      try {
+        const { blob } = await getData();
+        return jsonResult(derive.yearReviewSummary(blob, year));
+      } catch (e) {
+        return errorResult(String((e as Error).message));
+      }
+    },
+  );
+
+  server.registerTool(
     'what_if',
     {
       title: 'What-if scenario',

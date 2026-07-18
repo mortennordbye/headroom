@@ -5,6 +5,7 @@ import { computeEquityBreakdown } from '../src/lib/equity';
 import { essentialMonthlyExpenses } from '../src/lib/fixedExpenseTotals';
 import { calcDebtToIncome } from '../src/lib/calculations';
 import { spendByCategory } from '../src/lib/categoryStats';
+import { excludedTransferIds } from '../src/lib/transferRules';
 
 const MONTH = '2026-06';
 
@@ -92,6 +93,39 @@ describe('derive (pure, no server)', () => {
     expect(s.byCategory).toEqual(spendByCategory(blob.dailyTransactions, MONTH));
     const groceries = s.byCategory.find((c) => c.category === 'groceries');
     expect(groceries?.amount).toBe(5000);
+  });
+
+  it('spending: nets out own-account transfers (transferRules), matching the app', () => {
+    const withTransfer: ExportPayload = {
+      ...blob,
+      dailyTransactions: [
+        ...blob.dailyTransactions,
+        { id: 'x1', date: '2026-06-20', description: 'Til: Sparekonto', amount: 9000, category: 'transfers', kind: 'expense' },
+      ],
+      transferRules: [{ id: 'r1', match: 'Til: Sparekonto' }],
+    };
+    const s = derive.spendingAnalysis(withTransfer, MONTH);
+    const excluded = excludedTransferIds(withTransfer.dailyTransactions, withTransfer.transferRules!);
+    const netted = withTransfer.dailyTransactions.filter((t) => !excluded.has(t.id));
+    // Totals match the transfer-netted ledger, NOT the raw one — the rule-matched
+    // 9000 row never lands in a category.
+    expect(s.byCategory).toEqual(spendByCategory(netted, MONTH));
+    expect(s.byCategory.find((c) => c.category === 'transfers')).toBeUndefined();
+  });
+
+  it('year review: caps at the current month, nets transfers, ranks top categories', () => {
+    const r = derive.yearReviewSummary(blob, 2026, MONTH);
+    expect(r.year).toBe(2026);
+    expect(r.availableYears).toContain(2026);
+    expect(r.months[r.months.length - 1]).toBe(MONTH); // no future months
+    // 2026 groceries: 5000 (Jun) + 4500 (May) + 4800 (Apr) = 14300, the biggest spend.
+    expect(r.topCategories[0]?.category).toBe('groceries');
+    expect(r.topCategories.some((c) => c.category === 'transfers')).toBe(false);
+  });
+
+  it('year review: defaults to the most recent year with data', () => {
+    const r = derive.yearReviewSummary(blob, undefined, MONTH);
+    expect(r.year).toBe(2026);
   });
 
   it('debt: extra payment saves months and interest on the credit card', () => {

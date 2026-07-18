@@ -8,50 +8,16 @@ Shipped: a tested `calcRealBorrowingCapacity` (`src/lib/secondHome.ts`) + a "Rea
 capacity (5×)" section in `src/pages/bolig/SecondHomePanel.tsx` — income build-up (base + optional
 bonus + rent at an adjustable bank factor), full debt build-up (existing mortgage + other debt +
 credit frames at full limit + new loan), the 5× verdict, and a liquidity (cash-required vs liquid)
-warning. Also fixed the panel's serviceability DTI to include `assets.houseDebt`. Deferred:
+warning. Also fixed the panel's serviceability DTI to include `assets.houseDebt`.
 
-- **Borrowing-capacity knobs are session-only.** base salary, bonus + include-toggle, rent factor,
-  credit frames and the liquid-assets override are local React state (seeded from app data), not
-  persisted — they reset on reload. **Why:** they're what-if stress levers; persisting them means a
-  new blob object threaded through every payload site (payloadRegistry + FinanceContext build/apply/
-  import/demo + Settings export). **What would unblock:** decide they're worth persisting, then add a
-  single `boligAssumptions` object across those sites. **Where:** `src/pages/bolig/SecondHomePanel.tsx`,
-  `src/lib/payloadRegistry.ts`, `src/context/FinanceContext.tsx`.
-- **Credit-card *limits* vs balances — DONE (2026-07).** `Debt` gained an optional `creditLimit`
-  (the granted frame); `lendingDebtTotal` in `src/lib/debt.ts` counts a limited line at its full
-  frame (falling back to the balance when no limit is recorded or the drawn amount exceeds it), and
-  FinanceContext exposes it as `capacityDebt` alongside the net-worth `totalDebt`. Wired into the
-  lending checks: Dashboard gjeldsgrad, the Loan first-buyer `Låneevne` auto-fill (`BoligPage`), the
-  second-home `calcPortfolio` headroom, and the MCP `overview` DTI (`mcp/derive.ts`). Editor field +
-  i18n in `DebtSection`; sanitize + demo updated. Remaining: the second-home planner's *detailed*
-  `calcRealBorrowingCapacity` still uses drawn `totalDebt` plus its own manual `creditFrames` row
-  (kept to avoid double-counting the frame). Could later auto-seed that `creditFrames` field from the
-  sum of recorded `creditLimit`s and drop the manual entry. **Where:** `src/pages/bolig/SecondHomePanel.tsx`.
-
-## MCP server — known gaps (shipped v1, 2026-07)
-
-Shipped: a local stdio MCP server (`mcp/`) exposing read/insight tools and guarded
-read-modify-write tools over the app's `/api/data`. Deferred:
-
-- **Spending analysis is gross of own-account transfers.** `get_spending_analysis`
-  (`mcp/derive.ts` `spendingAnalysis`) runs `spendByCategory`/`budgetProgress` on raw
-  `dailyTransactions` (matching the app's cashflow charts, which also use raw txs), so it
-  does NOT apply `transferRules` exclusion or the enveloped-category filter the app's
-  `CategoryBudgets` view uses. **Why deferred:** the transfer-aware view is assembled in
-  `FinanceContext` (`internalTransferIds` → `nonTransferTransactions`/`visibleBudgetTransactions`),
-  which can't be imported into the Node MCP process without dragging in React. **What would
-  unblock:** extract the transfer-rule → excluded-id logic into a pure `src/lib` helper, then
-  call it in `mcp/derive.ts`. **Where:** `mcp/derive.ts`, `src/context/FinanceContext.tsx`
-  (transfer id derivation), `src/lib/transferRules.ts`.
-- **`yearReview` not exposed as a tool.** The plan listed annual review under
-  `get_recommendations`; v1 ships `computeHistoryInsights` there but not `yearReview`
-  (`src/lib/yearReview.ts`), which needs a `YearReviewInput` assembled from
-  transactions/incomeByMonth/payslips/snapshots. **What would unblock:** add a `get_year_review`
-  tool that builds `YearReviewInput` (mirroring `availableReportYears`'s caller). **Where:**
-  `mcp/derive.ts`, `mcp/tools/read.ts`, `src/lib/yearReview.ts`.
-- **Remote/HTTP transport not built.** v1 is local stdio only (per the chosen scope). A
-  claude.ai web connector would need an HTTP MCP endpoint gated behind the app's auth
-  (`AUTH_PLAN.md`) + TLS. **Where:** would build on `mcp/` sharing `derive.ts`/`client.ts`.
+Done (2026-07): the borrowing-capacity knobs (base salary, bonus + include-toggle, rent factor,
+credit frames, liquid override) now persist in a single `boligAssumptions` blob object, threaded
+through `payloadRegistry` + FinanceContext build/apply + demo + import-sections + sanitize; the three
+seeded fields are `number | null` overrides that fall back to live/auto data. Credit frames now
+auto-seed from the sum of recorded `creditLimit`s via `creditFrameBreakdown` (`src/lib/debt.ts`), and
+the detailed `calcRealBorrowingCapacity` splits existing debt into drawn balances (`nonFrameDebt`) +
+full granted frames (`creditFrameTotal`) so a card's balance is never double-counted. **Where:**
+`src/lib/secondHome.ts` (`BoligAssumptions`), `src/pages/bolig/SecondHomePanel.tsx`, `src/lib/debt.ts`.
 
 ## Scenario bands on the other projection charts
 
@@ -470,25 +436,12 @@ engine `src/lib/secondHome.ts` (+ tests: `calcPortfolio`/`summarizeScenario`); U
 
 Remaining / intentionally out of v1:
 
-- **`MIN_EQUITY_SHARE = 0.15` in `src/lib/calculations.ts` is stale** (the utlånsforskrift floor
-  is now 10% / 90% LTV since Jan 2025). Left unchanged because it powers the existing
-  first-buyer `calcBorrowingCapacity` and changing it would silently alter that tool's output.
-  The second-home planner sidesteps it with its own adjustable `equityShare` (default 0.25 =
-  bank practice). **What would unblock**: a deliberate review of the first-buyer tool's numbers
-  against the current regulation. **Where**: `src/lib/calculations.ts` (`MIN_EQUITY_SHARE`),
-  `src/pages/BoligPage.tsx` first-buyer block.
 - **Tax model is a deliberate simplification** (disclosed in-UI). Not modelled: short-term /
   Airbnb rental (taxed on 85% of income over 10k, different regime); the owner-occupied
   tax-free rental rule (renting <50% of your primary home); full-household formuesskatt
   (bunnfradrag, spouse split, the automated 25%/100% ligningsverdi); capital-gains *benefit*
   on a modelled loss; botid exemption on a secondary that was once a primary. **Where**:
   `src/lib/secondHome.ts` (`calcRentalIncomeTax`, `calcWealthTaxImpact`, `calcPropertyCapitalGains`).
-- **BRRR ARV is a manual input** with a sensible default (= purchase price). The plan noted an
-  "estimate ARV from SSB kr/m²" affordance (reusing `estimatedPropertyValue` + the
-  `PropertyValueEstimate` pattern) — not wired in v1 because the scenario carries no
-  postcode/size. **What would unblock**: add postcode + m² to the scenario (or link a
-  `Residence`), then call `loadKvmpris`. **Where**: `src/pages/bolig/SecondHomePanel.tsx`,
-  `src/lib/propertyEstimate.ts`.
 - **Scenarios aren't snapshotted into the time machine.** They're forward-looking and render
   always-live, independent of `useBalanceHistory` (unlike the mortgage tools). Fine by design;
   noted in case historical scenario tracking is ever wanted.

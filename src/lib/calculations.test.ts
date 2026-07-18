@@ -179,7 +179,7 @@ describe('calcMortgageBalanceByYear', () => {
 
 describe('calcBorrowingCapacity', () => {
   it('is income-bound when equity is ample', () => {
-    // income 600k → maxDebt 3.0M; equity 2M → LTV cap = 2M/0.15 = 13.3M.
+    // income 600k → maxDebt 3.0M; equity 2M → LTV cap = 2M/0.10 = 20M.
     // Income cap (3M+2M=5M) is lower, so it binds.
     const c = calcBorrowingCapacity(600_000, 2_000_000, 0, 5, 25);
     expect(c.maxDebt).toBe(3_000_000);
@@ -189,12 +189,12 @@ describe('calcBorrowingCapacity', () => {
   });
 
   it('is LTV-bound when equity is thin relative to income', () => {
-    // income 1.2M → maxDebt 6M; equity 400k → LTV cap = 400k/0.15 ≈ 2.67M,
-    // far below the income cap (6.4M), so the 15%-equity rule binds.
+    // income 1.2M → maxDebt 6M; equity 400k → LTV cap = 400k/0.10 = 4.0M,
+    // below the income cap (6.4M), so the 10%-equity rule binds.
     const c = calcBorrowingCapacity(1_200_000, 400_000, 0, 5, 25);
     expect(c.ltvBound).toBe(true);
-    expect(c.maxPrice).toBeCloseTo(400_000 / 0.15, 4);
-    // debt at the LTV cap is price − equity, i.e. 85% of price
+    expect(c.maxPrice).toBeCloseTo(400_000 / 0.10, 4);
+    // debt at the LTV cap is price − equity, i.e. 90% of price
     expect(c.debtAtMaxPrice).toBeCloseTo(c.maxPrice - 400_000, 4);
   });
 

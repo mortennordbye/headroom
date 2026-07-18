@@ -83,7 +83,7 @@ const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
     monthlyRent: 0, vacancyPct: 0, monthlyOperatingCosts: 0, deductibleCostsAnnual: 0,
     renovationCost: 0, afterRepairValue: 0, refinanceLtvPct: 0,
     holdYears: 0, annualAppreciationPct: 0, saleAgentFeePct: 0, documentedImprovements: 0,
-    marginalWealthTaxPct: 0,
+    marginalWealthTaxPct: 0, arvSizeSqm: 0,
   },
 };
 

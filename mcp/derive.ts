@@ -32,7 +32,9 @@ import { prepayVsInvest } from '../src/lib/prepayVsInvest';
 import { computeHistoryInsights } from '../src/lib/historyInsights';
 import { goalPace } from '../src/lib/goalPace';
 import { salaryAt } from '../src/lib/salary';
-import { currentMonthKey, lastNMonthKeys, addMonthsKey } from '../src/lib/date';
+import { excludedTransferIds } from '../src/lib/transferRules';
+import { yearReview, availableReportYears } from '../src/lib/yearReview';
+import { currentMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
 
 // ---- shared helpers -------------------------------------------------------
 
@@ -171,20 +173,68 @@ export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey())
   };
 }
 
-export function spendingAnalysis(blob: ExportPayload, monthKey = currentMonthKey()) {
+/** Transactions with internal (own-account) transfers netted out, mirroring the
+ *  app's `nonTransferTransactions` (two-legged pairs + transferRule matches). */
+function nonTransferTransactions(blob: ExportPayload) {
   const txs = blob.dailyTransactions ?? [];
+  const excluded = excludedTransferIds(txs, blob.transferRules ?? []);
+  return txs.filter((tx) => !excluded.has(tx.id));
+}
+
+export function spendingAnalysis(blob: ExportPayload, monthKey = currentMonthKey()) {
+  // Net out own-account transfers exactly as the app's budget analysis does
+  // (transferRules + auto-detected pairs), so category totals aren't inflated by
+  // card payments / savings moves that show up as an expense + a matching income.
+  const txs = nonTransferTransactions(blob);
   const prior6 = lastNMonthKeys(monthAnchor(addMonthsKey(monthKey, -1)), 6);
   return {
     monthKey,
-    // Excludes kind === 'income' only, matching the app's spend charts. Internal
-    // transfers are NOT rule-filtered here (the app does that upstream via
-    // transferRules); treat category totals as gross of own-account transfers.
     byCategory: spendByCategory(txs, monthKey),
     monthOverMonth: categoryMoM(txs, monthKey, addMonthsKey(monthKey, -1)),
     budgetProgress: budgetProgress(txs, monthKey, blob.categoryBudgets ?? {}),
     headline: topSpendInsight(txs, monthKey, prior6),
     recurringUntracked: detectRecurring(txs, blob.fixedExpenses ?? [], monthKey),
   };
+}
+
+/**
+ * Consolidated annual review for a calendar year: income, tax paid, savings rate,
+ * top spending categories, and net-worth change. Mirrors YearReviewPage — nets
+ * out transfers and caps at the current month. `year` defaults to the most recent
+ * year with data. Monthly net income approximates the app: the per-month override
+ * when present, else the flat `income` (the page's salary-derived fallback, which
+ * needs the React tax pipeline, isn't reproduced here).
+ */
+export function yearReviewSummary(
+  blob: ExportPayload,
+  year?: number,
+  monthKey = currentMonthKey(),
+) {
+  const txs = nonTransferTransactions(blob);
+  const payslips = blob.payslips ?? {};
+  const snapshots = blob.balanceSnapshots ?? {};
+  const history = blob.netWorthHistory ?? {};
+  const years = availableReportYears({
+    transactions: txs, payslips, snapshots, netWorthHistory: history, nowMonthKey: monthKey,
+  });
+  const targetYear = year && years.includes(year) ? year : (years[0] ?? yearOf(monthKey));
+
+  const incomeByMonth: Record<string, number> = {};
+  for (const m of monthsBetween(`${targetYear}-01`, `${targetYear}-12`)) {
+    incomeByMonth[m] = blob.monthlyIncomes?.[m] ?? blob.income ?? 0;
+  }
+
+  const review = yearReview(targetYear, {
+    transactions: txs,
+    incomeByMonth,
+    totalFixedExpenses: totalFixedExpenses(blob),
+    payslips,
+    snapshots,
+    netWorthHistory: history,
+    currentNetWorth: netWorth(blob),
+    nowMonthKey: monthKey,
+  });
+  return { availableYears: years, ...review };
 }
 
 export function debtAnalysis(
