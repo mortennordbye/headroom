@@ -28,9 +28,8 @@ import {
   type SecondHomeScenario,
   type SecondHomeStrategy,
 } from '../../lib/secondHome';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+import { Card } from '../../components/ui/Card';
+import { SectionLabel } from '../../components/ui/SectionLabel';
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
@@ -211,10 +210,10 @@ const SecondHomePanel: React.FC = () => {
 
       {/* Portfolio summary — the cumulative picture of the committed properties */}
       {portfolio.committedCount > 0 && (
-        <div className={`${card} p-6`} style={{ borderColor: 'var(--brass-dim)' }}>
+        <Card padding="none" className="p-6" style={{ borderColor: 'var(--brass-dim)' }}>
           <div className="flex items-center gap-2 mb-4">
             <Layers size={14} style={{ color: 'var(--brass)' }} />
-            <h2 className={sectionLabel}>{bp.portfolioTitle} · {portfolio.committedCount}</h2>
+            <SectionLabel>{bp.portfolioTitle} · {portfolio.committedCount}</SectionLabel>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <PortfolioStat label={bp.portfolioValue} value={formatCurrency(Math.round(portfolio.totalPropertyValue))} />
@@ -232,13 +231,13 @@ const SecondHomePanel: React.FC = () => {
             />
             <PortfolioStat label={bp.portfolioEquityIn} value={formatCurrency(Math.round(portfolio.totalEquityInvested))} />
           </div>
-        </div>
+        </Card>
       )}
 
       {!scenario || !derived ? (
-        <div className={`${card} p-8 text-center`}>
+        <Card padding="none" className="p-8 text-center">
           <p className="text-[15px]" style={{ color: 'var(--text-2)' }}>{bp.emptyBody}</p>
-        </div>
+        </Card>
       ) : (
         <>
           {/* Name + strategy + delete */}
@@ -314,8 +313,8 @@ const SecondHomePanel: React.FC = () => {
           </div>
 
           {/* Inputs */}
-          <div className={`${card} p-6 space-y-5`}>
-            <h2 className={sectionLabel}>{bp.secPurchase}</h2>
+          <Card padding="none" className="p-6 space-y-5">
+            <SectionLabel>{bp.secPurchase}</SectionLabel>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <NumberRow label={bp.inPurchasePrice} value={scenario.purchasePrice} onCommit={(v) => set({ purchasePrice: v })} suffix="kr" />
               <NumberRow label={bp.inDokumentavgift} value={scenario.dokumentavgiftPct} onCommit={(v) => set({ dokumentavgiftPct: v })} suffix="%" />
@@ -326,7 +325,7 @@ const SecondHomePanel: React.FC = () => {
               {bp.purchaseCostsTotal}: <span className="font-mono" style={{ color: 'var(--text-2)' }}>{formatCurrency(Math.round(derived.purchaseCosts.total))}</span>
             </div>
 
-            <h2 className={`${sectionLabel} pt-2`}>{bp.secFinancing}</h2>
+            <SectionLabel className="pt-2">{bp.secFinancing}</SectionLabel>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <NumberRow label={bp.inEquityShare} value={Math.round(scenario.equityShare * 100)} onCommit={(v) => set({ equityShare: clamp(v / 100, 0, 1) })} suffix="%" />
               <NumberRow label={bp.inMortgageRate} value={scenario.mortgageRatePct} onCommit={(v) => set({ mortgageRatePct: v })} suffix="%" />
@@ -335,7 +334,7 @@ const SecondHomePanel: React.FC = () => {
 
             {derived.isBrrr && (
               <>
-                <h2 className={`${sectionLabel} pt-2`}>{bp.secRenovation}</h2>
+                <SectionLabel className="pt-2">{bp.secRenovation}</SectionLabel>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <NumberRow label={bp.inRenovation} value={scenario.renovationCost} onCommit={(v) => set({ renovationCost: v })} suffix="kr" />
                   <NumberRow label={bp.inArv} value={scenario.afterRepairValue} onCommit={(v) => set({ afterRepairValue: v })} suffix="kr" />
@@ -391,7 +390,7 @@ const SecondHomePanel: React.FC = () => {
               </>
             )}
 
-            <h2 className={`${sectionLabel} pt-2`}>{bp.secRental}</h2>
+            <SectionLabel className="pt-2">{bp.secRental}</SectionLabel>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <NumberRow label={bp.inMonthlyRent} value={scenario.monthlyRent} onCommit={(v) => set({ monthlyRent: v })} suffix="kr" />
               <NumberRow label={bp.inVacancy} value={scenario.vacancyPct} onCommit={(v) => set({ vacancyPct: v })} suffix="%" />
@@ -399,7 +398,7 @@ const SecondHomePanel: React.FC = () => {
               <NumberRow label={bp.inDeductibleCosts} value={scenario.deductibleCostsAnnual} onCommit={(v) => set({ deductibleCostsAnnual: v })} suffix="kr/år" />
             </div>
 
-            <h2 className={`${sectionLabel} pt-2`}>{bp.secSale}</h2>
+            <SectionLabel className="pt-2">{bp.secSale}</SectionLabel>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <NumberRow label={bp.inHoldYears} value={scenario.holdYears} onCommit={(v) => set({ holdYears: v })} suffix={bp.years} />
               <NumberRow label={bp.inAppreciation} value={scenario.annualAppreciationPct} onCommit={(v) => set({ annualAppreciationPct: v })} suffix="%/år" />
@@ -407,12 +406,12 @@ const SecondHomePanel: React.FC = () => {
               <NumberRow label={bp.inImprovements} value={scenario.documentedImprovements} onCommit={(v) => set({ documentedImprovements: v })} suffix="kr" />
               <NumberRow label={bp.inWealthTaxRate} value={scenario.marginalWealthTaxPct} onCommit={(v) => set({ marginalWealthTaxPct: v })} suffix="%" />
             </div>
-          </div>
+          </Card>
 
           {/* BRRR flow */}
           {derived.isBrrr && (
-            <div className={`${card} p-6 space-y-4`}>
-              <h2 className={sectionLabel}>{bp.secBrrr}</h2>
+            <Card padding="none" className="p-6 space-y-4">
+              <SectionLabel>{bp.secBrrr}</SectionLabel>
               <div className="flex flex-wrap items-center gap-3 text-[13px]">
                 <FlowBox label={bp.brrrBuy} value={formatCurrency(Math.round(derived.brrr.initialLoan))} sub={bp.brrrInitialLoan} />
                 <ArrowRight size={16} style={{ color: 'var(--text-3)' }} />
@@ -422,13 +421,13 @@ const SecondHomePanel: React.FC = () => {
                 <ArrowRight size={16} style={{ color: 'var(--text-3)' }} />
                 <FlowBox label={bp.brrrCashOut} value={formatCurrency(Math.round(derived.brrr.cashOut))} sub={`${bp.brrrCapitalLeftIn}: ${formatCurrency(Math.round(derived.brrr.capitalLeftIn))}`} accent />
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Cashflow + serviceability + tax, two columns */}
           <div className="grid lg:grid-cols-2 gap-4">
-            <div className={`${card} p-6 space-y-3`}>
-              <h2 className={sectionLabel}>{bp.secCashflow}</h2>
+            <Card padding="none" className="p-6 space-y-3">
+              <SectionLabel>{bp.secCashflow}</SectionLabel>
               <Row label={bp.rowEffectiveRent} value={formatCurrency(Math.round(derived.cashflow.effectiveRent))} />
               <Row label={bp.rowOperating} value={`− ${formatCurrency(Math.round(derived.cashflow.annualOperatingCosts))}`} />
               <Row label={bp.rowInterest} value={`− ${formatCurrency(Math.round(derived.cashflow.annualInterest))}`} />
@@ -438,11 +437,11 @@ const SecondHomePanel: React.FC = () => {
                 <Row label={bp.rowNetAfterTax} value={formatCurrency(Math.round(derived.cashflow.afterTaxAnnualCashflow))} strong />
                 <Row label={bp.rowNetMonthly} value={formatCurrency(Math.round(derived.cashflow.afterTaxMonthlyCashflow))} />
               </div>
-            </div>
+            </Card>
 
             <div className="space-y-4">
-              <div className={`${card} p-6 space-y-3`}>
-                <h2 className={sectionLabel}>{bp.secServiceability}</h2>
+              <Card padding="none" className="p-6 space-y-3">
+                <SectionLabel>{bp.secServiceability}</SectionLabel>
                 <Row label={`${bp.rowStressPayment} (${pct(derived.stressPct)})`} value={`${formatCurrency(Math.round(derived.stressedMonthly))} /${bp.month}`} />
                 <Row
                   label={bp.rowDtiHeadroom}
@@ -451,10 +450,10 @@ const SecondHomePanel: React.FC = () => {
                 <div className="text-[11px] pt-1" style={{ color: 'var(--text-3)' }}>
                   {bp.dtiNote} <span className="font-mono">{derived.dti.ratio.toFixed(1)}×</span> / 5×
                 </div>
-              </div>
+              </Card>
 
-              <div className={`${card} p-6 space-y-3`}>
-                <h2 className={sectionLabel}>{bp.secTaxes}</h2>
+              <Card padding="none" className="p-6 space-y-3">
+                <SectionLabel>{bp.secTaxes}</SectionLabel>
                 <Row label={bp.rowRentalTax} value={`${formatCurrency(Math.round(derived.cashflow.rentalIncomeTax))} /${bp.year}`} />
                 <Row label={bp.rowInterestDeduction} value={`${formatCurrency(Math.round(derived.interestDeductionValue))} /${bp.year}`} />
                 <Row label={bp.rowWealthTax} value={`${formatCurrency(Math.round(derived.wealth.marginalWealthTax))} /${bp.year}`} />
@@ -462,15 +461,15 @@ const SecondHomePanel: React.FC = () => {
                   <Row label={`${bp.rowSaleValue} (${scenario.holdYears} ${bp.years})`} value={formatCurrency(Math.round(derived.projectedSale))} />
                   <Row label={bp.rowGainTax} value={formatCurrency(Math.round(derived.gains.tax))} />
                 </div>
-              </div>
+              </Card>
             </div>
           </div>
 
           {/* Real borrowing capacity — the full 5×-income check + liquidity */}
           {borrowCap && (
-            <div className={`${card} p-6 space-y-5`}>
+            <Card padding="none" className="p-6 space-y-5">
               <div>
-                <h2 className={sectionLabel}>{bp.borrowCap.title}</h2>
+                <SectionLabel>{bp.borrowCap.title}</SectionLabel>
                 <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{bp.borrowCap.subtitle}</p>
               </div>
 
@@ -580,12 +579,12 @@ const SecondHomePanel: React.FC = () => {
               <p className="text-[11px] leading-[1.5]" style={{ color: 'var(--text-3)' }}>
                 {bp.borrowCap.rentCaveat} {bp.borrowCap.note}
               </p>
-            </div>
+            </Card>
           )}
 
           {/* Sensitivity chart */}
-          <div className={`${card} p-6`}>
-            <h2 className={`${sectionLabel} mb-4`}>{bp.secSensitivity}</h2>
+          <Card padding="none" className="p-6">
+            <SectionLabel className="mb-4">{bp.secSensitivity}</SectionLabel>
             <div style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={derived.sensitivity} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
@@ -598,12 +597,12 @@ const SecondHomePanel: React.FC = () => {
               </ResponsiveContainer>
             </div>
             <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>{bp.sensitivityNote}</p>
-          </div>
+          </Card>
 
           {/* Comparison table — rank candidates side by side */}
           {comparison.length >= 2 && (
-            <div className={`${card} p-6`}>
-              <h2 className={`${sectionLabel} mb-4`}>{bp.compareTitle}</h2>
+            <Card padding="none" className="p-6">
+              <SectionLabel className="mb-4">{bp.compareTitle}</SectionLabel>
               <div className="overflow-x-auto">
                 <table className="w-full text-[13px] tabular-nums">
                   <thead>
@@ -635,7 +634,7 @@ const SecondHomePanel: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Disclaimer */}

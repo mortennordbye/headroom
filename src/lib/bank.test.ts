@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 // The Enable Banking mapping lives in the CommonJS server engine (server/bank.js)
 // so it ships in the production image; it's tested here via Vitest.
-import { mapEBTransaction, mapEBTransactions, mergeTransactions, dropStaleBareTwins, normalizeAccount } from '../../server/bank.js';
+import { mapEBTransaction, mapEBTransactions, mergeTransactions, evictSupersededPending, dropStaleBareTwins, normalizeAccount } from '../../server/bank.js';
 import type { MappedTransaction } from '../../server/bank';
 
 interface EBTransaction {
@@ -136,6 +136,13 @@ describe('mapEBTransactions', () => {
     expect(rows.map((r: { id: string }) => r.id)).toEqual(['eb-ref-1']);
   });
 
+  it('stamps `pending` on non-booked rows and leaves booked rows unflagged', () => {
+    const [pending] = mapEBTransactions([tx({ status: 'PDNG' })], { includePending: true });
+    expect(pending.pending).toBe(true);
+    const [booked] = mapEBTransactions([tx()]);
+    expect(booked.pending).toBeUndefined();
+  });
+
   it('keeps two identical same-day no-reference rows as distinct transactions', () => {
     const twin = tx({ entry_reference: undefined });
     const rows = mapEBTransactions([twin, twin]);
@@ -218,6 +225,57 @@ describe('mergeTransactions', () => {
     const stored = mapEBTransactions([tx()]);
     const merged = mergeTransactions(stored, [], ['eb-ref-1']);
     expect(merged).toHaveLength(0);
+  });
+
+  it('evicts a stored pending row once its booked twin arrives (no double-count)', () => {
+    const pending = mapEBTransactions(
+      [tx({ entry_reference: undefined, status: 'PDNG', booking_date: undefined, value_date: '2026-04-05' })],
+      { includePending: true, account: 'a:1' },
+    );
+    const booked = mapEBTransactions([tx({ entry_reference: 'ref-9', booking_date: '2026-04-06' })], { account: 'a:1' });
+    const merged = mergeTransactions(pending, booked);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe('eb-ref-9');
+    expect(merged[0].pending).toBeUndefined();
+  });
+});
+
+// evictSupersededPending is the CJS twin of the same function in
+// src/lib/bankDedup.ts (they must stay byte-equivalent); these cases mirror
+// bankDedup.test.ts.
+describe('evictSupersededPending', () => {
+  const p = (over: Partial<MappedTransaction>): MappedTransaction => ({
+    id: 'p', date: '2026-04-05', description: 'REMA 1000', amount: 249.9, kind: 'expense', account: 'a:1', pending: true, ...over,
+  });
+  const b = (over: Partial<MappedTransaction>): MappedTransaction => ({
+    id: 'b', date: '2026-04-06', description: 'REMA 1000', amount: 249.9, kind: 'expense', account: 'a:1', ...over,
+  });
+
+  it('drops a pending row superseded by a booked twin (same account/amount/kind, within days)', () => {
+    const out = evictSupersededPending([p({}), b({})]);
+    expect(out.map((t) => t.id)).toEqual(['b']);
+  });
+
+  it('keeps a pending row that has no booked twin', () => {
+    expect(evictSupersededPending([p({})]).map((t) => t.id)).toEqual(['p']);
+  });
+
+  it('does not evict when the amount differs, the account differs, or the dates are far apart', () => {
+    expect(evictSupersededPending([p({}), b({ amount: 250 })])).toHaveLength(2);
+    expect(evictSupersededPending([p({}), b({ account: 'a:2' })])).toHaveLength(2);
+    expect(evictSupersededPending([p({}), b({ date: '2026-04-20' })])).toHaveLength(2);
+  });
+
+  it('rescues a manual category from the dropped pending row onto its booked survivor', () => {
+    const out = evictSupersededPending([p({ category: 'groceries', categorySource: 'manual' }), b({})]);
+    expect(out).toHaveLength(1);
+    expect(out[0].category).toBe('groceries');
+    expect(out[0].categorySource).toBe('manual');
+  });
+
+  it('is a no-op when there are no pending rows', () => {
+    const rows = [b({ id: 'b1' }), b({ id: 'b2', amount: 10 })];
+    expect(evictSupersededPending(rows)).toBe(rows);
   });
 });
 

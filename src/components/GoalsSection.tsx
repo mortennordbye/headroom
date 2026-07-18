@@ -7,10 +7,9 @@ import { sumSavings, computeEquityBreakdown } from '../lib/equity';
 import { goalPace, type GoalSourcePoint } from '../lib/goalPace';
 import { currentMonthKey, addMonthsKey } from '../lib/date';
 import { ProgressBar } from './ui/ProgressBar';
+import { Card } from './ui/Card';
+import { SectionLabel } from './ui/SectionLabel';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 function currentValueFor(goal: Goal, ctx: { assets: Assets; totalEquity: number }): number {
   switch (goal.source) {
@@ -178,11 +177,11 @@ const GoalsSection: React.FC = () => {
   };
 
   return (
-    <div className={`${card} p-5 md:p-7 space-y-4`}>
+    <Card padding="none" className="p-5 md:p-7 space-y-4">
       <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
           <Target size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{t.goals.title}</h3>
+          <SectionLabel>{t.goals.title}</SectionLabel>
         </div>
         <button
           onClick={() => openModal()}
@@ -276,7 +275,7 @@ const GoalsSection: React.FC = () => {
 
       {modal && <EditModal {...modal} onCancel={() => setModal(null)} />}
       {confirm && <ConfirmModal {...confirm} onCancel={() => setConfirm(null)} />}
-    </div>
+    </Card>
   );
 };
 

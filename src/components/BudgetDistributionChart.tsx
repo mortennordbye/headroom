@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import type { FixedExpense } from '../context/FinanceContext';
 import { CHART, GRID_PROPS } from '../lib/chartColors';
+import ChartTooltip from './ChartTooltip';
 
 interface Props {
   data: FixedExpense[];
@@ -76,20 +77,19 @@ export default function BudgetDistributionChart({
         <Tooltip
           cursor={{ fill: CHART.track }}
           content={({ active, payload }: TooltipContentProps) => {
-            if (!active || !payload?.length) return null;
-            const d = payload[0].payload as { name: string; amount: number };
+            const d = payload?.[0]?.payload as { name: string; amount: number } | undefined;
+            if (!d) return null;
             const pct = totalFixedExpenses > 0 ? (d.amount / totalFixedExpenses) * 100 : 0;
             return (
-              <div
-                className="rounded-[6px] px-3.5 py-2.5"
-                style={{ background: 'var(--bg-card)', border: '1px solid var(--rule)' }}
-              >
-                <div className="text-[13px] font-semibold text-[var(--text-1)]">{d.name}</div>
-                <div className="text-[13px] font-mono text-[var(--text-2)] mt-0.5">{formatCurrency(d.amount)}</div>
-                <div className="text-[11px] text-[var(--text-3)] mt-1">
-                  {pct.toFixed(1)}% {ofFixedCostsLabel}
-                </div>
-              </div>
+              <ChartTooltip
+                active={active}
+                payload={[{ value: d.amount }]}
+                hideLabel
+                hideNames
+                title={d.name}
+                valueFormatter={(v) => formatCurrency(v)}
+                extra={`${pct.toFixed(1)}% ${ofFixedCostsLabel}`}
+              />
             );
           }}
         />

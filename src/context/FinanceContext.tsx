@@ -30,7 +30,7 @@ import { computeAutomationPostings, type AutomationRule, type AutomationState, t
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
-import { dedupeBankTransactions } from '../lib/bankDedup';
+import { dedupeBankTransactions, evictSupersededPending } from '../lib/bankDedup';
 import { salaryAt } from '../lib/salary';
 import { stableStringify } from '../lib/stableStringify';
 import { sanitizePayload } from '../lib/sanitizePayload';
@@ -166,6 +166,12 @@ export interface DailyTransaction {
    * Missing on legacy rows — treat as 'auto'.
    */
   categorySource?: 'auto' | 'manual';
+  /**
+   * Provisional bank row (not yet booked). Set by bank sync when pending import
+   * is enabled; shown muted, and evicted once its booked twin arrives. Absent on
+   * booked, manual, and legacy rows.
+   */
+  pending?: boolean;
 }
 
 export interface TransactionTemplate {
@@ -2298,7 +2304,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // external change and trigger a "data changed elsewhere" reload.
   const applyBankSync = useCallback((txs: DailyTransaction[], rev?: number) => {
     if (typeof rev === 'number' && Number.isFinite(rev)) revRef.current = rev;
-    setDailyTransactionsTracked(dedupeBankTransactions(txs));
+    setDailyTransactionsTracked(evictSupersededPending(dedupeBankTransactions(txs)));
   }, [setDailyTransactionsTracked]);
 
   // Import / demo-restore: overlay the present fields, leaving absent ones as the

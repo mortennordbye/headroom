@@ -56,6 +56,8 @@ import { PropertyCard, ResidenceTimeline } from '../components/ResidenceHistory'
 import { PropertyValueEstimate } from '../components/PropertyValueEstimate';
 import { StatCard } from '../components/ui/StatCard';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
+import { Card } from '../components/ui/Card';
+import { SectionLabel } from '../components/ui/SectionLabel';
 import SecondHomePanel from './bolig/SecondHomePanel';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
@@ -65,9 +67,6 @@ interface ModalConfig {
   fields: ModalField[];
   onSave: (values: Record<string, string>) => void;
 }
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 const LtvChart = lazy(() => import('../components/charts/LtvChart'));
 const PaydownVsPlanChart = lazy(() => import('../components/charts/PaydownVsPlanChart'));
@@ -377,10 +376,10 @@ const BoligPage: React.FC = () => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
 
             {/* Låneevne */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <Calculator size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{lp.borrowingPower}</h2>
+                <SectionLabel>{lp.borrowingPower}</SectionLabel>
               </div>
               <div className="space-y-1">
                 <LoanRow label={lp.annualSalary} notes={lp.annualSalaryNote}
@@ -412,13 +411,13 @@ const BoligPage: React.FC = () => {
                 <LoanRow label={lp.stressTest} notes={`${lp.stressTestNotePrefix}${fmtPct(calc.capacity.stressRatePct)}`}
                   value={`${fmtNum(Math.round(calc.capacity.stressedMonthlyPayment))}/${t.common.moAbbr}`} />
               </div>
-            </div>
+            </Card>
 
             {/* Kostnad på lån */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{lp.loanCost}</h2>
+                <SectionLabel>{lp.loanCost}</SectionLabel>
               </div>
               <div className="space-y-1">
                 <LoanRow label={lp.loanAmount} notes={lp.loanAmountNote}
@@ -446,13 +445,13 @@ const BoligPage: React.FC = () => {
                 <LoanRow label={lp.totalCostLabel} notes={lp.totalCostNote}
                   value={fmtNum(calc.totalCost)} highlight highlightColor="brass" />
               </div>
-            </div>
+            </Card>
 
             {/* Skattelettelse */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <ShieldCheck size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{lp.taxReliefTitle}</h2>
+                <SectionLabel>{lp.taxReliefTitle}</SectionLabel>
               </div>
               <div className="space-y-1">
                 <LoanRow label={lp.yearOneInterest} notes={lp.yearOneInterestNote}
@@ -463,14 +462,14 @@ const BoligPage: React.FC = () => {
                 <LoanRow label={lp.annualRelief} notes={lp.annualReliefNote}
                   value={fmtNum(calc.taxDeduction)} highlight highlightColor="green" />
               </div>
-            </div>
+            </Card>
 
             {/* Finansieringsbevis */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
                   <Building2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                  <h2 className={sectionLabel}>{lp.financingProof}</h2>
+                  <SectionLabel>{lp.financingProof}</SectionLabel>
                 </div>
                 <button
                   onClick={() => editText(lp.validUntil, 'gyldigTil', loan.gyldigTil)}
@@ -494,7 +493,7 @@ const BoligPage: React.FC = () => {
                 <LoanRow label={lp.totalPrice} notes={lp.totalPriceNote}
                   value={fmtNum(calc.totalpris)} highlight highlightColor="brass" />
               </div>
-            </div>
+            </Card>
 
           </div>
 
@@ -550,10 +549,10 @@ const BoligPage: React.FC = () => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
 
             {/* Nåværende lån */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <Calculator size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{lp.currentLoanTitle}</h2>
+                <SectionLabel>{lp.currentLoanTitle}</SectionLabel>
               </div>
               <div className="space-y-1">
                 <LoanRow label={lp.accountLabel}
@@ -602,7 +601,7 @@ const BoligPage: React.FC = () => {
                   <ProgressBar pct={loanTL.elapsedPct} color="var(--positive)" />
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* Bolig & kjøp */}
             <PropertyCard currentValue={assets.houseValue} readOnly={!hist.isLive} />
@@ -617,10 +616,10 @@ const BoligPage: React.FC = () => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
 
             {/* Skattelettelse */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <ShieldCheck size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{lp.taxReliefTitle}</h2>
+                <SectionLabel>{lp.taxReliefTitle}</SectionLabel>
               </div>
               <div className="space-y-1">
                 <LoanRow label={lp.monthlyInterestLabel}
@@ -632,13 +631,13 @@ const BoligPage: React.FC = () => {
                   value={fmtNum(homeownerStatus.annualTaxDeduction)}
                   highlight highlightColor="green" />
               </div>
-            </div>
+            </Card>
 
             {/* Sammenlign renten din */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <TrendingDown size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{lp.compareRateTitle}</h2>
+                <SectionLabel>{lp.compareRateTitle}</SectionLabel>
               </div>
               <p className="text-[13px] text-[var(--text-2)]">
                 {lp.compareRateBody}
@@ -684,7 +683,7 @@ const BoligPage: React.FC = () => {
                 {lp.compareCta}
                 <ExternalLink size={14} strokeWidth={2} />
               </a>
-            </div>
+            </Card>
 
           </div>
 
@@ -702,15 +701,15 @@ const BoligPage: React.FC = () => {
           />
 
           {/* Loan-to-value over time */}
-          <div className={`${card} p-5 md:p-7`}>
+          <Card padding="none" className="p-5 md:p-7">
             <div className="pb-4 mb-2 border-b border-[var(--border)]">
-              <h3 className={sectionLabel}>{t.charts.ltvTitle}</h3>
+              <SectionLabel>{t.charts.ltvTitle}</SectionLabel>
               <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.ltvSub}</p>
             </div>
             <div className="h-[240px] w-full">
               <Suspense fallback={<ChartSkeleton />}><LtvChart /></Suspense>
             </div>
-          </div>
+          </Card>
 
           {/* Nedbetaling: plan vs. faktisk (renders only when ≥2 months recorded) */}
           <Suspense fallback={null}><PaydownVsPlanChart /></Suspense>
@@ -723,10 +722,10 @@ const BoligPage: React.FC = () => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
 
             {/* Salg av nåværende bolig */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <Building2 size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{t.saleCard}</h2>
+                <SectionLabel>{t.saleCard}</SectionLabel>
               </div>
               <div className="space-y-1">
                 <LoanRow label={t.currentHouseValue}
@@ -752,13 +751,13 @@ const BoligPage: React.FC = () => {
                   highlightColor={saleProceeds.netProceeds < 0 ? 'red' : 'blue'}
                 />
               </div>
-            </div>
+            </Card>
 
             {/* Mellomfinansieringsperiode */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <Clock size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{t.bridgeCard}</h2>
+                <SectionLabel>{t.bridgeCard}</SectionLabel>
               </div>
               <div className="space-y-1">
                 <LoanRow label={t.bridgeMonths}
@@ -771,13 +770,13 @@ const BoligPage: React.FC = () => {
                   value={fmtNum(bridgeCost)}
                   highlight />
               </div>
-            </div>
+            </Card>
 
             {/* Ny bolig – lånekalkulator */}
-            <div className={`${card} p-5 md:p-7 space-y-5`}>
+            <Card padding="none" className="p-5 md:p-7 space-y-5">
               <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
                 <Calculator size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-                <h2 className={sectionLabel}>{t.newHouseCard}</h2>
+                <SectionLabel>{t.newHouseCard}</SectionLabel>
               </div>
               <div className="space-y-1">
                 <LoanRow label={lp.purchasePrice}
@@ -804,15 +803,15 @@ const BoligPage: React.FC = () => {
                   value={fmtNum(transitionNewLoan.newMonthlyPayment)}
                   highlight />
               </div>
-            </div>
+            </Card>
 
           </div>
 
           {/* Summary hero card */}
-          <div className={`${card} p-5 md:p-7`}>
+          <Card padding="none" className="p-5 md:p-7">
             <div className="flex items-center gap-2 pb-4 mb-5 border-b border-[var(--border)]">
               <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-              <h2 className={sectionLabel}>{t.summaryCard}</h2>
+              <SectionLabel>{t.summaryCard}</SectionLabel>
             </div>
 
             {/* Flow diagram */}
@@ -838,7 +837,7 @@ const BoligPage: React.FC = () => {
               <SummaryTile label={t.otherSaleCosts} value={fmtNum(transition.documentFee + transition.otherSaleCosts)} />
               <SummaryTile label={t.totalTransactionCosts} value={fmtNum(transitionNewLoan.totalTransactionCosts)} accent />
             </div>
-          </div>
+          </Card>
 
           {/* Din nåværende bolig (den du selger) + bohistorikk. Verdien er
               salgsverdien fra salgskortet over — samme boligen du eier nå. */}
@@ -881,14 +880,14 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
     [principal, annualRatePct, basePayment, extra],
   );
   return (
-    <div className={`${card} overflow-hidden`}>
+    <Card padding="none" className="overflow-hidden">
       <button
         onClick={onToggle}
         className="w-full px-5 py-4 md:px-7 md:py-5 flex items-center justify-between hover:bg-[var(--bg-raised)] transition-colors"
       >
         <div className="flex items-center gap-2">
           <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <span className={sectionLabel}>{t.amortizationSchedule}</span>
+          <SectionLabel>{t.amortizationSchedule}</SectionLabel>
         </div>
         {show
           ? <ChevronUp size={16} className="text-[var(--text-2)]" />
@@ -997,7 +996,7 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 

@@ -49,9 +49,8 @@ import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/sa
 import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 import { ChartSkeleton } from '../components/ui/Skeleton';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+import { Card } from '../components/ui/Card';
+import { SectionLabel } from '../components/ui/SectionLabel';
 
 const MoneyFlowSankey = lazy(() => import('../components/charts/MoneyFlowSankey'));
 
@@ -664,10 +663,10 @@ const SalaryPage: React.FC = () => {
       </div>
 
       {/* Money flow — where the gross salary goes, with the marginal-rate readout. */}
-      <div className={`${card} p-5 md:p-7`}>
+      <Card padding="none" className="p-5 md:p-7">
         <div className="flex items-start justify-between gap-3 pb-4 mb-2 border-b border-[var(--border)]">
           <div>
-            <h3 className={sectionLabel}>{t.charts.moneyFlowTitle}</h3>
+            <SectionLabel>{t.charts.moneyFlowTitle}</SectionLabel>
             <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.moneyFlowSub}</p>
           </div>
           {marginalRate != null && (
@@ -681,14 +680,14 @@ const SalaryPage: React.FC = () => {
         <div className="h-[280px] w-full">
           <Suspense fallback={<ChartSkeleton />}><MoneyFlowSankey /></Suspense>
         </div>
-      </div>
+      </Card>
 
       {/* Restskatt early warning — withheld-to-date vs expected annual tax. */}
       {restskatt && (
-        <div className={`${card} p-5 md:p-7 space-y-4`}>
+        <Card padding="none" className="p-5 md:p-7 space-y-4">
           <div className="flex items-start justify-between gap-3 pb-4 border-b border-[var(--border)]">
             <div>
-              <h3 className={sectionLabel}>{t.salaryPage.restskattTitle}</h3>
+              <SectionLabel>{t.salaryPage.restskattTitle}</SectionLabel>
               <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.salaryPage.restskattDesc}</p>
             </div>
             <span className="text-[10px] uppercase tracking-wider shrink-0" style={{ color: 'var(--text-3)' }}>
@@ -706,20 +705,20 @@ const SalaryPage: React.FC = () => {
           </div>
           <div className="grid grid-cols-3 gap-3 text-[13px]">
             <div>
-              <div className={sectionLabel + ' mb-1'}>{t.salaryPage.restskattWithheld}</div>
+              <SectionLabel className="mb-1">{t.salaryPage.restskattWithheld}</SectionLabel>
               <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.withheldToDate))}</div>
             </div>
             <div>
-              <div className={sectionLabel + ' mb-1'}>{t.salaryPage.restskattProjected}</div>
+              <SectionLabel className="mb-1">{t.salaryPage.restskattProjected}</SectionLabel>
               <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.projectedAnnualWithholding))}</div>
             </div>
             <div>
-              <div className={sectionLabel + ' mb-1'}>{t.salaryPage.restskattExpected}</div>
+              <SectionLabel className="mb-1">{t.salaryPage.restskattExpected}</SectionLabel>
               <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.expectedAnnualTax))}</div>
             </div>
           </div>
           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.salaryPage.restskattNote}</p>
-        </div>
+        </Card>
       )}
 
       {/* Next salary review — forward-looking helper for negotiation moments. */}
@@ -733,11 +732,11 @@ const SalaryPage: React.FC = () => {
 
       {/* Salary over time — nominal trajectory, with a real-hourly (purchasing-power)
           toggle when CPI is available. Folds in the former standalone real-rate card. */}
-      <div className={`${card} p-5 md:p-7 space-y-4`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
             <Briefcase size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-            <h3 className={sectionLabel}>{timelineView === 'real' ? t.salary.realHourlyRate : t.salary.salaryTimeline}</h3>
+            <SectionLabel>{timelineView === 'real' ? t.salary.realHourlyRate : t.salary.salaryTimeline}</SectionLabel>
           </div>
           {!isGeneric && (
             <div className="inline-flex rounded-[6px] border border-[var(--border)] p-0.5">
@@ -850,14 +849,14 @@ const SalaryPage: React.FC = () => {
         </div>
           </>
         )}
-      </div>
+      </Card>
 
       {/* YoY vs inflation — hidden in generic region (no CPI source). */}
       {!isGeneric && (
-      <div className={`${card} p-5 md:p-7 space-y-4`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-4">
         <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
           <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{t.salary.yoyChart}</h3>
+          <SectionLabel>{t.salary.yoyChart}</SectionLabel>
         </div>
         <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.yoyChartDesc}</p>
         <div className="h-[300px] w-full">
@@ -928,14 +927,14 @@ const SalaryPage: React.FC = () => {
             </table>
           </div>
         )}
-      </div>
+      </Card>
       )}
 
       {/* Total comp by year */}
-      <div className={`${card} p-5 md:p-7 space-y-4`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-4">
         <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
           <Gift size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{t.salary.totalCompChart}</h3>
+          <SectionLabel>{t.salary.totalCompChart}</SectionLabel>
         </div>
         <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.totalCompChartDesc}</p>
         <div className="h-[300px] w-full">
@@ -985,14 +984,14 @@ const SalaryPage: React.FC = () => {
             <div key={s.key} className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: s.legend }} />{s.name}</div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Hours vs effective hourly — only meaningful when weekly hours vary. */}
       {hoursVary && (
-      <div className={`${card} p-5 md:p-7 space-y-4`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-4">
         <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
           <Clock size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-          <h3 className={sectionLabel}>{t.salary.hoursVsComp}</h3>
+          <SectionLabel>{t.salary.hoursVsComp}</SectionLabel>
         </div>
         <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.hoursVsCompDesc}</p>
         <div className="h-[300px] w-full">
@@ -1034,7 +1033,7 @@ const SalaryPage: React.FC = () => {
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--warning)' }} />{t.salaryPage.hoursPerWk}</div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent)' }} />{t.salary.effectiveHourly}</div>
         </div>
-      </div>
+      </Card>
       )}
 
       {/* One box: each job is a lane with its events on a timeline spine */}
@@ -1212,11 +1211,11 @@ const SalaryPage: React.FC = () => {
         };
 
         return (
-          <div className={`${card} p-5 md:p-7 space-y-4`}>
+          <Card padding="none" className="p-5 md:p-7 space-y-4">
             <div className="flex items-center justify-between gap-3 pb-4 border-b border-[var(--border)] flex-wrap">
               <div className="flex items-center gap-2 min-w-0">
                 <TrendingUp size={14} className="text-[var(--text-2)]" />
-                <h3 className={sectionLabel}>{t.salary.salaryAndJobs}</h3>
+                <SectionLabel>{t.salary.salaryAndJobs}</SectionLabel>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
                 <PaydayField />
@@ -1244,7 +1243,7 @@ const SalaryPage: React.FC = () => {
                 {renderTimeline(unassignedEvents)}
               </div>
             )}
-          </div>
+          </Card>
         );
       })()}
 
@@ -1273,14 +1272,14 @@ interface SummaryTileProps {
 }
 
 const SummaryTile: React.FC<SummaryTileProps> = ({ label, value, sub, chip, color }) => (
-  <div className={`${card} p-4 md:p-5 space-y-1.5`}>
-    <div className={sectionLabel}>{label}</div>
+  <Card padding="none" className="p-4 md:p-5 space-y-1.5">
+    <SectionLabel>{label}</SectionLabel>
     <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
       {value}
     </div>
     {chip && <div>{chip}</div>}
     {sub && <div className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{sub}</div>}
-  </div>
+  </Card>
 );
 
 // One event on a job's timeline spine (salary change, bonus, overtime, hours).
@@ -1471,16 +1470,16 @@ const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency 
   const verdictColor = real == null ? 'var(--text-2)' : real >= 0 ? 'var(--positive)' : 'var(--negative)';
 
   return (
-    <div className={`${card} p-5 md:p-7 space-y-5`}>
+    <Card padding="none" className="p-5 md:p-7 space-y-5">
       <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
         <TrendingUp size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-        <h3 className={sectionLabel}>{t.salary.nextReviewTitle}</h3>
+        <SectionLabel>{t.salary.nextReviewTitle}</SectionLabel>
       </div>
       <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.salary.nextReviewDesc}</p>
 
       {/* Offer input with kr / % toggle */}
       <div className="space-y-2">
-        <div className={sectionLabel}>{t.salary.proposedSalaryLabel}</div>
+        <SectionLabel>{t.salary.proposedSalaryLabel}</SectionLabel>
         <div className="flex flex-wrap items-stretch gap-2">
           <div className="flex rounded-[6px] border border-[var(--border)] overflow-hidden shrink-0">
             {([['kr', t.salary.offerModeKr], ['pct', t.salary.offerModePct]] as ['kr' | 'pct', string][]).map(([m, lbl]) => (
@@ -1574,7 +1573,7 @@ const NextReviewCard: React.FC<NextReviewCardProps> = ({ ctx, t, formatCurrency 
           color={pct != null ? (pct >= 0 ? 'var(--positive)' : 'var(--negative)') : undefined}
         />
       </div>
-    </div>
+    </Card>
   );
 };
 

@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react';
 import { LineChart } from 'lucide-react';
 import { useFinance, type Residence } from '../context/FinanceContext';
 import { Sparkline, DeltaChip } from './ui';
+import { Card } from './ui/Card';
+import { SectionLabel } from './ui/SectionLabel';
 import { estimatedPropertyValue } from '../lib/propertyEstimate';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
 
 interface Props {
   /** The current residence — its postalCode + dwellingType + sizeSqm drive the estimate. */
@@ -45,17 +44,17 @@ export function PropertyValueEstimate({ residence, currentValue }: Props) {
   const header = (
     <div className="flex items-center gap-2 pb-4 border-b border-[var(--border)]">
       <LineChart size={14} strokeWidth={2} className="text-[var(--text-2)]" />
-      <h2 className={sectionLabel}>{lp.estValueTitle}</h2>
+      <SectionLabel>{lp.estValueTitle}</SectionLabel>
     </div>
   );
 
   // No postnummer yet — prompt for one rather than showing an empty card.
   if (!postnr || postnr.replace(/\D/g, '').length !== 4) {
     return (
-      <div className={`${card} p-5 md:p-7 space-y-5`}>
+      <Card padding="none" className="p-5 md:p-7 space-y-5">
         {header}
         <p className="text-[13px] text-[var(--text-2)]">{lp.estValueNoPostal}</p>
-      </div>
+      </Card>
     );
   }
 
@@ -68,7 +67,7 @@ export function PropertyValueEstimate({ residence, currentValue }: Props) {
   const deltaPct = delta != null ? (delta / currentValue) * 100 : null;
 
   return (
-    <div className={`${card} p-5 md:p-7 space-y-5`}>
+    <Card padding="none" className="p-5 md:p-7 space-y-5">
       {header}
 
       {estimate == null ? (
@@ -125,6 +124,6 @@ export function PropertyValueEstimate({ residence, currentValue }: Props) {
       )}
 
       <p className="text-[11px] text-[var(--text-3)] leading-relaxed">{lp.estValueSource}</p>
-    </div>
+    </Card>
   );
 }

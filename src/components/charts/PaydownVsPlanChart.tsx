@@ -8,9 +8,8 @@ import { paydownVsPlan } from '../../lib/paydown';
 import { fillMonthGaps } from '../../lib/monthGrid';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+import { Card } from '../ui/Card';
+import { SectionLabel } from '../ui/SectionLabel';
 
 /**
  * Mortgage paydown plan-vs-actual (HISTORY_PLAN §6.3). Actual = each recorded
@@ -48,9 +47,9 @@ export default function PaydownVsPlanChart() {
   const months = Math.abs(Math.round(result.monthsAhead));
 
   return (
-    <div className={`${card} p-5 md:p-7`}>
+    <Card padding="none" className="p-5 md:p-7">
       <div className="pb-4 mb-4 border-b border-[var(--border)]">
-        <h3 className={sectionLabel}>{c.paydownTitle}</h3>
+        <SectionLabel>{c.paydownTitle}</SectionLabel>
         <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{c.paydownSub}</p>
       </div>
 
@@ -86,6 +85,6 @@ export default function PaydownVsPlanChart() {
           </LineChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </Card>
   );
 }

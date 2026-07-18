@@ -1,9 +1,8 @@
 import { Smile } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { ProgressBar } from './ui/ProgressBar';
-
-const card = 'bg-[var(--bg-card)] rounded-[8px] border border-[var(--border)]';
-const sectionLabel = 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)]';
+import { Card } from './ui/Card';
+import { SectionLabel } from './ui/SectionLabel';
 
 interface FunStatProps {
   label: string;
@@ -43,11 +42,11 @@ export default function FunBudget() {
   const pct = funBudget > 0 ? Math.min(100, (funSpent / funBudget) * 100) : 0;
 
   return (
-    <div className={`${card} p-5 md:p-7`}>
+    <Card padding="none" className="p-5 md:p-7">
       <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
           <Smile size={13} className="text-[var(--text-2)]" />
-          <h2 className={sectionLabel}>{t.funBudget}</h2>
+          <SectionLabel>{t.funBudget}</SectionLabel>
         </div>
         <span className="text-[11px] font-mono text-[var(--text-2)]">
           {t.categoryLabels.entertainment} — {formatCurrency(funBudget)}
@@ -92,6 +91,6 @@ export default function FunBudget() {
           {t.common.noFunSpending}
         </p>
       )}
-    </div>
+    </Card>
   );
 }
