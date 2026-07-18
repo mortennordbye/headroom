@@ -59,6 +59,10 @@ export interface SecondHomeScenario {
   renovationCost: number;
   afterRepairValue: number;
   refinanceLtvPct: number;
+  // Optional ARV estimator inputs (SSB kr/m²). When postcode + size are set the
+  // panel can suggest an after-repair value from the kommune's square-metre price.
+  arvPostalCode?: string;
+  arvSizeSqm?: number;
   // Future sale (capital gains)
   holdYears: number;
   annualAppreciationPct: number;
@@ -94,6 +98,35 @@ export const DEFAULT_SECOND_HOME_SCENARIO: Omit<SecondHomeScenario, 'id' | 'name
   documentedImprovements: 0,
   marginalWealthTaxPct: 0.85,
   committed: false,
+};
+
+/**
+ * Household-level what-if levers for the real-borrowing-capacity check. Seeded
+ * from the app's live data (base salary, credit frames, liquid assets) but
+ * persisted so they survive a reload. The three `*Override` fields fall back to
+ * the live/auto figure when `null`, so a change in the underlying data still
+ * flows through until the user pins a value.
+ */
+export interface BoligAssumptions {
+  /** Gross annual base salary; `null` → the app's derived gross income. */
+  baseSalaryOverride: number | null;
+  bonusAnnual: number;
+  includeBonus: boolean;
+  /** Share of gross rent the bank credits toward income, as a percent. */
+  rentFactorPct: number;
+  /** Granted credit frames counted in full; `null` → sum of recorded `creditLimit`s. */
+  creditFramesOverride: number | null;
+  /** Liquid assets available for the cash need; `null` → the app-derived figure. */
+  liquidOverride: number | null;
+}
+
+export const DEFAULT_BOLIG_ASSUMPTIONS: BoligAssumptions = {
+  baseSalaryOverride: null,
+  bonusAnnual: 0,
+  includeBonus: false,
+  rentFactorPct: Math.round(DEFAULT_RENTAL_BANK_FACTOR * 100),
+  creditFramesOverride: null,
+  liquidOverride: null,
 };
 
 // ── Purchase costs ──────────────────────────────────────────────────────────

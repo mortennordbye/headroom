@@ -166,6 +166,7 @@ function fullPayload(): ExportPayload {
     salaries: canonicalSalaries,
     residences: canonicalResidences,
     secondHomeScenarios: canonicalSecondHome,
+    boligAssumptions: { baseSalaryOverride: 650000, bonusAnnual: 50000, includeBonus: true, rentFactorPct: 80, creditFramesOverride: 120000, liquidOverride: 300000 },
     bonuses: canonicalBonuses,
     overtime: canonicalOvertime,
     hoursSnapshots: canonicalHours,
@@ -197,15 +198,15 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 52 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(52);
+  it('registers exactly the 53 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(53);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (29) or preserve (23)', () => {
+  it('partitions every field into reset (30) or preserve (23)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
-    expect(reset).toHaveLength(29);
+    expect(reset).toHaveLength(30);
     expect(preserve).toHaveLength(23);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([

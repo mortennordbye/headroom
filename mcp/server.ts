@@ -4,15 +4,10 @@
 // of guarded write tools. Run with: npx tsx mcp/server.ts
 // Config: HEADROOM_URL (default http://localhost:8080), HEADROOM_PASSWORD (if auth on).
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { registerReadTools } from './tools/read';
-import { registerWriteTools } from './tools/write';
+import { createServer } from './createServer';
 
-const server = new McpServer({ name: 'headroom', version: '1.0.0' });
-
-registerReadTools(server);
-registerWriteTools(server);
+const server = createServer();
 
 async function main() {
   await server.connect(new StdioServerTransport());

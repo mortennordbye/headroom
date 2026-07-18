@@ -330,3 +330,29 @@ export function lendingDebtTotal(debts: Debt[]): number {
     return s + Math.max(bal, frame);
   }, 0);
 }
+
+export interface CreditFrameBreakdown {
+  /** Lines counted at their outstanding balance (no granted frame, or frame ≤ balance). */
+  nonFrameDebt: number;
+  /** Revolving lines counted at their full granted `creditLimit` (frame > balance). */
+  creditFrameTotal: number;
+}
+
+/**
+ * Split debts into the part the lending rule counts at balance vs the revolving
+ * lines it counts at their full granted `creditLimit`. `nonFrameDebt +
+ * creditFrameTotal === lendingDebtTotal` by construction. Lets the second-home
+ * borrowing-capacity check show existing debt and granted credit frames as two
+ * separate rows without double-counting a card's drawn balance.
+ */
+export function creditFrameBreakdown(debts: Debt[]): CreditFrameBreakdown {
+  let nonFrameDebt = 0;
+  let creditFrameTotal = 0;
+  for (const d of debts) {
+    const bal = Math.max(0, finite(d.balance));
+    const frame = Math.max(0, finite(d.creditLimit));
+    if (frame > bal) creditFrameTotal += frame;
+    else nonFrameDebt += bal;
+  }
+  return { nonFrameDebt, creditFrameTotal };
+}

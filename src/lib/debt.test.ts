@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings } from './debt';
+import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, creditFrameBreakdown, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings } from './debt';
 import { calcMonthlyPayment } from './calculations';
 import type { Debt, BalanceSnapshot } from '../context/FinanceContext';
 
@@ -232,6 +232,24 @@ describe('lendingDebtTotal', () => {
     ];
     expect(lendingDebtTotal(debts)).toBe(90_000);
     expect(lendingDebtTotal([])).toBe(0);
+  });
+});
+
+describe('creditFrameBreakdown', () => {
+  it('splits full-frame lines from balance-only debt and sums to lendingDebtTotal', () => {
+    const debts = [
+      debt({ id: 'a', type: 'credit_card', balance: 20_000, creditLimit: 100_000 }), // frame > balance → 100k frame
+      debt({ id: 'b', type: 'student', balance: 200_000 }),                            // no frame → balance
+      debt({ id: 'c', type: 'credit_card', balance: 50_000, creditLimit: 40_000 }),   // frame ≤ balance → balance
+    ];
+    const { nonFrameDebt, creditFrameTotal } = creditFrameBreakdown(debts);
+    expect(creditFrameTotal).toBe(100_000);
+    expect(nonFrameDebt).toBe(250_000); // 200k student + 50k over-limit card at balance
+    expect(nonFrameDebt + creditFrameTotal).toBe(lendingDebtTotal(debts));
+  });
+
+  it('is all zeros for no debt', () => {
+    expect(creditFrameBreakdown([])).toEqual({ nonFrameDebt: 0, creditFrameTotal: 0 });
   });
 });
 

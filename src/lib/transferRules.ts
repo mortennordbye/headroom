@@ -11,6 +11,8 @@
 // unmatched row keeps its current "counts as spend" default. Pure + unit-tested.
 import type { DailyTransaction } from '../context/FinanceContext';
 import { buildMatchHaystack } from './text';
+import { findInternalTransferIds } from './transfers';
+import { isSpend } from './monthlyCashflow';
 
 export interface TransferRule {
   id: string;
@@ -29,4 +31,27 @@ export function matchesTransferRule(
     if (m && hay.includes(m)) return true;
   }
   return false;
+}
+
+/**
+ * All transaction ids that are internal (own-account) transfers rather than
+ * spending: the two-legged pairs the matcher proves automatically
+ * (`findInternalTransferIds`), plus one-legged spends to a destination the user
+ * marked as their own account via a `TransferRule`.
+ *
+ * This is the single source of the app's `internalTransferIds` derivation
+ * (FinanceContext) so callers outside React — the MCP server — net transfers out
+ * of the spend analysis exactly as the UI does.
+ */
+export function excludedTransferIds(
+  txs: DailyTransaction[],
+  rules: TransferRule[],
+): Set<string> {
+  const ids = findInternalTransferIds(txs);
+  if (rules && rules.length) {
+    for (const tx of txs) {
+      if (isSpend(tx) && matchesTransferRule(tx, rules)) ids.add(tx.id);
+    }
+  }
+  return ids;
 }

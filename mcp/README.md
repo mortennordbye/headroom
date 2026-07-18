@@ -55,6 +55,34 @@ Use absolute paths (Desktop does not run from the repo):
 
 Start the app first (`make up`), then start/restart the client.
 
+## HTTP transport (for remote / web clients)
+
+`npm run mcp` speaks **stdio** — perfect for a local desktop client, but a web
+connector (e.g. a claude.ai remote MCP) needs HTTP. `npm run mcp:http` serves the
+exact same tools (shared `createServer()`) over the MCP **Streamable HTTP**
+transport, stateless, at `POST /mcp`.
+
+It is network-reachable, so it is locked down by default:
+
+| Var | Default | Meaning |
+| --- | --- | --- |
+| `HEADROOM_MCP_TOKEN` | _(required)_ | Bearer token every request must send (`Authorization: Bearer …`). The server **refuses to start** without it. |
+| `HEADROOM_MCP_HOST` | `127.0.0.1` | Bind address. Keep it loopback; only widen behind a TLS-terminating reverse proxy / VPN you control. |
+| `HEADROOM_MCP_PORT` | `3900` | Listen port. |
+
+Plus `HEADROOM_URL` / `HEADROOM_PASSWORD` as above (it still reads/writes through
+the app's `/api/data`).
+
+```bash
+HEADROOM_MCP_TOKEN=$(openssl rand -hex 32) npm run mcp:http
+```
+
+Baked-in guards: constant-time token check, DNS-rebinding protection, a 1 MB body
+cap, and a fixed-window rate limit (120 req/min per IP). There is **no TLS here** —
+the token is the only credential, so terminate TLS in front of it if you expose it
+beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
+(`AUTH_PLAN.md`) too.
+
 ## Tools
 
 **Read (safe, read-only):**
@@ -63,10 +91,11 @@ Start the app first (`make up`), then start/restart the client.
 | --- | --- |
 | `get_overview` | Net worth, gross income, equity breakdown, debt-to-income, mortgage status |
 | `get_budget_summary` | Income vs fixed/variable, per-type fixed totals, 12-month cashflow, savings-rate status |
-| `get_spending_analysis` | Spend by category, month-over-month, budget-vs-actual, top insight, untracked recurring |
+| `get_spending_analysis` | Spend by category (own-account transfers netted out), month-over-month, budget-vs-actual, top insight, untracked recurring |
 | `get_debt_analysis` | Avalanche/snowball payoff, baseline vs extra payment (months + interest saved) |
 | `get_savings_and_goals` | Emergency-fund adequacy (two measures), buffer recommendation, per-goal progress |
 | `get_recommendations` | Budget plan, savings-rate status, history-based insights |
+| `get_year_review` | Annual review for a calendar year: income, tax paid, savings rate, top categories, net-worth change (`year` optional) |
 | `what_if` | `prepay_vs_invest` or `extra_debt_payment` scenarios |
 | `list_history` | Recent saved revisions (newest first) with timestamps and sizes |
 | `get_history_revision` | The full dataset as it was at a past revision |

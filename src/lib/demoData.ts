@@ -1,6 +1,7 @@
 import type { ExportPayload, BalanceSnapshot, Assets, Debt, Pension } from '../context/FinanceContext';
 import { computeEquityBreakdown } from './equity';
 import { DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from './employerCost';
+import { DEFAULT_BOLIG_ASSUMPTIONS } from './secondHome';
 
 /**
  * A believable but entirely fictional dataset used by demo mode, so the app can
@@ -259,5 +260,6 @@ export function getDemoData(): Partial<ExportPayload> {
         marginalWealthTaxPct: 0.85, committed: false,
       },
     ],
+    boligAssumptions: DEFAULT_BOLIG_ASSUMPTIONS,
   };
 }

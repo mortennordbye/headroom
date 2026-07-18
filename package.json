@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "mcp": "tsx mcp/server.ts"
+    "mcp": "tsx mcp/server.ts",
+    "mcp:http": "tsx mcp/http.ts"
   },
   "dependencies": {
     "@fontsource/cormorant-garamond": "^5.2.11",

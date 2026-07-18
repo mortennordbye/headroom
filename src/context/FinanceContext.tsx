@@ -12,7 +12,8 @@ import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculatio
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
-import type { SecondHomeScenario } from '../lib/secondHome';
+import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
+import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
 import { getDemoData } from '../lib/demoData';
 import { type Profile, DEFAULT_PROFILE, birthYearFrom } from '../lib/profile';
 import { translations, type Language, type Translations } from '../i18n/translations';
@@ -21,11 +22,9 @@ import { translations, type Language, type Translations } from '../i18n/translat
 export type { Language } from '../i18n/translations';
 import { categorizeWithRules, type CategoryRule } from '../lib/categorize';
 import type { LabelRule } from '../lib/labelRules';
-import { matchesTransferRule, type TransferRule } from '../lib/transferRules';
-import { isSpend } from '../lib/monthlyCashflow';
+import { excludedTransferIds, type TransferRule } from '../lib/transferRules';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
-import { findInternalTransferIds } from '../lib/transfers';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { computeAutomationPostings, type AutomationRule, type AutomationState, type ResolvedPosting } from '../lib/automation';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
@@ -725,6 +724,9 @@ interface FinanceDataContextType {
   addSecondHomeScenario: (entry: Omit<SecondHomeScenario, 'id'>) => string;
   updateSecondHomeScenario: (id: string, patch: Partial<Omit<SecondHomeScenario, 'id'>>) => void;
   removeSecondHomeScenario: (id: string) => void;
+  /** Persisted household what-if levers for the second-home borrowing-capacity check. */
+  boligAssumptions: BoligAssumptions;
+  updateBoligAssumptions: (patch: Partial<BoligAssumptions>) => void;
   jobs: JobEntry[];
   addJob: (job: Omit<JobEntry, 'id'>) => string;
   updateJob: (id: string, patch: Partial<Omit<JobEntry, 'id'>>) => void;
@@ -897,6 +899,7 @@ export interface ExportPayload {
   transition?: TransitionData;
   residences?: Residence[];
   secondHomeScenarios?: SecondHomeScenario[];
+  boligAssumptions?: BoligAssumptions;
   lang?: Language;
   currentMonth?: string;
   savingsTargetPercent?: number;
@@ -1020,6 +1023,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [transition, setTransition] = useState<TransitionData>(DEFAULT_TRANSITION);
   const [residences, setResidences] = useState<Residence[]>([]);
   const [secondHomeScenarios, setSecondHomeScenarios] = useState<SecondHomeScenario[]>([]);
+  const [boligAssumptions, setBoligAssumptions] = useState<BoligAssumptions>(DEFAULT_BOLIG_ASSUMPTIONS);
   const [growthReturnRate, setGrowthReturnRate] = useState<number>(DEFAULT_GROWTH_RATES.growthReturnRate);
   const [forecastAssumptions, setForecastAssumptions] = useState<ForecastAssumptions>(DEFAULT_FORECAST_ASSUMPTIONS);
   const [houseGrowthRate, setHouseGrowthRate] = useState<number>(DEFAULT_GROWTH_RATES.houseGrowthRate);
@@ -1115,7 +1119,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const buildPayload = useCallback((): ExportPayload => derivePayload(PAYLOAD_REGISTRY, {
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
-    housingMode, homeowner, transition, residences, secondHomeScenarios, lang,
+    housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang,
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
@@ -1123,7 +1127,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
-    housingMode, homeowner, transition, residences, secondHomeScenarios, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
+    housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
@@ -1140,6 +1144,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       assets: DEFAULT_ASSETS, loan: DEFAULT_LOAN, pension: DEFAULT_PENSION,
       homeowner: DEFAULT_HOMEOWNER, transition: DEFAULT_TRANSITION,
       employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG, billingConfig: DEFAULT_BILLING_CONFIG,
+      // Numeric levers of the second-home assumptions (nullable overrides coerce
+      // to their default null via the registry's merge when dropped).
+      boligAssumptions: { baseSalaryOverride: 0, bonusAnnual: 0, rentFactorPct: 0, creditFramesOverride: 0, liquidOverride: 0 },
     });
     // Bind the persisted-field registry to the raw React state setters (the
     // `PayloadSetters` type makes this map exhaustive — a new field won't compile
@@ -1152,7 +1159,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       labelRules: setLabelRules, transferRules: setTransferRules, categoryBudgets: setCategoryBudgets, debts: setDebts, assets: setAssets,
       loan: setLoan, pension: setPension, recurringTemplates: setRecurringTemplates,
       housingMode: setHousingMode, homeowner: setHomeowner, transition: setTransition, residences: setResidences,
-      secondHomeScenarios: setSecondHomeScenarios, lang: setLang,
+      secondHomeScenarios: setSecondHomeScenarios, boligAssumptions: setBoligAssumptions, lang: setLang,
       savingsTargetPercent: setSavingsTargetPercent, growthReturnRate: setGrowthReturnRate,
       forecastAssumptions: setForecastAssumptions,
       houseGrowthRate: setHouseGrowthRate, cashGrowthRate: setCashGrowthRate, cryptoGrowthRate: setCryptoGrowthRate,
@@ -1760,18 +1767,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Money moved between two of the user's own connected accounts double-counts
   // as an expense + an income; net those pairs out of the budget analysis.
-  const internalTransferIds = useMemo(() => {
-    // Two-legged pairs the matcher can prove automatically, plus one-legged
-    // moves to destinations the user marked as their own account (transferRules)
-    // — the payments (card/savings/loan) whose counterpart leg isn't imported.
-    const ids = findInternalTransferIds(dailyTransactions);
-    if (transferRules.length) {
-      for (const tx of dailyTransactions) {
-        if (isSpend(tx) && matchesTransferRule(tx, transferRules)) ids.add(tx.id);
-      }
-    }
-    return ids;
-  }, [dailyTransactions, transferRules]);
+  // Two-legged pairs the matcher can prove automatically, plus one-legged moves
+  // to destinations the user marked as their own account (transferRules) — the
+  // payments (card/savings/loan) whose counterpart leg isn't imported. Shared
+  // with the MCP server via the pure `excludedTransferIds` helper.
+  const internalTransferIds = useMemo(
+    () => excludedTransferIds(dailyTransactions, transferRules),
+    [dailyTransactions, transferRules],
+  );
   // All accounts, internal transfers removed — for whole-finance surfaces (e.g.
   // the savings rate) that shouldn't be narrowed to one account.
   const nonTransferTransactions = useMemo(
@@ -2058,6 +2061,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const addSecondHomeScenario = secondHomeCrud.add;
   const updateSecondHomeScenario = secondHomeCrud.update;
   const removeSecondHomeScenario = secondHomeCrud.remove;
+  const updateBoligAssumptions = useCallback(
+    (patch: Partial<BoligAssumptions>) => setBoligAssumptions((prev) => ({ ...prev, ...patch })),
+    [],
+  );
 
   const addBonus = bonusesCrud.add;
   const updateBonus = bonusesCrud.update;
@@ -2546,6 +2553,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     housingMode, setHousingMode: changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,
     secondHomeScenarios, addSecondHomeScenario, updateSecondHomeScenario, removeSecondHomeScenario,
+    boligAssumptions, updateBoligAssumptions,
     jobs, addJob, updateJob, removeJob,
     salaries, addSalary, updateSalary, removeSalary,
     bonuses, addBonus, updateBonus, removeBonus,
@@ -2574,6 +2582,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,
     secondHomeScenarios, addSecondHomeScenario, updateSecondHomeScenario, removeSecondHomeScenario,
+    boligAssumptions, updateBoligAssumptions,
     jobs, addJob, updateJob, removeJob, salaries, addSalary, updateSalary, removeSalary,
     bonuses, addBonus, updateBonus, removeBonus, overtime, addOvertime, updateOvertime,
     removeOvertime, hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,

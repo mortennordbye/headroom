@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { matchesTransferRule, type TransferRule } from './transferRules';
+import { matchesTransferRule, excludedTransferIds, type TransferRule } from './transferRules';
+import type { DailyTransaction } from '../context/FinanceContext';
 
 const rules: TransferRule[] = [
   { id: '1', match: 'Til:90467295445' },
@@ -23,5 +24,30 @@ describe('matchesTransferRule', () => {
   it('ignores blank matches and empty rule sets', () => {
     expect(matchesTransferRule({ description: 'anything' }, [{ id: 'a', match: '   ' }])).toBe(false);
     expect(matchesTransferRule({ description: 'anything' }, [])).toBe(false);
+  });
+});
+
+describe('excludedTransferIds', () => {
+  const txs: DailyTransaction[] = [
+    { id: 'a', date: '2026-06-01', description: 'REMA 1000', amount: 500, kind: 'expense' },
+    { id: 'b', date: '2026-06-02', description: 'Til: MORROW BANK ASA', amount: 9000, kind: 'expense' },
+    // An auto-detected pair: equal amount, opposite kind, different accounts, same day.
+    { id: 'c', date: '2026-06-03', description: 'Overføring', amount: 3000, kind: 'expense', account: 'acc1' },
+    { id: 'd', date: '2026-06-03', description: 'Innskudd', amount: 3000, kind: 'income', account: 'acc2' },
+  ];
+
+  it('combines rule matches with auto-detected transfer pairs', () => {
+    const ids = excludedTransferIds(txs, [{ id: 'r', match: 'MORROW BANK' }]);
+    expect(ids.has('b')).toBe(true); // rule-matched one-legged transfer
+    expect(ids.has('c')).toBe(true); // auto-detected pair leg
+    expect(ids.has('d')).toBe(true); // auto-detected pair leg
+    expect(ids.has('a')).toBe(false); // ordinary spend stays
+  });
+
+  it('returns only auto-detected pairs when there are no rules', () => {
+    const ids = excludedTransferIds(txs, []);
+    expect(ids.has('c')).toBe(true);
+    expect(ids.has('d')).toBe(true);
+    expect(ids.has('b')).toBe(false); // no rule → the one-legged move counts as spend
   });
 });

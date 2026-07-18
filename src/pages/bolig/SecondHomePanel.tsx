@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
-import { Plus, Trash2, Home, Hammer, ArrowRight, Info, Layers, AlertTriangle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Trash2, Home, Hammer, ArrowRight, Info, Layers, AlertTriangle, LineChart } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { useFinance } from '../../context/FinanceContext';
 import { computeEquityBreakdown, sumSavings } from '../../lib/equity';
 import { calcDebtToIncome, calcMonthlyPayment } from '../../lib/calculations';
+import { creditFrameBreakdown } from '../../lib/debt';
+import { estimatedPropertyValue } from '../../lib/propertyEstimate';
 import { StatCard } from '../../components/ui/StatCard';
 import { NumberRow } from '../../components/ui/NumberRow';
 import { DeltaChip } from '../../components/ui/DeltaChip';
@@ -23,7 +25,6 @@ import {
   calcPortfolio,
   summarizeScenario,
   calcRealBorrowingCapacity,
-  DEFAULT_RENTAL_BANK_FACTOR,
   type SecondHomeScenario,
   type SecondHomeStrategy,
 } from '../../lib/secondHome';
@@ -37,24 +38,26 @@ const SecondHomePanel: React.FC = () => {
   const {
     t, formatCurrency,
     secondHomeScenarios, addSecondHomeScenario, updateSecondHomeScenario, removeSecondHomeScenario,
-    grossAnnualIncome, totalDebt, capacityDebt, assets,
+    boligAssumptions: ba, updateBoligAssumptions,
+    grossAnnualIncome, totalDebt, capacityDebt, debts, assets,
     policyRate, houseGrowthRate,
+    kvmpris, loadKvmpris,
   } = useFinance();
   const bp = t.boligPage;
 
   const [selectedId, setSelectedId] = useState<string | null>(secondHomeScenarios[0]?.id ?? null);
   const scenario = secondHomeScenarios.find((s) => s.id === selectedId) ?? secondHomeScenarios[0] ?? null;
 
-  // Real-borrowing-capacity knobs. Household-level stress-test inputs, seeded from
-  // the app's own data (base salary, liquid assets) and kept as session-only local
-  // state — they are what-if levers, not persisted scenario fields. `null` liquid =
-  // "use the app-derived figure below" until the user overrides it.
-  const [baseSalary, setBaseSalary] = useState(() => Math.round(grossAnnualIncome));
-  const [bonus, setBonus] = useState(0);
-  const [includeBonus, setIncludeBonus] = useState(false);
-  const [rentFactorPct, setRentFactorPct] = useState(Math.round(DEFAULT_RENTAL_BANK_FACTOR * 100));
-  const [creditFrames, setCreditFrames] = useState(0);
-  const [liquidOverride, setLiquidOverride] = useState<number | null>(null);
+  // Real-borrowing-capacity knobs. Household-level stress-test levers, persisted in
+  // `boligAssumptions` so they survive a reload. The three overrides fall back to
+  // the app's live/auto figure when null: base salary → derived gross income,
+  // credit frames → sum of recorded credit limits, liquid → derived liquid assets.
+  const { nonFrameDebt, creditFrameTotal } = useMemo(() => creditFrameBreakdown(debts), [debts]);
+  const baseSalary = ba.baseSalaryOverride ?? Math.round(grossAnnualIncome);
+  const bonus = ba.bonusAnnual;
+  const includeBonus = ba.includeBonus;
+  const rentFactorPct = ba.rentFactorPct;
+  const creditFrames = ba.creditFramesOverride ?? Math.round(creditFrameTotal);
 
   const pct = (n: number) => `${n.toFixed(1)} %`;
 
@@ -115,9 +118,11 @@ const SecondHomePanel: React.FC = () => {
   }, [scenario, totalDebt, grossAnnualIncome, assets.houseDebt]);
 
   const liquid = useMemo(() => sumSavings(assets) + assets.bufferAccount + computeEquityBreakdown(assets).netInvestment, [assets]);
-  const liquidValue = liquidOverride ?? Math.round(liquid);
+  const liquidValue = ba.liquidOverride ?? Math.round(liquid);
 
-  // The bank's real 5×-income check for the selected scenario.
+  // The bank's real 5×-income check for the selected scenario. Existing debt is
+  // split so `otherDebt` counts drawn balances and `creditFrames` counts revolving
+  // lines at their full granted limit — no double-counting (see creditFrameBreakdown).
   const borrowCap = useMemo(() => {
     if (!scenario || !derived) return null;
     return calcRealBorrowingCapacity({
@@ -127,13 +132,26 @@ const SecondHomePanel: React.FC = () => {
       grossAnnualRent: scenario.monthlyRent * 12,
       rentalBankFactor: rentFactorPct / 100,
       existingMortgage: assets.houseDebt,
-      otherDebt: totalDebt,
+      otherDebt: nonFrameDebt,
       creditFrames,
       newLoan: derived.loanAmount,
       cashRequired: derived.cashNeeded,
       liquidAssets: liquidValue,
     });
-  }, [scenario, derived, baseSalary, bonus, includeBonus, rentFactorPct, creditFrames, assets.houseDebt, totalDebt, liquidValue]);
+  }, [scenario, derived, baseSalary, bonus, includeBonus, rentFactorPct, creditFrames, assets.houseDebt, nonFrameDebt, liquidValue]);
+
+  // ARV estimator (BRRR): load the kommune's SSB kr/m² when the scenario has a
+  // valid 4-digit postcode, and estimate the after-repair value from size × price.
+  const arvPostal = scenario?.strategy === 'brrr' ? (scenario.arvPostalCode ?? '') : '';
+  useEffect(() => {
+    const clean = arvPostal.replace(/\D/g, '');
+    if (clean.length === 4) void loadKvmpris(clean, '');
+  }, [arvPostal, loadKvmpris]);
+  const arvEstimate = useMemo(() => {
+    if (!scenario || scenario.strategy !== 'brrr') return null;
+    if ((scenario.arvPostalCode ?? '').replace(/\D/g, '').length !== 4) return null;
+    return estimatedPropertyValue(scenario.arvSizeSqm, kvmpris?.latestPrice ?? null);
+  }, [scenario, kvmpris]);
 
   // Portfolio aggregate (owning home 2, 3, 4…) + the cross-scenario comparison.
   // Portfolio headroom is a lending check (cumulative debt vs 5× income), so it
@@ -323,6 +341,53 @@ const SecondHomePanel: React.FC = () => {
                   <NumberRow label={bp.inArv} value={scenario.afterRepairValue} onCommit={(v) => set({ afterRepairValue: v })} suffix="kr" />
                   <NumberRow label={bp.inRefinanceLtv} value={scenario.refinanceLtvPct} onCommit={(v) => set({ refinanceLtvPct: v })} suffix="%" />
                 </div>
+
+                {/* ARV estimator from SSB square-metre prices */}
+                <div className="rounded-[8px] border p-4 space-y-3" style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}>
+                  <div className="flex items-center gap-2">
+                    <LineChart size={13} style={{ color: 'var(--text-2)' }} />
+                    <h3 className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>{bp.arvEstimatorTitle}</h3>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: 'var(--text-3)' }}>{bp.arvPostal}</span>
+                      <input
+                        value={scenario.arvPostalCode ?? ''}
+                        onChange={(e) => set({ arvPostalCode: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                        inputMode="numeric"
+                        placeholder="0000"
+                        className="mt-1 w-full h-9 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
+                        style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+                      />
+                    </label>
+                    <NumberRow label={bp.arvSize} value={scenario.arvSizeSqm ?? 0} onCommit={(v) => set({ arvSizeSqm: v })} suffix="m²" />
+                  </div>
+                  {arvEstimate != null ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.12em] font-semibold" style={{ color: 'var(--text-3)' }}>{bp.arvEstimated}</div>
+                        <div className="text-[17px] font-mono font-medium mt-0.5" style={{ color: 'var(--text-1)' }}>{formatCurrency(arvEstimate)}</div>
+                        {kvmpris?.latestPrice != null && (
+                          <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                            {formatCurrency(kvmpris.latestPrice)}{bp.arvPerSqmUnit}{kvmpris.poststed ? ` · ${kvmpris.poststed}` : ''}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => set({ afterRepairValue: arvEstimate })}
+                        className="px-3 h-8 rounded-[8px] text-[12px] font-medium border transition-colors"
+                        style={{ background: 'transparent', color: 'var(--accent)', borderColor: 'var(--border)' }}
+                      >
+                        {bp.arvApply}
+                      </button>
+                    </div>
+                  ) : (
+                    (scenario.arvPostalCode ?? '').replace(/\D/g, '').length === 4 && (scenario.arvSizeSqm ?? 0) > 0 ? (
+                      <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{bp.arvNoData}</p>
+                    ) : null
+                  )}
+                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{bp.arvHint}</p>
+                </div>
               </>
             )}
 
@@ -415,7 +480,7 @@ const SecondHomePanel: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>{bp.borrowCap.incomeTitle}</h3>
                     <button
-                      onClick={() => setIncludeBonus((v) => !v)}
+                      onClick={() => updateBoligAssumptions({ includeBonus: !includeBonus })}
                       role="switch"
                       aria-checked={includeBonus}
                       className="px-2.5 h-7 rounded-[6px] text-[11px] font-medium border transition-colors"
@@ -428,9 +493,9 @@ const SecondHomePanel: React.FC = () => {
                       {bp.borrowCap.includeBonus}
                     </button>
                   </div>
-                  <NumberRow label={bp.borrowCap.baseSalary} value={baseSalary} onCommit={setBaseSalary} suffix="kr" />
-                  <NumberRow label={bp.borrowCap.bonus} value={bonus} onCommit={setBonus} suffix="kr" />
-                  <NumberRow label={bp.borrowCap.rentFactor} value={rentFactorPct} onCommit={setRentFactorPct} suffix="%" />
+                  <NumberRow label={bp.borrowCap.baseSalary} value={baseSalary} onCommit={(v) => updateBoligAssumptions({ baseSalaryOverride: v })} suffix="kr" />
+                  <NumberRow label={bp.borrowCap.bonus} value={bonus} onCommit={(v) => updateBoligAssumptions({ bonusAnnual: v })} suffix="kr" />
+                  <NumberRow label={bp.borrowCap.rentFactor} value={rentFactorPct} onCommit={(v) => updateBoligAssumptions({ rentFactorPct: v })} suffix="%" />
                   <Row label={bp.borrowCap.acceptedRent} value={`+ ${formatCurrency(Math.round(borrowCap.acceptedRentalIncome))}`} />
                   <div className="pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
                     <Row label={bp.borrowCap.totalIncome} value={formatCurrency(Math.round(borrowCap.totalAcceptedIncome))} strong />
@@ -441,8 +506,22 @@ const SecondHomePanel: React.FC = () => {
                 <div className="space-y-3">
                   <h3 className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>{bp.borrowCap.debtTitle}</h3>
                   <Row label={bp.borrowCap.existingMortgage} value={formatCurrency(Math.round(assets.houseDebt))} />
-                  <Row label={bp.borrowCap.otherDebt} value={formatCurrency(Math.round(totalDebt))} />
-                  <NumberRow label={bp.borrowCap.creditFrames} value={creditFrames} onCommit={setCreditFrames} suffix="kr" />
+                  <Row label={bp.borrowCap.otherDebt} value={formatCurrency(Math.round(nonFrameDebt))} />
+                  <NumberRow label={bp.borrowCap.creditFrames} value={creditFrames} onCommit={(v) => updateBoligAssumptions({ creditFramesOverride: v })} suffix="kr" />
+                  <div className="flex items-center justify-between gap-2 -mt-1">
+                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                      {ba.creditFramesOverride == null ? bp.borrowCap.creditFramesAuto : ''}
+                    </span>
+                    {ba.creditFramesOverride != null && (
+                      <button
+                        onClick={() => updateBoligAssumptions({ creditFramesOverride: null })}
+                        className="text-[11px] underline underline-offset-2 hover:opacity-80 transition-opacity"
+                        style={{ color: 'var(--accent)' }}
+                      >
+                        {bp.borrowCap.resetAuto}
+                      </button>
+                    )}
+                  </div>
                   <Row label={bp.borrowCap.newLoan} value={`+ ${formatCurrency(Math.round(derived.loanAmount))}`} />
                   <div className="pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
                     <Row label={bp.borrowCap.debtAfter} value={formatCurrency(Math.round(borrowCap.totalDebtAfter))} strong />
@@ -489,7 +568,7 @@ const SecondHomePanel: React.FC = () => {
                     {formatCurrency(Math.round(derived.cashNeeded))}
                   </span>
                 </div>
-                <NumberRow label={bp.borrowCap.liquidAssets} value={liquidValue} onCommit={setLiquidOverride} suffix="kr" />
+                <NumberRow label={bp.borrowCap.liquidAssets} value={liquidValue} onCommit={(v) => updateBoligAssumptions({ liquidOverride: v })} suffix="kr" />
                 {!borrowCap.hasEnoughCash && (
                   <div className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--negative)' }}>
                     <AlertTriangle size={13} className="shrink-0" />
