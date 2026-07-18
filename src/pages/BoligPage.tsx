@@ -55,6 +55,7 @@ import { loanTimeline, currentResidence, residenceMetrics } from '../lib/propert
 import { PropertyCard, ResidenceTimeline } from '../components/ResidenceHistory';
 import { PropertyValueEstimate } from '../components/PropertyValueEstimate';
 import { StatCard } from '../components/ui/StatCard';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import SecondHomePanel from './bolig/SecondHomePanel';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
@@ -331,33 +332,13 @@ const BoligPage: React.FC = () => {
     <div className="space-y-6 md:space-y-7 pb-8">
 
       {/* Bolig hub — switch between the mortgage tools and the second-home planner */}
-      <div
-        className="inline-flex p-1 rounded-[8px] border flex-wrap gap-1"
-        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
+      <SegmentedControl
         role="tablist"
-        aria-label={t.boligPage.hubLabel}
-      >
-        {hubTabs.map(({ id, label, icon }) => {
-          const active = hubTab === id;
-          return (
-            <button
-              key={id}
-              onClick={() => setHubTab(id)}
-              role="tab"
-              aria-selected={active}
-              className="flex items-center gap-2 px-4 h-8 rounded-[6px] text-[12px] font-medium transition-colors"
-              style={{
-                background: active ? 'var(--text-1)' : 'transparent',
-                color: active ? 'var(--bg-page)' : 'var(--text-2)',
-                fontWeight: active ? 600 : 500,
-              }}
-            >
-              {icon}
-              {label}
-            </button>
-          );
-        })}
-      </div>
+        ariaLabel={t.boligPage.hubLabel}
+        value={hubTab}
+        onChange={setHubTab}
+        items={hubTabs.map(({ id, label, icon }) => ({ value: id, label, icon }))}
+      />
 
       {hubTab === 'sekundaerbolig' ? (
         <SecondHomePanel />
@@ -381,32 +362,12 @@ const BoligPage: React.FC = () => {
       </header>
 
       {/* Mode selector — pill segmented control */}
-      <div
-        className="inline-flex p-1 rounded-[8px] border flex-wrap gap-1"
-        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
+      <SegmentedControl
         role="radiogroup"
-      >
-        {modeOptions.map(({ mode, label, icon }) => {
-          const active = housingMode === mode;
-          return (
-            <button
-              key={mode}
-              onClick={() => setHousingMode(mode)}
-              role="radio"
-              aria-checked={active}
-              className="flex items-center gap-2 px-4 h-8 rounded-[6px] text-[12px] font-medium transition-colors"
-              style={{
-                background: active ? 'var(--text-1)' : 'transparent',
-                color: active ? 'var(--bg-page)' : 'var(--text-2)',
-                fontWeight: active ? 600 : 500,
-              }}
-            >
-              {icon}
-              {label}
-            </button>
-          );
-        })}
-      </div>
+        value={housingMode}
+        onChange={setHousingMode}
+        items={modeOptions.map(({ mode, label, icon }) => ({ value: mode, label, icon }))}
+      />
 
       {/* ── FIRST BUYER ── */}
       {housingMode === 'first_buyer' && (

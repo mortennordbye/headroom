@@ -24,7 +24,8 @@ import OnboardingTour from './onboarding/OnboardingTour';
 import HistoryManagerModal from './HistoryManagerModal';
 import GlossaryModal from './GlossaryModal';
 
-import { NAV_ITEMS, MORE_ROUTES, ALWAYS_VISIBLE_NAV } from './navItems';
+import { NAV_ITEMS, NAV_GROUPS, MORE_ROUTES, ALWAYS_VISIBLE_NAV, groupForPath, navKeyForPath } from './navItems';
+import { SegmentedControl } from './ui/SegmentedControl';
 
 // Pages whose data is scoped to the selected month get the interactive month picker.
 const MONTH_SCOPED_ROUTES = ['/', '/budget'];
@@ -47,6 +48,8 @@ const Layout: React.FC = () => {
   // viewed month's balances editor (past months are read-only on the page itself).
   const [editMonthOpen, setEditMonthOpen] = useState(false);
   const moreActive = MORE_ROUTES.includes(location.pathname);
+  // The group owning the current route drives the active top tab and the sub-tab strip.
+  const activeGroup = groupForPath(location.pathname);
   const sheetRef = useFocusTrap<HTMLDivElement>(() => setMoreOpen(false), undefined, moreOpen);
 
   const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
@@ -139,10 +142,16 @@ const Layout: React.FC = () => {
           <span className="font-serif text-[22px] font-semibold leading-none">{t.title}</span>
         </div>
 
-        {/* Underline tabs — desktop only */}
+        {/* Underline tabs — desktop only. One tab per group; folds sibling routes into
+            a sub-tab strip, so the tab stays lit while a child route is active. */}
         <nav className="hidden md:flex items-center gap-7 shrink-0">
-          {NAV_ITEMS.filter(item => isVisible(item.path)).map(item => (
-            <NavButton key={item.path} to={item.path} label={t.nav[item.key]} />
+          {NAV_GROUPS.filter(group => isVisible(group.primary)).map(group => (
+            <NavButton
+              key={group.primary}
+              to={group.primary}
+              label={t.nav[group.key]}
+              active={activeGroup?.primary === group.primary}
+            />
           ))}
         </nav>
 
@@ -283,6 +292,19 @@ const Layout: React.FC = () => {
 
       {/* ─── Main ────────────────────────────── */}
       <main id="main-content" tabIndex={-1} className="max-w-[1320px] mx-auto px-5 md:px-8 py-6 md:py-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12 focus:outline-none">
+        {/* Sub-tab strip — sibling routes folded under this group (e.g. Lønn · Lønnskostnad).
+            Each sub-tab is its own route, so it keeps its own header picker / time-machine. */}
+        {activeGroup && activeGroup.children.length > 1 && (
+          <SegmentedControl
+            className="mb-6"
+            ariaLabel={t.nav[activeGroup.key]}
+            items={activeGroup.children.map(path => ({
+              value: path,
+              to: path,
+              label: t.nav[navKeyForPath(path)!],
+            }))}
+          />
+        )}
         {demoMode && (
           <div
             className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-[var(--radius-md)] border text-[13px]"
@@ -420,10 +442,10 @@ const Layout: React.FC = () => {
           borderColor: 'var(--rule)',
         }}
       >
-        <MobileNavTab to="/" icon={<LayoutDashboard size={20} strokeWidth={1.75} />} label={t.nav.dashboard} />
-        <MobileNavTab to="/budget" icon={<BarChart3 size={20} strokeWidth={1.75} />} label={t.nav.budget} />
-        <MobileNavTab to="/assets" icon={<TrendingUp size={20} strokeWidth={1.75} />} label={t.nav.assets} />
-        <MobileNavTab to="/salary" icon={<LineChartIcon size={20} strokeWidth={1.75} />} label={t.nav.salary} />
+        <MobileNavTab to="/" icon={<LayoutDashboard size={20} strokeWidth={1.75} />} label={t.nav.dashboard} active={activeGroup?.primary === '/'} />
+        <MobileNavTab to="/budget" icon={<BarChart3 size={20} strokeWidth={1.75} />} label={t.nav.budget} active={activeGroup?.primary === '/budget'} />
+        <MobileNavTab to="/assets" icon={<TrendingUp size={20} strokeWidth={1.75} />} label={t.nav.assets} active={activeGroup?.primary === '/assets'} />
+        <MobileNavTab to="/salary" icon={<LineChartIcon size={20} strokeWidth={1.75} />} label={t.nav.salary} active={activeGroup?.primary === '/salary'} />
         <button
           onClick={() => setMoreOpen(true)}
           className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
@@ -495,17 +517,19 @@ const SheetItem: React.FC<SheetItemProps> = ({ to, icon, label, onNavigate }) =>
 interface NavButtonProps {
   to: string;
   label: string;
+  /** Active state is driven by the owning group, so the tab stays lit on a child route. */
+  active: boolean;
 }
 
-const NavButton: React.FC<NavButtonProps> = ({ to, label }) => (
+const NavButton: React.FC<NavButtonProps> = ({ to, label, active }) => (
   <NavLink
     to={to}
     end={to === '/'}
     className="text-[13px] font-medium pb-1 border-b transition-colors"
-    style={({ isActive }) => ({
-      borderColor: isActive ? 'var(--brass)' : 'transparent',
-      color: isActive ? 'var(--text-1)' : 'var(--text-2)',
-    })}
+    style={{
+      borderColor: active ? 'var(--brass)' : 'transparent',
+      color: active ? 'var(--text-1)' : 'var(--text-2)',
+    }}
   >
     {label}
   </NavLink>
@@ -515,16 +539,18 @@ interface MobileNavTabProps {
   to: string;
   icon: React.ReactNode;
   label: string;
+  /** Group-driven active state, so the tab stays lit on a folded child route. */
+  active: boolean;
 }
 
-const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon, label }) => (
+const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon, label, active }) => (
   <NavLink
     to={to}
     end={to === '/'}
     className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
-    style={({ isActive }) => ({
-      color: isActive ? 'var(--brass)' : 'var(--text-3)',
-    })}
+    style={{
+      color: active ? 'var(--brass)' : 'var(--text-3)',
+    }}
   >
     {icon}
     <span className="truncate max-w-full px-0.5">{label}</span>
