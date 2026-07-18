@@ -80,7 +80,7 @@ const BoligPage: React.FC = () => {
     transition: liveTransition, updateTransition,
     assets: liveAssets,
     residences,
-    grossAnnualIncome, totalDebt,
+    grossAnnualIncome, capacityDebt,
     formatCurrency,
     policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
   } = useFinance();
@@ -118,7 +118,9 @@ const BoligPage: React.FC = () => {
   const [gjeldOverride, setGjeldOverride] = useState<number | null>(null);
   const [egenkapitalOverride, setEgenkapitalOverride] = useState<number | null>(null);
   const effArslonn = arslonnOverride ?? (hist.isLive ? grossAnnualIncome : loan.arslonn);
-  const effGjeld = gjeldOverride ?? (hist.isLive ? totalDebt : loan.eksisterendeGjeld);
+  // Borrowing capacity counts existing debt at the lending-rule figure (full credit
+  // frame), so `capacityDebt` — not the drawn `totalDebt` — auto-fills the live value.
+  const effGjeld = gjeldOverride ?? (hist.isLive ? capacityDebt : loan.eksisterendeGjeld);
   const effEgenkapital = egenkapitalOverride ?? (hist.isLive ? liquidEquity : loan.egenkapital);
 
   const [modal, setModal] = useState<ModalConfig | null>(null);

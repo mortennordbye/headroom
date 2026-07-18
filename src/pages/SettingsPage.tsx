@@ -58,6 +58,7 @@ import { CategoryRules } from '../components/CategoryRules';
 import { AuthSettings } from '../components/AuthSettings';
 import { PaydayField } from '../components/PaydayField';
 import { RestorePointsCard } from '../components/RestorePointsCard';
+import { AiAccessCard } from '../components/AiAccessCard';
 import HistoryManagerModal from '../components/HistoryManagerModal';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
@@ -994,6 +995,9 @@ export default function SettingsPage() {
 
         {/* ──── Restore points — per-write revision history (span 12) ──── */}
         <RestorePointsCard />
+
+        {/* ──── Connect an AI assistant (MCP) — how-to (span 12) ──── */}
+        <AiAccessCard />
 
         {/* ═══════ Security ═══════ */}
         <GroupHeading>{t.settings.groups.security}</GroupHeading>

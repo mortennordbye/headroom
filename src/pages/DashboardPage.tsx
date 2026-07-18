@@ -18,7 +18,7 @@ import { EquityCompositionBar } from '../components/EquityCompositionBar';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import HistoryManagerModal from '../components/HistoryManagerModal';
 import {
-  calcNetWorthProjectionByBucket, calcHouseEquityByYear,
+  calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear,
   calcEmergencyFundStatus, calcDebtToIncome, bufferRecommendation,
 } from '../lib/calculations';
 import { calcDebtBalanceByYear } from '../lib/debt';
@@ -70,7 +70,7 @@ const DashboardPage: React.FC = () => {
     labelRules,
     incomeSeries,
     currentMonth,
-    totalDebt,
+    capacityDebt,
     netWorth,
     debts,
     netInvestment,
@@ -136,7 +136,9 @@ const DashboardPage: React.FC = () => {
   const bufferRec = bufferRecommendation(emergencyFund);
   const bufferGoal = goals.find(g => g.source === 'bufferAccount' && g.target > 0);
   const recommendedBufferTarget = bufferGoal?.target ?? Math.round(assets.bufferAccount + emergencyFund.shortfallToMin);
-  const debtToIncome = calcDebtToIncome(assets.houseDebt + totalDebt, grossAnnualIncome);
+  // Gjeldsgrad counts the full granted credit frame (capacityDebt), not the drawn
+  // balance — a card's limit reduces borrowing headroom even when it's paid off.
+  const debtToIncome = calcDebtToIncome(assets.houseDebt + capacityDebt, grossAnnualIncome);
 
   // ─── How many market assumptions are still on their default value ───
   // Surfaced as a nudge so the user knows their projections rest on untuned defaults.
@@ -259,9 +261,10 @@ const DashboardPage: React.FC = () => {
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
     const debtByYear = calcDebtBalanceByYear(debts, 15, currentMonthKey());
-    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear, debtByYear);
+    const mortgageByYear = calcMortgageBalanceByYear(assets.houseDebt, mortgageRate, mortgageTermYears, 15);
+    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear, debtByYear, { mortgageByYear, region });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, assets.houseValue, assets.houseDebt, mortgageRate, mortgageTermYears, debts]);
+  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, assets.houseValue, assets.houseDebt, mortgageRate, mortgageTermYears, debts, region]);
 
   const projectionEndYear = projection15y[projection15y.length - 1]?.year;
   const projectionEndValue = projection15y[projection15y.length - 1]?.total ?? 0;
@@ -856,7 +859,7 @@ const DashboardPage: React.FC = () => {
                     {debtToIncome.ratio.toFixed(1)}× / {debtToIncome.cap}×
                   </div>
                   <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                    {formatCurrency(assets.houseDebt + totalDebt)} {t.dashboardPage.debtWord} · {t.dashboardPage.gross} {formatCurrency(grossAnnualIncome)}
+                    {formatCurrency(assets.houseDebt + capacityDebt)} {t.dashboardPage.debtWord} · {t.dashboardPage.gross} {formatCurrency(grossAnnualIncome)}
                   </div>
                 </>
               )}

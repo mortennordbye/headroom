@@ -12,6 +12,11 @@ const inputs: ForecastInputs = {
   customTaxRatePct: 30, // flat 30% net → net = 70% of gross in generic mode
   ipsAnnualContribution: 0,
   startYear: 2026,
+  startHomeValue: 3000000,
+  houseGrowthPct: 2,
+  startShares: 500000,
+  startOtherAssets: 300000,
+  nonMortgageDebt: 0,
 };
 
 const scenario = (over: Partial<EffectiveScenario> = {}): EffectiveScenario => ({
@@ -61,5 +66,35 @@ describe('projectForecast', () => {
     const a = projectForecast(inputs, scenario({ returnPct: 8 }));
     const b = projectForecast(inputs, scenario({ returnPct: 4 }));
     expect(a[a.length - 1].netWorth).toBeGreaterThan(b[b.length - 1].netWorth);
+  });
+
+  describe('wealth tax (formuesskatt)', () => {
+    // All-financial, all listed shares → valued at 80%. 3M shares = 2.4M valued,
+    // 0.64M above the 1.76M bunnfradrag → 6 400/yr at the first bracket.
+    const noTaxDrift: EffectiveScenario = { raisePct: 0, savingsPct: 0, returnPct: 0, inflationPct: 0, years: 2, extraMonthly: 0 };
+    const noInputs: ForecastInputs = {
+      ...inputs, region: 'no', totalEquity: 3000000, startingMortgage: 0,
+      startHomeValue: 0, startShares: 3000000, startOtherAssets: 0, nonMortgageDebt: 0,
+    };
+
+    it('charges no tax at year 0 and reduces net worth from year 1 on', () => {
+      const rows = projectForecast(noInputs, noTaxDrift);
+      expect(rows[0].netWorth).toBe(3000000);   // today, pre-deduction
+      expect(rows[0].wealthTax).toBe(0);
+      expect(rows[1].wealthTax).toBe(6400);      // 0.64M × 1.0%, charged this year
+      expect(rows[1].netWorth).toBe(2993600);    // 3.0M − 6 400
+      expect(rows[2].netWorth).toBeLessThan(rows[1].netWorth);
+    });
+
+    it('is a no-op in the generic region', () => {
+      const rows = projectForecast({ ...noInputs, region: 'generic' }, noTaxDrift);
+      expect(rows.every(r => r.wealthTax === 0)).toBe(true);
+      expect(rows.every(r => r.netWorth === 3000000)).toBe(true);
+    });
+
+    it('leaves a below-bunnfradrag household untaxed', () => {
+      const rows = projectForecast({ ...noInputs, totalEquity: 1000000, startShares: 1000000 }, noTaxDrift);
+      expect(rows.every(r => r.wealthTax === 0)).toBe(true);
+    });
   });
 });

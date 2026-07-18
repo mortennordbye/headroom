@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths, sumDebtByType, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings } from './debt';
+import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings } from './debt';
 import { calcMonthlyPayment } from './calculations';
 import type { Debt, BalanceSnapshot } from '../context/FinanceContext';
 
@@ -199,6 +199,39 @@ describe('sumDebtByType', () => {
     expect(sumDebtByType(debts, 'consumer')).toBe(80_000);
     expect(sumDebtByType(debts, 'credit_card')).toBe(0);
     expect(sumDebtByType([], 'student')).toBe(0);
+  });
+});
+
+describe('lendingDebtTotal', () => {
+  it('counts a credit line at its full frame, not the drawn balance', () => {
+    const debts = [
+      debt({ id: 'a', type: 'credit_card', balance: 20_000, creditLimit: 100_000, revolving: true }),
+    ];
+    expect(lendingDebtTotal(debts)).toBe(100_000);
+  });
+
+  it('falls back to the balance when a line has no recorded limit', () => {
+    const debts = [
+      debt({ id: 'a', type: 'credit_card', balance: 24_500 }),
+      debt({ id: 'b', type: 'consumer', balance: 55_000 }),
+    ];
+    expect(lendingDebtTotal(debts)).toBe(79_500);
+  });
+
+  it('uses the balance when the drawn amount exceeds the frame', () => {
+    // Over-limit (or a stale limit): never under-count real debt.
+    const debts = [debt({ id: 'a', type: 'credit_card', balance: 30_000, creditLimit: 25_000 })];
+    expect(lendingDebtTotal(debts)).toBe(30_000);
+  });
+
+  it('ignores negatives and NaN/undefined balances and limits', () => {
+    const debts = [
+      debt({ id: 'a', type: 'credit_card', balance: -10, creditLimit: NaN as unknown as number }),
+      debt({ id: 'b', type: 'consumer', balance: 40_000 }),
+      debt({ id: 'c', type: 'credit_card', balance: undefined as unknown as number, creditLimit: 50_000 }),
+    ];
+    expect(lendingDebtTotal(debts)).toBe(90_000);
+    expect(lendingDebtTotal([])).toBe(0);
   });
 });
 

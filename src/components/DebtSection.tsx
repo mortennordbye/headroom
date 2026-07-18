@@ -59,6 +59,13 @@ export default function DebtSection() {
     { key: 'revolving', label: d.revolvingLabel, type: 'select', value: val.revolving ? 'yes' : 'no', options: revolvingOptions },
     { key: 'rate', label: d.rate, type: 'number', value: val.rate != null ? String(val.rate) : '' },
     { key: 'minPayment', label: d.minPayment, type: 'number', value: val.minPayment != null ? String(val.minPayment) : '' },
+    // Credit frame — only meaningful for a card / revolving line. The lending-rule
+    // debt (gjeldsgrad) counts the full frame, so record it to size headroom right.
+    {
+      key: 'creditLimit', label: d.creditLimit, type: 'number',
+      value: val.creditLimit != null ? String(val.creditLimit) : '', hint: d.creditLimitHint,
+      showWhen: (v) => v.type === 'credit_card' || v.revolving === 'yes',
+    },
     // Lånekassen interest-free/deferred month — only meaningful for student loans.
     {
       key: 'interestFreeUntil', label: d.interestFreeLabel, type: 'monthpicker', pickerMode: 'month',
@@ -75,6 +82,10 @@ export default function DebtSection() {
     // and never used in the payoff plan). Otherwise both are required.
     const rate = parseNum(v.rate), minPayment = parseNum(v.minPayment);
     if (!revolving && (rate === null || minPayment === null)) return null;
+    // A credit frame is only kept for a card / revolving line (else it's meaningless);
+    // blank or invalid leaves it unset so the lending math falls back to the balance.
+    const isCard = v.type === 'credit_card' || revolving;
+    const creditLimit = parseNum(v.creditLimit);
     return {
       name: v.name.trim(),
       type: v.type as DebtType,
@@ -82,6 +93,7 @@ export default function DebtSection() {
       rate: revolving ? 0 : rate!,
       minPayment: revolving ? 0 : minPayment!,
       revolving,
+      creditLimit: isCard && creditLimit !== null ? creditLimit : undefined,
       // Persist an interest-free month only for a (non-revolving) student loan.
       interestFreeUntil: v.type === 'student' && !revolving && isValidYearMonth(v.interestFreeUntil)
         ? v.interestFreeUntil : undefined,

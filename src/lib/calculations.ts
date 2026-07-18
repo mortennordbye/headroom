@@ -1,3 +1,5 @@
+import { calcWealthTax, type Region } from './norwegianTax';
+
 export function calcMonthlyPayment(principal: number, annualRate: number, years: number): number {
   const monthlyRate = annualRate / 100 / 12;
   const n = years * 12;
@@ -309,7 +311,23 @@ export interface BucketProjectionPoint {
   house: number;
   /** Non-mortgage debt remaining that year (0 unless `debtByYear` is passed). */
   debt: number;
+  /** Estimated formuesskatt assessed that year (0 unless a wealth-tax config is
+   *  passed or the household stays under the bunnfradrag). The tax is paid out of
+   *  the liquid buckets, so it also drags `total` down in later years. */
+  wealthTax: number;
   total: number;
+}
+
+/** Optional wealth-tax (formuesskatt) drag for `calcNetWorthProjectionByBucket`. */
+export interface WealthTaxProjectionConfig {
+  /** Gross mortgage balance per year (index 0..years) — combined with the house
+   *  equity in `houseByYear` to recover the home *market* value (equity + mortgage)
+   *  and the total deductible debt. See `calcMortgageBalanceByYear`. */
+  mortgageByYear: number[];
+  /** Only applies the drag under the Norwegian region ('no'); a no-op otherwise. */
+  region: Region;
+  /** Tax-year params for `calcWealthTax` (defaults to the current TAX_YEAR). */
+  year?: number;
 }
 
 /**
@@ -395,6 +413,12 @@ export function calcMortgageBalanceByYear(
  * Pass `debtByYear` (see `calcDebtBalanceByYear`) to net non-mortgage debt
  * paydown out of `total`, so the projection starts at true net worth instead
  * of asset equity; without it, debt is 0 and `total` is the asset sum.
+ *
+ * Pass `wealthTax` to subtract an estimated annual formuesskatt: each year the
+ * tax is computed from that year's composition (home valued at 25%/70%, listed
+ * shares at 80%, the rest at 100%, less all debt) and paid out of the liquid
+ * buckets (stocks → cash → crypto), so it compounds into a lower net worth over
+ * time. It's a no-op below the bunnfradrag or outside the Norwegian region.
  */
 export function calcNetWorthProjectionByBucket(
   start: BucketAmounts,
@@ -402,15 +426,30 @@ export function calcNetWorthProjectionByBucket(
   rates: BucketRates,
   years: number,
   houseByYear?: number[],
-  debtByYear?: number[]
+  debtByYear?: number[],
+  wealthTax?: WealthTaxProjectionConfig
 ): BucketProjectionPoint[] {
   const result: BucketProjectionPoint[] = [];
   let { stocks, crypto, cash, house } = start;
   const currentYear = new Date().getFullYear();
+  const wtOn = wealthTax != null && wealthTax.region === 'no';
 
   for (let y = 0; y <= years; y++) {
     const houseVal = houseByYear ? houseByYear[y] ?? house : house;
     const debtVal = debtByYear ? debtByYear[y] ?? 0 : 0;
+    // Formuesskatt on the wealth entering this year. The house bucket is *equity*,
+    // so add the mortgage back for the market value the tax is assessed on, and
+    // deduct the mortgage again as part of total debt.
+    let wt = 0;
+    if (wtOn) {
+      const mortgage = Math.max(0, wealthTax!.mortgageByYear[y] ?? 0);
+      wt = calcWealthTax({
+        primaryHomeValue: Math.max(0, houseVal + mortgage),
+        shares: Math.max(0, stocks),
+        otherAssets: Math.max(0, cash + crypto),
+        debt: Math.max(0, mortgage + debtVal),
+      }, wealthTax!.year).tax;
+    }
     result.push({
       year: currentYear + y,
       stocks: Math.round(stocks),
@@ -418,12 +457,20 @@ export function calcNetWorthProjectionByBucket(
       cash: Math.round(cash),
       house: Math.round(houseVal),
       debt: Math.round(debtVal),
+      wealthTax: Math.round(wt),
       total: Math.round(stocks + crypto + cash + houseVal - debtVal),
     });
     stocks = stocks * (1 + rates.stocks / 100) + annualSavings;
     crypto = crypto * (1 + rates.crypto / 100);
     cash = cash * (1 + rates.cash / 100);
     if (!houseByYear) house = house * (1 + rates.house / 100);
+    // Pay the year's wealth tax from the liquid pot (stocks first, then cash, then
+    // crypto). Any residual — when only the illiquid home is left — goes unpaid in
+    // the model rather than force-selling the home.
+    let owed = wt;
+    const fromStocks = Math.min(Math.max(0, stocks), owed); stocks -= fromStocks; owed -= fromStocks;
+    const fromCash = Math.min(Math.max(0, cash), owed); cash -= fromCash; owed -= fromCash;
+    const fromCrypto = Math.min(Math.max(0, crypto), owed); crypto -= fromCrypto;
   }
   return result;
 }

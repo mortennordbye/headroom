@@ -30,7 +30,7 @@ import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { computeAutomationPostings, type AutomationRule, type AutomationState, type ResolvedPosting } from '../lib/automation';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
-import { sumDebtByType } from '../lib/debt';
+import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
 import { dedupeBankTransactions } from '../lib/bankDedup';
 import { salaryAt } from '../lib/salary';
 import { stableStringify } from '../lib/stableStringify';
@@ -118,6 +118,14 @@ export interface Debt {
    * payoff planner/projection. rate/minPayment are irrelevant when this is set.
    */
   revolving?: boolean;
+  /**
+   * The granted credit frame (innvilget kredittramme) for a revolving/credit-card
+   * line. Norway's lending rule (gjeldsgrad, 5× income) counts the *full frame*,
+   * not the drawn `balance` — a card with a 100k limit and 20k drawn counts 100k
+   * toward borrowing capacity. Optional and only meaningful for a credit line;
+   * net-worth math still uses the drawn `balance` (see `capacityDebt` vs `totalDebt`).
+   */
+  creditLimit?: number;
   /**
    * Lånekassen student-loan basics: the loan is interest-free and
    * payment-deferred while studying. `interestFreeUntil` (YYYY-MM) is the month
@@ -798,6 +806,7 @@ interface FinanceDerivedContextType {
   conservativeMode: boolean;
   conservativeReason: ConservativeReason;
   totalDebt: number;
+  capacityDebt: number;
   netWorth: number;
   studentDebt: number;
   mortgageRate: number;
@@ -1855,6 +1864,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Non-mortgage debts reduce it further to give true net worth.
   const totalDebt = debts.reduce((s, d) => s + Math.max(0, d.balance), 0);
   const netWorth = totalEquity - totalDebt;
+  // Debt as it counts toward the lending rule (gjeldsgrad / 5×): a revolving credit
+  // line counts at its full granted frame, not the drawn balance. Distinct from
+  // `totalDebt` (net worth), which always uses the drawn balance.
+  const capacityDebt = lendingDebtTotal(debts);
   // Student loans are "soft" debt (low-interest, human-capital) whose real bite
   // is on borrowing capacity, not wealth. Surface net worth excluding it so a big
   // studielån doesn't make the headline equity read poorer than it feels; it
@@ -2579,7 +2592,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
@@ -2588,7 +2601,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,

@@ -14,6 +14,7 @@ import { netWorthBands } from '../lib/scenarioBands';
 import { projectForecast, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
+import { sumSavings } from '../lib/equity';
 import { currentMonthKey, addMonthsKey } from '../lib/date';
 import { formatAxisInt } from '../lib/format';
 
@@ -25,6 +26,7 @@ const ForecastPage: React.FC = () => {
     t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
     formatCurrency, region, customTaxRatePct, pension,
     recommendedInvestment, growthReturnRate, inflation, annualMortgageInterest,
+    assets, houseGrowthRate, netInvestment, netCrypto, totalDebt,
     forecastAssumptions: fa, setForecastAssumptions,
   } = useFinance();
   const reduced = useReducedMotion();
@@ -140,7 +142,13 @@ const ForecastPage: React.FC = () => {
     annualMortgagePayment, region, customTaxRatePct,
     ipsAnnualContribution: pension.ipsAnnualContribution,
     startYear: new Date().getFullYear(),
-  }), [currentGross, totalEquity, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution]);
+    // Composition — used only to estimate the yearly wealth-tax drag.
+    startHomeValue: assets.houseValue,
+    houseGrowthPct: houseGrowthRate,
+    startShares: netInvestment,
+    startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
+    nonMortgageDebt: totalDebt,
+  }), [currentGross, totalEquity, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution, assets, houseGrowthRate, netInvestment, netCrypto, totalDebt]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),
@@ -162,12 +170,13 @@ const ForecastPage: React.FC = () => {
   }, [projection, projectionB]);
 
   // Bear/base/bull bands (return ±3pp) so the projection doesn't read as a
-  // single certain line. Contributions are the same across scenarios (they
-  // depend on income/savings, not the return), so the band base equals the
-  // netWorth line and only the growth rate varies.
+  // single certain line. The per-year contribution net of that year's wealth-tax
+  // charge is held the same across scenarios (it depends on income/savings/tax,
+  // not the return), so the band base still equals the netWorth line and only the
+  // growth rate varies.
   const BAND_DELTA_PP = 3;
   const chartData = useMemo(() => {
-    const bands = netWorthBands(totalEquity, projection.map(p => p.contribution), returnPct, BAND_DELTA_PP, years);
+    const bands = netWorthBands(totalEquity, projection.map(p => p.contribution - p.wealthTax), returnPct, BAND_DELTA_PP, years);
     return projection.map((p, i) => ({
       ...p,
       band: [bands[i]?.bear ?? p.netWorth, bands[i]?.bull ?? p.netWorth] as [number, number],
