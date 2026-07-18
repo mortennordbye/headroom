@@ -39,6 +39,7 @@ import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
+import { calcWealthTax, TAX_YEAR } from '../lib/norwegianTax';
 import { currentMonthKey } from '../lib/date';
 import { bsuStatus } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
@@ -90,6 +91,7 @@ const AssetPage: React.FC = () => {
     restoreAssetTaxDefaults,
     restoreGrowthRateDefaults,
     balanceSnapshots,
+    region,
   } = useFinance();
   const reduced = useReducedMotion();
 
@@ -122,6 +124,17 @@ const AssetPage: React.FC = () => {
   );
   // True net worth also nets out non-mortgage debts (studielån, forbrukslån, …).
   const netWorth = totalEquity - totalDebt;
+  // Norwegian wealth tax (formuesskatt): primary home at 25%/70%, shares at 80%,
+  // deposits/crypto/BSU/buffer at full value, minus all debt. Norway region only.
+  const wealthTax = useMemo(
+    () => calcWealthTax({
+      primaryHomeValue: assets.houseValue,
+      shares: assets.portfolio,
+      otherAssets: assets.crypto + assets.bsu + sumSavings(assets) + assets.bufferAccount,
+      debt: assets.houseDebt + totalDebt,
+    }),
+    [assets, totalDebt],
+  );
   // Summary "liabilities" figure: mortgage + other debt + net latent tax. Latent
   // tax can be negative (an unrealized-loss tax shield), so this can flip sign.
   const liabilitiesTotal = assets.houseDebt + taxOnGain + cryptoTaxOnGain + totalDebt;
@@ -519,6 +532,50 @@ const AssetPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Wealth tax (formuesskatt) — Norway only */}
+      {region === 'no' && (
+        <div className={`${card} p-5 md:p-7`}>
+          <div className="flex items-baseline justify-between gap-3 flex-wrap pb-4 border-b border-[var(--border)]">
+            <h3 className={sectionLabel}>{t.wealthTax.title}</h3>
+            <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>{TAX_YEAR}</span>
+          </div>
+          <div className="mt-5 flex items-end justify-between gap-4 flex-wrap">
+            <div>
+              <div
+                className="font-mono font-medium tabular-nums leading-none"
+                style={{ fontSize: 'clamp(28px, 4vw, 40px)', color: wealthTax.tax > 0 ? 'var(--negative)' : 'var(--text-1)' }}
+              >
+                {formatCurrency(Math.round(wealthTax.tax))}
+              </div>
+              <div className="text-[12px] mt-1.5" style={{ color: 'var(--text-2)' }}>{t.wealthTax.perYear}</div>
+            </div>
+            {wealthTax.tax > 0 && (
+              <span
+                className="text-[12px] font-semibold tabular-nums px-2.5 h-7 inline-flex items-center rounded-[6px]"
+                style={{ background: 'var(--surface-3)', color: 'var(--text-2)' }}
+              >
+                {wealthTax.effectiveRatePct.toFixed(2)} %
+              </span>
+            )}
+          </div>
+          <div className="mt-5 space-y-2.5 text-[13px] border-t pt-4 border-[var(--border)]">
+            <div className="flex justify-between">
+              <span style={{ color: 'var(--text-2)' }}>{t.wealthTax.taxableWealth}</span>
+              <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{formatCurrency(Math.round(wealthTax.netWealth))}</span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: 'var(--text-2)' }}>{t.wealthTax.bunnfradrag}</span>
+              <span className="tabular-nums" style={{ color: 'var(--text-2)' }}>−{formatCurrency(wealthTax.bunnfradrag)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: 'var(--text-2)' }}>{t.wealthTax.taxedSlice}</span>
+              <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{formatCurrency(Math.round(wealthTax.taxableBase))}</span>
+            </div>
+          </div>
+          <p className="mt-4 text-[11px] leading-[1.5]" style={{ color: 'var(--text-3)' }}>{t.wealthTax.note}</p>
+        </div>
+      )}
 
       {/* Allocation snapshot + liquidity split */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-stretch">

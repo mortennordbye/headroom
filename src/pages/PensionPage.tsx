@@ -24,7 +24,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors'
 const PensionHistoryChart = lazy(() => import('../components/charts/PensionHistoryChart'));
 
 const PensionPage: React.FC = () => {
-  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct } = useFinance();
+  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile } = useFinance();
   const reduced = useReducedMotion();
 
   // Time machine: when viewing a past month, render that month's pension snapshot (read-only).
@@ -226,12 +226,28 @@ const PensionPage: React.FC = () => {
           <SectionLabel>{t.pensionPage.target}</SectionLabel>
         </div>
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-          <NumberRow
-            label={t.birthYear}
-            value={pension.birthYear}
-            onCommit={(v) => updatePension('birthYear', v)}
-            suffix=""
-          />
+          {profile.birthDate ? (
+            <div>
+              <div className="flex items-baseline mb-2">
+                <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{t.birthYear}</label>
+              </div>
+              <div
+                className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono border flex items-center"
+                style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
+                title={t.pensionPage.birthYearFromProfile}
+              >
+                {pension.birthYear || '—'}
+              </div>
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>{t.pensionPage.birthYearFromProfile}</p>
+            </div>
+          ) : (
+            <NumberRow
+              label={t.birthYear}
+              value={pension.birthYear}
+              onCommit={(v) => updatePension('birthYear', v)}
+              suffix=""
+            />
+          )}
           <SliderRow
             label={t.retirementAge}
             value={pension.retirementAge}

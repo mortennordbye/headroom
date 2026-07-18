@@ -149,6 +149,7 @@ export function getDemoData(): Partial<ExportPayload> {
 
   return {
     income: 62000,
+    profile: { name: 'Alex Doe', birthDate: '1990-05-01' },
     aiContext:
       'Long-term: want to go independent and start my own consultancy in ~3 years, so keeping a bigger cash buffer than usual. Hoping to buy a rental flat once the mortgage is under 60% LTV.',
     monthlyIncomes: {},

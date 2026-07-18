@@ -288,7 +288,7 @@ export function BankSyncCard() {
             onChange={(e) => setRedirectInput(e.target.value)}
             placeholder={defaultRedirect()}
             className="flex-1 min-w-[16rem] h-9 px-3 rounded-[6px] text-[13px] border font-mono"
-            style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
           />
           <Button variant="secondary" size="sm" disabled={savingCfg || !redirectInput.trim()} onClick={saveRedirect}>
             {b.save}
@@ -314,7 +314,7 @@ export function BankSyncCard() {
             onChange={(e) => setAppIdInput(e.target.value)}
             placeholder="00000000-0000-0000-0000-000000000000"
             className="flex-1 min-w-[16rem] h-9 px-3 rounded-[6px] text-[13px] border font-mono"
-            style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
           />
           <Button variant="secondary" size="sm" disabled={savingCfg || !appIdInput.trim()} onClick={saveAppId}>
             {b.save}
@@ -353,7 +353,7 @@ export function BankSyncCard() {
             placeholder={fallbackLabel}
             autoFocus
             className="h-8 px-2.5 rounded-[6px] text-[13px] border min-w-[12rem]"
-            style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
           />
           <Button variant="secondary" size="sm" onClick={() => { setAccountLabel(key, draft); setEditingKey(null); }}>{b.save}</Button>
           <Button variant="ghost" size="sm" onClick={() => setEditingKey(null)}>{b.cancel}</Button>
@@ -422,7 +422,7 @@ export function BankSyncCard() {
           // Amber the expiry line once consent is within its lead-time window, so a
           // cron-driven sync doesn't go silent right up until it's already expired.
           color: c.needsRelink || (!c.needsRelink && (c.daysLeft ?? Infinity) <= RELINK_LEAD_DAYS)
-            ? 'var(--warning, var(--text))'
+            ? 'var(--warning, var(--text-1))'
             : 'var(--text-2)',
         }}
       >
@@ -438,7 +438,7 @@ export function BankSyncCard() {
         onChange={(e) => setSelectedBank(e.target.value)}
         disabled={!aspsps}
         className="h-9 px-3 rounded-[6px] text-[13px] border min-w-[16rem]"
-        style={{ background: 'var(--bg-2)', borderColor: 'var(--border)', color: 'var(--text)' }}
+        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
       >
         {!aspsps ? (
           <option>{b.loadingBanks}</option>
@@ -477,7 +477,7 @@ export function BankSyncCard() {
         {showGuide ? b.setup.hide : b.setup.show}
       </button>
       {showGuide && (
-        <div className="mt-3 rounded-[8px] border p-4 space-y-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-2)' }}>
+        <div className="mt-3 rounded-[8px] border p-4 space-y-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}>
           <div className="text-[13px] font-semibold">{b.setup.title}</div>
           <ol className="list-decimal pl-5 space-y-2 text-[13px] leading-[1.5]" style={muted}>
             {b.setup.steps.map((step, i) => (

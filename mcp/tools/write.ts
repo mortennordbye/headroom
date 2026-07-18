@@ -23,6 +23,7 @@ import {
   updateFixedExpense,
   updateAssumptions,
   setAiContext,
+  setProfile,
 } from '../mutations';
 
 const readWrite = { readOnlyHint: false, openWorldHint: false } as const;
@@ -30,6 +31,7 @@ const categoryEnum = z.enum(CATEGORY_KEYS as unknown as [CategoryKey, ...Categor
 const sourceEnum = z.enum(GOAL_SOURCES as unknown as [GoalSource, ...GoalSource[]]);
 const typeEnum = z.enum(EXPENSE_TYPES as unknown as [ExpenseType, ...ExpenseType[]]);
 const yearMonth = z.string().regex(/^\d{4}-\d{2}$/);
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 async function run(build: (blob: ExportPayload) => FieldChange[]) {
   try {
@@ -154,6 +156,21 @@ export function registerWriteTools(server: McpServer) {
       annotations: { title: 'Set AI context notes', ...readWrite, destructiveHint: true, idempotentHint: true },
     },
     ({ text }) => run((blob) => setAiContext(blob, { text })),
+  );
+
+  server.registerTool(
+    'set_profile',
+    {
+      title: 'Set user profile',
+      description:
+        "Update the user's optional profile. Only provided fields change (the other is left as-is). `birthDate` also drives the pension birth year.",
+      inputSchema: {
+        name: z.string().optional().describe("The user's display name."),
+        birthDate: isoDate.optional().describe("Date of birth as 'YYYY-MM-DD'."),
+      },
+      annotations: { title: 'Set user profile', ...readWrite, destructiveHint: true, idempotentHint: true },
+    },
+    (fields) => run((blob) => setProfile(blob, fields)),
   );
 
   server.registerTool(

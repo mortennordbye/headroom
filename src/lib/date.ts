@@ -1,4 +1,16 @@
-import { format } from 'date-fns';
+import { format, parseISO, isValid, differenceInYears } from 'date-fns';
+
+/**
+ * Whole years from a 'YYYY-MM-DD' birth date to `now` (defaults to today).
+ * Returns null for an absent, unparseable, or future date, so callers can hide
+ * the age rather than render a nonsense number. `now` is injectable for tests.
+ */
+export function ageFromBirthDate(birthDate: string | undefined, now: Date = new Date()): number | null {
+  if (!birthDate) return null;
+  const dob = parseISO(birthDate);
+  if (!isValid(dob) || dob > now) return null;
+  return differenceInYears(now, dob);
+}
 
 /**
  * The current month as a 'yyyy-MM' key, in LOCAL time.

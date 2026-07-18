@@ -13,6 +13,7 @@ import type {
   JobEntry,
 } from '../src/context/FinanceContext';
 import { computeEquityBreakdown, sumSavings } from '../src/lib/equity';
+import { ageFromBirthDate } from '../src/lib/date';
 import {
   calcDebtToIncome,
   calcEmergencyFundStatus,
@@ -102,11 +103,26 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
         blob.homeowner?.skattefradragssats ?? 22,
       )
     : null;
+  const currentJob = (blob.jobs ?? []).find((j) => !j.endDate);
   return {
     monthKey,
+    // Optional user profile — identity context the user set in Settings. `currentJob`
+    // is derived from the active (open-ended) job, not stored on the profile.
+    profile: {
+      name: blob.profile?.name || '',
+      age: ageFromBirthDate(blob.profile?.birthDate),
+      currentJob: currentJob ? [currentJob.role, currentJob.employer].filter(Boolean).join(' · ') : '',
+    },
     // Free-text context the user keeps about their plans / long-term goals. Read
     // it before advising; use set_ai_context to record new context.
     notes: blob.aiContext ?? '',
+    // The user's savings goals with live progress (see get_savings_and_goals for detail).
+    goals: (blob.goals ?? []).map((g) => ({
+      name: g.name,
+      target: g.target,
+      deadline: g.deadline ?? null,
+      progressPct: g.target > 0 ? Math.round((goalCurrentValue(g, blob.assets) / g.target) * 100) : 0,
+    })),
     netWorth: Math.round(netWorth(blob)),
     grossAnnualIncome: Math.round(gross),
     monthlyNetIncome: blob.income ?? 0,

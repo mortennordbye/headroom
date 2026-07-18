@@ -181,6 +181,7 @@ function fullPayload(): ExportPayload {
     conservativeNudgeDismissedMonth: '2026-01',
     payday: 25,
     aiContext: 'Go independent in ~3 years.',
+    profile: { name: 'Alex Doe', birthDate: '1990-05-01' },
   };
 }
 
@@ -196,22 +197,22 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 51 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(51);
+  it('registers exactly the 52 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(52);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (29) or preserve (22)', () => {
+  it('partitions every field into reset (29) or preserve (23)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
     expect(reset).toHaveLength(29);
-    expect(preserve).toHaveLength(22);
+    expect(preserve).toHaveLength(23);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([
       'lang', 'savingsTargetPercent', 'growthReturnRate', 'forecastAssumptions', 'houseGrowthRate',
       'cashGrowthRate', 'cryptoGrowthRate', 'displayCurrency', 'nokToUsd', 'customCurrencyCode',
       'customCurrencyRate', 'jobs', 'salaries', 'residences', 'secondHomeScenarios', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'region',
-      'customTaxRatePct', 'hiddenNavItems',
+      'customTaxRatePct', 'hiddenNavItems', 'profile',
     ]));
   });
 

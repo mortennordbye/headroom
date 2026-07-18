@@ -17,6 +17,7 @@
 import type { ExportPayload } from '../context/FinanceContext';
 import { DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from './employerCost';
 import { DEFAULT_FORECAST_ASSUMPTIONS } from './forecastProjection';
+import { DEFAULT_PROFILE } from './profile';
 import { dedupeBankTransactions } from './bankDedup';
 import { migrateSavingsAccounts, migrateSnapshotSavings } from './savingsMigration';
 
@@ -163,6 +164,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     conservativeNudgeDismissedMonth: { group: 'reset', demo: 'preference', read: whenString('conservativeNudgeDismissedMonth'), default: '' },
     payday: { group: 'reset', demo: 'preference', read: whenNumber('payday'), default: 0 },
     aiContext: { group: 'reset', demo: 'personal', read: whenString('aiContext'), default: '' },
+    profile: { group: 'preserve', demo: 'personal', read: mergedWith('profile', DEFAULT_PROFILE) },
 
     // ── Group B: apply only when present (identical on load + import) ──
     lang: { group: 'preserve', demo: 'preference', read: whenTruthy('lang') },

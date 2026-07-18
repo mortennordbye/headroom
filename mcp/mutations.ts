@@ -135,6 +135,21 @@ export function setAiContext(blob: ExportPayload, args: { text: string }): Field
   return [diff('aiContext', before, args.text)];
 }
 
+/** Update the user profile. Only provided fields change; touches only `blob.profile`. */
+export function setProfile(
+  blob: ExportPayload,
+  fields: { name?: string; birthDate?: string },
+): FieldChange[] {
+  const before = blob.profile ?? {};
+  const after = { ...before };
+  const changes: FieldChange[] = [];
+  if (fields.name !== undefined) { changes.push(diff('profile.name', before.name, fields.name)); after.name = fields.name; }
+  if (fields.birthDate !== undefined) { changes.push(diff('profile.birthDate', before.birthDate, fields.birthDate)); after.birthDate = fields.birthDate; }
+  if (changes.length === 0) throw new Error('no profile fields provided');
+  blob.profile = after;
+  return changes;
+}
+
 export function updateAssumptions(
   blob: ExportPayload,
   fields: Partial<Record<AssumptionKey, number>>,

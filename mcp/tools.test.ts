@@ -46,6 +46,7 @@ function fixture(): ExportPayload {
       { id: 'd2', name: 'Credit card', type: 'credit_card', balance: 40000, rate: 20, minPayment: 1500 },
     ],
     goals: [{ id: 'g1', name: 'Down payment', target: 600000, source: 'bufferAccount' }],
+    profile: { name: 'Alex Doe', birthDate: '1990-05-01' },
     savingsTargetPercent: 25,
     region: 'no',
   } as ExportPayload;
@@ -67,6 +68,15 @@ describe('derive (pure, no server)', () => {
     expect(o.grossAnnualIncome).toBe(720000);
     const dti = calcDebtToIncome(2500000 + 240000, 720000);
     expect(o.debt.debtToIncome.ratio).toBeCloseTo(dti.ratio, 6);
+  });
+
+  it('overview: surfaces the profile and a compact goals summary with live progress', () => {
+    const o = derive.overview(blob, MONTH);
+    expect(o.profile.name).toBe('Alex Doe');
+    // Down-payment goal (bufferAccount): 120000 / 600000 = 20%
+    const g = o.goals.find((x) => x.name === 'Down payment');
+    expect(g?.progressPct).toBe(20);
+    expect(g?.deadline).toBeNull();
   });
 
   it('budget: essential expenses exclude subscriptions', () => {

@@ -17,7 +17,7 @@ export function AuthSettings() {
 
   const envManaged = authSource === 'env';
 
-  const input = 'w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[10px] px-3.5 py-2.5 text-[14px] text-[var(--text-1)] outline-none focus:border-[var(--forest)] transition-colors';
+  const input = 'w-full bg-[var(--surface-3)] border border-[var(--border)] rounded-[10px] px-3.5 py-2.5 text-[14px] text-[var(--text-1)] outline-none focus:border-[var(--accent)] transition-colors';
   const btn = 'py-2.5 px-4 rounded-[10px] text-[13px] font-semibold transition-colors';
 
   const reset = () => { setPw(''); setConfirm(''); setError(''); setChanging(false); };
@@ -53,7 +53,7 @@ export function AuthSettings() {
           <input type="password" className={input} value={pw} onChange={e => { setPw(e.target.value); setError(''); }} placeholder={t.auth.newPassword} aria-label={t.auth.newPassword} />
           <input type="password" className={input} value={confirm} onChange={e => { setConfirm(e.target.value); setError(''); }} placeholder={t.auth.confirmPassword} aria-label={t.auth.confirmPassword} />
           {error && <p className="text-[12px] text-[var(--negative)]">{error}</p>}
-          <button type="button" disabled={busy || !pw} onClick={savePassword} className={`${btn} self-start text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] disabled:opacity-50`}>
+          <button type="button" disabled={busy || !pw} onClick={savePassword} className={`${btn} self-start text-[var(--text-1)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] disabled:opacity-50`}>
             {t.auth.enable}
           </button>
         </div>
@@ -67,16 +67,16 @@ export function AuthSettings() {
               <input type="password" className={input} value={confirm} onChange={e => { setConfirm(e.target.value); setError(''); }} placeholder={t.auth.confirmPassword} aria-label={t.auth.confirmPassword} />
               {error && <p className="text-[12px] text-[var(--negative)]">{error}</p>}
               <div className="flex gap-2">
-                <button type="button" disabled={busy || !pw} onClick={savePassword} className={`${btn} text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] disabled:opacity-50`}>{t.auth.changePassword}</button>
-                <button type="button" onClick={reset} className={`${btn} text-[var(--text-2)] bg-[var(--bg-raised)]`}>{t.cancel}</button>
+                <button type="button" disabled={busy || !pw} onClick={savePassword} className={`${btn} text-[var(--text-1)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] disabled:opacity-50`}>{t.auth.changePassword}</button>
+                <button type="button" onClick={reset} className={`${btn} text-[var(--text-2)] bg-[var(--surface-2)]`}>{t.cancel}</button>
               </div>
             </div>
           ) : (
             <>
               {error && <p className="text-[12px] text-[var(--negative)]">{error}</p>}
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => { setError(''); setChanging(true); }} className={`${btn} text-[var(--text-1)] bg-[var(--bg-raised)] hover:bg-[var(--bg-elev)]`}>{t.auth.changePassword}</button>
-                <button type="button" onClick={logout} className={`${btn} text-[var(--text-1)] bg-[var(--bg-raised)] hover:bg-[var(--bg-elev)]`}>{t.auth.logout}</button>
+                <button type="button" onClick={() => { setError(''); setChanging(true); }} className={`${btn} text-[var(--text-1)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)]`}>{t.auth.changePassword}</button>
+                <button type="button" onClick={logout} className={`${btn} text-[var(--text-1)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)]`}>{t.auth.logout}</button>
                 <button type="button" disabled={busy} onClick={disable} className={`${btn} text-[var(--negative)] bg-[color-mix(in_srgb,var(--negative)_12%,transparent)] hover:bg-[color-mix(in_srgb,var(--negative)_20%,transparent)] disabled:opacity-50`}>{t.auth.disable}</button>
               </div>
             </>
