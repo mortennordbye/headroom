@@ -15,6 +15,28 @@ const finite = (n: number | undefined): number => (Number.isFinite(n) ? (n as nu
 export const BSU_ANNUAL_CAP = 27_500;
 export const BSU_LIFETIME_CAP = 300_000;
 
+// BSU income-tax credit: 10% of the year's contribution (capped at the annual
+// cap → max 2 750 kr), available through the year you turn 33 and only while you
+// don't own a home. The rate was 20% before 2023; it is 10% for 2023 onward.
+export const BSU_CREDIT_RATE = 0.10;
+export const BSU_MAX_AGE = 33;
+
+/**
+ * The BSU tax credit (fradrag i skatt) for a year's contribution. Returns the
+ * gross credit; it is non-refundable, so a caller applying it to tax should cap
+ * it at the tax actually owed (calcNorwegianTax does this). Zero when the saver
+ * owns a home or is past the age limit.
+ */
+export function calcBsuTaxCredit(
+  contribution: number,
+  opts: { age: number; ownsHome: boolean },
+): number {
+  if (opts.ownsHome) return 0;
+  if (!Number.isFinite(opts.age) || opts.age < 0 || opts.age > BSU_MAX_AGE) return 0;
+  const eligible = Math.min(Math.max(0, finite(contribution)), BSU_ANNUAL_CAP);
+  return Math.round(BSU_CREDIT_RATE * eligible);
+}
+
 export interface BsuStatus {
   balance: number;
   contributedThisYear: number;

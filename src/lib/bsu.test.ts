@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bsuStatus, BSU_ANNUAL_CAP, BSU_LIFETIME_CAP } from './bsu';
+import { bsuStatus, calcBsuTaxCredit, BSU_ANNUAL_CAP, BSU_LIFETIME_CAP } from './bsu';
 
 const snap = (bsu: number) => ({ assets: { bsu } });
 
@@ -47,5 +47,24 @@ describe('bsuStatus', () => {
     const s = bsuStatus(NaN, {}, 2026);
     expect(s.balance).toBe(0);
     expect(s.lifetimeRoomLeft).toBe(BSU_LIFETIME_CAP);
+  });
+});
+
+describe('calcBsuTaxCredit', () => {
+  it('gives 10% of the contribution for an eligible young non-homeowner', () => {
+    expect(calcBsuTaxCredit(20_000, { age: 25, ownsHome: false })).toBe(2_000);
+  });
+  it('caps the creditable contribution at the annual cap (max 2 750)', () => {
+    expect(calcBsuTaxCredit(40_000, { age: 30, ownsHome: false })).toBe(2_750);
+  });
+  it('is zero for a homeowner', () => {
+    expect(calcBsuTaxCredit(27_500, { age: 25, ownsHome: true })).toBe(0);
+  });
+  it('is zero past the age limit (through the year you turn 33)', () => {
+    expect(calcBsuTaxCredit(27_500, { age: 33, ownsHome: false })).toBe(2_750);
+    expect(calcBsuTaxCredit(27_500, { age: 34, ownsHome: false })).toBe(0);
+  });
+  it('is zero for an unset age (birth year missing → age -1)', () => {
+    expect(calcBsuTaxCredit(27_500, { age: -1, ownsHome: false })).toBe(0);
   });
 });

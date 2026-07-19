@@ -41,7 +41,7 @@ import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBala
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
 import { calcWealthTax, TAX_YEAR } from '../lib/norwegianTax';
 import { currentMonthKey } from '../lib/date';
-import { bsuStatus } from '../lib/bsu';
+import { bsuStatus, calcBsuTaxCredit } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
 import { formatAxisInt } from '../lib/format';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -91,6 +91,7 @@ const AssetPage: React.FC = () => {
     restoreGrowthRateDefaults,
     balanceSnapshots,
     region,
+    housingMode,
   } = useFinance();
   const reduced = useReducedMotion();
 
@@ -216,6 +217,11 @@ const AssetPage: React.FC = () => {
     () => bsuStatus(liveAssets.bsu, balanceSnapshots, new Date().getFullYear()),
     [liveAssets.bsu, balanceSnapshots],
   );
+  // BSU income-tax credit (10%, under-34, non-homeowner) on this year's deposit.
+  const bsuAge = pension.birthYear > 1900 ? new Date().getFullYear() - pension.birthYear : -1;
+  const bsuOwnsHome = housingMode !== 'first_buyer';
+  const bsuCredit = calcBsuTaxCredit(assets.bsuAnnualContribution, { age: bsuAge, ownsHome: bsuOwnsHome });
+  const bsuHasContribution = assets.bsuAnnualContribution > 0;
   const houseByYear = useMemo(
     () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm, 15),
     [assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm]
@@ -395,6 +401,22 @@ const AssetPage: React.FC = () => {
                 onEdit={() => openAssetEdit(t.bsu, assets.bsu, 'bsu')}
                 formatCurrency={formatCurrency}
               />
+              {hist.isLive && (
+                <AssetRow
+                  label={t.assetPage.bsuContribution}
+                  value={assets.bsuAnnualContribution}
+                  onEdit={() => openAssetEdit(t.assetPage.bsuContribution, assets.bsuAnnualContribution, 'bsuAnnualContribution')}
+                  formatCurrency={formatCurrency}
+                />
+              )}
+              {hist.isLive && bsuHasContribution && (
+                <div className="flex justify-between items-baseline text-[11px] px-1 pb-2 -mt-1">
+                  <span style={{ color: 'var(--text-2)' }}>{t.assetPage.bsuTaxCredit}</span>
+                  <span className="font-mono font-medium" style={{ color: bsuCredit > 0 ? 'var(--positive)' : 'var(--text-3)' }}>
+                    {bsuCredit > 0 ? formatCurrency(bsuCredit) : t.assetPage.bsuNotEligible}
+                  </span>
+                </div>
+              )}
               {hist.isLive && bsu.balance > 0 && (
                 <div className="rounded-[6px] bg-[var(--bg-raised)] border border-[var(--border)] p-3 mt-1 mb-1 space-y-2.5">
                   <div>

@@ -75,6 +75,12 @@ const PARAMS = TAX_PARAMS[TAX_YEAR];
 
 export const IPS_MAX_DEDUCTION = 15_000;
 
+// Mortgage-interest tax deduction (rentefradrag) rate. This is not a per-loan
+// choice — interest lowers alminnelig inntekt, taxed back at the flat 22% rate —
+// so it is the single source of truth for the Bolig page's "skattefradrag" line
+// (previously an editable copy duplicated on both the loan and homeowner forms).
+export const RENTEFRADRAG_RATE_PCT = PARAMS.skattAlminneligRate * 100;
+
 // In the opptrapping band just above the lower limit, trygdeavgift is capped at
 // 25% of income exceeding the limit — a statutory rate that phases the avgift in
 // smoothly instead of it jumping to the full rate at the threshold.
@@ -118,15 +124,18 @@ export function calcTaxByRegion(
   customRatePct: number,
   ipsContribution: number = 0,
   interestDeduction: number = 0,
+  bsuTaxCredit: number = 0,
 ): NorwegianTaxBreakdown {
-  if (region === 'no') return calcNorwegianTax(grossAnnual, ipsContribution, TAX_YEAR, interestDeduction);
+  if (region === 'no') return calcNorwegianTax(grossAnnual, ipsContribution, TAX_YEAR, interestDeduction, bsuTaxCredit);
   const gross = Math.max(0, grossAnnual);
   const rate = Math.min(100, Math.max(0, customRatePct)) / 100;
   // Approximate: IPS + interest deductions also lower taxable income in generic mode at the flat rate.
   const ipsDeduction = Math.min(Math.max(0, ipsContribution), IPS_MAX_DEDUCTION);
   const interest = Math.max(0, interestDeduction);
   const taxable = Math.max(0, gross - ipsDeduction - interest);
-  const totalTax = taxable * rate;
+  const rawTax = taxable * rate;
+  // BSU credit applies in generic mode too, non-refundable against the flat tax.
+  const totalTax = rawTax - Math.min(Math.max(0, bsuTaxCredit), rawTax);
   const netAnnual = gross - totalTax - ipsDeduction;
   return {
     gross,
@@ -166,6 +175,7 @@ export function calcNorwegianTax(
   ipsContribution: number = 0,
   year: number = TAX_YEAR,
   interestDeduction: number = 0,
+  bsuTaxCredit: number = 0,
 ): NorwegianTaxBreakdown {
   const P = TAX_PARAMS[year] ?? PARAMS;
   const gross = Math.max(0, grossAnnual);
@@ -188,7 +198,9 @@ export function calcNorwegianTax(
       )
     : 0;
 
-  const totalTax = inntektsskatt + trinn + trygde;
+  // BSU credit is a non-refundable fradrag i skatt — it can only cancel tax owed.
+  const bsuCredit = Math.min(Math.max(0, bsuTaxCredit), inntektsskatt + trinn + trygde);
+  const totalTax = inntektsskatt + trinn + trygde - bsuCredit;
   // IPS contribution leaves the paycheck (locked savings) — subtract from take-home.
   const netAnnual = gross - totalTax - ipsDeduction;
   const netMonthly = netAnnual / 12;

@@ -292,3 +292,21 @@ describe('calcPensionIncomeTax', () => {
     expect(r.netAnnual).toBe(0);
   });
 });
+
+describe('BSU tax credit in calcNorwegianTax', () => {
+  it('reduces total tax by the credit for an earner who owes tax', () => {
+    const base = calcNorwegianTax(600_000, 0, 2026, 0).totalTax;
+    const withCredit = calcNorwegianTax(600_000, 0, 2026, 0, 2_750).totalTax;
+    expect(base - withCredit).toBeCloseTo(2_750, 6);
+  });
+  it('is non-refundable — cannot push tax below zero', () => {
+    // Very low gross owes little/no tax; a large credit cannot create a refund.
+    const r = calcNorwegianTax(120_000, 0, 2026, 0, 5_000);
+    expect(r.totalTax).toBeGreaterThanOrEqual(0);
+  });
+  it('flows through calcTaxByRegion in generic mode too', () => {
+    const base = calcTaxByRegion(500_000, 'generic', 30, 0, 0, 0).totalTax;
+    const withCredit = calcTaxByRegion(500_000, 'generic', 30, 0, 0, 2_000).totalTax;
+    expect(base - withCredit).toBeCloseTo(2_000, 6);
+  });
+});

@@ -34,20 +34,20 @@ import type { SecondHomeScenario } from './secondHome';
 // ── Injection defaults for the registry. Recognizable (all-9s) so the reset
 // test can assert a 'reset' object field dropped to exactly this value. ──
 const defAssets: Assets = {
-  portfolio: 9, unrealizedGain: 9, taxRate: 9, bsu: 9, savings: 0, savingsAccounts: [],
+  portfolio: 9, unrealizedGain: 9, taxRate: 9, bsu: 9, bsuAnnualContribution: 9, savings: 0, savingsAccounts: [],
   houseValue: 9, houseDebt: 9, crypto: 9, cryptoUnrealizedGain: 9, cryptoTaxRate: 9, bufferAccount: 9,
 };
 const defLoan: LoanData = {
   arslonn: 9, eksisterendeGjeld: 9, egenkapital: 9, laanebelop: 9, rente: 9, nedbetalingstid: 9,
-  termingebyr: 9, etableringsgebyr: 9, skattefradragssats: 9, betingetLaan: 9, kjoepesum: 9, gyldigTil: 'x',
+  termingebyr: 9, etableringsgebyr: 9, betingetLaan: 9, kjoepesum: 9, gyldigTil: 'x',
 };
 const defPension: Pension = {
   otpBalance: 9, otpEmployerPct: 9, otpEmployeePct: 9, otpGrowthRate: 9,
   ipsBalance: 9, ipsAnnualContribution: 9, ipsGrowthRate: 9, birthYear: 9, retirementAge: 9,
-  folketrygdBeholdning: 9, folketrygdSingle: true, pensionPayoutYears: 9,
+  folketrygdBeholdning: 9, folketrygdSingle: true, pensionPayoutYears: 9, afpEligible: false,
 };
 const defHomeowner: HomeownerData = {
-  currentMortgageBalance: 9, originalLoanAmount: 9, rente: 9, nedbetalingstid: 9, termingebyr: 9, skattefradragssats: 9,
+  currentMortgageBalance: 9, originalLoanAmount: 9, rente: 9, nedbetalingstid: 9, termingebyr: 9,
 };
 const defTransition: TransitionData = {
   currentHouseValue: 9, currentMortgageBalance: 9, agentFeePercent: 9, documentFee: 9,
@@ -68,21 +68,21 @@ const KEYS = persistedKeys(registry);
 // snapshots, dailyTransactions, merged configs) are already in the exact shape
 // their read produces, so applyPayload→buildPayload is a pure identity. ──
 const canonicalAssets: Assets = {
-  portfolio: 111, unrealizedGain: 222, taxRate: 30, bsu: 333, savings: 0,
+  portfolio: 111, unrealizedGain: 222, taxRate: 30, bsu: 333, bsuAnnualContribution: 0, savings: 0,
   savingsAccounts: [{ id: 'sav-1', name: 'Sparekonto', balance: 444 }],
   houseValue: 555, houseDebt: 666, crypto: 777, cryptoUnrealizedGain: 888, cryptoTaxRate: 20, bufferAccount: 999,
 };
 const canonicalLoan: LoanData = {
   arslonn: 700000, eksisterendeGjeld: 1, egenkapital: 400000, laanebelop: 2500000, rente: 4.5, nedbetalingstid: 20,
-  termingebyr: 60, etableringsgebyr: 2, skattefradragssats: 21, betingetLaan: 2000000, kjoepesum: 3000000, gyldigTil: '1. jan 2030',
+  termingebyr: 60, etableringsgebyr: 2, betingetLaan: 2000000, kjoepesum: 3000000, gyldigTil: '1. jan 2030',
 };
 const canonicalPension: Pension = {
   otpBalance: 100, otpEmployerPct: 6, otpEmployeePct: 1, otpGrowthRate: 4,
   ipsBalance: 200, ipsAnnualContribution: 300, ipsGrowthRate: 6, birthYear: 1988, retirementAge: 68,
-  folketrygdBeholdning: 850000, folketrygdSingle: false, pensionPayoutYears: 12,
+  folketrygdBeholdning: 850000, folketrygdSingle: false, pensionPayoutYears: 12, afpEligible: true,
 };
 const canonicalHomeowner: HomeownerData = {
-  currentMortgageBalance: 2000000, originalLoanAmount: 2600000, rente: 5, nedbetalingstid: 22, termingebyr: 55, skattefradragssats: 23,
+  currentMortgageBalance: 2000000, originalLoanAmount: 2600000, rente: 5, nedbetalingstid: 22, termingebyr: 55,
 };
 const canonicalTransition: TransitionData = {
   currentHouseValue: 5000000, currentMortgageBalance: 2000000, agentFeePercent: 2.5, documentFee: 8000,

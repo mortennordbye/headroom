@@ -7,6 +7,7 @@ const assets = (over: Partial<Assets> = {}): Assets => ({
   unrealizedGain: 0,
   taxRate: 37.84,
   bsu: 0,
+  bsuAnnualContribution: 0,
   savings: 0,
   houseValue: 0,
   houseDebt: 0,

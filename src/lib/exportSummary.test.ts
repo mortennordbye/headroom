@@ -34,7 +34,7 @@ describe('summarizeExport', () => {
   it('flags singleton config objects as present when supplied', () => {
     const s = summarizeExport({
       assets: {
-        portfolio: 0, unrealizedGain: 0, taxRate: 0, bsu: 0, savings: 0,
+        portfolio: 0, unrealizedGain: 0, taxRate: 0, bsu: 0, bsuAnnualContribution: 0, savings: 0,
         houseValue: 0, houseDebt: 0, crypto: 0, cryptoUnrealizedGain: 0,
         cryptoTaxRate: 0, bufferAccount: 0,
       },

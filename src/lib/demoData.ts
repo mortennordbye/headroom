@@ -28,6 +28,7 @@ export function getDemoData(): Partial<ExportPayload> {
     unrealizedGain: 62000,
     taxRate: 37.84,
     bsu: 33000,
+    bsuAnnualContribution: 27500,
     savingsAccounts: [
       { id: 'demo-sav-1', name: 'Sparekonto', balance: 60000 },
       { id: 'demo-sav-2', name: 'Feriekonto', balance: 35000 },
@@ -45,7 +46,6 @@ export function getDemoData(): Partial<ExportPayload> {
     rente: 5.5,
     nedbetalingstid: 25,
     termingebyr: 50,
-    skattefradragssats: 22,
     accountLabel: 'Boliglån ung',
     startDate: monthsAgo(48),
   };
@@ -67,7 +67,6 @@ export function getDemoData(): Partial<ExportPayload> {
     nedbetalingstid: 25,
     termingebyr: 50,
     etableringsgebyr: 0,
-    skattefradragssats: 22,
     betingetLaan: 2500000,
     kjoepesum: 3500000,
     gyldigTil: '',
@@ -85,6 +84,7 @@ export function getDemoData(): Partial<ExportPayload> {
     folketrygdBeholdning: 950000,
     folketrygdSingle: true,
     pensionPayoutYears: 10,
+    afpEligible: true,
   };
   const demoDebts: Debt[] = [
     { id: 'demo-debt-1', name: 'Studielån (Lånekassen)', type: 'student', balance: 284000, rate: 4.9, minPayment: 3200 },
