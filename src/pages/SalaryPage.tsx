@@ -40,6 +40,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { PaydayField } from '../components/PaydayField';
+import { WageCalculator } from '../components/WageCalculator';
 import RecordEventModal, { type RecordEditTarget, type RecordType } from '../components/RecordEventModal';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
@@ -92,6 +93,7 @@ const SalaryPage: React.FC = () => {
     inflation, inflationStale, refreshInflation,
     wageStats, wageStatsStale, payslips,
     region, customTaxRatePct, pension, annualMortgageInterest,
+    grossAnnualIncome,
   } = useFinance();
   const reduced = useReducedMotion();
   const isGeneric = region === 'generic';
@@ -661,6 +663,9 @@ const SalaryPage: React.FC = () => {
           sub={current ? `${current.hoursPerWeek.toFixed(1)} ${t.common.hoursPerWeekUnit}` : ''}
         />
       </div>
+
+      {/* Wage-unit calculator — annual ↔ month/week/day/hour/minute/second. */}
+      <WageCalculator currentAnnual={current?.grossAnnual ?? grossAnnualIncome} />
 
       {/* Money flow — where the gross salary goes, with the marginal-rate readout. */}
       <Card padding="none" className="p-5 md:p-7">
