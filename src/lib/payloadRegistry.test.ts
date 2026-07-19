@@ -44,6 +44,7 @@ const defLoan: LoanData = {
 const defPension: Pension = {
   otpBalance: 9, otpEmployerPct: 9, otpEmployeePct: 9, otpGrowthRate: 9,
   ipsBalance: 9, ipsAnnualContribution: 9, ipsGrowthRate: 9, birthYear: 9, retirementAge: 9,
+  folketrygdBeholdning: 9, folketrygdSingle: true, pensionPayoutYears: 9,
 };
 const defHomeowner: HomeownerData = {
   currentMortgageBalance: 9, originalLoanAmount: 9, rente: 9, nedbetalingstid: 9, termingebyr: 9, skattefradragssats: 9,
@@ -78,6 +79,7 @@ const canonicalLoan: LoanData = {
 const canonicalPension: Pension = {
   otpBalance: 100, otpEmployerPct: 6, otpEmployeePct: 1, otpGrowthRate: 4,
   ipsBalance: 200, ipsAnnualContribution: 300, ipsGrowthRate: 6, birthYear: 1988, retirementAge: 68,
+  folketrygdBeholdning: 850000, folketrygdSingle: false, pensionPayoutYears: 12,
 };
 const canonicalHomeowner: HomeownerData = {
   currentMortgageBalance: 2000000, originalLoanAmount: 2600000, rente: 5, nedbetalingstid: 22, termingebyr: 55, skattefradragssats: 23,

@@ -33,6 +33,7 @@ COPY server/auth.js ./
 COPY server/seed.js ./
 COPY server/ssb.js ./
 COPY server/boligPrices.js ./
+COPY server/wageStats.js ./
 COPY server/norgesBank.js ./
 COPY server/postnummer.js ./
 # postnummer.js reads ./data/postnummer.tsv relative to its own dir (/app).

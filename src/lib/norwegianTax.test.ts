@@ -4,6 +4,7 @@ import {
   calcMarginalTaxRate,
   calcTaxByRegion,
   calcWealthTax,
+  calcPensionIncomeTax,
   WEALTH_TAX_PARAMS,
   TAX_PARAMS,
   TAX_YEAR,
@@ -242,5 +243,52 @@ describe('calcWealthTax (formuesskatt)', () => {
     const lo = calcWealthTax({ primaryHomeValue: 0, shares: 0, otherAssets: 5_000_000, debt: 0 });
     const hi = calcWealthTax({ primaryHomeValue: 0, shares: 0, otherAssets: 8_000_000, debt: 0 });
     expect(hi.tax).toBeGreaterThan(lo.tax);
+  });
+});
+
+describe('calcPensionIncomeTax', () => {
+  it('taxes a minimum pension to ~zero (skattefradrag cancels it)', () => {
+    // Single garantipensjon 2026 = 253 787; the pension tax credit fully offsets.
+    const r = calcPensionIncomeTax(253_787, 2026);
+    expect(r.totalTax).toBeCloseTo(0, 0);
+    expect(r.netAnnual).toBeCloseTo(253_787, 0);
+  });
+
+  it('matches the hand-computed tax for a mid-size pension (2026)', () => {
+    const r = calcPensionIncomeTax(400_000, 2026);
+    // minstefradrag 75 400 → alminnelig 324 600 → grunnlag 210 060 → 22% = 46 213.2
+    // trinn: (318 300−226 100)·1.7% + (400 000−318 300)·4.0% = 1 567.4 + 3 268 = 4 835.4
+    // trygde 5.1% = 20 400 ; credit = 37 100 − (400 000−284 950)·16.7% = 17 886.65
+    expect(r.totalTax).toBeCloseTo(46_213.2 + 4_835.4 + 20_400 - 17_886.65, 1);
+  });
+
+  it('phases the credit out entirely at high pensions', () => {
+    // At 700k the two-tier reduction exceeds the 37 100 max, so no credit remains.
+    const r = calcPensionIncomeTax(700_000, 2026);
+    const P = TAX_PARAMS[2026];
+    // Rebuild raw tax without any credit and confirm totalTax equals it.
+    const minstefradrag = Math.min(700_000 * 0.40, 75_400);
+    const grunnlag = Math.max(0, 700_000 - minstefradrag - P.personfradrag);
+    const inntektsskatt = grunnlag * 0.22;
+    let trinn = 0;
+    for (let i = 0; i < P.trinnskatt.length; i++) {
+      const lo = P.trinnskatt[i].from;
+      const hi = i + 1 < P.trinnskatt.length ? P.trinnskatt[i + 1].from : Infinity;
+      if (700_000 > lo) trinn += (Math.min(700_000, hi) - lo) * P.trinnskatt[i].rate;
+    }
+    const trygde = 700_000 * 0.051;
+    expect(r.totalTax).toBeCloseTo(inntektsskatt + trinn + trygde, 0);
+  });
+
+  it('taxes pension more lightly than wage income at the same gross', () => {
+    const pension = calcPensionIncomeTax(600_000, 2026).totalTax;
+    const wage = calcNorwegianTax(600_000, 0, 2026).totalTax;
+    expect(pension).toBeLessThan(wage); // 5.1% trygde vs 7.6%, plus the credit
+  });
+
+  it('is zero at zero gross', () => {
+    const r = calcPensionIncomeTax(0, 2026);
+    expect(r.totalTax).toBe(0);
+    expect(r.netAnnual).toBe(0);
   });
 });

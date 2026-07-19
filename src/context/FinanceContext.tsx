@@ -237,6 +237,9 @@ export interface Pension {
   ipsGrowthRate: number;               // annual return % (default 7%)
   birthYear: number;                   // 0 = unset
   retirementAge: number;               // default 67
+  folketrygdBeholdning: number;        // NAV pensjonsbeholdning today in kr (0 = estimate from age+income)
+  folketrygdSingle: boolean;           // garantipensjon floor: true = enslig (høy sats), false = gift/samboer
+  pensionPayoutYears: number;          // years OTP/IPS are drawn down over (default 10)
 }
 
 export interface LoanData {
@@ -540,6 +543,9 @@ export const DEFAULT_PENSION: Pension = {
   ipsGrowthRate: 7,
   birthYear: 0,
   retirementAge: 67,
+  folketrygdBeholdning: 0,
+  folketrygdSingle: true,
+  pensionPayoutYears: 10,
 };
 
 // Single source of the persisted-field list (§8.10). The object-field defaults
@@ -715,7 +721,7 @@ interface FinanceDataContextType {
   loan: LoanData;
   updateLoan: (key: keyof LoanData, value: number | string) => void;
   pension: Pension;
-  updatePension: (key: keyof Pension, value: number) => void;
+  updatePension: <K extends keyof Pension>(key: K, value: Pension[K]) => void;
   housingMode: HousingMode;
   setHousingMode: (mode: HousingMode) => void;
   homeowner: HomeownerData;
@@ -1287,8 +1293,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     fetch('/api/wage-stats')
       .then(r => r.ok ? r.json() : null)
       .then((data) => {
-        if (data && Array.isArray(data.points)) setWageStats(data.points);
-        else setWageStatsStale(true);
+        if (data && Array.isArray(data.points)) {
+          setWageStats(data.points);
+          setWageStatsStale(Boolean(data.stale));
+        } else setWageStatsStale(true);
       })
       .catch(() => setWageStatsStale(true));
   }, [region]);
@@ -1966,7 +1974,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setLoan(prev => ({ ...prev, [key]: value }));
   }, []);
 
-  const updatePension = useCallback((key: keyof Pension, value: number) => {
+  const updatePension = useCallback(<K extends keyof Pension>(key: K, value: Pension[K]) => {
     setPension(prev => ({ ...prev, [key]: value }));
   }, []);
 

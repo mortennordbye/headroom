@@ -2,14 +2,16 @@ import React, { useMemo, lazy, Suspense } from 'react';
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Briefcase, TrendingUp, Lock, Calculator } from 'lucide-react';
+import { Briefcase, TrendingUp, Lock, Calculator, Landmark } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual, DEFAULT_PENSION, type Pension } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
+import { IPS_MAX_DEDUCTION, calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../lib/norwegianTax';
+import { projectBeholdning, estimateBeholdning, annualFolketrygdPension } from '../lib/folketrygd';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { SummaryTile } from '../components/ui/SummaryTile';
 import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
@@ -22,6 +24,14 @@ import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 
 const PensionHistoryChart = lazy(() => import('../components/charts/PensionHistoryChart'));
+
+// One row of the "pension income at withdrawal" breakdown.
+const LineRow: React.FC<{ label: string; value: string; strong?: boolean; muted?: boolean; accent?: boolean }> = ({ label, value, strong, muted, accent }) => (
+  <div className="flex items-center justify-between">
+    <span style={{ color: muted ? 'var(--text-3)' : 'var(--text-2)', fontWeight: strong ? 600 : 400 }}>{label}</span>
+    <span className="font-mono" style={{ color: accent ? 'var(--positive)' : muted ? 'var(--text-3)' : 'var(--text-1)', fontWeight: strong ? 600 : 400 }}>{value}</span>
+  </div>
+);
 
 const PensionPage: React.FC = () => {
   const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile } = useFinance();
@@ -73,9 +83,36 @@ const PensionPage: React.FC = () => {
   const totalNow = pension.otpBalance + pension.ipsBalance;
   const totalAtRetire = atRetirement?.total ?? totalNow;
 
-  // Approximate monthly pension in drawdown (very rough — uniform 20-year withdrawal).
-  const drawdownYears = 20;
-  const monthlyPensionGross = totalAtRetire / (drawdownYears * 12);
+  // Folketrygd (state pension) — engine in src/lib/folketrygd.ts. Uses the user's
+  // NAV pensjonsbeholdning when entered, else a rough estimate from age + income.
+  const currentBeholdning = pension.folketrygdBeholdning > 0
+    ? pension.folketrygdBeholdning
+    : estimateBeholdning({ birthYear: pension.birthYear, currentYear, annualIncome: pensionableIncome });
+  const beholdningAtRetire = projectBeholdning(currentBeholdning, pensionableIncome, yearsToRetire, TAX_YEAR);
+  const folketrygd = annualFolketrygdPension({
+    beholdning: beholdningAtRetire,
+    birthYear: pension.birthYear,
+    retirementAge: pension.retirementAge,
+    single: pension.folketrygdSingle ?? true,
+    year: TAX_YEAR,
+  });
+
+  // OTP/IPS balances at retirement, annuitized over the payout years; folketrygd
+  // is lifelong (delingstall already encodes that). Net drawdown taxes the whole
+  // stream with the pension-income rules.
+  const payoutYears = Math.max(1, pension.pensionPayoutYears || DEFAULT_PENSION.pensionPayoutYears);
+  const otpAnnualPayout = (atRetirement?.otp ?? pension.otpBalance) / payoutYears;
+  const ipsAnnualPayout = (atRetirement?.ips ?? pension.ipsBalance) / payoutYears;
+  const grossPensionAnnual = folketrygd.annual + otpAnnualPayout + ipsAnnualPayout;
+  const pensionTax = region === 'no'
+    ? calcPensionIncomeTax(grossPensionAnnual, TAX_YEAR)
+    : calcTaxByRegion(grossPensionAnnual, region, customTaxRatePct);
+  const netPensionAnnual = pensionTax.netAnnual;
+  const netPensionMonthly = netPensionAnnual / 12;
+
+  // Replacement ratio vs current net salary.
+  const currentNetAnnual = calcTaxByRegion(pensionableIncome, region, customTaxRatePct, ipsAnnualContribution, 0).netAnnual;
+  const replacementPct = currentNetAnnual > 0 ? (netPensionAnnual / currentNetAnnual) * 100 : 0;
 
   return (
     <>
@@ -118,10 +155,8 @@ const PensionPage: React.FC = () => {
         />
         <SummaryTile
           label={t.pensionPage.estMonthlyPension}
-          value={hasBirthYear ? formatCurrency(monthlyPensionGross) : '—'}
-          sub={hasBirthYear
-            ? `${t.pensionPage.over} ${drawdownYears} ${t.pensionPage.yrUnit} (brutto)`
-            : ''}
+          value={hasBirthYear ? formatCurrency(netPensionMonthly) : '—'}
+          sub={hasBirthYear ? t.pensionPage.netInclState : ''}
           color={hasBirthYear ? 'var(--positive)' : undefined}
         />
       </div>
@@ -167,6 +202,37 @@ const PensionPage: React.FC = () => {
               <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.teal }} />IPS</div>
             </div>
           </>
+        )}
+      </Card>
+
+      {/* Pension income at withdrawal — folketrygd + OTP/IPS, net of drawdown tax */}
+      <Card padding="lg">
+        <div className="flex items-center gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <Landmark size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
+          <SectionLabel>{t.pensionPage.incomeAtRetirement}</SectionLabel>
+        </div>
+        {hasBirthYear ? (
+          <>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-[13px]">
+              <div className="space-y-2">
+                <LineRow label={t.pensionPage.folketrygdLifelong} value={`${formatCurrency(folketrygd.annual)}/${t.pensionPage.yrUnit}`} />
+                <LineRow label={`OTP · ${payoutYears} ${t.pensionPage.yrUnit}`} value={`${formatCurrency(otpAnnualPayout)}/${t.pensionPage.yrUnit}`} />
+                <LineRow label={`IPS · ${payoutYears} ${t.pensionPage.yrUnit}`} value={`${formatCurrency(ipsAnnualPayout)}/${t.pensionPage.yrUnit}`} />
+              </div>
+              <div className="space-y-2 md:border-l md:pl-8" style={{ borderColor: 'var(--border)' }}>
+                <LineRow label={t.pensionPage.grossPerYear} value={formatCurrency(grossPensionAnnual)} strong />
+                <LineRow label={t.pensionPage.taxDrawdown} value={`− ${formatCurrency(pensionTax.totalTax)}`} muted />
+                <LineRow label={t.pensionPage.netPerYear} value={formatCurrency(netPensionAnnual)} strong accent />
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <SummaryTile label={t.pensionPage.netPerMonthLabel} value={formatCurrency(netPensionMonthly)} color="var(--positive)" />
+              <SummaryTile label={t.pensionPage.replacementRatio} value={`${Math.round(replacementPct)} %`} />
+            </div>
+            <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>{t.pensionPage.folketrygdNote}</p>
+          </>
+        ) : (
+          <div className="h-[120px] grid place-items-center text-[13px]" style={{ color: 'var(--text-3)' }}>{t.setBirthYearHint}</div>
         )}
       </Card>
 
@@ -218,6 +284,60 @@ const PensionPage: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      {/* Settings — Folketrygd (state pension) */}
+      <Card padding="lg">
+        <div className="flex items-center gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <Landmark size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
+          <SectionLabel>{t.pensionPage.folketrygdTitle} — {t.pensionPage.stateProvided}</SectionLabel>
+        </div>
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+          <div>
+            <NumberRow
+              label={t.pensionPage.folketrygdBeholdning}
+              value={pension.folketrygdBeholdning}
+              onCommit={(v) => updatePension('folketrygdBeholdning', Math.max(0, v))}
+              suffix="kr"
+            />
+            {hasBirthYear && pension.folketrygdBeholdning === 0 && (
+              <button
+                type="button"
+                onClick={() => updatePension('folketrygdBeholdning', estimateBeholdning({ birthYear: pension.birthYear, currentYear, annualIncome: pensionableIncome }))}
+                className="mt-2 text-[11px] underline underline-offset-2 hover:opacity-80 transition-opacity"
+                style={{ color: 'var(--accent)' }}
+              >
+                {t.pensionPage.useEstimate}: {formatCurrency(currentBeholdning)}
+              </button>
+            )}
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>{t.pensionPage.folketrygdBeholdningHint}</p>
+          </div>
+          <div className="space-y-5">
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-[0.12em] block mb-2" style={{ color: 'var(--text-3)' }}>{t.pensionPage.civilStatus}</label>
+              <SegmentedControl<'single' | 'married'>
+                ariaLabel={t.pensionPage.civilStatus}
+                value={(pension.folketrygdSingle ?? true) ? 'single' : 'married'}
+                onChange={(v) => updatePension('folketrygdSingle', v === 'single')}
+                items={[{ value: 'single', label: t.pensionPage.single }, { value: 'married', label: t.pensionPage.married }]}
+              />
+            </div>
+            <SliderRow
+              label={t.pensionPage.payoutYears}
+              value={pension.pensionPayoutYears}
+              onChange={(v) => updatePension('pensionPayoutYears', v)}
+              min={5}
+              max={30}
+              step={1}
+              suffix={t.pensionPage.yrUnit}
+            />
+          </div>
+        </div>
+        <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
+          {hasBirthYear
+            ? `${t.pensionPage.folketrygdLifelong}: ${formatCurrency(folketrygd.annual)}/${t.pensionPage.yrUnit} · delingstall ${folketrygd.delingstall.toFixed(1)}`
+            : t.pensionPage.payoutYearsHint}
+        </p>
+      </Card>
 
       {/* Retirement target */}
       <Card padding="lg">

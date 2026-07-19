@@ -10,7 +10,8 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
-import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
+import { calcTaxByRegion, calcPensionIncomeTax, IPS_MAX_DEDUCTION, TAX_YEAR } from '../lib/norwegianTax';
+import { projectBeholdning, estimateBeholdning, annualFolketrygdPension } from '../lib/folketrygd';
 import { prepayVsInvest } from '../lib/prepayVsInvest';
 import { netWorthBands } from '../lib/scenarioBands';
 import { projectForecast, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
@@ -51,6 +52,25 @@ const ForecastPage: React.FC = () => {
     const ipsAnnual = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
     const otpAtRetire = pensionFutureValue(pension.otpBalance, otpAnnual, pension.otpGrowthRate, yearsToRetire);
     const ipsAtRetire = pensionFutureValue(pension.ipsBalance, ipsAnnual, pension.ipsGrowthRate, yearsToRetire);
+
+    // Folketrygd (state pension) + net-of-tax drawdown — the honest monthly figure.
+    const currentBeholdning = pension.folketrygdBeholdning > 0
+      ? pension.folketrygdBeholdning
+      : estimateBeholdning({ birthYear: pension.birthYear, currentYear, annualIncome: currentGross });
+    const beholdningAtRetire = projectBeholdning(currentBeholdning, currentGross, yearsToRetire, TAX_YEAR);
+    const ft = annualFolketrygdPension({
+      beholdning: beholdningAtRetire,
+      birthYear: pension.birthYear,
+      retirementAge: pension.retirementAge,
+      single: pension.folketrygdSingle ?? true,
+      year: TAX_YEAR,
+    });
+    const payoutYears = Math.max(1, pension.pensionPayoutYears || 10);
+    const grossPensionAnnual = ft.annual + otpAtRetire / payoutYears + ipsAtRetire / payoutYears;
+    const netPensionAnnual = region === 'no'
+      ? calcPensionIncomeTax(grossPensionAnnual, TAX_YEAR).netAnnual
+      : calcTaxByRegion(grossPensionAnnual, region, customTaxRatePct).netAnnual;
+
     return {
       hasBirthYear,
       yearsToRetire,
@@ -59,8 +79,10 @@ const ForecastPage: React.FC = () => {
       total: otpAtRetire + ipsAtRetire,
       otpAnnual,
       ipsAnnual,
+      folketrygdAnnual: ft.annual,
+      netPensionMonthly: netPensionAnnual / 12,
     };
-  }, [pension, currentGross]);
+  }, [pension, currentGross, region, customTaxRatePct]);
 
   // Seeds from the user's real data — the sliders start from these instead of
   // magic numbers, and follow the data until the user overrides a slider.
@@ -323,7 +345,7 @@ const ForecastPage: React.FC = () => {
             ? `${retirement.yearsToRetire} ${t.yearsToRetirement}`
             : t.setBirthYearHint}
           subThen={retirement.hasBirthYear
-            ? `${formatCurrency(retirement.otpAnnual + retirement.ipsAnnual)}/${t.forecastPage.yearSuffix} ${t.forecastPage.in}`
+            ? `${formatCurrency(retirement.netPensionMonthly)}${t.forecastPage.netPerMonthState}`
             : undefined}
           color="var(--violet)"
         />
