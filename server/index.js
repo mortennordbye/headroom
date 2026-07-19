@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
 const { fetchKvmpris, dwellingToBoligtype } = require('./boligPrices');
+const { fetchWageStats } = require('./wageStats');
 const { lookupPostnr } = require('./postnummer');
 const { fetchPolicyRate } = require('./norgesBank');
 const bank = require('./bank');
@@ -113,6 +114,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS policy_rate_cache (
     period TEXT PRIMARY KEY,
     rate REAL NOT NULL,
+    fetched_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS wage_stats_cache (
+    year INTEGER PRIMARY KEY,
+    median REAL NOT NULL,
     fetched_at TEXT NOT NULL
   );
   -- Rolling per-write history of the finance blob, kept IN the volume (separate
@@ -353,6 +359,16 @@ const policyRateLatest = db.prepare(
   'SELECT MAX(fetched_at) AS latest FROM policy_rate_cache'
 );
 
+const wageStatsGetAll = db.prepare(
+  'SELECT year, median, fetched_at AS fetchedAt FROM wage_stats_cache ORDER BY year ASC'
+);
+const wageStatsUpsert = db.prepare(
+  'INSERT OR REPLACE INTO wage_stats_cache (year, median, fetched_at) VALUES (?, ?, ?)'
+);
+const wageStatsLatest = db.prepare(
+  'SELECT MAX(fetched_at) AS latest FROM wage_stats_cache'
+);
+
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 30 * ONE_DAY_MS;
 // Upstream-attempt throttle: at most one SSB call per hour, regardless of
@@ -371,6 +387,9 @@ let lastSsbAttemptAt = 0;
 const kvmprisAttemptAt = new Map();
 // Independent throttle for the Norges Bank policy-rate endpoint.
 let lastPolicyRateAttemptAt = 0;
+// Independent throttle for the SSB wage-statistics endpoint (single global
+// series, so one shared attempt timer is correct — like policy-rate).
+let lastWageStatsAttemptAt = 0;
 
 function monthCount(fromMonth, toMonth) {
   const [fy, fm] = fromMonth.split('-').map(Number);
@@ -769,20 +788,54 @@ app.get('/api/policyrate', async (req, res) => {
 
 // ── SSB wage statistics ──────────────────────────────────────────
 // National median gross annual wage, full-time employees, all sectors.
-// Curated from SSB publications (table 11418 / 13606). Update yearly.
-// Live-fetch from SSB is on BACKLOG.md (the metadata query requires
-// occupation+sector code calibration that's brittle to do blindly).
+// Live from SSB table 11418 (median månedslønn × 12) via server/wageStats.js,
+// cached with the same TTL/cooldown/serve-stale shape as the other SSB series.
+// The curated series below is only a cold-cache fallback: if the very first
+// fetch fails on an empty cache, we still hand the frontend a plausible series
+// instead of nothing.
 const WAGE_STATS_STATIC = [
-  { year: 2020, median: 565_000 },
-  { year: 2021, median: 593_500 },
-  { year: 2022, median: 612_000 },
-  { year: 2023, median: 657_300 },
-  { year: 2024, median: 698_400 },
-  { year: 2025, median: 730_000 },
+  { year: 2020, median: 547_320 },
+  { year: 2021, median: 570_960 },
+  { year: 2022, median: 594_480 },
+  { year: 2023, median: 630_960 },
+  { year: 2024, median: 664_920 },
+  { year: 2025, median: 695_640 },
 ];
 
-app.get('/api/wage-stats', (_req, res) => {
-  res.json({ points: WAGE_STATS_STATIC, source: 'static-curated' });
+app.get('/api/wage-stats', async (req, res) => {
+  const cached = wageStatsGetAll.all();
+  const latestRow = wageStatsLatest.get();
+  const latestAt = latestRow?.latest ? Date.parse(latestRow.latest) : 0;
+  const ageMs = Date.now() - latestAt;
+  const needsRefresh = cached.length === 0 || ageMs > CACHE_TTL_MS;
+  const force = req.query.force === '1';
+
+  let stale = false;
+  if (needsRefresh && (force || Date.now() - lastWageStatsAttemptAt > SSB_ATTEMPT_COOLDOWN_MS)) {
+    lastWageStatsAttemptAt = Date.now();
+    try {
+      const points = await fetchWageStats();
+      const now = new Date().toISOString();
+      const tx = db.transaction((pts) => {
+        for (const p of pts) wageStatsUpsert.run(p.year, p.median, now);
+      });
+      tx(points);
+    } catch (err) {
+      console.warn(`[wage-stats] SSB fetch failed, serving cache (next attempt in ${Math.round(SSB_ATTEMPT_COOLDOWN_MS / 60000)} min):`, err.message);
+      stale = true;
+    }
+  } else if (needsRefresh) {
+    stale = true;
+  }
+
+  const rows = wageStatsGetAll.all();
+  if (rows.length === 0) {
+    // Cold cache and the fetch failed — hand back the curated fallback so the
+    // salary timeline still has a benchmark line.
+    return res.json({ points: WAGE_STATS_STATIC, source: 'static-fallback', stale: true, count: WAGE_STATS_STATIC.length });
+  }
+  const points = rows.map((r) => ({ year: r.year, median: r.median }));
+  res.json({ points, source: stale ? 'ssb-cache' : 'ssb-live', stale, count: points.length });
 });
 
 // ── Bank sync (Enable Banking) ───────────────────────────────────

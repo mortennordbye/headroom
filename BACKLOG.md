@@ -113,14 +113,6 @@ raise/savings/return/inflation sliders from the user's salary CAGR, `recommended
   still doesn't show a wealth-tax line — only the projections do. **Where**: `src/lib/calculations.ts`,
   `src/lib/forecastProjection.ts`, `src/pages/{ForecastPage,DashboardPage,AssetPage}.tsx`.
 
-## Live SSB wage statistics
-
-`/api/wage-stats` currently returns a curated static series (server/index.js, `WAGE_STATS_STATIC`). Should query SSB table 11418 (or 13606) for live national median annual wage instead.
-
-**What's needed**: the SSB PXweb query for that table requires picking correct `Yrke`, `Sektor`, `Kjønn` dimension codes — these vary by table version and need to be confirmed by inspecting the live metadata at `https://data.ssb.no/api/v0/no/table/11418/`. Once confirmed, add `fetchWageStats(years)` to `server/ssb.js` and call it from the endpoint with a 30-day cache (mirror the `inflation_cache` pattern).
-
-**Where**: `server/ssb.js`, `server/index.js`. The frontend already consumes `/api/wage-stats` and renders a comparison line on the salary timeline.
-
 ## Polish items noticed during the restyle
 
 Shipped (2026-07):
@@ -168,11 +160,28 @@ Done (2026-07): `ipsTaxSaving` now uses `customTaxRatePct` under the generic reg
 
 ## Pension — phase 2
 
-OTP + IPS tracking is shipped (balance, contribution, growth, retirement-readiness tile on Forecast). Remaining pension topics:
+OTP + IPS tracking is shipped (balance, contribution, growth, retirement-readiness tile on Forecast).
 
-- **Folketrygd / NAV state pension** — separate income stream at retirement based on lifetime income, G-multiple, and årskull. Adds a baseline monthly pension on top of OTP/IPS. Needs a simplified inntektsgrunnlag model. **Where**: `src/lib/norwegianTax.ts` (new `calcFolketrygd`), `src/pages/ForecastPage.tsx`.
-- **Withdrawal-phase taxation** — currently pension is shown as gross balance. Modeling drawdown tax (IPS as alminnelig 22%, OTP as ordinary wage-equivalent tax bracket) gives an honest "monthly pension net" number. **Where**: `src/lib/norwegianTax.ts`.
-- **AFP (Avtalefestet pensjon)** — eligibility-based (LO/NHO members, tenure ≥ 7 years etc.), can boost pension significantly. Defer until folketrygd lands.
+Shipped (2026-07): **Folketrygd (NAV state pension) + net drawdown taxation.** Pure engine
+`src/lib/folketrygd.ts` (unit-tested): 18.1% accrual up to 7.1G into a notional pensjonsbeholdning
+(projected in today's kroner — G-regulated, not market-funded), converted at retirement by the
+cohort delingstall (NAV 1954–2000 age-67 table, interpolated + per-age adjustment), with a
+garantipensjon floor (80% avkorting, single/married rate). Year-keyed `FOLKETRYGD_PARAMS` (G +
+garantipensjon for 2025/2026). Withdrawal taxation via `calcPensionIncomeTax` (`src/lib/norwegianTax.ts`,
+`PENSION_TAX_PARAMS` 2025/2026): pension minstefradrag 40%, 5.1% trygde, 22% + trinnskatt, and the
+skattefradrag for pensjonsinntekt (two-tier phase-out). New `Pension` fields `folketrygdBeholdning`
+(NAV figure, 0 = estimate from age+income), `folketrygdSingle`, `pensionPayoutYears` (auto-persist via
+`mergedWith`). PensionPage gained a "Pensjonsinntekt ved uttak" breakdown (folketrygd + OTP/IPS
+annuitized → gross → tax → net/mo + replacement ratio) and a Folketrygd input card; the Forecast
+retirement tile now shows net monthly pension incl. folketrygd. **Disclosed simplifications** (in-UI,
+not TODOs): today's-kroner projection with income held flat; delingstall linear age-adjust; garanti at
+full trygdetid (no cohort levealdersjustering); OTP/IPS annuitized linearly over payout years; new-IPS's
+trinn/trygde exemption folded into the pension-income model (conservative). **Where**: `src/lib/folketrygd.ts`,
+`src/lib/norwegianTax.ts`, `src/pages/{PensionPage,ForecastPage}.tsx`.
+
+Remaining pension topics:
+
+- **AFP (Avtalefestet pensjon)** — eligibility-based (LO/NHO members, tenure ≥ 7 years etc.), can boost pension significantly. Now unblocked: folketrygd + the pension-income tax engine (`calcPensionIncomeTax`) it can reuse have landed.
 - **Foreign pension / IRA / 401k** — multi-currency pension buckets for users who worked abroad.
 - **Pension contribution from variable comp** — `otpAnnual` calc currently uses `currentGross + currentOnCall` only. Real OTP base may include bonuses and is capped at 12G (~1.4M). Refine if it becomes inaccurate for high earners.
 

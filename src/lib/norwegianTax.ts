@@ -206,6 +206,106 @@ export function calcNorwegianTax(
   };
 }
 
+// ─────────────────────────── Pension-income tax (drawdown) ───────────────────
+//
+// Pension income (folketrygd alderspensjon, OTP and IPS payouts) is taxed
+// differently from wages: a lower trygdeavgift (5.1%), its own minstefradrag
+// rate/cap, and a "skattefradrag for pensjonsinntekt" that fully offsets tax on a
+// minimum pension and phases out at higher pensions — so a minstepensjonist pays
+// no tax. Alminnelig-inntekt rate (22%), personfradrag and the trinnskatt
+// brackets are shared with the wage model (TAX_PARAMS).
+//
+// Simplification: we treat all three streams as ordinary pension income. New IPS
+// (post-2017) is in fact taxed only as alminnelig inntekt (no trinnskatt/trygde);
+// folding it in here slightly over-states its tax, which under-states net pension
+// — the conservative direction — and keeps one coherent drawdown-tax function.
+
+export interface PensionTaxParams {
+  minstefradragRate: number;
+  minstefradragMax: number;
+  trygdeavgiftRate: number;
+  skattefradragMax: number;
+  skattefradragT1From: number;  // reduction starts here
+  skattefradragT1Rate: number;
+  skattefradragT2From: number;  // steeper reduction from here
+  skattefradragT2Rate: number;
+}
+
+export const PENSION_TAX_PARAMS: Record<number, PensionTaxParams> = {
+  2025: {
+    minstefradragRate: 0.40,
+    minstefradragMax: 73_150,
+    trygdeavgiftRate: 0.051,
+    skattefradragMax: 36_000,
+    skattefradragT1From: 276_400,
+    skattefradragT1Rate: 0.167,
+    skattefradragT2From: 422_950,
+    skattefradragT2Rate: 0.060,
+  },
+  2026: {
+    minstefradragRate: 0.40,
+    minstefradragMax: 75_400,
+    trygdeavgiftRate: 0.051,
+    skattefradragMax: 37_100,
+    skattefradragT1From: 284_950,
+    skattefradragT1Rate: 0.167,
+    skattefradragT2From: 436_050,
+    skattefradragT2Rate: 0.060,
+  },
+};
+
+/** Skattefradrag for pensjonsinntekt: max, reduced in two tiers, floored at 0. */
+function pensionTaxCredit(gross: number, PP: PensionTaxParams): number {
+  let reduction = 0;
+  if (gross > PP.skattefradragT1From) {
+    reduction += (Math.min(gross, PP.skattefradragT2From) - PP.skattefradragT1From) * PP.skattefradragT1Rate;
+  }
+  if (gross > PP.skattefradragT2From) {
+    reduction += (gross - PP.skattefradragT2From) * PP.skattefradragT2Rate;
+  }
+  return Math.max(0, PP.skattefradragMax - reduction);
+}
+
+/**
+ * Tax on gross annual pension income in drawdown. Norwegian model only (in
+ * generic mode the caller should apply its flat rate). Returns the same shape as
+ * calcNorwegianTax so tiles/memos stay uniform.
+ */
+export function calcPensionIncomeTax(
+  grossPensionAnnual: number,
+  year: number = TAX_YEAR,
+): NorwegianTaxBreakdown {
+  const P = TAX_PARAMS[year] ?? PARAMS;
+  const PP = PENSION_TAX_PARAMS[year] ?? PENSION_TAX_PARAMS[TAX_YEAR] ?? PENSION_TAX_PARAMS[2026];
+  const gross = Math.max(0, grossPensionAnnual);
+
+  const minstefradrag = Math.min(gross * PP.minstefradragRate, PP.minstefradragMax);
+  const alminneligInntekt = Math.max(0, gross - minstefradrag);
+  const skattegrunnlag = Math.max(0, alminneligInntekt - P.personfradrag);
+  const inntektsskatt = skattegrunnlag * P.skattAlminneligRate;
+
+  // Pension is personinntekt, so the trinnskatt brackets apply.
+  const trinn = trinnskatt(gross, P.trinnskatt);
+  const trygde = gross * PP.trygdeavgiftRate;
+
+  const rawTax = inntektsskatt + trinn + trygde;
+  // The credit is non-refundable — it can only cancel tax already owed.
+  const credit = Math.min(pensionTaxCredit(gross, PP), rawTax);
+  const totalTax = Math.max(0, rawTax - credit);
+
+  const netAnnual = gross - totalTax;
+  return {
+    gross,
+    inntektsskatt,
+    trinnskatt: trinn,
+    trygdeavgift: trygde,
+    totalTax,
+    netAnnual,
+    netMonthly: netAnnual / 12,
+    effectiveRatePct: gross > 0 ? (totalTax / gross) * 100 : 0,
+  };
+}
+
 // ─────────────────────────── Formuesskatt (wealth tax) ───────────────────────
 //
 // Approximate Norwegian net-wealth tax. Net wealth = valued assets − debt; tax

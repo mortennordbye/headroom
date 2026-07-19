@@ -82,6 +82,9 @@ export function getDemoData(): Partial<ExportPayload> {
     ipsGrowthRate: 7,
     birthYear: 1990,
     retirementAge: 67,
+    folketrygdBeholdning: 950000,
+    folketrygdSingle: true,
+    pensionPayoutYears: 10,
   };
   const demoDebts: Debt[] = [
     { id: 'demo-debt-1', name: 'Studielån (Lånekassen)', type: 'student', balance: 284000, rate: 4.9, minPayment: 3200 },
