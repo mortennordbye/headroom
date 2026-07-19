@@ -7,6 +7,7 @@ import { useFinance, calcActiveGrossAnnual, DEFAULT_PENSION, type Pension } from
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { IPS_MAX_DEDUCTION, calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../lib/norwegianTax';
 import { projectBeholdning, estimateBeholdning, annualFolketrygdPension } from '../lib/folketrygd';
+import { estimateAfpGrunnlag, annualAfp } from '../lib/afp';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
@@ -103,7 +104,15 @@ const PensionPage: React.FC = () => {
   const payoutYears = Math.max(1, pension.pensionPayoutYears || DEFAULT_PENSION.pensionPayoutYears);
   const otpAnnualPayout = (atRetirement?.otp ?? pension.otpBalance) / payoutYears;
   const ipsAnnualPayout = (atRetirement?.ips ?? pension.ipsBalance) / payoutYears;
-  const grossPensionAnnual = folketrygd.annual + otpAnnualPayout + ipsAnnualPayout;
+  // AFP (ny privat) — lifelong, only when the user certifies eligibility.
+  const afpAnnual = pension.afpEligible
+    ? annualAfp({
+        grunnlag: estimateAfpGrunnlag({ birthYear: pension.birthYear, annualIncome: pensionableIncome, year: TAX_YEAR }),
+        birthYear: pension.birthYear,
+        retirementAge: pension.retirementAge,
+      })
+    : 0;
+  const grossPensionAnnual = folketrygd.annual + afpAnnual + otpAnnualPayout + ipsAnnualPayout;
   const pensionTax = region === 'no'
     ? calcPensionIncomeTax(grossPensionAnnual, TAX_YEAR)
     : calcTaxByRegion(grossPensionAnnual, region, customTaxRatePct);
@@ -216,6 +225,9 @@ const PensionPage: React.FC = () => {
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-[13px]">
               <div className="space-y-2">
                 <LineRow label={t.pensionPage.folketrygdLifelong} value={`${formatCurrency(folketrygd.annual)}/${t.pensionPage.yrUnit}`} />
+                {pension.afpEligible && (
+                  <LineRow label={t.pensionPage.afpLifelong} value={`${formatCurrency(afpAnnual)}/${t.pensionPage.yrUnit}`} />
+                )}
                 <LineRow label={`OTP · ${payoutYears} ${t.pensionPage.yrUnit}`} value={`${formatCurrency(otpAnnualPayout)}/${t.pensionPage.yrUnit}`} />
                 <LineRow label={`IPS · ${payoutYears} ${t.pensionPage.yrUnit}`} value={`${formatCurrency(ipsAnnualPayout)}/${t.pensionPage.yrUnit}`} />
               </div>
@@ -330,6 +342,16 @@ const PensionPage: React.FC = () => {
               step={1}
               suffix={t.pensionPage.yrUnit}
             />
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-[0.12em] block mb-2" style={{ color: 'var(--text-3)' }}>{t.pensionPage.afpEligibleLabel}</label>
+              <SegmentedControl<'yes' | 'no'>
+                ariaLabel={t.pensionPage.afpEligibleLabel}
+                value={pension.afpEligible ? 'yes' : 'no'}
+                onChange={(v) => updatePension('afpEligible', v === 'yes')}
+                items={[{ value: 'yes', label: t.pensionPage.afpYes }, { value: 'no', label: t.pensionPage.afpNo }]}
+              />
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>{t.pensionPage.afpHint}</p>
+            </div>
           </div>
         </div>
         <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>

@@ -12,6 +12,7 @@ import { SectionLabel } from '../components/ui/SectionLabel';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcPensionIncomeTax, IPS_MAX_DEDUCTION, TAX_YEAR } from '../lib/norwegianTax';
 import { projectBeholdning, estimateBeholdning, annualFolketrygdPension } from '../lib/folketrygd';
+import { estimateAfpGrunnlag, annualAfp } from '../lib/afp';
 import { prepayVsInvest } from '../lib/prepayVsInvest';
 import { netWorthBands } from '../lib/scenarioBands';
 import { projectForecast, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
@@ -66,7 +67,14 @@ const ForecastPage: React.FC = () => {
       year: TAX_YEAR,
     });
     const payoutYears = Math.max(1, pension.pensionPayoutYears || 10);
-    const grossPensionAnnual = ft.annual + otpAtRetire / payoutYears + ipsAtRetire / payoutYears;
+    const afpAnnual = pension.afpEligible
+      ? annualAfp({
+          grunnlag: estimateAfpGrunnlag({ birthYear: pension.birthYear, annualIncome: currentGross, year: TAX_YEAR }),
+          birthYear: pension.birthYear,
+          retirementAge: pension.retirementAge,
+        })
+      : 0;
+    const grossPensionAnnual = ft.annual + afpAnnual + otpAtRetire / payoutYears + ipsAtRetire / payoutYears;
     const netPensionAnnual = region === 'no'
       ? calcPensionIncomeTax(grossPensionAnnual, TAX_YEAR).netAnnual
       : calcTaxByRegion(grossPensionAnnual, region, customTaxRatePct).netAnnual;

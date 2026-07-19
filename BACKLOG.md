@@ -70,12 +70,11 @@ The current home's value/mortgage are now hard-mirrored across `assets` ↔ `hom
 assets↔homeowner, only in homeowner mode). Code: `src/pages/BoligPage.tsx`,
 `src/context/FinanceContext.tsx`. Remaining:
 
-- **`skattefradragssats` (interest tax-deduction %) is still duplicated** — an editable copy
-  lives in both `loan` and `homeowner` (both default 22%), but it's a policy constant, not a
-  per-loan choice. Promote to one shared source (a Settings value or a `TAX_PARAMS` constant)
-  so the two can't diverge. Deferred because it's a persisted-shape change (touches
-  `LoanData`/`HomeownerData`, defaults, sanitize, export/import, demo). **Where**:
-  `src/context/FinanceContext.tsx` (`DEFAULT_LOAN`/`DEFAULT_HOMEOWNER`), `src/pages/BoligPage.tsx`.
+- **`skattefradragssats` dedup — DONE (2026-07).** The interest-deduction % was an editable copy
+  on both `loan` and `homeowner`; it's now a single shared constant `RENTEFRADRAG_RATE_PCT`
+  (`src/lib/norwegianTax.ts`, = the alminnelig-inntekt rate), and the two Bolig-page rows are
+  display-only. The field was removed from `LoanData`/`HomeownerData` + defaults + demo + resets;
+  old persisted blobs keep the stale key harmlessly (mergedWith ignores it).
 - **Loan-input overrides don't persist across reloads** — matches EmployerCost, and is fine
   for a what-if calculator, but if we later want a "sticky" manual salary/debt on the Loan
   page it needs a persisted `number | null` override model (or a `touched` set) rather than
@@ -94,10 +93,13 @@ raise/savings/return/inflation sliders from the user's salary CAGR, `recommended
   per-month manual override that never re-syncs when salary/tax/IPS change
   (`src/context/FinanceContext.tsx` `effectiveIncome`/`derivedNetMonthlyFor`). Partly
   deliberate; wants a "stale override" indicator or re-sync affordance rather than silent drift.
-- **BSU tax credit not modeled.** `assets.bsu` is a balance only (no annual-contribution field);
-  the 20% BSU income-tax credit isn't in `calcNorwegianTax`. Needs a new contribution input +
-  a capped credit term in the tax engine. **Where**: `src/lib/norwegianTax.ts`,
-  `src/pages/AssetPage.tsx`.
+- **BSU tax credit — DONE (2026-07).** New `assets.bsuAnnualContribution` field drives the BSU
+  income-tax credit (`calcBsuTaxCredit` in `src/lib/bsu.ts`, **10%** capped at 2 750 kr, gated on
+  age ≤ 33 and non-homeowner — the rate is 10%, not the old 20%). Applied as a non-refundable
+  fradrag i skatt via an optional `bsuTaxCredit` param on `calcNorwegianTax`/`calcTaxByRegion`,
+  threaded into the budget net-income derivation; shown on the Assets page with an eligibility
+  hint. **Where**: `src/lib/bsu.ts`, `src/lib/norwegianTax.ts`, `src/pages/AssetPage.tsx`,
+  `src/context/FinanceContext.tsx`.
 - **Wealth tax (formuesskatt) in projections — DONE (2026-07).** `calcWealthTax`
   (`src/lib/norwegianTax.ts`, valuation discounts + bunnfradrag + brackets) is now folded into the
   forward projections as a recurring annual drag, region-guarded to `'no'` and a no-op below the
@@ -181,7 +183,14 @@ trinn/trygde exemption folded into the pension-income model (conservative). **Wh
 
 Remaining pension topics:
 
-- **AFP (Avtalefestet pensjon)** — eligibility-based (LO/NHO members, tenure ≥ 7 years etc.), can boost pension significantly. Now unblocked: folketrygd + the pension-income tax engine (`calcPensionIncomeTax`) it can reuse have landed.
+Shipped (2026-07): **AFP (ny privat, født 1963+).** Tested engine `src/lib/afp.ts` (0.314% of
+pensjonsgrunnlag up to 7.1G over a career to 61, levealdersjustert via the folketrygd delingstall).
+A self-certified `pension.afpEligible` toggle gates it; when on, AFP is a lifelong line in the
+PensionPage income-at-withdrawal breakdown and is folded into the net-of-tax figure on both the
+Pension and Forecast pages (taxed as pension income via `calcPensionIncomeTax`). Disclosed
+simplifications: pensjonsgrunnlag estimated from today's income held flat; levealdersjustering
+reuses folketrygd delingstall rather than NAV's separate AFP forholdstall; no kompensasjonstillegg
+(that's for pre-1963 cohorts). **Where**: `src/lib/afp.ts`, `src/pages/{PensionPage,ForecastPage}.tsx`.
 - **Foreign pension / IRA / 401k** — multi-currency pension buckets for users who worked abroad.
 - **Pension contribution from variable comp** — `otpAnnual` calc currently uses `currentGross + currentOnCall` only. Real OTP base may include bonuses and is capped at 12G (~1.4M). Refine if it becomes inaccurate for high earners.
 

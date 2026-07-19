@@ -50,6 +50,7 @@ import {
   calcBorrowingCapacity,
 } from '../lib/calculations';
 import { parseLocaleNumber } from '../lib/validators';
+import { RENTEFRADRAG_RATE_PCT } from '../lib/norwegianTax';
 import { extraPaymentSavings, formatMonths } from '../lib/debt';
 import { loanTimeline, currentResidence, residenceMetrics } from '../lib/property';
 import { PropertyCard, ResidenceTimeline } from '../components/ResidenceHistory';
@@ -244,7 +245,7 @@ const BoligPage: React.FC = () => {
     const yearOneInterest = amortizationSchedule[0]?.interestPaid ?? 0;
     const totalInterest = amortizationSchedule.reduce((s, y) => s + y.interestPaid, 0);
     const totalCost = loan.laanebelop + totalInterest + loan.etableringsgebyr + loan.termingebyr * n;
-    const taxDeduction = yearOneInterest * (loan.skattefradragssats / 100);
+    const taxDeduction = yearOneInterest * (RENTEFRADRAG_RATE_PCT / 100);
     // Real Norwegian lending limits: the affordable price is the lower of the
     // 5× income cap and the 15%-equity (85% LTV) cap, plus a +3pp stress test.
     const capacity = calcBorrowingCapacity(
@@ -261,7 +262,7 @@ const BoligPage: React.FC = () => {
       homeowner.originalLoanAmount,
       homeowner.rente,
       homeowner.nedbetalingstid,
-      homeowner.skattefradragssats,
+      RENTEFRADRAG_RATE_PCT,
     ),
     [homeowner]
   );
@@ -457,8 +458,7 @@ const BoligPage: React.FC = () => {
                 <LoanRow label={lp.yearOneInterest} notes={lp.yearOneInterestNote}
                   value={fmtNum(calc.yearOneInterest)} />
                 <LoanRow label={lp.deductionRate} notes={lp.deductionRateNote}
-                  value={fmtPct(loan.skattefradragssats)}
-                  onEdit={() => editNum(lp.deductionRateEditTitle, 'skattefradragssats', loan.skattefradragssats)} />
+                  value={fmtPct(RENTEFRADRAG_RATE_PCT)} />
                 <LoanRow label={lp.annualRelief} notes={lp.annualReliefNote}
                   value={fmtNum(calc.taxDeduction)} highlight highlightColor="green" />
               </div>
@@ -625,8 +625,7 @@ const BoligPage: React.FC = () => {
                 <LoanRow label={lp.monthlyInterestLabel}
                   value={fmtNum(homeownerStatus.monthlyInterest)} />
                 <LoanRow label={lp.deductionRate}
-                  value={fmtPct(homeowner.skattefradragssats)}
-                  onEdit={() => editHomeowner(lp.deductionRateEditTitle, 'skattefradragssats', homeowner.skattefradragssats)} />
+                  value={fmtPct(RENTEFRADRAG_RATE_PCT)} />
                 <LoanRow label={t.annualTaxBenefit}
                   value={fmtNum(homeownerStatus.annualTaxDeduction)}
                   highlight highlightColor="green" />

@@ -12,6 +12,7 @@ import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculatio
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
+import { calcBsuTaxCredit } from '../lib/bsu';
 import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
 import { getDemoData } from '../lib/demoData';
@@ -212,6 +213,7 @@ export interface Assets {
   unrealizedGain: number;
   taxRate: number;
   bsu: number;
+  bsuAnnualContribution: number;       // planned BSU deposit this year (drives the 10% tax credit)
   /**
    * Legacy single savings, superseded by savingsAccounts. Import-time input
    * only: applyPayload absorbs it into savingsAccounts and writes 0, so live
@@ -240,6 +242,7 @@ export interface Pension {
   folketrygdBeholdning: number;        // NAV pensjonsbeholdning today in kr (0 = estimate from age+income)
   folketrygdSingle: boolean;           // garantipensjon floor: true = enslig (høy sats), false = gift/samboer
   pensionPayoutYears: number;          // years OTP/IPS are drawn down over (default 10)
+  afpEligible: boolean;                // qualifies for ny privat AFP (self-certified)
 }
 
 export interface LoanData {
@@ -251,7 +254,6 @@ export interface LoanData {
   nedbetalingstid: number;
   termingebyr: number;
   etableringsgebyr: number;
-  skattefradragssats: number;
   betingetLaan: number;
   kjoepesum: number;
   gyldigTil: string;
@@ -268,7 +270,6 @@ export interface HomeownerData {
   rente: number;
   nedbetalingstid: number;
   termingebyr: number;
-  skattefradragssats: number;
   /** Bank account name for the loan, e.g. "Boliglån ung" (free text). */
   accountLabel?: string;
   /** Loan origination month 'YYYY-MM' — anchors payoff date and elapsed/remaining. */
@@ -485,6 +486,7 @@ const DEFAULT_ASSETS: Assets = {
   unrealizedGain: 0,
   taxRate: DEFAULT_TAX_RATES.stockTaxRate,
   bsu: 0,
+  bsuAnnualContribution: 0,
   // Retired scalar: kept at 0 here because DEFAULT_ASSETS doubles as the
   // sanitizePayload schema (number-typed keys mark what gets coerced), so an
   // imported blob with a string "savings" is still coerced before migration.
@@ -504,7 +506,6 @@ const DEFAULT_HOMEOWNER: HomeownerData = {
   rente: 5.5,
   nedbetalingstid: 25,
   termingebyr: 50,
-  skattefradragssats: 22,
 };
 
 const DEFAULT_TRANSITION: TransitionData = {
@@ -526,7 +527,6 @@ const DEFAULT_LOAN: LoanData = {
   nedbetalingstid: 25,
   termingebyr: 50,
   etableringsgebyr: 0,
-  skattefradragssats: 22,
   betingetLaan: 2500000,
   kjoepesum: 3500000,
   gyldigTil: '1. jan 2027',
@@ -546,6 +546,7 @@ export const DEFAULT_PENSION: Pension = {
   folketrygdBeholdning: 0,
   folketrygdSingle: true,
   pensionPayoutYears: 10,
+  afpEligible: false,
 };
 
 // Single source of the persisted-field list (§8.10). The object-field defaults
@@ -1638,7 +1639,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (salaries.length === 0) return income;
     const totalAnnual = calcActiveGrossAnnual(salaries, jobs, mKey);
     if (totalAnnual === 0) return income;
-    const baseNetAnnual = calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
+    // BSU tax credit (10%, under-34, non-homeowner) reduces the year's tax.
+    const bsuCredit = calcBsuTaxCredit(assets.bsuAnnualContribution, {
+      age: pension.birthYear > 1900 ? new Date().getFullYear() - pension.birthYear : -1,
+      ownsHome: housingMode !== 'first_buyer',
+    });
+    const baseNetAnnual = calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     // Bonus/overtime entries opted into the budget: fold this month's opted-in
     // gross into the annual gross (so it's taxed at the marginal rate) and deliver
     // the after-tax value in the month it lands, not smeared across the year.
@@ -1646,9 +1652,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       bonuses.reduce((s, b) => (b.includeInBudget && b.date.startsWith(mKey) ? s + b.amount : s), 0) +
       overtime.reduce((s, o) => (o.includeInBudget && o.date.startsWith(mKey) ? s + o.amount : s), 0);
     if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
-    const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
+    const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));
-  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest]);
+  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, assets.bsuAnnualContribution, pension.birthYear, housingMode]);
 
   const derivedMonthlyIncome = useMemo(
     () => derivedNetMonthlyFor(monthKey),
@@ -2373,12 +2379,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setLoan({
       arslonn: 0, eksisterendeGjeld: 0, egenkapital: 0,
       laanebelop: 0, rente: 0, nedbetalingstid: 0, termingebyr: 0,
-      etableringsgebyr: 0, skattefradragssats: 0,
+      etableringsgebyr: 0,
       betingetLaan: 0, kjoepesum: 0, gyldigTil: '',
     });
     setHomeowner({
       currentMortgageBalance: 0, originalLoanAmount: 0,
-      rente: 0, nedbetalingstid: 0, termingebyr: 0, skattefradragssats: 0,
+      rente: 0, nedbetalingstid: 0, termingebyr: 0,
     });
     setTransition({
       currentHouseValue: 0, currentMortgageBalance: 0,
