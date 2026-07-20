@@ -195,7 +195,12 @@ describe('runningEnvelopeBalance', () => {
     expect(pts.map((p) => Math.round(p.balance))).toEqual([700, 1500, 2500]);
   });
 
-  it('adds income to the balance and never draws it from an envelope', () => {
+  // Behaviour change (deliberate): income used to be ADDED to the balance. That was
+  // harmless while the app was manual-only — no income rows existed — but once bank
+  // sync began importing the actual paycheck it double-counted, because dailyBudget
+  // already derives from that same income. Income is still reported per day for
+  // display; it just no longer moves the balance.
+  it('reports income per day but never adds it to the balance', () => {
     const expenses = [fe({ name: 'Mat', amount: 6000, category: 'groceries' })];
     const txs = [
       tx({ date: '2026-07-01', amount: 5000, category: 'groceries', kind: 'income' }),
@@ -204,7 +209,19 @@ describe('runningEnvelopeBalance', () => {
     const pts = runningEnvelopeBalance(days, txs, 0, recon(expenses, txs));
     expect(pts.map((p) => p.income)).toEqual([5000, 0, 0]);
     expect(pts.map((p) => p.discretionary)).toEqual([0, 0, 0]); // grocery spend covered
-    expect(pts.map((p) => Math.round(p.balance))).toEqual([5000, 5000, 5000]);
+    expect(pts.map((p) => Math.round(p.balance))).toEqual([0, 0, 0]);
+  });
+
+  it('never draws income from an envelope', () => {
+    const expenses = [fe({ name: 'Mat', amount: 200, category: 'groceries' })];
+    const txs = [
+      tx({ date: '2026-07-01', amount: 5000, category: 'groceries', kind: 'income' }),
+      tx({ date: '2026-07-02', amount: 300, category: 'groceries' }),
+    ];
+    const pts = runningEnvelopeBalance(days, txs, 0, recon(expenses, txs));
+    // The 5000 income row must not consume the 200 envelope: the 300 expense sees a
+    // full envelope, so only 100 spills over.
+    expect(pts.map((p) => p.discretionary)).toEqual([0, 100, 0]);
   });
 });
 

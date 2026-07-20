@@ -9,6 +9,7 @@
 // Pure and unit-tested. Every consumer (daily running balance, dashboard, charts,
 // the envelope UI) reads from here so the numbers stay consistent everywhere.
 import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
+import { isSpend } from './spend';
 import { isCategoryKey, type CategoryKey } from './categories';
 import { spendByCategory } from './categoryStats';
 import { buildMatchHaystack } from './text';
@@ -64,7 +65,7 @@ function statusFor(budgeted: number, actual: number): EnvelopeStatus {
  * never draws an envelope.
  */
 export function envelopeKeyForTx(tx: DailyTransaction, rec: Pick<Reconciliation, 'matchers' | 'envelopedCategories'>): string | undefined {
-  if (tx.kind === 'income') return undefined;
+  if (!isSpend(tx)) return undefined;
   if (rec.matchers.length) {
     const hay = buildMatchHaystack(tx.merchant, tx.description);
     for (const m of rec.matchers) if (m.match && hay.includes(m.match)) return m.key;
@@ -122,7 +123,7 @@ export function reconcile(
   const rec = { matchers, envelopedCategories };
   const actualByKey = new Map<string, number>();
   for (const tx of transactions) {
-    if (tx.kind === 'income' || !tx.date.startsWith(monthKey)) continue;
+    if (!isSpend(tx) || !tx.date.startsWith(monthKey)) continue;
     const key = envelopeKeyForTx(tx, rec);
     if (key) actualByKey.set(key, (actualByKey.get(key) ?? 0) + tx.amount);
   }
@@ -252,7 +253,7 @@ export function createEnvelopeLedger(reconciliation: Reconciliation) {
   const used = new Map<string, number>();
   return {
     draw(tx: DailyTransaction): EnvelopeDraw {
-      if (tx.kind === 'income') return { covered: 0, spillover: 0 };
+      if (!isSpend(tx)) return { covered: 0, spillover: 0 };
       const key = envelopeKeyForTx(tx, reconciliation);
       if (!key || !reconciliation.budgetByKey.has(key)) {
         return { covered: 0, spillover: tx.amount };
@@ -282,7 +283,7 @@ export function discretionarySpendForMonth(
   const ledger = createEnvelopeLedger(reconcile(fixedExpenses, transactions, monthKey));
   let total = 0;
   for (const t of transactions) {
-    if (t.kind === 'income' || !t.date.startsWith(monthKey)) continue;
+    if (!isSpend(t) || !t.date.startsWith(monthKey)) continue;
     total += ledger.draw(t).spillover;
   }
   return total;
@@ -324,14 +325,21 @@ export function runningEnvelopeBalance(
     let discretionary = 0;
     let income = 0;
     for (const t of byDay.get(date) ?? []) {
-      if (t.kind === 'income') {
-        income += t.amount;
+      if (!isSpend(t)) {
+        // Real income still reported per day for display; an ambiguous row
+        // (kind:'expense' but categorised income) is simply skipped.
+        if (t.kind === 'income') income += t.amount;
         continue;
       }
       spent += t.amount;
       discretionary += ledger.draw(t).spillover;
     }
-    balance += dailyBudget - discretionary + income;
+    // Income is NOT added. `dailyBudget` already derives from the month's income
+    // (recommendedSpending = (income − fixed) × (1 − investRatio)), so adding the
+    // salary row on top counted the same money twice — invisible while the app was
+    // manual-only (no income rows existed), a large distortion once bank sync began
+    // importing the actual paycheck. `income` stays on the point for display.
+    balance += dailyBudget - discretionary;
     result.push({ date, spent, discretionary, income, balance });
   }
   return result;

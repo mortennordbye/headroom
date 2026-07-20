@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Receipt, Layers, HandCoins } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import { calcEmployerCost, calcBillingRate, DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from '../lib/employerCost';
@@ -20,6 +20,7 @@ const EmployerCostPage: React.FC = () => {
     employerCostConfig, updateEmployerCostConfig,
     billingConfig, updateBillingConfig,
     restoreEmployerCostDefaults,
+    employerSalaryOverride: salaryOverride, setEmployerSalaryOverride: setSalaryOverride,
   } = useFinance();
   const ec = t.employerCost;
   const isNo = region === 'no';
@@ -32,7 +33,6 @@ const EmployerCostPage: React.FC = () => {
     () => calcActiveGrossAnnual(salaries, jobs, today),
     [salaries, jobs, today],
   );
-  const [salaryOverride, setSalaryOverride] = useState<number | null>(null);
   const gross = salaryOverride ?? derivedGross;
   const isAuto = salaryOverride === null;
 

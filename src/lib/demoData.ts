@@ -154,6 +154,9 @@ export function getDemoData(): Partial<ExportPayload> {
   return {
     income: 62000,
     profile: { name: 'Alex Doe', birthDate: '1990-05-01' },
+    // Demo shows the auto-derived figures, so no manual override is set.
+    capacityOverrides: { arslonn: null, gjeld: null, egenkapital: null },
+    employerSalaryOverride: null,
     aiContext:
       'Long-term: want to go independent and start my own consultancy in ~3 years, so keeping a bigger cash buffer than usual. Hoping to buy a rental flat once the mortgage is under 60% LTV.',
     monthlyIncomes: {},

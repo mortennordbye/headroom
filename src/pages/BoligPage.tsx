@@ -50,6 +50,7 @@ import {
   calcBorrowingCapacity,
 } from '../lib/calculations';
 import { parseLocaleNumber } from '../lib/validators';
+import type { CapacityOverrides } from '../lib/capacityOverrides';
 import { RENTEFRADRAG_RATE_PCT } from '../lib/norwegianTax';
 import { extraPaymentSavings, formatMonths } from '../lib/debt';
 import { loanTimeline, currentResidence, residenceMetrics } from '../lib/property';
@@ -83,6 +84,7 @@ const BoligPage: React.FC = () => {
     grossAnnualIncome, capacityDebt,
     formatCurrency,
     policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
+    capacityOverrides, setCapacityOverride,
   } = useFinance();
   // Hub tab: the mortgage tools ('boliglaan') vs. the second-home planner
   // ('sekundaerbolig'). View state only — not persisted.
@@ -114,9 +116,7 @@ const BoligPage: React.FC = () => {
     () => Math.round(assets.bsu + sumSavings(assets) + assets.bufferAccount + equityBreakdown.netInvestment),
     [assets, equityBreakdown.netInvestment],
   );
-  const [arslonnOverride, setArslonnOverride] = useState<number | null>(null);
-  const [gjeldOverride, setGjeldOverride] = useState<number | null>(null);
-  const [egenkapitalOverride, setEgenkapitalOverride] = useState<number | null>(null);
+  const { arslonn: arslonnOverride, gjeld: gjeldOverride, egenkapital: egenkapitalOverride } = capacityOverrides;
   const effArslonn = arslonnOverride ?? (hist.isLive ? grossAnnualIncome : loan.arslonn);
   // Borrowing capacity counts existing debt at the lending-rule figure (full credit
   // frame), so `capacityDebt` — not the drawn `totalDebt` — auto-fills the live value.
@@ -202,13 +202,13 @@ const BoligPage: React.FC = () => {
   };
 
   // Edit an auto-filled Låneevne input → sets that field's manual override.
-  const editOverride = (label: string, current: number, setOverride: (n: number) => void) => {
+  const editOverride = (label: string, current: number, key: keyof CapacityOverrides) => {
     openModal({
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: Math.round(current).toString() }],
       onSave: (vals) => {
         const n = parseLocaleNumber(vals.value);
-        if (!isNaN(n) && n >= 0) setOverride(n);
+        if (!isNaN(n) && n >= 0) setCapacityOverride(key, n);
         closeModal();
       },
     });
@@ -385,24 +385,24 @@ const BoligPage: React.FC = () => {
               <div className="space-y-1">
                 <LoanRow label={lp.annualSalary} notes={lp.annualSalaryNote}
                   value={fmtNum(effArslonn)}
-                  onEdit={() => editOverride(lp.annualSalary, effArslonn, setArslonnOverride)}
+                  onEdit={() => editOverride(lp.annualSalary, effArslonn, 'arslonn')}
                   badge={sourceBadge(arslonnOverride === null)}
-                  onReset={arslonnOverride === null ? undefined : () => setArslonnOverride(null)}
+                  onReset={arslonnOverride === null ? undefined : () => setCapacityOverride('arslonn', null)}
                   resetLabel={lp.resetAuto} />
                 <LoanRow label={lp.debtLabel} notes={lp.debtNote}
                   value={fmtNum(effGjeld)}
-                  onEdit={() => editOverride(lp.debtLabel, effGjeld, setGjeldOverride)}
+                  onEdit={() => editOverride(lp.debtLabel, effGjeld, 'gjeld')}
                   badge={sourceBadge(gjeldOverride === null)}
-                  onReset={gjeldOverride === null ? undefined : () => setGjeldOverride(null)}
+                  onReset={gjeldOverride === null ? undefined : () => setCapacityOverride('gjeld', null)}
                   resetLabel={lp.resetAuto} />
                 <LoanRow label={lp.loanSum} notes={lp.loanSumNote}
                   value={fmtNum(loan.laanebelop)}
                   onEdit={() => editNum(lp.loanSum, 'laanebelop', loan.laanebelop)} />
                 <LoanRow label={lp.equityLabel} notes={lp.equityAutoNote}
                   value={fmtNum(effEgenkapital)}
-                  onEdit={() => editOverride(lp.equityLabel, effEgenkapital, setEgenkapitalOverride)}
+                  onEdit={() => editOverride(lp.equityLabel, effEgenkapital, 'egenkapital')}
                   badge={sourceBadge(egenkapitalOverride === null)}
-                  onReset={egenkapitalOverride === null ? undefined : () => setEgenkapitalOverride(null)}
+                  onReset={egenkapitalOverride === null ? undefined : () => setCapacityOverride('egenkapital', null)}
                   resetLabel={lp.resetAuto} />
                 <LoanRow label={lp.maxPrice} notes={calc.capacity.ltvBound ? lp.maxPriceLtvNote : lp.maxPriceIncomeNote}
                   value={fmtNum(Math.round(calc.capacity.maxPrice))}

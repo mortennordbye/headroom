@@ -35,6 +35,18 @@ describe('spendByCategory', () => {
     expect(r.find((x) => x.category === 'income')).toBeUndefined();
   });
 
+  // Regression: a row categorised 'income' but carrying kind:'expense' (a mis-signed
+  // import, or a refund the user recategorised) used to count as spend, putting an
+  // "Inntekt" bar in the spend breakdown and inflating the month total.
+  it('excludes the income category even when the row is marked kind:"expense"', () => {
+    const txs = [
+      tx({ date: '2026-07-01', amount: 499, category: 'income', kind: 'expense' }),
+      tx({ date: '2026-07-02', amount: 300, category: 'groceries' }),
+    ];
+    expect(spendByCategory(txs, '2026-07')).toEqual([{ category: 'groceries', amount: 300 }]);
+    expect(totalSpend(txs, '2026-07')).toBe(300);
+  });
+
   it('buckets an uncategorized expense under "other"', () => {
     const r = spendByCategory([tx({ date: '2026-07-01', amount: 50, category: undefined })], '2026-07');
     expect(r).toEqual([{ category: 'other', amount: 50 }]);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { savingsRateStatus, savingsContributionTotal, targetRateOfIncome } from './savingsRate';
+import { savingsRateStatus, savingsContributionTotal, targetRateOfIncome, planSavingsRateSeries } from './savingsRate';
 import type { MonthlyCashflowRow } from './monthlyCashflow';
 import type { FixedExpense } from '../context/FinanceContext';
 
@@ -110,5 +110,36 @@ describe('targetRateOfIncome', () => {
 
   it('returns 0 for a month with no income', () => {
     expect(targetRateOfIncome(0, 30000, 5000, 20)).toBe(0);
+  });
+});
+
+describe('planSavingsRateSeries', () => {
+  it('is the share of income left after the consumption fixed expenses', () => {
+    const rows = planSavingsRateSeries(['2026-06', '2026-07'], {}, 50000, 30000);
+    // (50000 − 30000) / 50000 = 40%
+    expect(rows.map((r) => r.rate)).toEqual([40, 40]);
+    expect(rows.map((r) => r.income)).toEqual([50000, 50000]);
+  });
+
+  it('uses a manual monthly income override when present', () => {
+    const rows = planSavingsRateSeries(['2026-06', '2026-07'], { '2026-07': 80000 }, 50000, 40000);
+    expect(rows[0].rate).toBe(20);  // (50000 − 40000) / 50000
+    expect(rows[1].rate).toBe(50);  // (80000 − 40000) / 80000
+  });
+
+  // The whole point of the plan series: it must not vary with transactions, and
+  // it must have a value for every month (no "unmeasured" gaps to blank out).
+  it('marks every month measured, so no month is blanked from the chart', () => {
+    const rows = planSavingsRateSeries(['2026-01', '2026-02', '2026-03'], {}, 50000, 10000);
+    expect(rows.every((r) => r.measured)).toBe(true);
+    expect(rows).toHaveLength(3);
+  });
+
+  it('returns 0 rather than dividing by zero when income is absent', () => {
+    expect(planSavingsRateSeries(['2026-07'], {}, 0, 10000)[0].rate).toBe(0);
+  });
+
+  it('goes negative when fixed expenses exceed income', () => {
+    expect(planSavingsRateSeries(['2026-07'], {}, 20000, 30000)[0].rate).toBe(-50);
   });
 });

@@ -1,8 +1,8 @@
 // Trailing savings-rate health, derived from the same `monthlyCashflow` rows
 // that feed SavingsRateChart. Pure + unit-tested so the Budget page can flag a
 // slipping rate without re-deriving the money math in a component.
-import type { MonthlyCashflowRow } from './monthlyCashflow';
 import type { FixedExpense } from '../context/FinanceContext';
+import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 
 /** Finite-and-non-negative guard against a hand-edited undefined/NaN amount. */
 const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
@@ -53,6 +53,45 @@ export function targetRateOfIncome(
   return Math.round((retained / income) * 1000) / 10;
 }
 
+export interface PlanSavingsRow {
+  month: string;   // 'yyyy-MM'
+  income: number;
+  /** Share of income left after the consumption part of the fixed expenses, %. */
+  rate: number;
+  /** Always true — a plan row is never an unmeasured month. */
+  measured: boolean;
+}
+
+/**
+ * The savings rate as a PLAN figure: for each month, the share of income left
+ * after the consumption part of the fixed expenses.
+ *
+ * Deliberately transaction-free. The chart used to plot
+ * (income − fixed − logged spend) / income, which meant a single imported
+ * transfer moved a line the user reads as their budget, and months from before a
+ * bank was connected had to be blanked out as "unmeasured". This version answers
+ * the question the card's own subtitle asks — "andel av inntekt igjen etter
+ * utgifter" — from income, fixed expenses and the savings target alone, so it is
+ * complete for every month and identical whether or not a bank is connected.
+ *
+ * `spendFixedTotal` must exclude automated savings contributions: money moved to
+ * a savings account is retained, not spent (see `savingsContributionTotal`).
+ */
+export function planSavingsRateSeries(
+  months: string[],
+  monthlyIncomes: Record<string, number>,
+  fallbackIncome: number,
+  spendFixedTotal: number,
+  seasonal?: FeriepengerConfig | null,
+): PlanSavingsRow[] {
+  return months.map((month) => {
+    const estimated = seasonal ? feriepengerMonthlyNet(month, fallbackIncome, seasonal) : fallbackIncome;
+    const income = monthlyIncomes[month] ?? estimated;
+    const rate = income > 0 ? Math.round(((income - spendFixedTotal) / income) * 1000) / 10 : 0;
+    return { month, income, rate, measured: true };
+  });
+}
+
 export interface SavingsRateStatus {
   trailingRate: number;  // average savings rate over the trailing window, %
   belowTarget: boolean;  // trailing rate under the target
@@ -68,7 +107,7 @@ export interface SavingsRateStatus {
  * worse, fake an improvement. Returns null when there are no real months.
  */
 export function savingsRateStatus(
-  rows: MonthlyCashflowRow[],
+  rows: { income: number; rate: number; measured: boolean }[],
   targetPct: number,
   window: number = 3,
 ): SavingsRateStatus | null {
