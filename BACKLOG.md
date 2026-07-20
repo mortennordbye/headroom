@@ -495,3 +495,57 @@ Remaining / intentionally out of v1:
 - **Scenarios aren't snapshotted into the time machine.** They're forward-looking and render
   always-live, independent of `useBalanceHistory` (unlike the mortgage tools). Fine by design;
   noted in case historical scenario tracking is ever wanted.
+
+## Savings rate (Spareandel) — remaining gaps
+
+Fixed (2026-07): three bugs made the savings rate read far worse than reality.
+(a) automated savings transfers were subtracted as consumption; (b) the target
+(a share of *residual*) was compared against and plotted on top of a rate (a share
+of *income*); (c) a budgeted fixed expense and its own imported bank payment were
+both charged, roughly doubling expenses for any month with bank coverage. See
+`savingsContributionTotal` / `targetRateOfIncome` (`src/lib/savingsRate.ts`), the
+optional `fixedExpenses` reconciliation arg in `src/lib/monthlyCashflow.ts`, and the
+`measured` flag that stops pre-bank-sync months plotting as high-savings months.
+
+Remaining:
+
+- **`mortgage` and `debt` destinations still count as pure spend.** The principal
+  portion of a loan payment builds equity and belongs in the savings rate, but a
+  `FixedExpense` holds the *gross* payment, so counting it whole would overstate the
+  rate. Needs the amortization split `src/lib/automation.ts` already computes,
+  threaded into the rate. **Where**: `savingsContributionTotal` in
+  `src/lib/savingsRate.ts` (the destinationKind filter), `src/lib/automation.ts`.
+- **`yearReview` and `mcp/derive` don't pass `fixedExpenses`,** so they keep the old
+  double-counting behaviour and disagree with the Budget page. The reconciliation arg
+  is optional precisely so these could be migrated separately; they need a
+  fixed-expense list plumbed to the call site. **Where**: `src/lib/yearReview.ts:69`,
+  `mcp/derive.ts:155` and `:333`.
+- **Transfer-rule suggestions are dismissible for the session only.** The Budget
+  banner comes back on reload until the suggestion is accepted or the payee stops
+  appearing; there is no "not a transfer, stop asking" state. Persisting one means
+  a new field in the blob and therefore every payload site in `FinanceContext.tsx`
+  (autosave + dep array, `applyData`, `importAll`, demo snapshot, `SettingsPage`
+  export) — deliberately skipped to keep this change contained. **Where**:
+  `transferHintDismissed` in `src/pages/BudgetPage.tsx`.
+- **The overlapping-jobs warning only checks the current month.** A job change
+  entered with a stale end date in a *past* or future month still double-counts
+  gross there (and so in the 12-month income series, volatility, and every chart
+  keyed off it) without any warning. Checking the whole series would catch it, at
+  the cost of deciding which month to point the user at. **Where**:
+  `overlappingJobs` in `src/pages/SalaryPage.tsx`, `activeJobBreakdown` in
+  `src/lib/salary.ts`.
+- **A job with no salary entries contributes nothing, silently.** Once every job
+  with a salary has ended, `calcActiveGrossAnnual` returns 0 and
+  `derivedNetMonthlyFor` falls back to the legacy flat `income` field — so a
+  long-range forecast can quietly switch from salary data to a single stale
+  number. Worth a warning of its own. **Where**: `derivedNetMonthlyFor` in
+  `src/context/FinanceContext.tsx`.
+- **Suggestion thresholds are untuned beyond one real dataset.** `MIN_SUGGESTION_TOTAL`
+  (2000 kr) and the "3+ months" recurrence override were checked against a single
+  user's 244 transactions. A different bank's statement format may not use a
+  `Til:` prefix at all, leaving only the account-number and round-amount signals.
+  **Where**: `src/lib/transferSuggestions.ts`.
+- **CashflowChart still shows savings transfers as money out.** Deliberate — it is a
+  literal cashflow view, not a retention view — but the two Budget-page charts then
+  disagree about the same transfer. **Where**:
+  `src/components/charts/CashflowChart.tsx`.

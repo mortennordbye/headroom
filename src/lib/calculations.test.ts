@@ -91,6 +91,42 @@ describe('calcRecommendations', () => {
     const r = calcRecommendations(50_000, 50_000, 20_000, 0.5, 20);
     expect(r.conservativeReason).toBe('volatility');
   });
+
+  it('suggests the conservative floor when the target is under it', () => {
+    // Volatile income, target 20% of a 30k residual → advisory asks for 30%.
+    const r = calcRecommendations(50_000, 50_000, 20_000, 0.5, 20);
+    expect(r.recommendedInvestment).toBe(6_000);
+    expect(r.suggestedInvestment).toBe(9_000);
+  });
+
+  it('stops suggesting once the plan already clears the floor', () => {
+    const r = calcRecommendations(50_000, 50_000, 20_000, 0.5, 45);
+    // suggested === recommended is what hides the advisory in the UI.
+    expect(r.suggestedInvestment).toBe(r.recommendedInvestment);
+  });
+
+  it('resolves instead of ratcheting when the suggestion is accepted', () => {
+    // The old formula was target + 10pp, so accepting the advisory raised the
+    // target and re-suggested another 10pp above it, forever. Accepting must
+    // now settle: one round trip, then no further ask.
+    const residual = 30_000;
+    const first = calcRecommendations(50_000, 50_000, 20_000, 0.5, 20);
+    const acceptedPct = (first.suggestedInvestment / residual) * 100;
+    const second = calcRecommendations(50_000, 50_000, 20_000, 0.5, acceptedPct);
+    expect(second.suggestedInvestment).toBe(second.recommendedInvestment);
+    expect(second.suggestedInvestment).toBe(first.suggestedInvestment);
+  });
+
+  it('never suggests above the 95% cap', () => {
+    const r = calcRecommendations(50_000, 50_000, 20_000, 0.5, 99);
+    expect(r.suggestedInvestment).toBeLessThanOrEqual(Math.round(30_000 * 0.95));
+  });
+
+  it('leaves the suggestion equal to the plan outside conservative mode', () => {
+    const r = calcRecommendations(50_000, 50_000, 20_000, 0, 10);
+    expect(r.conservativeMode).toBe(false);
+    expect(r.suggestedInvestment).toBe(r.recommendedInvestment);
+  });
 });
 
 describe('calcEmergencyFundStatus', () => {

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { savingsRateStatus } from './savingsRate';
+import { savingsRateStatus, savingsContributionTotal, targetRateOfIncome } from './savingsRate';
 import type { MonthlyCashflowRow } from './monthlyCashflow';
+import type { FixedExpense } from '../context/FinanceContext';
 
-const row = (month: string, income: number, rate: number): MonthlyCashflowRow => ({
-  month, income, variable: 0, expenses: 0, net: 0, rate,
+const row = (month: string, income: number, rate: number, measured = true): MonthlyCashflowRow => ({
+  month, income, variable: 0, expenses: 0, net: 0, rate, measured,
 });
 
 describe('savingsRateStatus', () => {
@@ -32,6 +33,16 @@ describe('savingsRateStatus', () => {
     expect(s.belowTarget).toBe(false);
   });
 
+  it('skips unmeasured months so a pre-bank-sync gap does not fake a high rate', () => {
+    // The two 55% months have no logged spend — they only look good because
+    // nothing was recorded. Only the measured month should count.
+    const rows = [row('2026-01', 50000, 55, false), row('2026-02', 50000, 55, false), row('2026-03', 50000, 10)];
+    const s = savingsRateStatus(rows, 20)!;
+    expect(s.months).toBe(1);
+    expect(s.trailingRate).toBeCloseTo(10, 5);
+    expect(s.belowTarget).toBe(true);
+  });
+
   it('returns null when there are no real months in the window', () => {
     const rows = [row('2026-02', 0, 0), row('2026-03', 0, 0)];
     expect(savingsRateStatus(rows, 20)).toBeNull();
@@ -41,5 +52,63 @@ describe('savingsRateStatus', () => {
     const rows = [row('2026-01', 50000, 40), row('2026-02', 50000, 10), row('2026-03', 50000, 10)];
     // window 2 → average of the last two months (10, 10)
     expect(savingsRateStatus(rows, 20, 2)!.trailingRate).toBeCloseTo(10, 5);
+  });
+});
+
+const fixed = (amount: number, destinationKind?: FixedExpense['destinationKind']): FixedExpense =>
+  ({ id: `f-${amount}-${destinationKind ?? 'none'}`, name: 'x', amount, type: 'fixed', destinationKind });
+
+describe('savingsContributionTotal', () => {
+  it('counts savings and buffer destinations, not ordinary expenses', () => {
+    const total = savingsContributionTotal([
+      fixed(12000),                     // rent
+      fixed(5000, 'savingsAccount'),
+      fixed(2000, 'bufferAccount'),
+    ]);
+    expect(total).toBe(7000);
+  });
+
+  it('excludes mortgage and debt destinations (gross payment, not principal)', () => {
+    expect(savingsContributionTotal([fixed(9000, 'mortgage'), fixed(3000, 'debt')])).toBe(0);
+  });
+
+  it('is 0 for an empty list', () => {
+    expect(savingsContributionTotal([])).toBe(0);
+  });
+
+  it('ignores a NaN/undefined amount instead of poisoning the total', () => {
+    const bad = { ...fixed(0, 'savingsAccount'), amount: undefined as unknown as number };
+    expect(savingsContributionTotal([bad, fixed(5000, 'savingsAccount')])).toBe(5000);
+  });
+});
+
+describe('targetRateOfIncome', () => {
+  it('restates a residual-share target as a share of income', () => {
+    // income 50k, fixed 30k → residual 20k; 20% of residual = 4k retained = 8% of income.
+    expect(targetRateOfIncome(50000, 30000, 0, 20)).toBeCloseTo(8, 5);
+  });
+
+  it('adds automated contributions on top of the residual share', () => {
+    // Of the 30k fixed, 5k is a savings transfer. Retained = 5k + 20% × 20k = 9k = 18%.
+    expect(targetRateOfIncome(50000, 30000, 5000, 20)).toBeCloseTo(18, 5);
+  });
+
+  it('matches the achievable rate when the user follows the plan exactly', () => {
+    // Same inputs as above: spend the recommended 80% of residual (16k) and the
+    // rate from monthlyCashflow is (50k − 25k spend-fixed − 16k)/50k = 18%.
+    const income = 50000, totalFixed = 30000, contributions = 5000;
+    const spendFixed = totalFixed - contributions;
+    const variable = (income - totalFixed) * 0.8;
+    const actual = ((income - spendFixed - variable) / income) * 100;
+    expect(actual).toBeCloseTo(targetRateOfIncome(income, totalFixed, contributions, 20), 5);
+  });
+
+  it('clamps a negative residual instead of lowering the target below contributions', () => {
+    // Fixed expenses exceed income → residual share is 0, contributions still count.
+    expect(targetRateOfIncome(50000, 60000, 5000, 20)).toBeCloseTo(10, 5);
+  });
+
+  it('returns 0 for a month with no income', () => {
+    expect(targetRateOfIncome(0, 30000, 5000, 20)).toBe(0);
   });
 });

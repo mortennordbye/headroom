@@ -9,6 +9,7 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculations';
+import { savingsContributionTotal } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { calcTaxByRegion } from '../lib/norwegianTax';
@@ -32,7 +33,7 @@ import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
 import { dedupeBankTransactions, evictSupersededPending } from '../lib/bankDedup';
-import { salaryAt } from '../lib/salary';
+import { activeJobBreakdown } from '../lib/salary';
 import { stableStringify } from '../lib/stableStringify';
 import { sanitizePayload } from '../lib/sanitizePayload';
 import {
@@ -352,17 +353,9 @@ export function calcActiveGrossAnnual(
   jobs: JobEntry[],
   monthKey: string,
 ): number {
-  // Latest applicable salary PER job via the shared `salaryAt` selection, then
-  // summed across jobs still active this month.
-  let total = 0;
-  for (const jobId of new Set(salaries.map(s => s.jobId))) {
-    const sal = salaryAt(monthKey, salaries.filter(s => s.jobId === jobId));
-    if (!sal) continue;
-    const job = jobs.find(j => j.id === jobId);
-    if (job?.endDate && job.endDate < monthKey) continue; // skip jobs that ended before this month
-    total += sal.grossAnnual + (job?.onCallAnnual ?? 0);
-  }
-  return total;
+  // Selection lives in `activeJobBreakdown` so the Salary page's overlap warning
+  // reads exactly the same set of jobs this sums.
+  return activeJobBreakdown(salaries, jobs, monthKey).reduce((sum, c) => sum + c.gross, 0);
 }
 
 export type BonusType = 'annual' | 'performance' | 'signing' | 'holiday_pay' | 'profit_share' | 'other';
@@ -829,6 +822,12 @@ interface FinanceDerivedContextType {
   annualMortgageInterest: number;
   totalResidual: number;
   totalFixedExpenses: number;
+  /** The part of `totalFixedExpenses` that is an automated move into savings
+   *  (savingsAccount / bufferAccount), not consumption. */
+  savingsContributions: number;
+  /** `viewFixedExpenses` minus the savings automations — the rows that represent
+   *  real spending, for reconciliation against imported transactions. */
+  spendFixedExpenses: FixedExpense[];
   /** Fixed expenses for the selected month: live config, or the recorded
    *  snapshot's expenses when viewing a past month (read-only). */
   viewFixedExpenses: FixedExpense[];
@@ -1620,6 +1619,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const totalFixedExpenses = useMemo(() =>
     viewFixedExpenses.reduce((sum, item) => sum + item.amount, 0),
+  [viewFixedExpenses]);
+
+  // The slice of totalFixedExpenses that is moved into savings rather than spent.
+  // Budgeting treats it like any other fixed expense (it does leave free-to-spend),
+  // but the savings rate must add it back or automating more savings reads as a
+  // *worse* rate. See src/lib/savingsRate.ts.
+  const savingsContributions = useMemo(() =>
+    savingsContributionTotal(viewFixedExpenses),
+  [viewFixedExpenses]);
+
+  // The same split as a list, for envelope reconciliation in monthlyCashflow:
+  // the rows whose budgets should be matched against real transactions so a
+  // bill isn't charged once as a budget and again as an imported payment.
+  const spendFixedExpenses = useMemo(() =>
+    viewFixedExpenses.filter(e =>
+      e.destinationKind !== 'savingsAccount' && e.destinationKind !== 'bufferAccount'),
   [viewFixedExpenses]);
 
   // Year-one mortgage interest (rentefradrag): reduces alminnelig inntekt at 22%,
@@ -2622,7 +2637,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
-    totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
+    totalResidual, totalFixedExpenses, savingsContributions, spendFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   }), [
@@ -2631,7 +2646,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
-    totalResidual, totalFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
+    totalResidual, totalFixedExpenses, savingsContributions, spendFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   ]);

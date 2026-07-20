@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
+import { Link } from 'react-router-dom';
 import {
   PlusCircle,
   Trash2,
@@ -34,9 +35,11 @@ import EditTransactionModal from '../components/EditTransactionModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeStatus } from '../lib/envelopes';
+import { suggestTransferRules } from '../lib/transferSuggestions';
+import { RULES_ANCHOR } from '../components/CategoryRules';
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
 import { monthlyCashflow } from '../lib/monthlyCashflow';
-import { savingsRateStatus } from '../lib/savingsRate';
+import { savingsRateStatus, targetRateOfIncome } from '../lib/savingsRate';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -170,6 +173,8 @@ const BudgetPage: React.FC = () => {
     monthlyBudget,
     dailyBudget,
     totalFixedExpenses,
+    savingsContributions,
+    spendFixedExpenses,
     fixedExpenses,
     viewFixedExpenses,
     fixedExpensesFromSnapshot,
@@ -180,6 +185,7 @@ const BudgetPage: React.FC = () => {
     dailyData,
     reconciliation,
     dailyTransactions,
+    transferRules,
     setDailyTransactions,
     recurringTemplates,
     setRecurringTemplates,
@@ -199,6 +205,22 @@ const BudgetPage: React.FC = () => {
     formatCurrencyShort,
   } = useFinance();
 
+  // Own-account transfers still counting as spend. Dismissible for the session
+  // only — accepting a rule removes its suggestion for good, which is the real
+  // exit from this banner.
+  const [transferHintDismissed, setTransferHintDismissed] = useState(false);
+  const transferSuggestions = useMemo(
+    () => suggestTransferRules(dailyTransactions, transferRules),
+    [dailyTransactions, transferRules],
+  );
+
+  // The savings target restated as a share of income, matching the rate the
+  // banner and SavingsRateChart plot (the stored percent is a share of residual).
+  const savingsTargetRate = useMemo(
+    () => targetRateOfIncome(effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetPercent),
+    [effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetPercent],
+  );
+
   // Trailing savings-rate health — flag when the last few months' rate has slipped
   // under the target (same inputs as SavingsRateChart so the banner and line agree).
   const savingsWarning = useMemo(() => {
@@ -206,9 +228,10 @@ const BudgetPage: React.FC = () => {
     const seasonal = region === 'no'
       ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
       : null;
-    const rows = monthlyCashflow(months, nonTransferTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses, seasonal);
-    return savingsRateStatus(rows, savingsTargetPercent);
-  }, [currentMonth, nonTransferTransactions, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsTargetPercent, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+    const spendFixedTotal = totalFixedExpenses - savingsContributions;
+    const rows = monthlyCashflow(months, nonTransferTransactions, monthlyIncomes, Math.round(effectiveIncome), spendFixedTotal, seasonal, spendFixedExpenses);
+    return savingsRateStatus(rows, savingsTargetRate);
+  }, [currentMonth, nonTransferTransactions, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, spendFixedExpenses, savingsTargetRate, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -1006,8 +1029,34 @@ const BudgetPage: React.FC = () => {
                 {t.budgetPage.savingsRateWarning
                   .replace('{months}', String(savingsWarning.months))
                   .replace('{rate}', String(savingsWarning.trailingRate))
-                  .replace('{target}', String(Math.round(savingsTargetPercent)))}
+                  .replace('{target}', String(Math.round(savingsTargetRate)))}
               </span>
+            </div>
+          )}
+          {transferSuggestions.length > 0 && !transferHintDismissed && (
+            <div
+              className="flex items-start gap-2 mb-3 px-3 py-2 rounded-[6px] text-[12px] leading-snug"
+              style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+              role="status"
+            >
+              <ArrowLeftRight size={14} strokeWidth={2} className="shrink-0 mt-px" />
+              <span className="flex-1">
+                {t.budgetPage.transferSuggestBanner
+                  .replace('{count}', String(transferSuggestions.reduce((n, s) => n + s.txCount, 0)))
+                  .replace('{amount}', formatCurrency(transferSuggestions.reduce((n, s) => n + s.total, 0)))}
+                {' '}
+                <Link to={`/settings#${RULES_ANCHOR}`} className="underline" style={{ color: 'var(--accent)' }}>
+                  {t.budgetPage.transferSuggestBannerCta}
+                </Link>
+              </span>
+              <button
+                type="button"
+                aria-label={t.dismiss}
+                onClick={() => setTransferHintDismissed(true)}
+                className="shrink-0 text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors"
+              >
+                <X size={13} />
+              </button>
             </div>
           )}
           <div className="flex-1 min-h-[240px] w-full">

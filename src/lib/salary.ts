@@ -20,6 +20,48 @@ export function salaryAt(month: string, salaries: SalaryEntry[]): SalaryEntry | 
   return eligible.reduce((a, b) => (a.effectiveDate > b.effectiveDate ? a : b));
 }
 
+/** One job's contribution to a month's gross employment income. */
+export interface ActiveJobContribution {
+  jobId: string;
+  /** The job record, when one still exists for this salary's `jobId`. */
+  job: JobEntry | undefined;
+  /** Gross annual base salary in effect that month. */
+  base: number;
+  /** On-call annual attached to the job (0 when none). */
+  onCall: number;
+  /** base + onCall — what this job adds to the month's gross. */
+  gross: number;
+}
+
+/**
+ * Every job contributing gross employment income in `monthKey`: the latest
+ * applicable salary PER job, for each job that hasn't ended before this month.
+ *
+ * This is the single source of truth for "which jobs count this month" —
+ * `calcActiveGrossAnnual` sums it, and the overlap warning reads it, so the
+ * warning can never disagree with the figure it is warning about.
+ *
+ * A salary whose `jobId` has no job record still counts (there is no end date to
+ * disqualify it), matching the long-standing behaviour.
+ */
+export function activeJobBreakdown(
+  salaries: SalaryEntry[],
+  jobs: JobEntry[],
+  monthKey: string,
+): ActiveJobContribution[] {
+  const out: ActiveJobContribution[] = [];
+  for (const jobId of new Set(salaries.map(s => s.jobId))) {
+    const sal = salaryAt(monthKey, salaries.filter(s => s.jobId === jobId));
+    if (!sal) continue;
+    const job = jobs.find(j => j.id === jobId);
+    if (job?.endDate && job.endDate < monthKey) continue;
+    const base = sal.grossAnnual;
+    const onCall = job?.onCallAnnual ?? 0;
+    out.push({ jobId, job, base, onCall, gross: base + onCall });
+  }
+  return out;
+}
+
 /** How a salary-change amount is entered when recording a raise/adjustment. */
 export type SalaryEntryMode = 'percent' | 'kr' | 'total';
 

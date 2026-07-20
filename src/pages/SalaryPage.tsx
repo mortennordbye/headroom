@@ -7,6 +7,7 @@ import {
   Edit2,
   Trash2,
   Plus,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   BarChart,
@@ -46,7 +47,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors'
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { restskattEstimate } from '../lib/restskatt';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH } from '../lib/salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, activeJobBreakdown } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 import { ChartSkeleton } from '../components/ui/Skeleton';
@@ -120,6 +121,14 @@ const SalaryPage: React.FC = () => {
   );
 
   const currentMonthKey = monthKeyFromDate(new Date());
+
+  // Concurrent employment is legitimate and deliberately summed, but it is also
+  // what a job change looks like when the previous job's end date wasn't
+  // shortened — and that silently doubles income. Surface it either way.
+  const overlappingJobs = useMemo(
+    () => activeJobBreakdown(salaries, jobs, currentMonthKey),
+    [salaries, jobs, currentMonthKey],
+  );
 
   // ── Build a monthly series from first salary to current month ───
   type Point = {
@@ -596,6 +605,38 @@ const SalaryPage: React.FC = () => {
           </p>
         )}
       </header>
+
+      {overlappingJobs.length > 1 && (
+        <Card padding="md" style={{ borderColor: 'var(--warning)' }}>
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={16} strokeWidth={2} className="shrink-0 mt-0.5" style={{ color: 'var(--warning)' }} />
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium" style={{ color: 'var(--warning)' }}>
+                {t.salaryPage.overlapTitle.replace('{count}', String(overlappingJobs.length))}
+              </p>
+              <ul className="mt-2 space-y-1">
+                {overlappingJobs.map((c) => (
+                  <li key={c.jobId} className="text-[13px] flex items-baseline gap-2">
+                    <span className="text-[var(--text-1)] truncate">{c.job?.role ?? t.salaryPage.overlapUnknownJob}</span>
+                    <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>
+                      {c.job?.startDate ?? '—'} → {c.job?.endDate ?? t.salaryPage.overlapOpenEnded}
+                    </span>
+                    <span className="ml-auto shrink-0 font-mono text-[12px]" style={{ color: 'var(--text-2)' }}>
+                      {formatCurrency(c.gross)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
+                {t.salaryPage.overlapTotal.replace('{total}', formatCurrency(grossAnnualIncome))}
+              </p>
+              <p className="mt-1 text-[12px]" style={{ color: 'var(--text-3)' }}>
+                {t.salaryPage.overlapHint}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Summary tiles */}
       <div data-tour="salary-overview" className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
