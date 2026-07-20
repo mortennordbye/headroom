@@ -108,12 +108,26 @@ export interface BudgetRecommendation {
   /** Which trigger put us in conservative mode (null when not active). */
   conservativeReason: ConservativeReason;
   /**
-   * Conservative advisory target for investment. In conservative mode this is
-   * higher than recommendedInvestment (savings bumped +10pp); otherwise it
-   * equals recommendedInvestment. Purely advisory — it never overrides the plan.
+   * Conservative advisory target for investment: in conservative mode, enough to
+   * reach `CONSERVATIVE_FLOOR_RATIO` of the residual. Equals
+   * recommendedInvestment once the plan already clears the floor (which is how
+   * the advisory switches itself off). Purely advisory — it never overrides the plan.
    */
   suggestedInvestment: number;
 }
+
+/**
+ * Conservative mode asks for at least this share of the residual to be set aside
+ * when income is shaky.
+ *
+ * This is an ABSOLUTE floor, deliberately. It used to be the user's own target
+ * plus 10pp, which meant accepting the suggestion raised the target, which
+ * re-suggested another 10pp above *that* — the advisory ratcheted upward every
+ * time it was followed and could never be satisfied. Anchoring it to a fixed
+ * share makes accepting it resolve it. 30% keeps the original behaviour for the
+ * 20% default target, which previously suggested exactly this.
+ */
+export const CONSERVATIVE_FLOOR_RATIO = 0.30;
 
 export function calcRecommendations(
   effectiveIncome: number,
@@ -131,9 +145,9 @@ export function calcRecommendations(
   if (residual <= 0) return { recommendedSpending: 0, recommendedInvestment: 0, conservativeMode: true, conservativeReason, suggestedInvestment: 0 };
   // The plan follows the user's chosen savings target exactly — manual edits stick.
   const investRatio = savingsTargetPercent / 100;
-  // Conservative mode only *suggests* saving 10pp more (capped at 95%); it does not override the plan.
+  // Conservative mode only *suggests* reaching the floor; it never overrides the plan.
   const suggestedRatio = conservativeMode
-    ? Math.min(0.95, (savingsTargetPercent + 10) / 100)
+    ? Math.min(0.95, Math.max(investRatio, CONSERVATIVE_FLOOR_RATIO))
     : investRatio;
   return {
     recommendedSpending: Math.round(residual * (1 - investRatio)),

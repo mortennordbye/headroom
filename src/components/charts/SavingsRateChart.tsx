@@ -8,6 +8,7 @@ import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 import { lastNMonthKeys } from '../../lib/date';
 import { monthlyCashflow } from '../../lib/monthlyCashflow';
+import { targetRateOfIncome } from '../../lib/savingsRate';
 
 /**
  * Monthly savings capacity as a rate: the share of income left after fixed
@@ -20,7 +21,8 @@ export default function SavingsRateChart() {
     region, grossAnnualIncome, employerCostConfig,
     // Whole-finance rate: net out internal transfers, but not per-account (income
     // isn't account-scoped), so use nonTransferTransactions.
-    nonTransferTransactions: dailyTransactions, savingsTargetPercent,
+    nonTransferTransactions: dailyTransactions, savingsTargetPercent, savingsContributions,
+    spendFixedExpenses,
   } = useFinance();
   const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -30,12 +32,24 @@ export default function SavingsRateChart() {
     const seasonal = region === 'no'
       ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
       : null;
-    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses, seasonal)
-      .map(({ month, rate }) => ({
+    // Automated savings transfers are money retained, not spent — subtract only
+    // the consumption part of the fixed expenses.
+    const spendFixedTotal = totalFixedExpenses - savingsContributions;
+    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), spendFixedTotal, seasonal, spendFixedExpenses)
+      .map(({ month, rate, measured }) => ({
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
-        rate,
+        // A month with no logged spend isn't a 40%-savings month, it's an
+        // unmeasured one — leave a gap instead of an inviting peak.
+        rate: measured ? rate : null,
       }));
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, spendFixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+
+  // The target is a share of residual; the line is a share of income. Restate it
+  // so the reference line and the plotted rate are the same quantity.
+  const targetRate = useMemo(
+    () => targetRateOfIncome(effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetPercent),
+    [effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetPercent],
+  );
 
   return (
     <div role="img" aria-label={t.charts.aria.savingsRate} className="w-full h-full">
@@ -45,7 +59,7 @@ export default function SavingsRateChart() {
         <XAxis dataKey="label" {...AXIS_PROPS} />
         <YAxis tickFormatter={(v) => `${v}%`} {...AXIS_PROPS_Y} width={40} />
         <Tooltip content={<ChartTooltip valueFormatter={(v) => `${v.toFixed(1)}%`} />} />
-        <ReferenceLine y={savingsTargetPercent} stroke={CHART.brass} strokeDasharray="4 4" label={{ value: t.charts.target, position: 'insideTopRight', fontSize: 10, fill: CHART.brass }} />
+        <ReferenceLine y={targetRate} stroke={CHART.brass} strokeDasharray="4 4" label={{ value: t.charts.target, position: 'insideTopRight', fontSize: 10, fill: CHART.brass }} />
         <Line isAnimationActive={!reduced} name={t.charts.savingsRate} type="monotone" dataKey="rate" stroke={CHART.forestLight} strokeWidth={2} dot={{ r: 2, fill: CHART.forestLight }} />
       </LineChart>
     </ResponsiveContainer>

@@ -61,3 +61,48 @@ describe('monthlyCashflow', () => {
     expect(rows[0].net).toBe(-5000);
   });
 });
+
+describe('monthlyCashflow — measured months', () => {
+  it('marks a month with no logged spend as unmeasured', () => {
+    // 2026-05 has no transactions at all: its rate is an artefact of the fixed
+    // total, not a real savings month.
+    const rows = monthlyCashflow(['2026-05', '2026-06'], [tx({ date: '2026-06-02', amount: 100, kind: 'expense' })], {}, 40000, 10000);
+    expect(rows[0].measured).toBe(false);
+    expect(rows[1].measured).toBe(true);
+  });
+
+  it('counts an income-only month as unmeasured', () => {
+    const rows = monthlyCashflow(['2026-06'], [tx({ date: '2026-06-02', amount: 5000, kind: 'income' })], {}, 40000, 10000);
+    expect(rows[0].measured).toBe(false);
+  });
+});
+
+describe('monthlyCashflow — envelope reconciliation', () => {
+  const fixedExpenses = [
+    { id: 'e1', name: 'Strøm', amount: 1000, type: 'fixed' as const, match: 'stroem' },
+  ];
+
+  it('charges a budgeted bill once when its own payment is imported', () => {
+    const txs = [tx({ date: '2026-06-05', amount: 900, kind: 'expense', description: 'stroem AS' })];
+    // Without the rows: 1000 budget + 900 payment = 1900 (double count).
+    expect(monthlyCashflow(['2026-06'], txs, {}, 40000, 1000)[0].expenses).toBe(1900);
+    // With them: the 900 draws down the 1000 envelope → 1000.
+    expect(monthlyCashflow(['2026-06'], txs, {}, 40000, 1000, null, fixedExpenses)[0].expenses).toBe(1000);
+  });
+
+  it('adds the overspend when the real payment exceeds the budget', () => {
+    const txs = [tx({ date: '2026-06-05', amount: 1300, kind: 'expense', description: 'stroem AS' })];
+    // 1000 budget + 300 over = 1300.
+    expect(monthlyCashflow(['2026-06'], txs, {}, 40000, 1000, null, fixedExpenses)[0].expenses).toBe(1300);
+  });
+
+  it('still adds spend that no envelope claims', () => {
+    const txs = [
+      tx({ date: '2026-06-05', amount: 900, kind: 'expense', description: 'stroem AS' }),
+      tx({ date: '2026-06-06', amount: 450, kind: 'expense', description: 'unrelated shop' }),
+    ];
+    // 1000 envelope + 450 unenveloped.
+    expect(monthlyCashflow(['2026-06'], txs, {}, 40000, 1000, null, fixedExpenses)[0].expenses).toBe(1450);
+  });
+});
+

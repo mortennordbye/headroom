@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob } from './salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob, activeJobBreakdown } from './salary';
 import type { SalaryEntry, JobEntry, HoursSnapshot } from '../context/FinanceContext';
 
 const sal = (id: string, effectiveDate: string, grossAnnual: number, jobId = 'j1'): SalaryEntry => ({
@@ -140,3 +140,48 @@ describe('priorSalaryForJob', () => {
     expect(priorSalaryForJob(list, 'j1', '2022-01')).toBeNull();
   });
 });
+
+describe('activeJobBreakdown', () => {
+  const j = (id: string, startDate: string, endDate: string | null, onCallAnnual: number | null = null): JobEntry => ({
+    id, startDate, endDate, employer: 'Acme', role: id, contractedHoursPerWeek: 37.5, onCallAnnual,
+  });
+
+  it('excludes a job that ended before the month', () => {
+    const b = activeJobBreakdown(
+      [sal('s1', '2023-08', 690_000, 'old'), sal('s2', '2026-01', 740_000, 'new')],
+      [j('old', '2023-08', '2026-01'), j('new', '2026-01', null)],
+      '2026-07',
+    );
+    expect(b.map(c => c.jobId)).toEqual(['new']);
+  });
+
+  it('adds on-call to the job it belongs to', () => {
+    const b = activeJobBreakdown([sal('s1', '2026-01', 810_000, 'a')], [j('a', '2026-01', null, 100_000)], '2026-07');
+    expect(b[0]).toMatchObject({ base: 810_000, onCall: 100_000, gross: 910_000 });
+  });
+
+  it('reports both jobs when an old end date overlaps a new job', () => {
+    // The real-world shape: a job change entered without shortening the old
+    // job's end date, so two salaries are counted at once.
+    const b = activeJobBreakdown(
+      [sal('s1', '2026-07', 810_000, 'old'), sal('s2', '2026-07', 925_000, 'new')],
+      [j('old', '2026-01', '2027-06', 100_000), j('new', '2026-07', '2027-06')],
+      '2026-07',
+    );
+    expect(b).toHaveLength(2);
+    expect(b.reduce((t, c) => t + c.gross, 0)).toBe(1_835_000);
+  });
+
+  it('skips a job whose salary has not taken effect yet', () => {
+    const b = activeJobBreakdown([sal('s1', '2027-01', 900_000, 'future')], [j('future', '2027-01', null)], '2026-07');
+    expect(b).toEqual([]);
+  });
+
+  it('keeps a salary whose job record is gone (no end date to disqualify it)', () => {
+    const b = activeJobBreakdown([sal('s1', '2026-01', 500_000, 'orphan')], [], '2026-07');
+    expect(b).toHaveLength(1);
+    expect(b[0].job).toBeUndefined();
+    expect(b[0].onCall).toBe(0);
+  });
+});
+

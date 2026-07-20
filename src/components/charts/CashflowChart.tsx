@@ -25,7 +25,7 @@ export default function CashflowChart() {
     region, grossAnnualIncome, employerCostConfig,
     // Whole-finance cashflow: net out internal transfers, but not per-account (income
     // isn't account-scoped), so use nonTransferTransactions.
-    nonTransferTransactions: dailyTransactions, formatCurrencyShort,
+    nonTransferTransactions: dailyTransactions, formatCurrencyShort, viewFixedExpenses,
   } = useFinance();
   const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -35,12 +35,15 @@ export default function CashflowChart() {
     const seasonal = region === 'no'
       ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
       : null;
-    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses, seasonal)
+    // Savings automations stay in "money out" here — this is literal cashflow,
+    // not retention — but reconcile so a budgeted bill isn't counted twice once
+    // its real payment is imported.
+    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses, seasonal, viewFixedExpenses)
       .map(({ month, income, expenses, net }) => ({
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
         income, expenses, net,
       }));
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, viewFixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   return (
     <div role="img" aria-label={t.charts.aria.cashflow} className="w-full h-full">
