@@ -520,13 +520,6 @@ Remaining:
   is optional precisely so these could be migrated separately; they need a
   fixed-expense list plumbed to the call site. **Where**: `src/lib/yearReview.ts:69`,
   `mcp/derive.ts:155` and `:333`.
-- **Transfer-rule suggestions are dismissible for the session only.** The Budget
-  banner comes back on reload until the suggestion is accepted or the payee stops
-  appearing; there is no "not a transfer, stop asking" state. Persisting one means
-  a new field in the blob and therefore every payload site in `FinanceContext.tsx`
-  (autosave + dep array, `applyData`, `importAll`, demo snapshot, `SettingsPage`
-  export) — deliberately skipped to keep this change contained. **Where**:
-  `transferHintDismissed` in `src/pages/BudgetPage.tsx`.
 - **The overlapping-jobs warning only checks the current month.** A job change
   entered with a stale end date in a *past* or future month still double-counts
   gross there (and so in the 12-month income series, volatility, and every chart
@@ -549,3 +542,30 @@ Remaining:
   literal cashflow view, not a retention view — but the two Budget-page charts then
   disagree about the same transfer. **Where**:
   `src/components/charts/CashflowChart.tsx`.
+
+- **Transaction segments (plan Stage 2) not built.** The Budget page now separates the
+  budget from the bank layer visually, and the arithmetic no longer double-counts
+  transfers or income. What is still missing is the per-row escape hatch: a `segment`
+  field on `DailyTransaction` (`forbruk` / `fast` / `overforing` / `inntekt` /
+  `engangs`) so a single odd row — a car purchase, an own-account move the matcher
+  can't prove — can be reclassified without deleting it. Today the only row-scoped
+  lever is a destructive delete, or flipping `kind` to income (which is worse: it
+  used to *raise* the running balance). Deferred to keep the layout change reviewable.
+  **Unblocked by**: agreeing the segment list; the persist plumbing is the same
+  five-site pattern as `capacityOverrides`. **Where**: `DailyTransaction` in
+  `src/context/FinanceContext.tsx`, a new `src/lib/segments.ts`,
+  `src/components/EditTransactionModal.tsx`, `src/lib/payloadRegistry.ts`.
+
+  Concrete case from live data (July 2026): a single uncategorised row, "Giro
+  26 000,00 kr", is 66% of the month's categorised spend and the entire reason
+  "Brukt" (39 099 kr) blows past the 14 040 kr plan — without it the month lands
+  at ~13 100 kr, just *under* plan. Two smaller siblings ("Avtalegiro" 599,
+  "Overførsel" 500) are the same class. Nothing in the app can currently mark
+  these as a transfer or a one-off without deleting them.
+- **`make backup` misses the bank connection state.** It copies only
+  `/data/database.sqlite`, but `server/bank.js` writes `eb-pending.json` and its
+  session/config files as plain JSON in `DATA_DIR`. They survive in the Docker volume,
+  so this only bites on a restore-from-backups, where the bank must be re-linked.
+  Excluding OAuth tokens from the plaintext JSON export is correct; this is most likely
+  a README fix rather than a code change. **Where**: `backup:` in `Makefile`,
+  `PENDING_PATH` / `CONFIG_PATH` in `server/bank.js`.

@@ -18,8 +18,11 @@ import {
   Repeat,
   TrendingDown,
   Clock,
+  Landmark,
+  ArrowRight,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
+import SpendVsPlan from '../components/SpendVsPlan';
 import { AccountBadge } from '../components/AccountBadge';
 import { accountGroupKey } from '../lib/account';
 import { txDisplayName } from '../lib/labelRules';
@@ -38,8 +41,7 @@ import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeSta
 import { suggestTransferRules } from '../lib/transferSuggestions';
 import { RULES_ANCHOR } from '../components/CategoryRules';
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
-import { monthlyCashflow } from '../lib/monthlyCashflow';
-import { savingsRateStatus, targetRateOfIncome } from '../lib/savingsRate';
+import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries } from '../lib/savingsRate';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -174,7 +176,6 @@ const BudgetPage: React.FC = () => {
     dailyBudget,
     totalFixedExpenses,
     savingsContributions,
-    spendFixedExpenses,
     fixedExpenses,
     viewFixedExpenses,
     fixedExpensesFromSnapshot,
@@ -194,7 +195,6 @@ const BudgetPage: React.FC = () => {
     accountFilter,
     setAccountFilter,
     internalTransferIds,
-    nonTransferTransactions,
     savingsTargetPercent,
     payday,
     labelRules,
@@ -203,12 +203,14 @@ const BudgetPage: React.FC = () => {
     employerCostConfig,
     formatCurrency,
     formatCurrencyShort,
+    dismissedLinkSuggestions, dismissLinkSuggestion,
+    dismissedRecurringSuggestions, dismissRecurringSuggestion,
+    transferHintDismissed, dismissTransferHint,
   } = useFinance();
 
-  // Own-account transfers still counting as spend. Dismissible for the session
-  // only — accepting a rule removes its suggestion for good, which is the real
-  // exit from this banner.
-  const [transferHintDismissed, setTransferHintDismissed] = useState(false);
+  // Own-account transfers still counting as spend. The dismissal is persisted;
+  // accepting a rule removes its suggestion for good, which is the other exit
+  // from this banner.
   const transferSuggestions = useMemo(
     () => suggestTransferRules(dailyTransactions, transferRules),
     [dailyTransactions, transferRules],
@@ -229,12 +231,20 @@ const BudgetPage: React.FC = () => {
       ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
       : null;
     const spendFixedTotal = totalFixedExpenses - savingsContributions;
-    const rows = monthlyCashflow(months, nonTransferTransactions, monthlyIncomes, Math.round(effectiveIncome), spendFixedTotal, seasonal, spendFixedExpenses);
+    // Plan-based, matching the chart it sits above: income and fixed expenses
+    // only, no transactions.
+    const rows = planSavingsRateSeries(months, monthlyIncomes, Math.round(effectiveIncome), spendFixedTotal, seasonal);
     return savingsRateStatus(rows, savingsTargetRate);
-  }, [currentMonth, nonTransferTransactions, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, spendFixedExpenses, savingsTargetRate, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetRate, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  // The bank layer below the divider only has something to say once there are
+  // transactions. Gated on the whole ledger (not the viewed month) so paging
+  // between months doesn't make the section appear and vanish. With none, a slim
+  // card advertises that bank sync exists — the feature is otherwise invisible.
+  const hasTransactions = dailyTransactions.length > 0;
+
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -522,8 +532,8 @@ const BudgetPage: React.FC = () => {
 
   // Collision detector: unlinked fixed expenses that look like they double-count
   // with tracked spending (e.g. a "Mat" line while groceries also flow in as
-  // transactions). Dismissable per session; linking resolves it for good.
-  const [dismissedLinks, setDismissedLinks] = useState<Set<string>>(new Set());
+  // transactions). Dismissals persist; linking resolves it for good.
+  const dismissedLinks = useMemo(() => new Set(dismissedLinkSuggestions), [dismissedLinkSuggestions]);
   const linkSuggestions = useMemo(
     () => suggestEnvelopeLinks(fixedExpenses, dailyTransactions, monthKey).filter(s => !dismissedLinks.has(s.expenseId)),
     [fixedExpenses, dailyTransactions, monthKey, dismissedLinks],
@@ -533,15 +543,15 @@ const BudgetPage: React.FC = () => {
 
   // Recurring-payment detector: a merchant charging a steady amount ~monthly that
   // isn't yet a fixed expense. One tap creates a matching fixed expense (as a
-  // pattern envelope, so it draws down instead of double-counting). Session-dismissable.
-  const [dismissedRecurring, setDismissedRecurring] = useState<Set<string>>(new Set());
+  // pattern envelope, so it draws down instead of double-counting). Dismissals persist.
+  const dismissedRecurring = useMemo(() => new Set(dismissedRecurringSuggestions), [dismissedRecurringSuggestions]);
   const recurringSuggestions = useMemo(
     () => detectRecurring(dailyTransactions, fixedExpenses, monthKey).filter(s => !dismissedRecurring.has(s.key)),
     [dailyTransactions, fixedExpenses, monthKey, dismissedRecurring],
   );
   const makeFixedFromRecurring = (s: RecurringSuggestion) => {
     setFixedExpenses([...fixedExpenses, { id: crypto.randomUUID(), name: s.label, amount: s.amount, type: 'fixed', category: s.category, match: s.key }]);
-    setDismissedRecurring(prev => new Set(prev).add(s.key));
+    dismissRecurringSuggestion(s.key);
   };
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
@@ -822,7 +832,7 @@ const BudgetPage: React.FC = () => {
                       {t.envelopeSuggestLink}
                     </button>
                     <button
-                      onClick={() => setDismissedLinks(prev => new Set(prev).add(s.expenseId))}
+                      onClick={() => dismissLinkSuggestion(s.expenseId)}
                       className="px-2 py-1 rounded-[4px] text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
                     >
                       {t.envelopeSuggestDismiss}
@@ -854,7 +864,7 @@ const BudgetPage: React.FC = () => {
                       {t.recurringSuggestAction}
                     </button>
                     <button
-                      onClick={() => setDismissedRecurring(prev => new Set(prev).add(s.key))}
+                      onClick={() => dismissRecurringSuggestion(s.key)}
                       className="px-2 py-1 rounded-[4px] text-[11px] font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
                     >
                       {t.envelopeSuggestDismiss}
@@ -969,7 +979,9 @@ const BudgetPage: React.FC = () => {
           </div>
         </Card>
 
-        {/* Charts */}
+        {/* Distribution of the fixed expenses above — plan-side, no transactions.
+            The category/trend/budget charts that used to share this card moved
+            below the divider, since they are transaction-derived. */}
         <Card padding="none" className="lg:col-span-2 p-5 md:p-7 flex flex-col gap-5">
           <SectionLabel className="pb-4 border-b border-[var(--border)]">
             {t.distributionAnalysis}
@@ -987,90 +999,10 @@ const BudgetPage: React.FC = () => {
             </Suspense>
           </div>
 
-          {/* Category dashboard — spend per category with MoM + drill-in */}
-          <div className="pt-2 pb-3 border-t border-[var(--border)] flex items-center justify-between gap-3">
-            <SectionLabel>{t.spendingByCategory}</SectionLabel>
-            {accountFilterSelect}
-          </div>
-          <CategoryBreakdown onEditTransaction={(tx) => setEditingTx(tx)} />
-
-          {/* Multi-month spending trend by category */}
-          <SectionLabel className="pt-5 pb-3 border-t border-[var(--border)]">
-            {t.spendingTrend} · {t.trendMonths}
-          </SectionLabel>
-          <CategoryTrendChart />
-
-          {/* Per-category monthly budgets */}
-          <div className="pt-5 border-t border-[var(--border)]">
-            <CategoryBudgets />
-          </div>
         </Card>
       </div>
-
-      <MonthlyAccountSpend />
 
       <FunBudget />
-
-      {/* Savings rate + spending heatmap */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <Card padding="none" className="p-5 md:p-7 flex flex-col">
-          <div className="pb-4 mb-2 border-b border-[var(--border)]">
-            <SectionLabel>{t.charts.savingsRateTitle}</SectionLabel>
-            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.savingsRateSub}</p>
-          </div>
-          {savingsWarning && savingsWarning.belowTarget && savingsWarning.months >= 2 && !beforePayday && (
-            <div
-              className="flex items-start gap-2 mb-3 px-3 py-2 rounded-[6px] text-[12px] leading-snug"
-              style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
-              role="status"
-            >
-              <TrendingDown size={14} strokeWidth={2} className="shrink-0 mt-px" />
-              <span>
-                {t.budgetPage.savingsRateWarning
-                  .replace('{months}', String(savingsWarning.months))
-                  .replace('{rate}', String(savingsWarning.trailingRate))
-                  .replace('{target}', String(Math.round(savingsTargetRate)))}
-              </span>
-            </div>
-          )}
-          {transferSuggestions.length > 0 && !transferHintDismissed && (
-            <div
-              className="flex items-start gap-2 mb-3 px-3 py-2 rounded-[6px] text-[12px] leading-snug"
-              style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
-              role="status"
-            >
-              <ArrowLeftRight size={14} strokeWidth={2} className="shrink-0 mt-px" />
-              <span className="flex-1">
-                {t.budgetPage.transferSuggestBanner
-                  .replace('{count}', String(transferSuggestions.reduce((n, s) => n + s.txCount, 0)))
-                  .replace('{amount}', formatCurrency(transferSuggestions.reduce((n, s) => n + s.total, 0)))}
-                {' '}
-                <Link to={`/settings#${RULES_ANCHOR}`} className="underline" style={{ color: 'var(--accent)' }}>
-                  {t.budgetPage.transferSuggestBannerCta}
-                </Link>
-              </span>
-              <button
-                type="button"
-                aria-label={t.dismiss}
-                onClick={() => setTransferHintDismissed(true)}
-                className="shrink-0 text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors"
-              >
-                <X size={13} />
-              </button>
-            </div>
-          )}
-          <div className="flex-1 min-h-[240px] w-full">
-            <Suspense fallback={<ChartSkeleton />}><SavingsRateChart /></Suspense>
-          </div>
-        </Card>
-        <Card padding="none" className="p-5 md:p-7">
-          <div className="pb-4 mb-4 border-b border-[var(--border)]">
-            <SectionLabel>{t.charts.heatmapTitle}</SectionLabel>
-            <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.heatmapSub}</p>
-          </div>
-          <Suspense fallback={<ChartSkeleton className="h-[240px] w-full" />}><SpendingHeatmap /></Suspense>
-        </Card>
-      </div>
 
       {/* Daily Tracker */}
       <Card padding="none" className="overflow-hidden">
@@ -1343,6 +1275,130 @@ const BudgetPage: React.FC = () => {
         </div>
         </>)}
       </Card>
+
+      {/* Savings rate — plan-only: income, fixed expenses and the savings
+          target. No transactions, so it belongs above the bank divider. */}
+      <Card padding="none" className="p-5 md:p-7">
+        <div className="pb-4 mb-2 border-b border-[var(--border)]">
+          <SectionLabel>{t.charts.savingsRateTitle}</SectionLabel>
+          <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.savingsRateSub}</p>
+        </div>
+        {savingsWarning && savingsWarning.belowTarget && savingsWarning.months >= 2 && !beforePayday && (
+          <div
+            className="flex items-start gap-2 mb-3 px-3 py-2 rounded-[6px] text-[12px] leading-snug"
+            style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
+            role="status"
+          >
+            <TrendingDown size={14} strokeWidth={2} className="shrink-0 mt-px" />
+            <span>
+              {t.budgetPage.savingsRateWarning
+                .replace('{months}', String(savingsWarning.months))
+                .replace('{rate}', String(savingsWarning.trailingRate))
+                .replace('{target}', String(Math.round(savingsTargetRate)))}
+            </span>
+          </div>
+        )}
+        <div className="w-full h-[280px]">
+          <Suspense fallback={<ChartSkeleton className="h-[280px] w-full" />}><SavingsRateChart /></Suspense>
+        </div>
+      </Card>
+
+      {/* ────────────────────────────────────────────────────────────────
+          Everything ABOVE this line is the budget: what you set and track
+          yourself. It works with no bank connected at all. Everything BELOW
+          is the bank-transaction layer — an optional add-on that must never
+          change a number above it. */}
+      <div className="pt-4">
+        <div className="border-t-2 border-[var(--border)]" />
+        <div className="mt-6 flex items-center gap-2">
+          <Landmark size={15} className="text-[var(--text-2)]" />
+          <SectionLabel>{t.budgetPage.bankSectionTitle}</SectionLabel>
+        </div>
+        <p className="mt-1.5 text-[12px] max-w-2xl" style={{ color: 'var(--text-3)' }}>
+          {t.budgetPage.bankSectionIntro}
+        </p>
+      </div>
+
+      {hasTransactions ? (<>
+      <SpendVsPlan />
+
+        {transferSuggestions.length > 0 && !transferHintDismissed && (
+          <div
+            className="flex items-start gap-2 mb-3 px-3 py-2 rounded-[6px] text-[12px] leading-snug"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+            role="status"
+          >
+            <ArrowLeftRight size={14} strokeWidth={2} className="shrink-0 mt-px" />
+            <span className="flex-1">
+              {t.budgetPage.transferSuggestBanner
+                .replace('{count}', String(transferSuggestions.reduce((n, s) => n + s.txCount, 0)))
+                .replace('{amount}', formatCurrency(transferSuggestions.reduce((n, s) => n + s.total, 0)))}
+              {' '}
+              <Link to={`/settings#${RULES_ANCHOR}`} className="underline" style={{ color: 'var(--accent)' }}>
+                {t.budgetPage.transferSuggestBannerCta}
+              </Link>
+            </span>
+            <button
+              type="button"
+              aria-label={t.dismiss}
+              onClick={dismissTransferHint}
+              className="shrink-0 text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+
+      <Card padding="none" className="p-5 md:p-7 flex flex-col gap-5">
+            {/* Category dashboard — spend per category with MoM + drill-in */}
+            <div className="pt-2 pb-3 border-t border-[var(--border)] flex items-center justify-between gap-3">
+              <SectionLabel>{t.spendingByCategory}</SectionLabel>
+              {accountFilterSelect}
+            </div>
+            <CategoryBreakdown onEditTransaction={(tx) => setEditingTx(tx)} />
+
+            {/* Multi-month spending trend by category */}
+            <SectionLabel className="pt-5 pb-3 border-t border-[var(--border)]">
+              {t.spendingTrend} · {t.trendMonths}
+            </SectionLabel>
+            <CategoryTrendChart />
+
+            {/* Per-category monthly budgets */}
+            <div className="pt-5 border-t border-[var(--border)]">
+              <CategoryBudgets />
+            </div>
+      </Card>
+
+      <MonthlyAccountSpend />
+
+      {/* Savings rate + spending heatmap */}
+      {/* Spending heatmap — transaction-derived, stays below the divider. */}
+      <Card padding="none" className="p-5 md:p-7">
+        <div className="pb-4 mb-4 border-b border-[var(--border)]">
+          <SectionLabel>{t.charts.heatmapTitle}</SectionLabel>
+          <p className="text-[12px] mt-1" style={{ color: 'var(--text-3)' }}>{t.charts.heatmapSub}</p>
+        </div>
+        {/* Cells are aspect-square in a 7-col grid, so their size tracks the
+            container width. This card used to share a two-column row; full-width
+            blew each day up to ~170px (a ~1000px tall card), so cap the grid. */}
+        <div className="max-w-[560px]">
+          <Suspense fallback={<ChartSkeleton className="h-[240px] w-full" />}><SpendingHeatmap /></Suspense>
+        </div>
+      </Card>
+      </>) : (
+        <Card padding="none" className="p-5 md:p-7">
+          <p className="text-[13px]" style={{ color: 'var(--text-2)' }}>
+            {t.budgetPage.bankSectionEmpty}
+          </p>
+          <Link
+            to="/settings"
+            className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--accent)] hover:opacity-80 transition-opacity"
+          >
+            {t.budgetPage.bankSectionEmptyCta}
+            <ArrowRight size={14} />
+          </Link>
+        </Card>
+      )}
 
       {/* Quick-add FAB (mobile, current month): log today's spend without
           expanding and scrolling the tracker. Hidden while selecting rows. */}

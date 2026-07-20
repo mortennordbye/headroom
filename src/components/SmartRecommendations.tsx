@@ -3,7 +3,6 @@ import { format } from 'date-fns';
 import { AlertTriangle, TrendingUp, Edit2, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
-import { ProgressBar } from './ui/ProgressBar';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 
@@ -47,7 +46,7 @@ function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: E
 
   return (
     <div
-      className={`flex flex-col gap-1.5 rounded-[6px] border p-3 md:p-4 cursor-pointer ${bg}`}
+      className={`flex flex-col justify-center gap-1.5 rounded-[6px] border p-3 md:p-4 cursor-pointer ${bg}`}
       onClick={() => { if (!editing) startEditing(); }}
     >
       <div className="flex items-center justify-between">
@@ -95,7 +94,6 @@ export default function SmartRecommendations() {
     monthlyIncomes,
     savingsTargetPercent,
     setSavingsTargetPercent,
-    dailyData,
     formatCurrency,
     formatCurrencyShort,
     totalResidual,
@@ -138,20 +136,13 @@ export default function SmartRecommendations() {
     setSavingsTargetPercent(Math.round((clamped / totalResidual) * 100));
   };
 
-  // Discretionary spend (envelope-covered spend is already reserved in fixed
-  // expenses), so pacing against recommendedSpending isn't double-counted.
-  const totalSpentThisMonth = dailyData.reduce((s, d) => s + d.discretionary, 0);
-  const spendingPct = recommendedSpending > 0
-    ? Math.min(100, (totalSpentThisMonth / recommendedSpending) * 100)
-    : 0;
-
   const recordedMonthCount = Object.keys(monthlyIncomes).length;
 
-  // Money still left this month after fixed costs and what's actually been spent
-  // (income − fixed − spent). A true monthly balance that falls as you spend —
-  // not a daily-accrual tracker, and not the plan's unallocated remainder (which
-  // is ~0, since recommended spend + invest already split the whole residual).
-  const budgetBalance = Math.round(totalResidual - totalSpentThisMonth);
+  // This card is deliberately transaction-free: it is the budget, and nothing a bank
+  // imports may move a number in it. It used to also show a "Budsjettbalanse" of
+  // (residual − spent) and a spend-progress bar, both derived from dailyData — so a
+  // single stray transfer moved figures the user thought they controlled. Both now
+  // live below the divider in `SpendVsPlan`, where they are labelled as actuals.
 
   const pieData = [
     { name: t.fixedCosts, value: totalFixedExpenses, color: ROLE_FIXED },
@@ -221,10 +212,10 @@ export default function SmartRecommendations() {
       </div>
 
       {/* Main content: stats + chart */}
-      <div className="mt-4 flex flex-col md:flex-row gap-4 md:gap-6 items-start">
-        {/* Left: pills + progress */}
-        <div className="flex-1 space-y-4 min-w-0">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
+      <div className="mt-4 flex flex-col md:flex-row gap-4 md:gap-6 items-stretch">
+        {/* Left: the split of what is left after fixed costs */}
+        <div className="flex-1 min-w-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
             <EditablePill
               label={t.canSpend}
               value={recommendedSpending}
@@ -241,27 +232,6 @@ export default function SmartRecommendations() {
               hint={conservativeMode && suggestedInvestment > recommendedInvestment
                 ? `${t.common.recommended}: ${formatCurrency(suggestedInvestment)}`
                 : undefined}
-            />
-            <div className="flex flex-col gap-1.5 rounded-[8px] border p-3 md:p-4 bg-[var(--bg-raised)] border-[var(--border)]">
-              <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{t.residual}</span>
-              <span
-                className="text-[13px] md:text-[15px] font-bold font-mono tracking-tight"
-                style={{ color: budgetBalance < 0 ? 'var(--negative)' : 'var(--text-1)' }}
-              >
-                {formatCurrency(budgetBalance)}
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between text-[11px] text-[var(--text-2)]">
-              <span>{t.common.spent}: {formatCurrency(totalSpentThisMonth)}</span>
-              <span>{Math.round(spendingPct)}% {t.spentOfRecommended}</span>
-            </div>
-            <ProgressBar
-              pct={spendingPct}
-              square
-              color={spendingPct >= 100 ? 'var(--rust)' : spendingPct >= 80 ? 'var(--brass)' : 'var(--forest-light)'}
             />
           </div>
         </div>

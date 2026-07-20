@@ -1,16 +1,17 @@
 // Category aggregations over daily transactions — the shared math behind the
 // category dashboard (spend + month-over-month), the multi-month trend chart,
-// and per-category budgets. Pure and unit-tested; expenses only (income rows,
-// kind === 'income', never count as spend).
+// and per-category budgets. Pure and unit-tested; expenses only — see `isSpend`
+// in spend.ts for what counts (income is excluded by kind AND by category).
 import type { DailyTransaction } from '../context/FinanceContext';
 import { CATEGORY_KEYS, type CategoryKey } from './categories';
+import { isSpend } from './spend';
 
 export interface CategorySpend {
   category: string;   // canonical key or legacy free-text label
   amount: number;
 }
 
-const isExpense = (t: DailyTransaction) => t.kind !== 'income';
+const isExpense = isSpend;
 const monthOf = (t: DailyTransaction) => t.date.slice(0, 7); // 'yyyy-MM'
 
 /** Total expense per category label for one month, biggest first. */

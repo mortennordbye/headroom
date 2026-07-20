@@ -19,6 +19,7 @@ import { DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from './employer
 import { DEFAULT_FORECAST_ASSUMPTIONS } from './forecastProjection';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from './secondHome';
 import { DEFAULT_PROFILE } from './profile';
+import { DEFAULT_CAPACITY_OVERRIDES } from './capacityOverrides';
 import { dedupeBankTransactions } from './bankDedup';
 import { migrateSavingsAccounts, migrateSnapshotSavings } from './savingsMigration';
 
@@ -27,8 +28,10 @@ import { migrateSavingsAccounts, migrateSnapshotSavings } from './savingsMigrati
 export type PersistedKey = Exclude<keyof ExportPayload, 'currentMonth'>;
 
 // State values are never `undefined` (each has a concrete default), so a field's
-// applied value is the non-nullable form of its payload type.
-type FieldValue<K extends PersistedKey> = NonNullable<ExportPayload[K]>;
+// applied value is its payload type minus `undefined`. `null` is deliberately
+// KEPT: the manual-override fields use it as a meaningful value ("auto"), which
+// must round-trip rather than read as absent.
+type FieldValue<K extends PersistedKey> = Exclude<ExportPayload[K], undefined>;
 
 // Sentinel returned by a read when the field isn't meaningfully present in the
 // blob (distinct from a legitimately-falsy value like `0` or `''`).
@@ -166,6 +169,19 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     payday: { group: 'reset', demo: 'preference', read: whenNumber('payday'), default: 0 },
     aiContext: { group: 'reset', demo: 'personal', read: whenString('aiContext'), default: '' },
     profile: { group: 'preserve', demo: 'personal', read: mergedWith('profile', DEFAULT_PROFILE) },
+    // Manual overrides of an auto-derived figure. `null` means "follow auto" and
+    // is a real value, so these read with `whenDefined` (not `whenTruthy`, which
+    // would swallow both null and a legitimate 0).
+    capacityOverrides: {
+      group: 'reset', demo: 'personal', default: DEFAULT_CAPACITY_OVERRIDES,
+      read: mergedWith('capacityOverrides', DEFAULT_CAPACITY_OVERRIDES),
+    },
+    employerSalaryOverride: { group: 'reset', demo: 'personal', read: whenDefined('employerSalaryOverride'), default: null },
+    // Budget suggestion dismissals — user judgements ("this is not a recurring
+    // bill"), grouped with the other dismissal flags above.
+    dismissedLinkSuggestions: { group: 'reset', demo: 'preference', read: whenArray('dismissedLinkSuggestions'), default: [] },
+    dismissedRecurringSuggestions: { group: 'reset', demo: 'preference', read: whenArray('dismissedRecurringSuggestions'), default: [] },
+    transferHintDismissed: { group: 'reset', demo: 'preference', read: whenBoolean('transferHintDismissed'), default: false },
 
     // ── Group B: apply only when present (identical on load + import) ──
     lang: { group: 'preserve', demo: 'preference', read: whenTruthy('lang') },

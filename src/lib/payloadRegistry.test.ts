@@ -185,6 +185,13 @@ function fullPayload(): ExportPayload {
     payday: 25,
     aiContext: 'Go independent in ~3 years.',
     profile: { name: 'Alex Doe', birthDate: '1990-05-01' },
+    // Non-null overrides on purpose: `null` is the default, so a null here would
+    // not distinguish "round-tripped" from "reset to default".
+    capacityOverrides: { arslonn: 720000, gjeld: 150000, egenkapital: 900000 },
+    employerSalaryOverride: 810000,
+    dismissedLinkSuggestions: ['fe-1'],
+    dismissedRecurringSuggestions: ['spotify'],
+    transferHintDismissed: true,
   };
 }
 
@@ -200,15 +207,15 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 53 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(53);
+  it('registers exactly the 58 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(58);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (30) or preserve (23)', () => {
+  it('partitions every field into reset (35) or preserve (23)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
-    expect(reset).toHaveLength(30);
+    expect(reset).toHaveLength(35);
     expect(preserve).toHaveLength(23);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([

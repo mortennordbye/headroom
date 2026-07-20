@@ -18,6 +18,7 @@ import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
 import { getDemoData } from '../lib/demoData';
 import { type Profile, DEFAULT_PROFILE, birthYearFrom } from '../lib/profile';
+import { type CapacityOverrides, DEFAULT_CAPACITY_OVERRIDES } from '../lib/capacityOverrides';
 import { translations, type Language, type Translations } from '../i18n/translations';
 
 // Re-exported so existing consumers can keep importing these from the context.
@@ -597,6 +598,21 @@ interface FinanceSettingsContextType {
    *  the birthday is also the single source for the pension birth year. */
   profile: Profile;
   updateProfile: (patch: Partial<Profile>) => void;
+  /** Manual overrides of the auto-derived Låneevne inputs (null = follow auto). */
+  capacityOverrides: CapacityOverrides;
+  setCapacityOverride: (key: keyof CapacityOverrides, value: number | null) => void;
+  /** Manual gross-salary override on the employer-cost page (null = follow auto). */
+  employerSalaryOverride: number | null;
+  setEmployerSalaryOverride: (v: number | null) => void;
+  /** Dismissed envelope-link suggestions, by fixed-expense id. */
+  dismissedLinkSuggestions: string[];
+  dismissLinkSuggestion: (expenseId: string) => void;
+  /** Dismissed recurring-payment suggestions, by detector key. */
+  dismissedRecurringSuggestions: string[];
+  dismissRecurringSuggestion: (key: string) => void;
+  /** Budget "these transfers still count as spend" hint — dismissed for good. */
+  transferHintDismissed: boolean;
+  dismissTransferHint: () => void;
   hiddenNavItems: string[];
   toggleNavItem: (path: string) => void;
   /** Dashboard "market assumptions still on defaults" nudge — dismissed for good. */
@@ -945,6 +961,16 @@ export interface ExportPayload {
    *  narrative; not used in any calculation, exposed to the MCP server for context. */
   aiContext?: string;
   profile?: Profile;
+  /** Manual overrides of the auto-derived Låneevne inputs (null = follow auto). */
+  capacityOverrides?: CapacityOverrides;
+  /** Manual gross-salary override on the employer-cost page (null = follow auto). */
+  employerSalaryOverride?: number | null;
+  /** Dismissed envelope-link suggestions, by fixed-expense id. */
+  dismissedLinkSuggestions?: string[];
+  /** Dismissed recurring-payment suggestions, by detector key. */
+  dismissedRecurringSuggestions?: string[];
+  /** Budget "these transfers still count as spend" hint — dismissed for good. */
+  transferHintDismissed?: boolean;
 }
 
 export interface DailyDataEntry {
@@ -1068,6 +1094,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [payday, setPayday] = useState<number>(0);
   const [aiContext, setAiContext] = useState('');
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [capacityOverrides, setCapacityOverrides] = useState<CapacityOverrides>(DEFAULT_CAPACITY_OVERRIDES);
+  const [employerSalaryOverride, setEmployerSalaryOverride] = useState<number | null>(null);
+  const [dismissedLinkSuggestions, setDismissedLinkSuggestions] = useState<string[]>([]);
+  const [dismissedRecurringSuggestions, setDismissedRecurringSuggestions] = useState<string[]>([]);
+  const [transferHintDismissed, setTransferHintDismissed] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   // First-run guided setup. `onboardingCompleted` is the persisted flag;
   // `onboardingActive` (not persisted) is whether the tour overlay is showing.
@@ -1137,13 +1168,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
+    capacityOverrides, employerSalaryOverride,
+    dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile]);
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
+    capacityOverrides, employerSalaryOverride,
+    dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed]);
 
   // The one place that applies a loaded/imported blob → app state (§4.2), with
   // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
@@ -1184,6 +1219,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
       conservativeNudgeDismissedMonth: setConservativeNudgeDismissedMonth, payday: setPayday,
       aiContext: setAiContext, profile: setProfile,
+      capacityOverrides: setCapacityOverrides, employerSalaryOverride: setEmployerSalaryOverride,
+      dismissedLinkSuggestions: setDismissedLinkSuggestions,
+      dismissedRecurringSuggestions: setDismissedRecurringSuggestions,
+      transferHintDismissed: setTransferHintDismissed,
     };
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
@@ -1784,22 +1823,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return eachDayOfInterval({ start, end });
   }, [currentMonth]);
 
-  const transactionsForMonth = useMemo(() => {
-    return dailyTransactions.filter(t => {
-      const date = parseISO(t.date);
-      return date >= startOfMonth(currentMonth) && date <= endOfMonth(currentMonth);
-    });
-  }, [dailyTransactions, currentMonth]);
-
-  // Envelope reconciliation: fixed expenses linked to a tracked category are
-  // reserved up front (in totalFixedExpenses) AND their real transactions draw the
-  // envelope down instead of hitting the daily budget a second time. Single source
-  // of truth shared with the budget UI and charts (src/lib/envelopes.ts).
-  const reconciliation = useMemo(
-    () => reconcile(viewFixedExpenses, dailyTransactions, monthKey),
-    [viewFixedExpenses, dailyTransactions, monthKey],
-  );
-
   // Money moved between two of the user's own connected accounts double-counts
   // as an expense + an income; net those pairs out of the budget analysis.
   // Two-legged pairs the matcher can prove automatically, plus one-legged moves
@@ -1817,12 +1840,37 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [dailyTransactions, internalTransferIds],
   );
 
+  // Every row dated in the viewed month — INCLUDING internal transfers, because
+  // the ledger still shows them (marked ⇄). Display only: never feed this to the
+  // spend arithmetic, or a transfer's expense leg counts as spending.
+  const transactionsForMonth = useMemo(() => {
+    return dailyTransactions.filter(t => {
+      const date = parseISO(t.date);
+      return date >= startOfMonth(currentMonth) && date <= endOfMonth(currentMonth);
+    });
+  }, [dailyTransactions, currentMonth]);
+
+  // The same month, transfer-netted — the set every spend figure is measured on,
+  // so the running balance agrees with the category/trend/per-account surfaces
+  // (which have always used `nonTransferTransactions`).
+  const spendTransactionsForMonth = useMemo(
+    () => transactionsForMonth.filter((tx) => !internalTransferIds.has(tx.id)),
+    [transactionsForMonth, internalTransferIds],
+  );
+
+  // Envelope reconciliation: fixed expenses linked to a tracked category are
+  // reserved up front (in totalFixedExpenses) AND their real transactions draw the
+  // envelope down instead of hitting the daily budget a second time. Single source
+  // of truth shared with the budget UI and charts (src/lib/envelopes.ts).
+  const reconciliation = useMemo(
+    () => reconcile(viewFixedExpenses, nonTransferTransactions, monthKey),
+    [viewFixedExpenses, nonTransferTransactions, monthKey],
+  );
+
   // Both sides of the "vs last month" chip, measured identically: income and
   // internal transfers excluded, envelope-covered spend excluded — only
   // discretionary spend counts, so the chip compares like with like instead of
-  // counting salary deposits or own-account moves as spending. (dailyData's
-  // totalSpent is close but not identical: it is built from the raw month
-  // transactions, so a transfer's expense leg still counts there.)
+  // counting salary deposits or own-account moves as spending.
   const prevMonthSpending = useMemo(
     () => discretionarySpendForMonth(nonTransferTransactions, fixedExpenses, prevMonthKey),
     [nonTransferTransactions, fixedExpenses, prevMonthKey],
@@ -1880,7 +1928,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // Envelope-covered spend is excluded from the running balance; only the
     // discretionary portion (spillover past a full envelope + all non-enveloped
     // spend) draws it down.
-    const points = runningEnvelopeBalance(orderedDays, transactionsForMonth, dailyBudget, reconciliation);
+    const points = runningEnvelopeBalance(orderedDays, spendTransactionsForMonth, dailyBudget, reconciliation);
     return monthInterval.map((day, i) => {
       const dateStr = orderedDays[i];
       const point = points[i];
@@ -1893,7 +1941,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         transactions: transactionsForMonth.filter(t => t.date === dateStr),
       };
     });
-  }, [monthInterval, transactionsForMonth, dailyBudget, reconciliation]);
+  }, [monthInterval, transactionsForMonth, spendTransactionsForMonth, dailyBudget, reconciliation]);
 
   // Latent tax floored at 0: a loss (negative gain) is not a liquid asset, so it
   // must not inflate net worth. The UI clamps inputs ≥0 but JSON import does not.
@@ -2009,6 +2057,21 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       if (year) setPension(prev => ({ ...prev, birthYear: year }));
     }
   }, []);
+
+  const setCapacityOverride = useCallback((key: keyof CapacityOverrides, value: number | null) => {
+    setCapacityOverrides(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  // Dismissals are append-only sets of ids; re-dismissing is a no-op.
+  const dismissLinkSuggestion = useCallback((expenseId: string) => {
+    setDismissedLinkSuggestions(prev => (prev.includes(expenseId) ? prev : [...prev, expenseId]));
+  }, []);
+
+  const dismissRecurringSuggestion = useCallback((key: string) => {
+    setDismissedRecurringSuggestions(prev => (prev.includes(key) ? prev : [...prev, key]));
+  }, []);
+
+  const dismissTransferHint = useCallback(() => setTransferHintDismissed(true), []);
 
   const updateEmployerCostConfig = useCallback((key: keyof EmployerCostConfig, value: number) => {
     setEmployerCostConfig(prev => ({ ...prev, [key]: value }));
@@ -2538,6 +2601,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     region, setRegion, customTaxRatePct, setCustomTaxRatePct,
     aiContext, setAiContext,
     profile, updateProfile,
+    capacityOverrides, setCapacityOverride,
+    employerSalaryOverride, setEmployerSalaryOverride,
+    dismissedLinkSuggestions, dismissLinkSuggestion,
+    dismissedRecurringSuggestions, dismissRecurringSuggestion,
+    transferHintDismissed, dismissTransferHint,
     hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
@@ -2554,7 +2622,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     currentMonth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
-    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, aiContext, profile, updateProfile, hiddenNavItems, toggleNavItem,
+    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, aiContext, profile, updateProfile,
+    capacityOverrides, setCapacityOverride, employerSalaryOverride, setEmployerSalaryOverride,
+    dismissedLinkSuggestions, dismissLinkSuggestion, dismissedRecurringSuggestions, dismissRecurringSuggestion,
+    transferHintDismissed, dismissTransferHint, hiddenNavItems, toggleNavItem,
     assumptionsNudgeDismissed, dismissAssumptionsNudge,
     incomeReminderDismissedMonth, dismissIncomeReminder,
     conservativeNudgeDismissedMonth, dismissConservativeNudge,

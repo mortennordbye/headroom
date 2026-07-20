@@ -8,15 +8,11 @@
 import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 import { reconcile } from './envelopes';
+import { isSpend } from './spend';
 
-/**
- * Whether a transaction counts as spend (money out). Income rows are excluded;
- * a missing `kind` is treated as an expense (legacy rows). This is the app's
- * one "what counts as spend" predicate — keep other spend filters in sync.
- */
-export function isSpend(tx: DailyTransaction): boolean {
-  return tx.kind !== 'income';
-}
+// Re-exported so existing importers keep working; the definition lives in
+// spend.ts so envelopes.ts can use it too (this module imports envelopes).
+export { isSpend } from './spend';
 
 export interface MonthlyCashflowRow {
   month: string; // 'yyyy-MM'

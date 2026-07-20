@@ -7,22 +7,22 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 import { lastNMonthKeys } from '../../lib/date';
-import { monthlyCashflow } from '../../lib/monthlyCashflow';
-import { targetRateOfIncome } from '../../lib/savingsRate';
+import { targetRateOfIncome, planSavingsRateSeries } from '../../lib/savingsRate';
 
 /**
- * Monthly savings capacity as a rate: the share of income left after fixed
- * expenses and logged spending, over the last 12 months, with the user's
- * savings target drawn as a reference line.
+ * Monthly savings capacity as a rate: the share of income left after the
+ * consumption part of the fixed expenses, over the last 12 months, with the
+ * user's savings target drawn as a reference line.
+ *
+ * Plan-only — income, fixed expenses and the savings target. No transactions, so
+ * an imported row can never move this line and every month is plotted (there are
+ * no "unmeasured" gaps from before a bank was connected).
  */
 export default function SavingsRateChart() {
   const {
     t, lang, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
     region, grossAnnualIncome, employerCostConfig,
-    // Whole-finance rate: net out internal transfers, but not per-account (income
-    // isn't account-scoped), so use nonTransferTransactions.
-    nonTransferTransactions: dailyTransactions, savingsTargetPercent, savingsContributions,
-    spendFixedExpenses,
+    savingsTargetPercent, savingsContributions,
   } = useFinance();
   const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -35,14 +35,12 @@ export default function SavingsRateChart() {
     // Automated savings transfers are money retained, not spent — subtract only
     // the consumption part of the fixed expenses.
     const spendFixedTotal = totalFixedExpenses - savingsContributions;
-    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), spendFixedTotal, seasonal, spendFixedExpenses)
-      .map(({ month, rate, measured }) => ({
+    return planSavingsRateSeries(months, monthlyIncomes, Math.round(effectiveIncome), spendFixedTotal, seasonal)
+      .map(({ month, rate }) => ({
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
-        // A month with no logged spend isn't a 40%-savings month, it's an
-        // unmeasured one — leave a gap instead of an inviting peak.
-        rate: measured ? rate : null,
+        rate,
       }));
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, spendFixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   // The target is a share of residual; the line is a share of income. Restate it
   // so the reference line and the plotted rate are the same quantity.
