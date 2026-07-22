@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: build frontend
-FROM node:22-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS frontend-build
+FROM node:26-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583 AS frontend-build
 WORKDIR /app
 COPY package*.json ./
 # Cache-mount the npm download dir so a rebuild (or a lockfile change) reuses
@@ -16,7 +16,7 @@ COPY public ./public
 RUN npm run build
 
 # Stage 2: production
-FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
+FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66
 WORKDIR /app
 # su-exec lets the entrypoint drop from root to `node` after fixing volume perms.
 RUN apk add --no-cache su-exec
