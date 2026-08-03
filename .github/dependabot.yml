@@ -26,9 +26,15 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps):"
+    open-pull-requests-limit: 5
     groups:
       npm-minor-patch:
         update-types: ["minor", "patch"]
+      # Without this, security updates ignore groups entirely and arrive as one
+      # PR per package.
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   - package-ecosystem: "npm"
     directory: "/server"
@@ -36,6 +42,10 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps):"
+    open-pull-requests-limit: 5
     groups:
       npm-minor-patch:
         update-types: ["minor", "patch"]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
