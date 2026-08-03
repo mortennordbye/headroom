@@ -569,3 +569,23 @@ Remaining:
   Excluding OAuth tokens from the plaintext JSON export is correct; this is most likely
   a README fix rather than a code change. **Where**: `backup:` in `Makefile`,
   `PENDING_PATH` / `CONFIG_PATH` in `server/bank.js`.
+
+## Blocked major dependency upgrades (2026-08)
+
+Two Dependabot majors cannot merge as-is. Both stay open and re-run CI on every rebase, so
+they are worth closing out rather than leaving to rot.
+
+- **`pdfjs-dist` 4.10.38 → 6.x needs real code changes.** The payslip importer breaks on the
+  v6 API: `page.render()` no longer accepts a bare `{ canvasContext, viewport }`
+  (`RenderParameters` changed shape), and `PDFDocumentProxy.destroy()` was removed in favour of
+  the loading task's own cleanup. Deferred because the fix is a genuine rewrite of the render
+  and teardown path, not a version bump, and the importer has no browser-level test to catch a
+  regression. **What would unblock**: port the three call sites to the v6 API and re-verify
+  against a real payslip PDF end to end (parsing is covered by fixtures, but the pdf.js
+  extraction layer is not). **Where**: `src/lib/payslip/extractPdfText.ts` lines 45, 70, 86;
+  open PR #24.
+- **`typescript` 6.0.3 → 7.0.2 is blocked upstream.** `npm ci` fails outright: `typescript-eslint@8.63.0`
+  declares `peer typescript ">=4.8.4 <6.1.0"`, so the resolver cannot satisfy TS 7 alongside the
+  current lint stack. Nothing to fix in this repo. **What would unblock**: a `typescript-eslint`
+  release widening its peer range to TS 7; then the bump is mechanical. **Where**:
+  `package.json` (`typescript`, `typescript-eslint`); open PR #27.
