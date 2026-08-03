@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink } from 'react-router';
 
 // One pill-segmented control for the whole app. Two rendering modes, same look:
 //  • button mode  — in-page pick-one state (Bolig hub/mode, Settings currency).

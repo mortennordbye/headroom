@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import ReactDOM from 'react-dom';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router';
 import { format } from 'date-fns';
 import {
   ArrowLeft, ArrowRight, Check, X, Sparkles, Plus, FileUp, ChevronDown,

@@ -3,7 +3,7 @@ import {
   TrendingUp, Wallet, Home, Zap, PiggyBank, BarChart2, Bitcoin, Shield, Receipt,
   ArrowUpRight, BarChart3, LifeBuoy, Scale, Pencil, AlertTriangle, X,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { format, parse, format as fmtDate, subMonths } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinance, DEFAULT_GROWTH_RATES, DEFAULT_TAX_RATES, type DailyTransaction } from '../context/FinanceContext';

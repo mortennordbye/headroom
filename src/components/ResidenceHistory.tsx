@@ -1,5 +1,5 @@
 import { useState, createElement } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { Home, Plus, Edit2, Trash2, Clock, Building2, Building, Warehouse, TreePine, MapPin, type LucideIcon } from 'lucide-react';
