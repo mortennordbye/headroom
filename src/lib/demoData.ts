@@ -22,6 +22,14 @@ export function getDemoData(): Partial<ExportPayload> {
     const d = new Date(now.getFullYear(), now.getMonth() - n, 1);
     return ym(d);
   };
+  // A dated day inside a past month, for entries that carry 'YYYY-MM-DD'
+  // (bonuses, overtime). Capped at 28 so it is a valid date in every month.
+  const dayMonthsAgo = (n: number, day: number) =>
+    `${monthsAgo(n)}-${String(Math.min(day, 28)).padStart(2, '0')}`;
+  const daysAgo = (n: number) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - n);
+    return `${ym(d)}-${String(d.getDate()).padStart(2, '0')}`;
+  };
 
   const demoAssets: Assets = {
     portfolio: 285000,
@@ -99,14 +107,97 @@ export function getDemoData(): Partial<ExportPayload> {
     { id: 'demo-fx-4', name: 'Forsikring', amount: 650, type: 'insurance' },
     { id: 'demo-fx-5', name: 'Mobil/Internett', amount: 800, type: 'subscription' },
     { id: 'demo-fx-6', name: 'Trening', amount: 500, type: 'subscription' },
-    { id: 'demo-fx-7', name: 'Mat', amount: 6500, type: 'variable' },
+    // Linked to a tracked category, which makes it an envelope: grocery
+    // transactions draw this down instead of also hitting the daily budget.
+    // Shows the envelope feature in its resolved state, while the unlinked
+    // 'Strøm' above still demonstrates the double-counting suggestion.
+    { id: 'demo-fx-7', name: 'Mat', amount: 6500, type: 'variable', category: 'groceries' },
   ];
+  // Two fictional accounts, so the per-account badge, the account filter and the
+  // custom-name ("merge") feature all have something to act on.
+  const ACCT_DAILY = 'demo-acct-daily';
+  const ACCT_CARD = 'demo-acct-card';
+
+  // A repeating weekly rhythm plus monthly bills over the last ~13 weeks.
+  //
+  // Dates are RELATIVE (daysAgo) rather than fixed days of the month. The old
+  // fixed-day approach clamped every row to "today" via dayThisMonth, so on the
+  // 4th of a month the whole ledger collapsed onto one date and the Budget page
+  // looked empty. Relative dates mean the current month is always populated up
+  // to today, the previous months are complete, and nothing is ever dated in the
+  // future — whatever day the demo is opened.
+  const WEEKLY: [offset: number, description: string, amount: number, category: string, account: string][] = [
+    [0, 'Rema 1000', 742, 'groceries', ACCT_DAILY],
+    [1, 'Ruter', 42, 'transport', ACCT_DAILY],
+    [2, 'Kaffebrenneriet', 49, 'dining', ACCT_CARD],
+    [3, 'Kiwi', 388, 'groceries', ACCT_DAILY],
+    [4, 'Lunsjbaren', 129, 'dining', ACCT_CARD],
+    [5, 'Coop Extra', 512, 'groceries', ACCT_DAILY],
+    [6, 'Restaurant Fjord', 640, 'dining', ACCT_CARD],
+  ];
+  // Day-of-month bills and occasional spending, cycled across the horizon.
+  const MONTHLY: [dayOfMonth: number, description: string, amount: number, category: string, account: string][] = [
+    [3, 'Strøm', 1290, 'utilities', ACCT_DAILY],
+    [5, 'Mobil og internett', 799, 'subscriptions', ACCT_DAILY],
+    [6, 'Ruter månedskort', 850, 'transport', ACCT_DAILY],
+    [8, 'Treningssenter', 499, 'subscriptions', ACCT_DAILY],
+    [11, 'Strømmetjeneste', 199, 'subscriptions', ACCT_CARD],
+    [13, 'Apotek', 310, 'health', ACCT_CARD],
+    [16, 'Vinmonopolet', 389, 'entertainment', ACCT_CARD],
+    [18, 'Sparekonto', 4000, 'transfers', ACCT_DAILY],
+    [19, 'Klesbutikk', 899, 'shopping', ACCT_CARD],
+    [22, 'Kino', 220, 'entertainment', ACCT_CARD],
+    [24, 'Bensin', 780, 'transport', ACCT_CARD],
+    [26, 'Legetime', 375, 'health', ACCT_CARD],
+  ];
+
+  // ~6.3 months, so the six-month spending-trend chart and the per-account
+  // monthly table are full rather than starting mid-range with blank columns.
+  // Matches the six months of balanceSnapshots built below.
+  const HORIZON_DAYS = 190;
+  const demoTransactions: ExportPayload['dailyTransactions'] = [];
+  for (let d = 0; d <= HORIZON_DAYS; d++) {
+    const date = daysAgo(d);
+    const dayOfMonth = Number(date.slice(8, 10));
+    // Weekly rhythm: one row per day, cycling through WEEKLY.
+    const w = WEEKLY[d % WEEKLY.length];
+    // Vary the amount a little so charts aren't perfectly flat lines. Derived
+    // from the index, never Math.random — the dataset must be deterministic or
+    // the tests below (and any screenshot) would drift between runs.
+    const wobble = 1 + ((d * 37) % 23) / 100 - 0.11;
+    demoTransactions.push({
+      id: `demo-tx-w${d}`, date, description: w[1],
+      amount: Math.round(w[2] * wobble), category: w[3], categorySource: 'auto',
+      account: w[4], accountName: w[4] === ACCT_DAILY ? 'Brukskonto' : 'Kredittkort', bank: 'Demo Bank',
+    });
+    for (const [dom, description, amount, category, account] of MONTHLY) {
+      if (dom !== dayOfMonth) continue;
+      demoTransactions.push({
+        id: `demo-tx-m${d}-${dom}`, date, description, amount, category, categorySource: 'auto',
+        account, accountName: account === ACCT_DAILY ? 'Brukskonto' : 'Kredittkort', bank: 'Demo Bank',
+      });
+    }
+  }
+  // A couple of money-in rows so the income/expense split is visible. Kept small
+  // and clearly incidental — the salary itself comes from the salary tracker, so
+  // depositing it here too would double-count the month's income.
+  demoTransactions.push(
+    { id: 'demo-tx-in-1', date: daysAgo(9), description: 'Refusjon reiseutgifter', amount: 1450, kind: 'income', category: 'income', categorySource: 'auto', account: ACCT_DAILY, accountName: 'Brukskonto', bank: 'Demo Bank' },
+    { id: 'demo-tx-in-2', date: daysAgo(38), description: 'Salg brukt sykkel', amount: 2800, kind: 'income', category: 'income', categorySource: 'auto', account: ACCT_DAILY, accountName: 'Brukskonto', bank: 'Demo Bank' },
+  );
+
+  // Budgets sized against the generated rhythm above: groceries and dining land
+  // close to their budget, transport and entertainment run a little over, so the
+  // Budget page shows both the healthy and the over-budget state.
   const demoCategoryBudgets: ExportPayload['categoryBudgets'] = {
-    groceries: 4000,   // 742 spent — comfortably under
-    transport: 800,    // 850 spent — just over
-    dining: 700,       // 640 spent — under
-    entertainment: 500, // 609 spent — over
-    health: 500,       // 310 spent — under
+    groceries: 7000,
+    dining: 3600,
+    transport: 1900,
+    entertainment: 800,
+    subscriptions: 1600,
+    health: 800,
+    shopping: 1000,
+    utilities: 1500,
   };
   // Forward assumptions in force during the demo history (constant across months).
   const demoAssumptions = { savingsTargetPercent: 20, growthReturnRate: 7, houseGrowthRate: 3 };
@@ -159,19 +250,48 @@ export function getDemoData(): Partial<ExportPayload> {
     employerSalaryOverride: null,
     aiContext:
       'Long-term: want to go independent and start my own consultancy in ~3 years, so keeping a bigger cash buffer than usual. Hoping to buy a rental flat once the mortgage is under 60% LTV.',
-    monthlyIncomes: {},
-    payslips: {},
+    // Three imported payslips, as if the presenter started importing PDFs a few
+    // months ago: the recent months show real gross/tax/net from the payslip,
+    // the older ones stay on the app's tax-estimated figure. Both states are
+    // worth seeing. Base is 744 000 / 12 = 62 000, plus 2 000/mo on-call and any
+    // overtime paid that month (matching the overtime rows above).
+    monthlyIncomes: {
+      [monthsAgo(0)]: 43840,
+      [monthsAgo(1)]: 48500,
+      [monthsAgo(2)]: 47000,
+    },
+    payslips: {
+      [monthsAgo(0)]: { gross: 64000, net: 43840, tax: 20160, base: 62000, holidayPay: 7680 },
+      [monthsAgo(1)]: { gross: 71800, net: 48500, tax: 23300, base: 62000, holidayPay: 8616 },
+      [monthsAgo(2)]: { gross: 69200, net: 47000, tax: 22200, base: 62000, holidayPay: 8304 },
+    },
     netWorthHistory,
     balanceSnapshots,
     savingsTargetPercent: 20,
 
-    // Personal-data fields with no demo counterpart: set to empty/default so the
-    // user's real account names, merchant rules and billing rates never render
-    // during a demo (importAll leaves omitted fields untouched).
-    accountLabels: {},
-    categoryRules: [],
-    labelRules: [],
-    transferRules: [],
+    // These must be SET (not omitted) or the presenter's real account names and
+    // merchant rules would show through — importAll leaves omitted fields alone.
+    // Fictional values satisfy that just as well as empty ones and let the rules
+    // features actually be seen working.
+    accountLabels: {
+      [ACCT_DAILY]: 'Daglig',
+      [ACCT_CARD]: 'Kredittkort',
+    },
+    categoryRules: [
+      { id: 'demo-cr-1', match: 'kaffebrenneriet', category: 'dining' },
+      { id: 'demo-cr-2', match: 'lunsjbaren', category: 'dining' },
+      { id: 'demo-cr-3', match: 'treningssenter', category: 'subscriptions' },
+      { id: 'demo-cr-4', match: 'legetime', category: 'health' },
+    ],
+    labelRules: [
+      { id: 'demo-lr-1', match: 'kaffebrenneriet', label: 'Morgenkaffe' },
+      { id: 'demo-lr-2', match: 'ruter', label: 'Kollektivtransport' },
+    ],
+    transferRules: [
+      // Moving money to your own savings isn't spending — this is what stops it
+      // being counted as such.
+      { id: 'demo-tr-1', match: 'sparekonto' },
+    ],
     employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG,
     billingConfig: DEFAULT_BILLING_CONFIG,
 
@@ -179,14 +299,7 @@ export function getDemoData(): Partial<ExportPayload> {
 
     debts: demoDebts,
 
-    dailyTransactions: [
-      { id: 'demo-tx-1', date: dayThisMonth(3), description: 'Rema 1000', amount: 742, category: 'groceries', categorySource: 'auto' },
-      { id: 'demo-tx-2', date: dayThisMonth(6), description: 'Vinmonopolet', amount: 389, category: 'entertainment', categorySource: 'auto' },
-      { id: 'demo-tx-3', date: dayThisMonth(9), description: 'Ruter månedskort', amount: 850, category: 'transport', categorySource: 'auto' },
-      { id: 'demo-tx-4', date: dayThisMonth(12), description: 'Restaurant', amount: 640, category: 'dining', categorySource: 'auto' },
-      { id: 'demo-tx-5', date: dayThisMonth(15), description: 'Kino', amount: 220, category: 'entertainment', categorySource: 'auto' },
-      { id: 'demo-tx-6', date: dayThisMonth(18), description: 'Apotek', amount: 310, category: 'health', categorySource: 'auto' },
-    ],
+    dailyTransactions: demoTransactions,
 
     categoryBudgets: demoCategoryBudgets,
 
@@ -219,9 +332,33 @@ export function getDemoData(): Partial<ExportPayload> {
 
     pension: demoPension,
 
+    // An ~11-year career across three employers, so the salary history, the
+    // progression chart and the per-job breakdown all have something to show.
+    //
+    // Handoffs are deliberately one month apart (a job ends the month BEFORE the
+    // next begins): activeJobBreakdown treats `endDate` as inclusive, so ending
+    // and starting in the same month would count both jobs and double the gross
+    // for that month. Only the current job has no end date, so today's figures
+    // are unchanged: 744 000 base + 24 000 on-call.
     jobs: [
       {
         id: 'demo-job-1',
+        startDate: monthsAgo(138),
+        endDate: monthsAgo(97),
+        employer: 'Nordvik Systemer AS',
+        role: 'Utvikler',
+        contractedHoursPerWeek: 37.5,
+      },
+      {
+        id: 'demo-job-2',
+        startDate: monthsAgo(96),
+        endDate: monthsAgo(31),
+        employer: 'Fjordkraft Digital AS',
+        role: 'Software Engineer',
+        contractedHoursPerWeek: 37.5,
+      },
+      {
+        id: 'demo-job-3',
         startDate: monthsAgo(30),
         endDate: null,
         employer: 'Demo Consulting AS',
@@ -230,15 +367,50 @@ export function getDemoData(): Partial<ExportPayload> {
         onCallAnnual: 24000,
       },
     ],
+    // 455k → 744k over the three jobs. `role` lives on the job, so an in-role
+    // step up is recorded as a promotion entry with a note rather than a new job.
     salaries: [
-      { id: 'demo-sal-1', jobId: 'demo-job-1', effectiveDate: monthsAgo(30), grossAnnual: 690000, changeType: 'initial' },
-      { id: 'demo-sal-2', jobId: 'demo-job-1', effectiveDate: monthsAgo(6), grossAnnual: 744000, changeType: 'raise' },
+      { id: 'demo-sal-1', jobId: 'demo-job-1', effectiveDate: monthsAgo(138), grossAnnual: 455000, changeType: 'initial' },
+      { id: 'demo-sal-2', jobId: 'demo-job-1', effectiveDate: monthsAgo(126), grossAnnual: 478000, changeType: 'raise' },
+      { id: 'demo-sal-3', jobId: 'demo-job-1', effectiveDate: monthsAgo(114), grossAnnual: 496000, changeType: 'raise' },
+
+      { id: 'demo-sal-4', jobId: 'demo-job-2', effectiveDate: monthsAgo(96), grossAnnual: 545000, changeType: 'job_change' },
+      { id: 'demo-sal-5', jobId: 'demo-job-2', effectiveDate: monthsAgo(84), grossAnnual: 568000, changeType: 'raise' },
+      { id: 'demo-sal-6', jobId: 'demo-job-2', effectiveDate: monthsAgo(72), grossAnnual: 610000, changeType: 'promotion', notes: 'Teamlead' },
+      { id: 'demo-sal-7', jobId: 'demo-job-2', effectiveDate: monthsAgo(60), grossAnnual: 632000, changeType: 'raise' },
+      { id: 'demo-sal-8', jobId: 'demo-job-2', effectiveDate: monthsAgo(42), grossAnnual: 655000, changeType: 'adjustment' },
+
+      { id: 'demo-sal-9', jobId: 'demo-job-3', effectiveDate: monthsAgo(30), grossAnnual: 690000, changeType: 'job_change' },
+      { id: 'demo-sal-10', jobId: 'demo-job-3', effectiveDate: monthsAgo(18), grossAnnual: 715000, changeType: 'raise' },
+      { id: 'demo-sal-11', jobId: 'demo-job-3', effectiveDate: monthsAgo(6), grossAnnual: 744000, changeType: 'raise' },
     ],
+    // Left out of the budget (no includeInBudget) so these enrich the salary
+    // views without quietly inflating the demo's monthly income.
     bonuses: [
-      { id: 'demo-bon-1', date: dayThisMonth(1), amount: 40000, type: 'annual', jobId: 'demo-job-1' },
+      { id: 'demo-bon-1', date: dayThisMonth(1), amount: 40000, type: 'annual', jobId: 'demo-job-3' },
+      { id: 'demo-bon-2', date: dayMonthsAgo(7, 12), amount: 18500, type: 'holiday_pay', jobId: 'demo-job-3' },
+      { id: 'demo-bon-3', date: dayMonthsAgo(12, 15), amount: 35000, type: 'annual', jobId: 'demo-job-3' },
+      { id: 'demo-bon-4', date: dayMonthsAgo(24, 10), amount: 28000, type: 'performance', jobId: 'demo-job-3' },
+      { id: 'demo-bon-5', date: dayMonthsAgo(30, 5), amount: 25000, type: 'signing', jobId: 'demo-job-3' },
+      { id: 'demo-bon-6', date: dayMonthsAgo(45, 14), amount: 22000, type: 'annual', jobId: 'demo-job-2' },
     ],
-    overtime: [],
-    hoursSnapshots: [],
+    overtime: [
+      { id: 'demo-ot-1', date: dayMonthsAgo(1, 20), hours: 12, amount: 7800, jobId: 'demo-job-3' },
+      { id: 'demo-ot-2', date: dayMonthsAgo(2, 18), hours: 8, amount: 5200, jobId: 'demo-job-3' },
+      { id: 'demo-ot-3', date: dayMonthsAgo(4, 22), hours: 16, amount: 10400, jobId: 'demo-job-3', notes: 'Produksjonsinsident' },
+      { id: 'demo-ot-4', date: dayMonthsAgo(6, 9), hours: 6, amount: 3900, jobId: 'demo-job-3' },
+      { id: 'demo-ot-5', date: dayMonthsAgo(9, 25), hours: 10, amount: 6500, jobId: 'demo-job-3' },
+    ],
+    // Actual hours worked against the 37.5 contracted, so the hours-vs-contract
+    // comparison has a real spread instead of a single flat month.
+    hoursSnapshots: [
+      { id: 'demo-hs-1', periodMonth: monthsAgo(0), actualHoursPerWeek: 39.5, jobId: 'demo-job-3' },
+      { id: 'demo-hs-2', periodMonth: monthsAgo(1), actualHoursPerWeek: 41, jobId: 'demo-job-3' },
+      { id: 'demo-hs-3', periodMonth: monthsAgo(2), actualHoursPerWeek: 38, jobId: 'demo-job-3' },
+      { id: 'demo-hs-4', periodMonth: monthsAgo(3), actualHoursPerWeek: 37.5, jobId: 'demo-job-3' },
+      { id: 'demo-hs-5', periodMonth: monthsAgo(4), actualHoursPerWeek: 40, jobId: 'demo-job-3' },
+      { id: 'demo-hs-6', periodMonth: monthsAgo(5), actualHoursPerWeek: 36, jobId: 'demo-job-3' },
+    ],
 
     goals: [
       { id: 'demo-goal-1', name: 'Bufferkonto', target: 100000, source: 'bufferAccount' },

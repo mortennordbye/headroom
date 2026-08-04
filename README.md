@@ -10,6 +10,12 @@
 
 [![License](https://img.shields.io/github/license/mortennordbye/headroom?style=flat-square)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/commits/main) [![Issues](https://img.shields.io/github/issues/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/issues) [![Stars](https://img.shields.io/github/stars/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/stargazers)
 
+### [**Try the live demo → headroom.nordbye.it**](https://headroom.nordbye.it)
+
+Fictional numbers, nothing to sign up for. Click through everything — your
+changes stay in your own browser and are never saved. See
+[Public demo mode](#public-demo-mode) for how it is locked down.
+
 A self-hosted personal finance tracker. Track monthly budgets, manage assets and investments, model housing loans, and get smart spending recommendations. All data is stored server-side in a SQLite database via Docker — zero browser storage. Norwegian is natively supported.
 
 | Dashboard | Budget |
@@ -202,9 +208,21 @@ All optional — the defaults are sensible and nothing needs to be set.
 
 ## Public demo mode
 
+**A live one runs at [headroom.nordbye.it](https://headroom.nordbye.it).**
+
 `DEMO_MODE=1` turns an instance into a public showcase — something you can link
 from a blog post and let strangers click through, without them reaching any real
 data or leaving anything behind.
+
+The demo is filled from `src/lib/demoData.ts`, a fictional dataset built to
+exercise the whole app rather than just render non-empty: an 11-year career
+across three employers with raises, promotions and a job change; bonuses,
+overtime and hours-worked history; imported payslips for the recent months
+alongside tax-estimated older ones; roughly six months of categorised
+transactions across two accounts, with categorisation, label and transfer rules
+applied; budgets that sit both under and over; property, second-home scenarios,
+pension, debts and goals. Transaction dates are relative to the day you open it,
+so the current month is always populated and nothing is ever dated in the future.
 
 What changes:
 
