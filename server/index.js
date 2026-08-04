@@ -13,7 +13,12 @@ const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
 const { startBankSyncSchedule } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
+const { isDemoMode, makeDemoGate } = require('./demo');
 const pkg = require('./package.json');
+
+// Public read-only demo instance (see server/demo.js). Off unless DEMO_MODE is
+// set, so a normal deployment is untouched.
+const DEMO_MODE = isDemoMode(process.env);
 
 // Build identity. CI passes the commit SHA as BUILD_SHA (see Dockerfile / the
 // build workflow's build-args); local runs report 'dev'. Together with the
@@ -218,10 +223,18 @@ const sessionToken = (req) => parseCookies(req.headers.cookie)[SESSION_COOKIE];
 // served plain-HTTP behind a TLS-terminating proxy).
 const cookieSecure = (req) => (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
 
+// Close the API down to safe reads on a public demo instance. Mounted BEFORE the
+// auth gate so the demo is read-only regardless of whether auth is configured —
+// this is the security boundary; the client's demo mode is only presentation.
+if (DEMO_MODE) {
+  console.log('[demo] DEMO_MODE is on — the API is read-only and bank routes are closed');
+  app.use(makeDemoGate());
+}
+
 // Gate /api/* when auth is on. Static assets and the SPA shell stay public (they
 // hold no personal data — the login screen renders from them); health, version
 // and the auth endpoints themselves are exempt so login can happen.
-const AUTH_EXEMPT = ['/healthz', '/api/version', '/api/auth/status', '/api/auth/login', '/api/auth/logout'];
+const AUTH_EXEMPT = ['/healthz', '/api/version', '/api/config', '/api/auth/status', '/api/auth/login', '/api/auth/logout'];
 app.use(makeAuthGate({
   exempt: AUTH_EXEMPT,
   currentAuth,
@@ -413,6 +426,13 @@ app.get('/healthz', (_req, res) => {
 // sha is the CI-stamped commit ('dev' locally).
 app.get('/api/version', (_req, res) => {
   res.json({ version: pkg.version, sha: BUILD_SHA });
+});
+
+// Server-side switches the client needs before it decides how to boot. Fetched
+// first (ahead of /api/data) so a demo instance can send the visitor straight
+// into demo mode instead of loading — and then failing to save — real data.
+app.get('/api/config', (_req, res) => {
+  res.json({ demoMode: DEMO_MODE });
 });
 
 app.get('/api/data', (req, res) => {
@@ -982,22 +1002,28 @@ if (fs.existsSync(DIST)) {
 // When required (integration tests import the app for supertest), skip both so
 // no port is bound and no backup timer/files are created.
 if (require.main === module) {
-  // Rotating on-disk backups (see backup.js). BACKUP_INTERVAL_HOURS=0 disables it.
-  const backupSchedule = startBackupSchedule(db, DATA_DIR, {
-    intervalHours: parseCount(process.env.BACKUP_INTERVAL_HOURS, 24),
-    keep: parseCount(process.env.BACKUP_KEEP, 7),
-  });
-  if (backupSchedule) console.log(`[backup] rotating snapshots enabled → ${backupSchedule.dir}`);
+  // Both schedules are pointless on a demo instance — its volume is ephemeral
+  // and holds no real data, and it has no bank credentials to sync with.
+  // BACKUP_INTERVAL_HOURS=0 / BANK_SYNC_INTERVAL_HOURS=0 have the same effect;
+  // forcing them here means the demo can't be misconfigured into doing either.
+  if (!DEMO_MODE) {
+    // Rotating on-disk backups (see backup.js). BACKUP_INTERVAL_HOURS=0 disables it.
+    const backupSchedule = startBackupSchedule(db, DATA_DIR, {
+      intervalHours: parseCount(process.env.BACKUP_INTERVAL_HOURS, 24),
+      keep: parseCount(process.env.BACKUP_KEEP, 7),
+    });
+    if (backupSchedule) console.log(`[backup] rotating snapshots enabled → ${backupSchedule.dir}`);
 
-  // Optional in-process bank sync (see bankSync.js). BANK_SYNC_INTERVAL_HOURS=0
-  // (default) disables it; the manual "Sync now" button and any external cron
-  // still work regardless.
-  const bankSyncSchedule = startBankSyncSchedule({
-    intervalHours: parseCount(process.env.BANK_SYNC_INTERVAL_HOURS, 0),
-    runSync: runBankSync,
-    lastSyncAgeMs: bank.lastSyncAgeMs,
-  });
-  if (bankSyncSchedule) console.log(`[bank] scheduled sync enabled → every ${bankSyncSchedule.intervalHours}h`);
+    // Optional in-process bank sync (see bankSync.js). BANK_SYNC_INTERVAL_HOURS=0
+    // (default) disables it; the manual "Sync now" button and any external cron
+    // still work regardless.
+    const bankSyncSchedule = startBankSyncSchedule({
+      intervalHours: parseCount(process.env.BANK_SYNC_INTERVAL_HOURS, 0),
+      runSync: runBankSync,
+      lastSyncAgeMs: bank.lastSyncAgeMs,
+    });
+    if (bankSyncSchedule) console.log(`[bank] scheduled sync enabled → every ${bankSyncSchedule.intervalHours}h`);
+  }
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`API running on :${PORT}`));

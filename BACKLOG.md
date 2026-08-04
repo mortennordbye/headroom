@@ -589,3 +589,25 @@ they are worth closing out rather than leaving to rot.
   current lint stack. Nothing to fix in this repo. **What would unblock**: a `typescript-eslint`
   release widening its peer range to TS 7; then the bump is mechanical. **Where**:
   `package.json` (`typescript`, `typescript-eslint`); open PR #27.
+
+## Public demo mode (2026-08) — deferred items
+
+`DEMO_MODE=1` shipped (`server/demo.js`, plus the locked client demo in `FinanceContext`).
+Two gaps were knowingly left.
+
+- **The rate limiter is one global bucket, which a public demo shares across all visitors.**
+  `apiLimiter` uses `keyGenerator: () => 'single-user'` — deliberately, because the app is
+  single-user and that sidesteps `X-Forwarded-For` trust. On the public demo that means one
+  visitor (or one crawler) hammering `/api/inflation` can spend the 2000-per-15-min budget and
+  429 everyone else. Deferred because per-IP keying requires deciding how far to trust the
+  proxy chain, and it would change limiter behaviour for the private instance too, which was
+  out of scope for standing the demo up. The blast radius is availability of a demo, not data.
+  **What would unblock**: key the limiter per-IP when `DEMO_MODE` is on, with `app.set('trust proxy', …)`
+  scoped to the known gateway. **Where**: `server/index.js` (`globalKey`, `apiLimiter`).
+- **A visitor holding a stale service worker would boot the pre-demo client.** The PWA precaches
+  the app shell, so a browser that cached a build predating `DEMO_MODE` would fetch `/api/data`,
+  find it empty, and then 403 on every autosave — an empty app with a "not saved" banner rather
+  than the demo. Deferred because it cannot happen on a fresh deployment (no prior visitors) and
+  self-heals as soon as the update prompt is accepted. **What would unblock**: nothing needed
+  unless the demo URL is ever repointed at a different app; if so, bump the SW cache name.
+  **Where**: `vite.config.ts` (VitePWA `workbox`), `src/context/FinanceContext.tsx` (boot effect).

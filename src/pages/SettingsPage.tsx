@@ -105,6 +105,8 @@ export default function SettingsPage() {
     restoreCustomTaxRateDefault,
     demoMode,
     toggleDemoMode,
+    demoLocked,
+    resetDemo,
     startOnboarding,
     resetGuide,
     restoreDismissedTips,
@@ -875,7 +877,11 @@ export default function SettingsPage() {
                     </div>
                   </label>
 
-                  {/* Restore from a raw SQLite backup (make backup) without a terminal. */}
+                  {/* Restore from a raw SQLite backup (make backup) without a terminal.
+                      Hidden on a public demo: it posts to /api/restore, which a demo
+                      instance refuses, and it's about the owner's deployment anyway.
+                      Export and JSON import above stay — both are client-side. */}
+                  {!demoLocked && (
                   <div className="mt-3 flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
                     <span>{t.settings.restoreOr}</span>
                     <input
@@ -897,6 +903,7 @@ export default function SettingsPage() {
                       {t.settings.restoreFromBackup}
                     </button>
                   </div>
+                  )}
 
                   {importState === 'error' && (
                     <div
@@ -994,15 +1001,22 @@ export default function SettingsPage() {
         </Card>
 
         {/* ──── Restore points — per-write revision history (span 12) ──── */}
-        <RestorePointsCard />
+        {/* Hidden on a public demo: the demo's volume is ephemeral and holds no
+            revisions, and rolling back posts to an API that refuses writes. */}
+        {!demoLocked && <RestorePointsCard />}
 
         {/* ──── Connect an AI assistant (MCP) — how-to (span 12) ──── */}
         <AiAccessCard />
 
         {/* ═══════ Security ═══════ */}
-        <GroupHeading>{t.settings.groups.security}</GroupHeading>
-
-        <AuthSettings />
+        {/* Setting a password on a public demo would either lock every other
+            visitor out or silently fail against the read-only API. */}
+        {!demoLocked && (
+          <>
+            <GroupHeading>{t.settings.groups.security}</GroupHeading>
+            <AuthSettings />
+          </>
+        )}
 
         {/* ═══════ Advanced ═══════ */}
         <GroupHeading>{t.settings.groups.advanced}</GroupHeading>
@@ -1011,9 +1025,11 @@ export default function SettingsPage() {
         <Card padding="lg" className="md:col-span-12">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <SectionLabel icon={<MonitorPlay />}>{t.settings.demoTitle}</SectionLabel>
+              <SectionLabel icon={<MonitorPlay />}>
+                {demoLocked ? t.settings.demoPublicTitle : t.settings.demoTitle}
+              </SectionLabel>
               <p className="mt-2 text-[13px] max-w-2xl" style={{ color: 'var(--text-2)' }}>
-                {t.settings.demoDesc}
+                {demoLocked ? t.settings.demoPublicDesc : t.settings.demoDesc}
               </p>
             </div>
             {demoMode && (
@@ -1026,13 +1042,17 @@ export default function SettingsPage() {
             )}
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
+            {/* A public demo can't be exited — there's no real data behind it.
+                The equivalent action is putting the sample data back. */}
             <Button
-              variant={demoMode ? 'secondary' : 'primary'}
+              variant={demoMode && !demoLocked ? 'secondary' : 'primary'}
               size="md"
-              leadingIcon={<MonitorPlay />}
-              onClick={toggleDemoMode}
+              leadingIcon={demoLocked ? <RotateCcw /> : <MonitorPlay />}
+              onClick={demoLocked ? resetDemo : toggleDemoMode}
             >
-              {demoMode ? t.settings.demoDeactivate : t.settings.demoActivate}
+              {demoLocked
+                ? t.settings.demoResetData
+                : demoMode ? t.settings.demoDeactivate : t.settings.demoActivate}
             </Button>
             <Button
               variant="secondary"
@@ -1062,6 +1082,10 @@ export default function SettingsPage() {
         </Card>
 
         {/* ──── Danger zone (span 12) ──── */}
+        {/* Hidden on a public demo: wiping the sample data leaves the next
+            visitor an empty app, and "Reset sample data" above is the reset a
+            demo visitor actually wants. */}
+        {!demoLocked && (
         <Card padding="lg" className="md:col-span-12">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
@@ -1120,6 +1144,7 @@ export default function SettingsPage() {
             </div>
           )}
         </Card>
+        )}
 
         {/* ──── About (span 12) ──── */}
         <Card padding="lg" className="md:col-span-12">

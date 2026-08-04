@@ -640,6 +640,14 @@ interface FinanceSettingsContextType {
   restoreCustomTaxRateDefault: () => void;
   demoMode: boolean;
   toggleDemoMode: () => void;
+  /** True on a public demo instance (server DEMO_MODE): demo mode is permanent —
+   *  there is no real data behind it to go back to, and the server refuses every
+   *  write. The UI hides anything that would exit demo mode, expose the owner's
+   *  deployment, or fail against a read-only API. */
+  demoLocked: boolean;
+  /** Put the demo dataset back the way it started, after a visitor has clicked
+   *  around and changed things. Only meaningful while `demoLocked`. */
+  resetDemo: () => void;
   /** First-run guided setup. `onboardingCompleted` persists; `onboardingActive`
    *  drives the tour overlay. `startOnboarding` opens it (Settings "replay"),
    *  `completeOnboarding` marks it done and closes it. */
@@ -1100,6 +1108,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [dismissedRecurringSuggestions, setDismissedRecurringSuggestions] = useState<string[]>([]);
   const [transferHintDismissed, setTransferHintDismissed] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  // Public demo instance (server DEMO_MODE, read at boot from /api/config). Demo
+  // mode is then permanent: there is no real data to restore and every write is
+  // refused server-side, so the exit affordances are hidden rather than shown
+  // and left to fail.
+  const [demoLocked, setDemoLocked] = useState(false);
   // First-run guided setup. `onboardingCompleted` is the persisted flag;
   // `onboardingActive` (not persisted) is whether the tour overlay is showing.
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
@@ -1231,6 +1244,23 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const ATTEMPTS = 3;
 
+    // A public demo instance never touches /api/data: the dataset is generated
+    // in the browser, so each visitor gets their own sandbox and their edits
+    // stay local. `loaded.current` deliberately stays false, which — alongside
+    // the `demoMode` guard — means the autosave path can never fire, and the
+    // server refuses writes anyway. Ordered before the data load so a demo
+    // visitor never sees an empty app flash into demo data.
+    const bootDemo = async () => {
+      const cfg = await fetch('/api/config')
+        .then(r => (r.ok ? r.json() : null))
+        .catch(() => null);
+      if (cancelled || !cfg?.demoMode) return false;
+      setDemoLocked(true);
+      setDemoMode(true);
+      applyPayload(getDemoData(), false);
+      return true;
+    };
+
     // Retry the initial load a few times: a transient miss (e.g. a network
     // hiccup around service-worker activation) otherwise leaves the app showing
     // empty defaults until a manual refresh. Crucially, `loaded.current` is set
@@ -1270,7 +1300,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       if (!cancelled) setDataLoadFailed(true);
     };
 
-    load();
+    void bootDemo().then((isDemo) => { if (!isDemo && !cancelled) void load(); });
     return () => { cancelled = true; };
   }, [applyPayload]);
 
@@ -2433,9 +2463,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [demoMode, importAll]);
 
   const toggleDemoMode = useCallback(() => {
+    // On a public demo there is nothing to toggle back to: no snapshot was taken
+    // and the server holds no real data. Ignore rather than drop the visitor
+    // into an empty app.
+    if (demoLocked) return;
     if (demoMode) disableDemoMode();
     else enableDemoMode();
-  }, [demoMode, disableDemoMode, enableDemoMode]);
+  }, [demoLocked, demoMode, disableDemoMode, enableDemoMode]);
+
+  // Re-apply the pristine demo dataset. `resetMissing: false` (the same overlay
+  // the demo boots with) is a complete data reset in practice: getDemoData sets
+  // every field that can hold data, so each is overwritten wholesale. What it
+  // deliberately omits — language, currency, region, nav visibility — is exactly
+  // what the visitor should keep across a reset.
+  const resetDemo = useCallback(() => {
+    applyPayload(getDemoData(), false);
+  }, [applyPayload]);
 
   const resetAll = useCallback(() => {
     setIncome(0);
@@ -2614,7 +2657,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     payday, setPayday,
     formatCurrency, formatCurrencyShort,
     restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
-    demoMode, toggleDemoMode,
+    demoMode, toggleDemoMode, demoLocked, resetDemo,
     onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,
     startOnboarding, resetGuide, completeOnboarding,
     dataLoadFailed, authRequired, authEnabled, authSource, login, logout, setAuthConfig,
@@ -2632,7 +2675,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     restoreDismissedTips,
     payday, setPayday,
     formatCurrency, formatCurrencyShort, restoreGrowthRateDefaults, restoreCustomTaxRateDefault,
-    demoMode, toggleDemoMode,
+    demoMode, toggleDemoMode, demoLocked, resetDemo,
     onboardingCompleted, onboardingActive, onboardingEntry, onboardingNonce,
     startOnboarding, resetGuide, completeOnboarding,
     dataLoadFailed, authRequired, authEnabled, authSource, login, logout, setAuthConfig,
