@@ -939,6 +939,11 @@ export const translations = {
       demoActive: 'Demomodus er på',
       demoBanner: 'Demomodus — viser eksempeldata, ikke din egen økonomi.',
       demoExit: 'Avslutt',
+      // Public demo instance (server DEMO_MODE): permanent demo, nothing is saved.
+      demoPublicTitle: 'Eksempeldata',
+      demoPublicDesc: 'Dette er en offentlig demo av Headroom, fylt med oppdiktede tall. Prøv gjerne alt — endringene dine blir liggende i denne nettleseren og forsvinner når du laster siden på nytt. Ingenting lagres på serveren, og du kan ikke påvirke det andre ser.',
+      demoPublicBanner: 'Offentlig demo — oppdiktede tall. Endringer blir kun liggende i nettleseren din og lagres aldri.',
+      demoResetData: 'Tilbakestill eksempeldata',
       dataManagement: 'Datahåndtering',
       dataDesc: 'Eksporter eller importer alle dataene dine som JSON.',
       about: 'Om Headroom',
@@ -2735,6 +2740,11 @@ export const translations = {
       demoActive: 'Demo mode is on',
       demoBanner: 'Demo mode — showing sample data, not your real finances.',
       demoExit: 'Exit',
+      // Public demo instance (server DEMO_MODE): permanent demo, nothing is saved.
+      demoPublicTitle: 'Sample data',
+      demoPublicDesc: 'This is a public demo of Headroom, filled with fictional numbers. Try anything you like — your changes stay in this browser and disappear when you reload. Nothing is written to the server, and you cannot affect what anyone else sees.',
+      demoPublicBanner: 'Public demo — fictional numbers. Your changes stay in this browser and are never saved.',
+      demoResetData: 'Reset sample data',
       dataManagement: 'Data management',
       dataDesc: 'Export or import all your data as JSON.',
       about: 'About Headroom',

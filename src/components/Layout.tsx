@@ -36,7 +36,7 @@ const BALANCE_SCOPED_ROUTES = ['/assets', '/bolig', '/pension'];
 const HIDE_TIME_MARKER_ROUTES = ['/settings', '/year'];
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded, hiddenNavItems, demoMode, toggleDemoMode, startOnboarding } = useFinanceSettings();
+  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded, hiddenNavItems, demoMode, toggleDemoMode, demoLocked, startOnboarding } = useFinanceSettings();
   const hist = useBalanceHistory();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
@@ -311,14 +311,19 @@ const Layout: React.FC = () => {
             style={{ background: 'var(--violet-bg)', borderColor: 'color-mix(in srgb, var(--violet) 35%, transparent)', color: 'var(--violet)' }}
             role="status"
           >
-            <span className="font-medium">{t.settings.demoBanner}</span>
-            <button
-              onClick={toggleDemoMode}
-              className="shrink-0 px-3 h-8 rounded-[6px] text-[12px] font-semibold"
-              style={{ background: 'var(--violet)', color: 'var(--bg-page)' }}
-            >
-              {t.settings.demoExit}
-            </button>
+            <span className="font-medium">
+              {demoLocked ? t.settings.demoPublicBanner : t.settings.demoBanner}
+            </span>
+            {/* No exit on a public demo — there is no real data behind it. */}
+            {!demoLocked && (
+              <button
+                onClick={toggleDemoMode}
+                className="shrink-0 px-3 h-8 rounded-[6px] text-[12px] font-semibold"
+                style={{ background: 'var(--violet)', color: 'var(--bg-page)' }}
+              >
+                {t.settings.demoExit}
+              </button>
+            )}
           </div>
         )}
         {dataLoadFailed && (

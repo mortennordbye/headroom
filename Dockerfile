@@ -30,6 +30,7 @@ RUN --mount=type=cache,target=/root/.npm \
   && apk del .build-deps
 COPY server/index.js ./
 COPY server/auth.js ./
+COPY server/demo.js ./
 COPY server/seed.js ./
 COPY server/ssb.js ./
 COPY server/boligPrices.js ./

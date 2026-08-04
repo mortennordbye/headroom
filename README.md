@@ -198,6 +198,43 @@ All optional — the defaults are sensible and nothing needs to be set.
 | `PORT` | `3001` | Port the server listens on inside the container. |
 | `ALLOWED_HOSTS` | _(unset — all hosts allowed)_ | Comma-separated hostname allowlist, e.g. `finance.example.com,localhost`. When unset, no host filtering is applied. |
 | `AUTH_PASSWORD` | _(unset — auth off)_ | When set, forces the [optional password](#optional-password) on with this password, overriding the in-app Settings toggle. |
+| `DEMO_MODE` | _(unset — off)_ | Set to `1` to run this instance as a [public read-only demo](#public-demo-mode). |
+
+## Public demo mode
+
+`DEMO_MODE=1` turns an instance into a public showcase — something you can link
+from a blog post and let strangers click through, without them reaching any real
+data or leaving anything behind.
+
+What changes:
+
+- **The API is closed to writes.** Every non-GET request under `/api/` is refused
+  with `403`, and the whole `/api/bank/*` namespace is refused outright (its GETs
+  aren't safe reads — one proxies to Enable Banking on the instance's own
+  credentials, another completes a bank link). This is enforced server-side in
+  `server/demo.js`, so it holds no matter what a client sends.
+- **Each visitor gets their own sandbox.** The app detects demo mode at boot (via
+  `GET /api/config`) and fills itself with the fictional dataset in
+  `src/lib/demoData.ts`, generated in the browser. It never fetches or posts
+  `/api/data`. Visitors can edit anything; their changes stay in their own tab and
+  disappear on reload. No visitor can affect what another sees.
+- **The UI drops what doesn't apply.** No exit-demo button (there is no real data
+  behind it), no password settings, no restore points, no SQLite-backup restore,
+  no "delete all data". A "Reset sample data" button puts the dataset back.
+- **No background jobs.** Rotating backups and scheduled bank sync are both
+  skipped — a demo instance has nothing worth backing up and no bank to sync.
+
+A demo instance needs no persistent volume; give it ephemeral storage and no bank
+credentials. Run it as a **separate instance** from your real one — `DEMO_MODE`
+protects the API, but pointing it at your own data volume still serves that data
+to the internet on `GET /api/data`.
+
+```yaml
+# docker-compose snippet for a demo instance
+environment:
+  DEMO_MODE: "1"
+  ALLOWED_HOSTS: "demo.example.com"
+```
 
 ## Data persistence
 
