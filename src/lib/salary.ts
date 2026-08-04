@@ -121,3 +121,43 @@ export function hoursAt(
   }
   return 37.5;
 }
+
+/** One month of the salary series, as far as the CPI comparison is concerned. */
+export interface SalaryCpiPoint {
+  totalAnnual: number;
+  /**
+   * SSB's CPI index for the month. Null/absent for months SSB hasn't published
+   * yet — both spellings occur across the callers, and both are falsy, which is
+   * exactly what the pairing check below tests for.
+   */
+  cpiIndex?: number | null;
+}
+
+/**
+ * Year-over-year salary growth, and the CPI growth to compare it against.
+ *
+ * The CPI side is anchored on the newest month that actually HAS an index,
+ * not on the newest month of the series. SSB publishes a month's CPI about ten
+ * days after that month ends, so the last month or two of the series never has
+ * one. Reading `cpiIndex` straight off the final point yields undefined, and
+ * treating that as 0 asserts that inflation was flat — which silently inflates
+ * the "beats CPI" gap and states something false about the user's money.
+ *
+ * `cpi` is null when no comparable pair exists, so callers can omit the
+ * comparison rather than present a wrong one. Returns null when the series is
+ * too short to span a year.
+ */
+export function salaryVsCpiYoy(series: SalaryCpiPoint[]): { salary: number; cpi: number | null } | null {
+  if (series.length < 13) return null;
+  const last = series[series.length - 1];
+  const prior = series[series.length - 13];
+  const salary = prior.totalAnnual > 0 ? ((last.totalAnnual / prior.totalAnnual) - 1) * 100 : 0;
+
+  let cpi: number | null = null;
+  for (let i = series.length - 1; i >= 12; i--) {
+    const now = series[i].cpiIndex;
+    const then = series[i - 12].cpiIndex;
+    if (now && then) { cpi = ((now / then) - 1) * 100; break; }
+  }
+  return { salary, cpi };
+}

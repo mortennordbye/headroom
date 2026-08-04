@@ -47,7 +47,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors'
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { restskattEstimate } from '../lib/restskatt';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, activeJobBreakdown } from '../lib/salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, activeJobBreakdown, salaryVsCpiYoy } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 import { ChartSkeleton } from '../components/ui/Skeleton';
@@ -189,18 +189,7 @@ const SalaryPage: React.FC = () => {
   // YoY: compare current month to 12 months ago (total comp including on-call).
   // Null with under 13 months of history — a fabricated +0.0% would read as a
   // confident "flat vs inflation" to a new user.
-  const yoy = useMemo(() => {
-    if (series.length < 13) return null;
-    const last = series[series.length - 1];
-    const prior = series[series.length - 13];
-    const salaryPct = prior.totalAnnual > 0
-      ? ((last.totalAnnual / prior.totalAnnual) - 1) * 100
-      : 0;
-    const cpiPct = prior.cpiIndex && last.cpiIndex
-      ? ((last.cpiIndex / prior.cpiIndex) - 1) * 100
-      : 0;
-    return { salary: salaryPct, cpi: cpiPct };
-  }, [series]);
+  const yoy = useMemo(() => salaryVsCpiYoy(series), [series]);
 
   // Effective hourly including bonus + overtime + on-call over trailing 12 months
   const trailingHourly = useMemo(() => {
@@ -553,7 +542,9 @@ const SalaryPage: React.FC = () => {
     );
   }, [isGeneric, payslips, currentMonthKey, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest]);
 
-  const yoyChip = yoy ? yoy.salary - yoy.cpi : null;
+  // No chip when CPI is unknown (SSB hasn't published the recent months): a
+  // beats/loses-CPI claim needs a real CPI to compare against.
+  const yoyChip = yoy && yoy.cpi != null ? yoy.salary - yoy.cpi : null;
   const chipColor = yoyChip != null && yoyChip >= 0 ? 'var(--positive)' : 'var(--negative)';
   const chipBg = yoyChip != null && yoyChip >= 0 ? 'var(--positive-bg)' : 'var(--negative-bg)';
 
@@ -687,7 +678,7 @@ const SalaryPage: React.FC = () => {
           <SummaryTile
             label={t.salary.yoyVsInflation}
             value={formatSignedPct(yoy?.salary)}
-            sub={yoy ? `${t.salaryPage.cpi} ${formatSignedPct(yoy.cpi)}` : ''}
+            sub={yoy && yoy.cpi != null ? `${t.salaryPage.cpi} ${formatSignedPct(yoy.cpi)}` : ''}
             chip={yoyChip != null ? (
               <span
                 className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold"
