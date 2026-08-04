@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY server/index.js ./
 COPY server/auth.js ./
 COPY server/demo.js ./
+COPY server/cpiWindow.js ./
 COPY server/seed.js ./
 COPY server/ssb.js ./
 COPY server/boligPrices.js ./

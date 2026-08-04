@@ -14,6 +14,7 @@ const { startBackupSchedule, parseCount } = require('./backup');
 const { startBankSyncSchedule } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
 const { isDemoMode, makeDemoGate } = require('./demo');
+const { isWindowComplete } = require('./cpiWindow');
 const pkg = require('./package.json');
 
 // Public read-only demo instance (see server/demo.js). Off unless DEMO_MODE is
@@ -404,12 +405,6 @@ let lastPolicyRateAttemptAt = 0;
 // series, so one shared attempt timer is correct — like policy-rate).
 let lastWageStatsAttemptAt = 0;
 
-function monthCount(fromMonth, toMonth) {
-  const [fy, fm] = fromMonth.split('-').map(Number);
-  const [ty, tm] = toMonth.split('-').map(Number);
-  return (ty - fy) * 12 + (tm - fm) + 1;
-}
-
 // Cheap liveness probe: exercises the DB so a hung event loop / broken SQLite
 // handle fails the healthcheck instead of staying "Up" forever.
 const healthStmt = db.prepare('SELECT 1 AS ok');
@@ -669,11 +664,20 @@ app.get('/api/inflation', async (req, res) => {
   const paddedFrom = `${fy - 1}-${String(fm).padStart(2, '0')}`;
 
   const cached = inflationGetRange.all(paddedFrom, to);
-  const expectedCount = monthCount(paddedFrom, to);
   const latestRow = inflationLatest.get();
   const latestAt = latestRow?.latest ? Date.parse(latestRow.latest) : 0;
   const ageMs = Date.now() - latestAt;
-  const needsRefresh = cached.length < expectedCount || ageMs > CACHE_TTL_MS;
+  // Completeness is measured against what SSB could actually have published,
+  // not against `to`. The client asks through the current month, but CPI lands
+  // ~10 days after a month ends, so the newest month or two of the window never
+  // exists upstream. Counting those as missing made the cache permanently
+  // incomplete: a refresh was always due, so every request inside the hourly
+  // cooldown fell through to the `else if` below and flagged the data stale —
+  // which the client renders as "could not reach SSB", constantly and wrongly.
+  // See server/cpiWindow.js.
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const haveComplete = isWindowComplete(cached.map(r => r.month), paddedFrom, to, nowMonth);
+  const needsRefresh = !haveComplete || ageMs > CACHE_TTL_MS;
   // A user-initiated refresh bypasses the per-hour attempt cooldown (but not the
   // needsRefresh check — nothing to fetch when the cache is already current).
   const force = req.query.force === '1';
@@ -690,12 +694,15 @@ app.get('/api/inflation', async (req, res) => {
       tx(points);
     } catch (err) {
       console.warn(`[inflation] SSB fetch failed, serving cache (next attempt in ${Math.round(SSB_ATTEMPT_COOLDOWN_MS / 60000)} min):`, err.message);
-      stale = true;
+      // Only a warning if what we're left serving is actually deficient. A
+      // failed fetch while the cache already holds every published month costs
+      // the user nothing, so don't tell them the data is unavailable.
+      stale = !haveComplete;
     }
   } else if (needsRefresh) {
     // Refresh is due but we attempted recently — serve what we have without
-    // touching SSB, flagged stale so the client can show its indicator.
-    stale = true;
+    // touching SSB, flagged stale only if it's genuinely missing months.
+    stale = !haveComplete;
   }
 
   const finalRows = inflationGetRange.all(paddedFrom, to);

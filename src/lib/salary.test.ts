@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob, activeJobBreakdown } from './salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob, activeJobBreakdown, salaryVsCpiYoy } from './salary';
 import type { SalaryEntry, JobEntry, HoursSnapshot } from '../context/FinanceContext';
 
 const sal = (id: string, effectiveDate: string, grossAnnual: number, jobId = 'j1'): SalaryEntry => ({
@@ -185,3 +185,56 @@ describe('activeJobBreakdown', () => {
   });
 });
 
+
+describe('salaryVsCpiYoy', () => {
+  /** 13+ months where every point carries a CPI index. */
+  const withCpi = (n: number, cpiAt: (i: number) => number | undefined) =>
+    Array.from({ length: n }, (_, i) => ({ totalAnnual: 600000, cpiIndex: cpiAt(i) }));
+
+  it('is null when the series cannot span a year', () => {
+    expect(salaryVsCpiYoy(withCpi(12, () => 100))).toBeNull();
+  });
+
+  it('computes salary growth over the trailing 12 months', () => {
+    const s = withCpi(13, () => 100);
+    s[0].totalAnnual = 600000;
+    s[12].totalAnnual = 660000;
+    expect(salaryVsCpiYoy(s)!.salary).toBeCloseTo(10, 6);
+  });
+
+  it('anchors CPI on the newest month that has an index', () => {
+    // The regression: SSB publishes ~2 months late, so the final points have no
+    // cpiIndex. Reading the last point gave undefined, which was treated as 0 —
+    // reporting "CPI +0.0%" and overstating the beats-CPI gap.
+    const s = withCpi(15, i => (i >= 13 ? undefined : 100 + i));
+    // Newest indexed point is i=12 (112); its 12-months-prior is i=0 (100).
+    expect(salaryVsCpiYoy(s)!.cpi).toBeCloseTo(12, 6);
+  });
+
+  it('reports real inflation rather than 0 when the tail is unpublished', () => {
+    // Two unpublished trailing months over a series where CPI rose 3%. The old
+    // code read the final (indexless) point and reported +0.0%.
+    const s = withCpi(15, i => (i >= 13 ? undefined : (i === 12 ? 103 : 100)));
+    expect(salaryVsCpiYoy(s)!.cpi).toBeCloseTo(3, 6);
+  });
+
+  it('is null for cpi when no pair 12 months apart has both indices', () => {
+    const s = withCpi(13, i => (i === 12 ? 110 : undefined));
+    expect(salaryVsCpiYoy(s)!.cpi).toBeNull();
+  });
+
+  it('still reports salary growth when CPI is unavailable', () => {
+    const s = withCpi(13, () => undefined);
+    s[0].totalAnnual = 500000;
+    s[12].totalAnnual = 550000;
+    const r = salaryVsCpiYoy(s)!;
+    expect(r.cpi).toBeNull();
+    expect(r.salary).toBeCloseTo(10, 6);
+  });
+
+  it('guards against a zero prior salary instead of dividing by it', () => {
+    const s = withCpi(13, () => 100);
+    s[0].totalAnnual = 0;
+    expect(salaryVsCpiYoy(s)!.salary).toBe(0);
+  });
+});
