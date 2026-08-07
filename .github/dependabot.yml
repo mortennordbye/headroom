@@ -36,32 +36,24 @@ updates:
         applies-to: security-updates
         patterns: ["*"]
 
-  # The desktop app pins its own copy of the server's runtime deps (it runs them
-  # under Electron's Node), so it needs its own update stream.
+  # server/ and desktop/ declare the same runtime dependencies: the desktop app
+  # runs the server under Electron's Node, so it needs its own ABI-matched copy,
+  # and desktop/deps.test.js fails the build if the two drift. Updating them in
+  # separate PRs therefore produces two PRs that each fail on their own. One
+  # entry across both directories, with a single catch-all group so major bumps
+  # are covered too, keeps a shared bump in one mergeable PR.
   - package-ecosystem: "npm"
-    directory: "/desktop"
+    directories:
+      - "/server"
+      - "/desktop"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps):"
     open-pull-requests-limit: 5
     groups:
-      npm-minor-patch:
-        update-types: ["minor", "patch"]
-      npm-security:
-        applies-to: security-updates
+      server-and-desktop:
         patterns: ["*"]
-
-  - package-ecosystem: "npm"
-    directory: "/server"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "chore(deps):"
-    open-pull-requests-limit: 5
-    groups:
-      npm-minor-patch:
-        update-types: ["minor", "patch"]
       npm-security:
         applies-to: security-updates
         patterns: ["*"]

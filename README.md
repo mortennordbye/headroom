@@ -440,7 +440,7 @@ headroom
 | [**Dependency Review**](.github/workflows/dependency-review.yml) | PRs | Blocks PRs that introduce known-vulnerable dependencies |
 | [**Scorecard**](.github/workflows/scorecard.yml) | Push to `main`, weekly | OpenSSF supply-chain score published to the Security tab |
 | [**Container Scan**](.github/workflows/container-scan.yml) | Push to `main`, weekly | Trivy scan of the image; findings to the Security tab |
-| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root + `server/` + `desktop/`, GitHub Actions) |
+| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root, `server/`+`desktop/` paired in one PR, Docker, GitHub Actions) |
 
 ---
 
