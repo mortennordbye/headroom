@@ -39,11 +39,14 @@ if (archives.length === 0) {
 
 let failed = false;
 for (const archive of archives) {
-  const files = listPackage(archive);
+  // listPackage builds entries with the platform separator, so on Windows they
+  // come back as \server\index.js. Normalise before comparing.
+  const files = listPackage(archive).map((f) => f.split(path.sep).join('/'));
   const missing = REQUIRED.filter((f) => !files.includes(f));
   const rel = path.relative(releaseDir, archive);
   if (missing.length) {
     console.error(`${rel}: missing ${missing.join(', ')}`);
+    console.error(`  archive holds ${files.length} entries, e.g. ${files.slice(0, 5).join(', ')}`);
     failed = true;
   } else {
     console.log(`${rel}: contains the server and the frontend (${files.length} entries)`);
