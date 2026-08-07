@@ -638,8 +638,11 @@ second data path — the packaged app runs the same server, API and SQLite stora
   private key, which a downloader will not have. **What would unblock**: register a custom protocol
   (`headroom://`) as the redirect target and handle `open-url` / `second-instance` in the wrapper.
   **Where**: `desktop/main.js` (`FIRST_PORT`, `will-navigate`), `server/bank.js`.
-- **Only the macOS arm64 installer has been run.** The Intel and Windows builds come off the same
-  config but have never been launched by a human — CI proves they *build*, not that they start.
-  Deferred because verifying needs the actual hardware. **What would unblock**: launching each
-  installer once on an Intel Mac and a Windows machine. **Where**:
-  `.github/workflows/desktop-build.yml` (matrix), `desktop/electron-builder.yml`.
+- **The Windows installer has never been launched.** Both macOS builds have been run from the CI
+  artifacts (arm64 natively, Intel under Rosetta 2: signature verified, server up, window
+  rendered), but nothing has run the `.exe`. CI checks that the archive holds the server and the
+  frontend, which is not the same as the app starting: the Windows-specific risks are the
+  better-sqlite3 native binary loading from `app.asar.unpacked` and the NSIS per-user install
+  path. Deferred because it needs a Windows machine. **What would unblock**: installing and
+  launching the `.exe` once. **Where**: `.github/workflows/desktop-build.yml` (matrix),
+  `desktop/electron-builder.yml` (`nsis`).
