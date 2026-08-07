@@ -11,7 +11,8 @@
     "postinstall": "electron-builder install-app-deps",
     "sync": "node scripts/sync.js",
     "start": "npm run sync && electron .",
-    "dist": "npm run sync && electron-builder"
+    "dist": "npm run sync && electron-builder",
+    "verify": "node scripts/verify.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",

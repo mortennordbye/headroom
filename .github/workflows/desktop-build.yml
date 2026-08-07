@@ -79,10 +79,19 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           VERSION: ${{ inputs.version }}
+        # `npm run dist`, not electron-builder directly: dist runs the sync step
+        # that assembles server/ and the frontend into the app. Calling the
+        # packer on its own produces a valid installer with nothing inside it.
         run: |
           flag=()
           if [[ -n "$VERSION" ]]; then flag=("-c.extraMetadata.version=$VERSION"); fi
-          npx --no-install electron-builder ${{ matrix.args }} --publish never "${flag[@]}"
+          npm run dist -- ${{ matrix.args }} --publish never "${flag[@]}"
+
+      # electron-builder does not fail when a files glob matches nothing, so
+      # check the packaged archive really holds the server and the frontend.
+      - name: Verify the package contents
+        working-directory: desktop
+        run: npm run verify
 
       - name: Upload installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
