@@ -32,7 +32,42 @@ Track monthly budgets with variable-income support, fixed expenses, a daily tran
 
 Assets covers your investment portfolio, property equity, crypto, and cash reserves with tax-aware calculations and a 15-year growth projection. The loan calculator handles first-time buyer, homeowner, and buy-and-sell scenarios with full amortization schedules and tax benefit calculations. Supports NOK, USD, or any custom currency, and ships with full Norwegian and English translations.
 
-## Run it on your laptop
+## Download the app (no Docker needed)
+
+If you just want to use Headroom, download it from the
+[latest release](https://github.com/mortennordbye/headroom/releases/latest) and open it like any
+other program. It is the same app as the Docker version, wrapped so it runs on its own.
+
+| Your computer | File to download |
+|---|---|
+| Mac with Apple chip (M1 and newer) | `Headroom-<version>-arm64.dmg` |
+| Mac with Intel chip | `Headroom-<version>.dmg` |
+| Windows | `Headroom-Setup-<version>.exe` |
+
+Not sure which Mac you have? Click the Apple menu, then **About This Mac**. If the Chip line says
+Apple, take the arm64 file.
+
+**The first time you open it, your computer will warn you.** The app is not signed with a paid
+developer certificate, so Windows and macOS do not recognise the publisher. Nothing is wrong with
+it, but you have to tell the system you meant to open it:
+
+- **Windows** — Windows protected your PC → click **More info** → **Run anyway**.
+- **macOS** — right-click (or Control-click) the app in Applications and choose **Open**, then
+  **Open** again in the dialog. If macOS offers no Open button, go to  **System Settings →
+  Privacy & Security**, scroll down, and click **Open Anyway** next to Headroom.
+
+You only do this once. After that it opens normally.
+
+Your data is stored on your own computer and never leaves it:
+
+- **macOS** — `~/Library/Application Support/Headroom/data`
+- **Windows** — `%APPDATA%\Headroom\data`
+
+That folder also gets the same automatic daily backups as the Docker version (see
+[Backups](#backups)). To move to a new version, download the new file and install over the old one.
+Your data is in a separate folder, so it is untouched.
+
+## Run it on your laptop (Docker)
 
 Headroom is happiest as a small private app on your own machine. All you need is Docker:
 
@@ -202,6 +237,7 @@ All optional — the defaults are sensible and nothing needs to be set.
 |---------|---------|---------|
 | `DATA_DIR` | `/data` (in Docker) | Where the SQLite database is stored. |
 | `PORT` | `3001` | Port the server listens on inside the container. |
+| `BIND_HOST` | _(unset — all interfaces)_ | Address to bind to. The desktop app sets `127.0.0.1`; in Docker the loopback restriction comes from the port mapping instead. |
 | `ALLOWED_HOSTS` | _(unset — all hosts allowed)_ | Comma-separated hostname allowlist, e.g. `finance.example.com,localhost`. When unset, no host filtering is applied. |
 | `AUTH_PASSWORD` | _(unset — auth off)_ | When set, forces the [optional password](#optional-password) on with this password, overriding the in-app Settings toggle. |
 | `DEMO_MODE` | _(unset — off)_ | Set to `1` to run this instance as a [public read-only demo](#public-demo-mode). |
@@ -332,6 +368,7 @@ headroom
 │   ├── i18n/            # Translation tables
 │   └── assets/          # Static assets
 ├── public/              # PWA manifest and icons
+├── desktop/             # Electron wrapper that ships server/ as a Mac/Windows app
 ├── scripts/             # Enable Banking extractor (optional)
 └── Dockerfile
 ```
@@ -341,10 +378,12 @@ headroom
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | [**CI**](.github/workflows/build.yml) | Push to `main`, PRs, manual | Typecheck, lint, test, then build and push the Docker image to GHCR |
+| [**Release**](.github/workflows/release.yml) | Push to `main` | release-please keeps a release PR open; merging it cuts the release and attaches the desktop installers |
+| [**Desktop build**](.github/workflows/desktop-build.yml) | PRs touching `desktop/`/`server/`, manual | Builds the Mac and Windows installers so a break surfaces before release |
 | [**Dependency Review**](.github/workflows/dependency-review.yml) | PRs | Blocks PRs that introduce known-vulnerable dependencies |
 | [**Scorecard**](.github/workflows/scorecard.yml) | Push to `main`, weekly | OpenSSF supply-chain score published to the Security tab |
 | [**Container Scan**](.github/workflows/container-scan.yml) | Push to `main`, weekly | Trivy scan of the image; findings to the Security tab |
-| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root + `server/`, GitHub Actions) |
+| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root + `server/` + `desktop/`, GitHub Actions) |
 
 ---
 

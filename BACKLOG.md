@@ -611,3 +611,35 @@ Two gaps were knowingly left.
   self-heals as soon as the update prompt is accepted. **What would unblock**: nothing needed
   unless the demo URL is ever repointed at a different app; if so, bump the SW cache name.
   **Where**: `vite.config.ts` (VitePWA `workbox`), `src/context/FinanceContext.tsx` (boot effect).
+
+## Desktop app (2026-08) — unsigned builds and bank linking
+
+Shipped: an Electron wrapper (`desktop/`) that runs `server/index.js` in a child process and ships
+it as a Mac/Windows download, built by `.github/workflows/desktop-release.yml` on a `v*` tag. No
+second data path — the packaged app runs the same server, API and SQLite storage as the container.
+
+- **The installers are unsigned, so every user meets a scare dialog on first launch.** macOS is
+  ad-hoc signed (`identity: '-'`), which is the minimum that stops Apple Silicon rejecting a
+  downloaded app as "damaged", but Gatekeeper still reports an unidentified developer, and Windows
+  still shows SmartScreen. Deferred because removing them costs money, not work: an Apple Developer
+  account ($99/yr) for signing plus notarization, and a Windows signing certificate (Azure Trusted
+  Signing, ~$10/month) — and a SmartScreen reputation that only builds after enough downloads.
+  **What would unblock**: buying the certificates, then adding the credentials as repository
+  secrets, setting `mac.identity` + `notarize` and `win.signtoolOptions`, and re-enabling
+  `CSC_IDENTITY_AUTO_DISCOVERY`. The entitlements file is already notarization-ready.
+  **Where**: `desktop/electron-builder.yml`, `desktop/build/entitlements.mac.plist`,
+  `.github/workflows/desktop-release.yml`.
+- **Bank linking is untested in the desktop app and probably needs work.** The Enable Banking flow
+  redirects to the bank and back to a registered callback URL. `main.js` sends off-origin
+  navigations to the system browser, so BankID opens correctly, but the callback then lands in the
+  browser rather than the app window, and it only works at all if the app is on its default port
+  (3737) — the wrapper falls forward to another port when that one is taken, which the registered
+  redirect URL cannot follow. Not blocking: bank sync needs an Enable Banking application ID and
+  private key, which a downloader will not have. **What would unblock**: register a custom protocol
+  (`headroom://`) as the redirect target and handle `open-url` / `second-instance` in the wrapper.
+  **Where**: `desktop/main.js` (`FIRST_PORT`, `will-navigate`), `server/bank.js`.
+- **Only the macOS arm64 installer has been run.** The Intel and Windows builds come off the same
+  config but have never been launched by a human — CI proves they *build*, not that they start.
+  Deferred because verifying needs the actual hardware. **What would unblock**: launching each
+  installer once on an Intel Mac and a Windows machine. **Where**:
+  `.github/workflows/desktop-build.yml` (matrix), `desktop/electron-builder.yml`.

@@ -1,0 +1,95 @@
+name: Desktop build
+
+# Builds the Mac and Windows installers. Runs on PRs that touch the code they
+# package (so a break surfaces before release rather than at release), and is
+# called by the release workflow to produce the real artifacts.
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'server/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/desktop-build.yml'
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Version to stamp into the installers. Defaults to desktop/package.json.
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS (Apple Silicon)
+            runner: macos-latest
+            args: --mac --arm64
+          - label: macOS (Intel)
+            runner: macos-15-intel
+            args: --mac --x64
+          - label: Windows
+            runner: windows-latest
+            args: --win --x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      # postinstall runs `electron-builder install-app-deps`, which rebuilds
+      # better-sqlite3 against Electron's ABI rather than the runner's Node.
+      - name: Install desktop dependencies
+        run: npm ci --prefix desktop
+
+      - name: Build app
+        working-directory: desktop
+        # Unsigned build: no certificates, so stop electron-builder hunting for
+        # one in the keychain. electron-builder.yml ad-hoc signs macOS instead.
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          VERSION: ${{ inputs.version }}
+        run: |
+          flag=()
+          if [[ -n "$VERSION" ]]; then flag=("-c.extraMetadata.version=$VERSION"); fi
+          npx --no-install electron-builder ${{ matrix.args }} --publish never "${flag[@]}"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-${{ matrix.runner }}
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*.exe
+          if-no-files-found: error
+          retention-days: 7
