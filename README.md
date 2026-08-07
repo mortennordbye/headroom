@@ -32,16 +32,76 @@ Track monthly budgets with variable-income support, fixed expenses, a daily tran
 
 Assets covers your investment portfolio, property equity, crypto, and cash reserves with tax-aware calculations and a 15-year growth projection. The loan calculator handles first-time buyer, homeowner, and buy-and-sell scenarios with full amortization schedules and tax benefit calculations. Supports NOK, USD, or any custom currency, and ships with full Norwegian and English translations.
 
-## Run it on your laptop
+## How to run it
 
-Headroom is happiest as a small private app on your own machine. All you need is Docker:
+Three ways to run Headroom. All of them keep your data on your own machine, with nothing in the
+cloud and no account to create. Pick one:
+
+| | Best for | What you need |
+|---|---|---|
+| **[A. Download the app](#a-download-the-app)** | Anyone who just wants to use it | A Mac or Windows PC |
+| **[B. Docker](#b-docker)** | Keeping it always-on, on a laptop, server or NAS | Docker |
+| **[C. Build it yourself](#c-build-it-yourself)** | Changing the code, or preferring not to run a binary someone else built | Node 22 and git |
+
+They are the same application. The desktop app runs the same server, the same SQLite database and
+the same backups as the container, only wrapped so it starts on its own.
+
+## A. Download the app
+
+Download it from the [latest release](https://github.com/mortennordbye/headroom/releases/latest)
+and open it like any other program. No Docker, no terminal.
+
+| Your computer | File to download |
+|---|---|
+| Mac with Apple chip (M1 and newer) | `Headroom-<version>-arm64.dmg` |
+| Mac with Intel chip | `Headroom-<version>.dmg` |
+| Windows | `Headroom-Setup-<version>.exe` |
+
+Not sure which Mac you have? Click the Apple menu, then **About This Mac**. If the Chip line says
+Apple, take the arm64 file.
+
+### Installing
+
+**macOS** — open the `.dmg` and drag Headroom into the Applications folder, then eject the disk
+image.
+
+**Windows** — run the `.exe`. It installs for your user only, so it does not ask for an
+administrator password, and it adds a Start menu and desktop shortcut.
+
+### The first time you open it, your computer will warn you
+
+The app is not signed with a paid developer certificate, so neither system recognises who published
+it. The warning is about an unknown publisher, not about anything found in the app. You have to
+tell your computer once that you meant to open it:
+
+**Windows** — "Windows protected your PC" → click **More info** → **Run anyway**.
+
+**macOS (Sequoia / macOS 15 and newer)** — double-click Headroom. macOS refuses and offers only
+**Done**. Click it, then go to **System Settings → Privacy & Security**, scroll to the Security
+section where it says Headroom was blocked, and click **Open Anyway**. Confirm with Touch ID or
+your password. (On macOS 14 and older you can instead right-click the app and choose **Open**.
+Apple removed that shortcut for unsigned apps in macOS 15.)
+
+You only do this once. After that it opens by double-clicking like anything else.
+
+Would rather not click past a security warning at all? [Build it yourself](#c-build-it-yourself).
+An app compiled on your own machine never triggers it.
+
+Your data is stored on your own computer and never leaves it:
+
+- **macOS** — `~/Library/Application Support/Headroom/data`
+- **Windows** — `%APPDATA%\Headroom\data`
+
+That folder also gets the same automatic daily backups as the Docker version (see
+[Backups](#backups)). To move to a new version, download the new file and install over the old one.
+Your data is in a separate folder, so it is untouched.
+
+## B. Docker
+
+The way to run it always-on, or on a machine that isn't a Mac or Windows PC. All you need is Docker:
 
 - **macOS / Windows** — [Docker Desktop](https://www.docker.com/products/docker-desktop/) (free).
 - **Linux** — [Docker Engine](https://docs.docker.com/engine/install/).
-
-No accounts, no cloud, no config files. Your data lives on your machine and never leaves it.
-
-**Option A — pre-built image (recommended, no clone, nothing to build):**
 
 ```bash
 docker run -d \
@@ -52,26 +112,58 @@ docker run -d \
   ghcr.io/mortennordbye/headroom:latest
 ```
 
-**Option B — build from source** (if you want to modify it; also needs [Make](https://www.gnu.org/software/make/)):
+Open **http://localhost:8080** and you're done — **no config files, no environment variables required.**
 
-```bash
-git clone https://github.com/mortennordbye/headroom.git
-cd headroom
-make build
-```
-
-Either way, open **http://localhost:8080** and you're done — **no config files, no environment variables required.**
-
-- The `--restart unless-stopped` flag (and `make up`) means it comes back automatically after you reboot your laptop, so it's always there when you open the browser.
+- The `--restart unless-stopped` flag means it comes back automatically after you reboot, so it's always there when you open the browser.
 - Everything you enter is saved in the **`headroom_data`** volume on your machine. It survives restarts, reboots, and updates (see [Updating](#updating) and [Data persistence](#data-persistence)).
 
 **Later, want it on a home server or another device?** Change the port binding (`-p 8080:3001` for all interfaces, or map it into a reverse proxy) — nothing else changes. Read [Security](#security) first: there's no login, so don't expose it to the open internet without a proxy or VPN in front.
 
+## C. Build it yourself
+
+Nothing here is a black box. Both the container image and the desktop installers are ordinary
+builds you can reproduce with the same commands CI runs.
+
+**As a container** (also needs [Make](https://www.gnu.org/software/make/)):
+
+```bash
+git clone https://github.com/mortennordbye/headroom.git
+cd headroom
+make build              # builds the image and starts it on http://localhost:8080
+```
+
+**As a Mac or Windows app** (needs [Node 22](https://nodejs.org/)):
+
+```bash
+git clone https://github.com/mortennordbye/headroom.git
+cd headroom
+npm install
+npm run build           # builds the frontend
+
+cd desktop
+npm install             # also rebuilds the SQLite binding for Electron
+npm run dist            # installer lands in desktop/release/
+```
+
+`npm run dist` builds for the machine you are on. It packages the server and the frontend into the
+app, then checks that they really are inside it (`npm run verify`, which the build runs for you).
+
+Worth knowing: an app you built yourself **does not show the unidentified-developer warning**. That
+warning is triggered by the quarantine flag your browser attaches to a download, and a file you
+built locally never has one. If the warning is what puts you off the release download, building it
+yourself sidesteps it entirely.
+
+For how the wrapper works and how releases are cut, see [`desktop/README.md`](desktop/README.md).
+
 ## Updating
 
-New versions never touch your data — it's in the `headroom_data` volume, separate from the app. To move to a newer version:
+New versions never touch your data. To move to a newer version:
 
-**Option A — pre-built image:**
+**The desktop app (A):** download the new installer from the
+[latest release](https://github.com/mortennordbye/headroom/releases/latest) and install it over the
+old one. Your data sits in a separate folder, so it carries over untouched.
+
+**Docker (B) — pre-built image:**
 
 ```bash
 docker pull ghcr.io/mortennordbye/headroom:latest   # get the new version
@@ -84,14 +176,14 @@ docker run -d \
   ghcr.io/mortennordbye/headroom:latest              # start the new one, same volume
 ```
 
-**Option B — from source:**
+**From source (C):**
 
 ```bash
 git pull
 make build
 ```
 
-Because you re-attach the same `-v headroom_data:/data` volume (Option A) or reuse the same Docker Compose volume (Option B, via `make build`), **all your budgets, transactions, and settings carry over untouched.** Only `docker-compose down -v` or deleting the volume by hand ever removes data.
+Because you re-attach the same `-v headroom_data:/data` volume, or reuse the same Docker Compose volume via `make build`, **all your budgets, transactions, and settings carry over untouched.** Only `docker-compose down -v` or deleting the volume by hand ever removes data.
 
 > **Tip:** before a big update, it costs nothing to take a snapshot first — `make backup`, or **Settings → Export** in the app (see [Data persistence](#data-persistence)).
 
@@ -112,7 +204,7 @@ Because you re-attach the same `-v headroom_data:/data` volume (Option A) or reu
 
 ## Local development (without Docker)
 
-_For contributors hacking on the code — if you just want to **use** Headroom on your laptop, use [Run it on your laptop](#run-it-on-your-laptop) above instead._
+_For contributors hacking on the code — if you just want to **use** Headroom on your laptop, use [How to run it](#how-to-run-it) above instead._
 
 For iterating on the frontend you can run the API and Vite dev server directly:
 
@@ -202,6 +294,7 @@ All optional — the defaults are sensible and nothing needs to be set.
 |---------|---------|---------|
 | `DATA_DIR` | `/data` (in Docker) | Where the SQLite database is stored. |
 | `PORT` | `3001` | Port the server listens on inside the container. |
+| `BIND_HOST` | _(unset — all interfaces)_ | Address to bind to. The desktop app sets `127.0.0.1`; in Docker the loopback restriction comes from the port mapping instead. |
 | `ALLOWED_HOSTS` | _(unset — all hosts allowed)_ | Comma-separated hostname allowlist, e.g. `finance.example.com,localhost`. When unset, no host filtering is applied. |
 | `AUTH_PASSWORD` | _(unset — auth off)_ | When set, forces the [optional password](#optional-password) on with this password, overriding the in-app Settings toggle. |
 | `DEMO_MODE` | _(unset — off)_ | Set to `1` to run this instance as a [public read-only demo](#public-demo-mode). |
@@ -332,6 +425,7 @@ headroom
 │   ├── i18n/            # Translation tables
 │   └── assets/          # Static assets
 ├── public/              # PWA manifest and icons
+├── desktop/             # Electron wrapper that ships server/ as a Mac/Windows app
 ├── scripts/             # Enable Banking extractor (optional)
 └── Dockerfile
 ```
@@ -341,10 +435,12 @@ headroom
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | [**CI**](.github/workflows/build.yml) | Push to `main`, PRs, manual | Typecheck, lint, test, then build and push the Docker image to GHCR |
+| [**Release**](.github/workflows/release.yml) | Push to `main` | release-please keeps a release PR open; merging it cuts the release and attaches the desktop installers |
+| [**Desktop build**](.github/workflows/desktop-build.yml) | PRs touching `desktop/`/`server/`, manual | Builds the Mac and Windows installers so a break surfaces before release |
 | [**Dependency Review**](.github/workflows/dependency-review.yml) | PRs | Blocks PRs that introduce known-vulnerable dependencies |
 | [**Scorecard**](.github/workflows/scorecard.yml) | Push to `main`, weekly | OpenSSF supply-chain score published to the Security tab |
 | [**Container Scan**](.github/workflows/container-scan.yml) | Push to `main`, weekly | Trivy scan of the image; findings to the Security tab |
-| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root + `server/`, GitHub Actions) |
+| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root + `server/` + `desktop/`, GitHub Actions) |
 
 ---
 

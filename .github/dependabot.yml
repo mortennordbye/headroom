@@ -36,6 +36,22 @@ updates:
         applies-to: security-updates
         patterns: ["*"]
 
+  # The desktop app pins its own copy of the server's runtime deps (it runs them
+  # under Electron's Node), so it needs its own update stream.
+  - package-ecosystem: "npm"
+    directory: "/desktop"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(deps):"
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
   - package-ecosystem: "npm"
     directory: "/server"
     schedule:

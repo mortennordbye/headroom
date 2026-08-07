@@ -4,6 +4,11 @@ node_modules/
 # Build artifacts
 dist/
 
+# Desktop app: server/ is assembled by desktop/scripts/sync.js, release/ holds
+# the packaged installers.
+desktop/server/
+desktop/release/
+
 # Data (contains real user financial data — never commit)
 data/*.sqlite
 data/*.db

@@ -1033,7 +1033,12 @@ if (require.main === module) {
   }
 
   const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => console.log(`API running on :${PORT}`));
+  // Optional bind address. The desktop build sets BIND_HOST=127.0.0.1 so the app
+  // is never reachable from the LAN; unset (Docker, where compose maps the port
+  // to loopback) keeps the previous all-interfaces bind. Deliberately not named
+  // HOST — plenty of shells and platforms already export that.
+  const BIND_HOST = process.env.BIND_HOST;
+  app.listen(PORT, BIND_HOST, () => console.log(`API running on :${PORT}`));
 }
 
 module.exports = app;
