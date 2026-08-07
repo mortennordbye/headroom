@@ -47,16 +47,29 @@ other program. It is the same app as the Docker version, wrapped so it runs on i
 Not sure which Mac you have? Click the Apple menu, then **About This Mac**. If the Chip line says
 Apple, take the arm64 file.
 
-**The first time you open it, your computer will warn you.** The app is not signed with a paid
-developer certificate, so Windows and macOS do not recognise the publisher. Nothing is wrong with
-it, but you have to tell the system you meant to open it:
+### Installing
 
-- **Windows** — Windows protected your PC → click **More info** → **Run anyway**.
-- **macOS** — right-click (or Control-click) the app in Applications and choose **Open**, then
-  **Open** again in the dialog. If macOS offers no Open button, go to  **System Settings →
-  Privacy & Security**, scroll down, and click **Open Anyway** next to Headroom.
+**macOS** — open the `.dmg` and drag Headroom into the Applications folder, then eject the disk
+image.
 
-You only do this once. After that it opens normally.
+**Windows** — run the `.exe`. It installs for your user only, so it does not ask for an
+administrator password, and it adds a Start menu and desktop shortcut.
+
+### The first time you open it, your computer will warn you
+
+The app is not signed with a paid developer certificate, so neither system recognises who published
+it. The warning is about an unknown publisher, not about anything found in the app. You have to
+tell your computer once that you meant to open it:
+
+**Windows** — "Windows protected your PC" → click **More info** → **Run anyway**.
+
+**macOS (Sequoia / macOS 15 and newer)** — double-click Headroom. macOS refuses and offers only
+**Done**. Click it, then go to **System Settings → Privacy & Security**, scroll to the Security
+section where it says Headroom was blocked, and click **Open Anyway**. Confirm with Touch ID or
+your password. (On macOS 14 and older you can instead right-click the app and choose **Open**.
+Apple removed that shortcut for unsigned apps in macOS 15.)
+
+You only do this once. After that it opens by double-clicking like anything else.
 
 Your data is stored on your own computer and never leaves it:
 
