@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { listPackage } = require('@electron/asar');
 
 const releaseDir = path.join(__dirname, '..', 'release');
@@ -50,6 +51,26 @@ for (const archive of archives) {
     failed = true;
   } else {
     console.log(`${rel}: contains the server and the frontend (${files.length} entries)`);
+  }
+}
+
+// An unsigned .app is refused outright by Apple Silicon ("damaged, move to
+// Trash") with no way for a user to click past it. Ad-hoc signing is what keeps
+// it to the ordinary unidentified-developer prompt, so assert it happened
+// rather than trusting the config.
+if (process.platform === 'darwin') {
+  for (const appDir of fs.readdirSync(releaseDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name.startsWith('mac'))
+    .flatMap((e) => fs.readdirSync(path.join(releaseDir, e.name))
+      .filter((n) => n.endsWith('.app'))
+      .map((n) => path.join(releaseDir, e.name, n)))) {
+    try {
+      execFileSync('codesign', ['--verify', '--strict', appDir], { stdio: 'pipe' });
+      console.log(`${path.relative(releaseDir, appDir)}: signature verifies`);
+    } catch (err) {
+      console.error(`${path.relative(releaseDir, appDir)}: signature check failed — ${String(err.stderr || err).trim()}`);
+      failed = true;
+    }
   }
 }
 

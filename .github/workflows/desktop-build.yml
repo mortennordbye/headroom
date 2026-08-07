@@ -78,6 +78,12 @@ jobs:
         # one in the keychain. electron-builder.yml ad-hoc signs macOS instead.
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # electron-builder skips signing on PR builds so fork PRs can't reach
+          # a maintainer's certificates. There are none here — macOS is ad-hoc
+          # signed, no secrets involved — and skipping makes the PR artifact
+          # unusable on Apple Silicon *and* blind to signing regressions, since
+          # what it checks would differ from what ships.
+          CSC_FOR_PULL_REQUEST: 'true'
           VERSION: ${{ inputs.version }}
         # `npm run dist`, not electron-builder directly: dist runs the sync step
         # that assembles server/ and the frontend into the app. Calling the
