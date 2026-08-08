@@ -13,9 +13,10 @@ import { CHART } from '../lib/chartColors';
 // tracking/matching options tucked under a collapsed "Advanced" section.
 
 type Flow = 'none' | 'save' | 'debt';
-const TYPE_ORDER: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance'];
+const TYPE_ORDER: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance', 'saving'];
 const TYPE_COLOR: Record<ExpenseType, string> = {
   fixed: CHART.teal, variable: CHART.forest, subscription: CHART.slate, insurance: CHART.rust,
+  saving: CHART.brass,
 };
 
 interface Props {
@@ -61,6 +62,21 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     storedScalarId ?? expense?.savingsAccountId ?? saveOptions[0].v,
   );
   const [paused, setPaused] = useState(!!expense?.automationPaused);
+
+  // Type and destination are two views of one decision: "Sparing" means the money
+  // is retained, which only means something if it has somewhere to go, and a
+  // savings destination makes the row a saving. Keep them in step so the two
+  // controls can never contradict each other.
+  const chooseType = (next: ExpenseType) => {
+    setType(next);
+    if (next === 'saving' && flow !== 'save') setFlow('save');
+    if (next !== 'saving' && flow === 'save') setFlow('none');
+  };
+  const chooseFlow = (next: Flow) => {
+    setFlow(next);
+    if (next === 'save') setType('saving');
+    else if (type === 'saving') setType('fixed');
+  };
   const debtOptions = [
     ...(housingMode !== 'first_buyer' ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }] : []),
     ...debts.map(d => ({ v: `debt:${d.id}`, l: `${t.expenseDestination.debt}: ${d.name}` })),
@@ -130,7 +146,7 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     return (
       <button
         type="button"
-        onClick={() => setFlow(key)}
+        onClick={() => chooseFlow(key)}
         className={`text-left p-3 rounded-[11px] border transition-colors ${on
           ? 'border-[var(--forest)] bg-[var(--positive-bg)]'
           : 'border-[var(--border)] bg-[var(--bg-raised)] hover:border-[var(--border-strong)]'}`}
@@ -177,12 +193,12 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
         </div>
         <div>
           <label className={lbl}>{t.expenseTypeLabel.replace(':', '')}</label>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-5 gap-1.5">
             {TYPE_ORDER.map(ty => (
               <button
                 key={ty}
                 type="button"
-                onClick={() => setType(ty)}
+                onClick={() => chooseType(ty)}
                 className={`flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-[9px] border text-[12px] font-medium transition-colors ${type === ty
                   ? 'border-[var(--border-strong)] bg-[color-mix(in_srgb,var(--text-1)_8%,transparent)] text-[var(--text-1)]'
                   : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-2)] hover:text-[var(--text-1)]'}`}

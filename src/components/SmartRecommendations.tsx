@@ -10,6 +10,7 @@ import { SectionLabel } from './ui/SectionLabel';
 const ROLE_FIXED = 'var(--teal)';
 const ROLE_SPEND = 'var(--forest-light)';
 const ROLE_INVEST = 'var(--slate)';
+const ROLE_SAVED = 'var(--brass)';
 
 interface EditablePillProps {
   label: string;
@@ -85,6 +86,7 @@ export default function SmartRecommendations() {
     totalFixedExpenses,
     recommendedSpending,
     recommendedInvestment,
+    savingsContributions,
     suggestedInvestment,
     conservativeMode,
     conservativeReason,
@@ -144,10 +146,19 @@ export default function SmartRecommendations() {
   // single stray transfer moved figures the user thought they controlled. Both now
   // live below the divider in `SpendVsPlan`, where they are labelled as actuals.
 
+  // Saving is not an expense, so it gets its own slice rather than hiding inside
+  // the fixed-costs bar — otherwise a big automated transfer reads as "85% of my
+  // income goes to bills". `totalFixedExpenses` still holds both, so the
+  // consumption slice is it minus the savings contributions.
   const pieData = [
-    { name: t.fixedCosts, value: totalFixedExpenses, color: ROLE_FIXED },
+    { name: t.fixedCosts, value: Math.max(0, totalFixedExpenses - savingsContributions), color: ROLE_FIXED },
+    ...(savingsContributions > 0
+      ? [{ name: t.budgetPage.savingSlice, value: savingsContributions, color: ROLE_SAVED }]
+      : []),
     { name: t.canSpend, value: recommendedSpending, color: ROLE_SPEND },
-    { name: t.shouldInvest, value: recommendedInvestment, color: ROLE_INVEST },
+    ...(recommendedInvestment > 0
+      ? [{ name: t.shouldInvest, value: recommendedInvestment, color: ROLE_INVEST }]
+      : []),
   ];
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
   const slicePct = (v: number) => (pieTotal > 0 ? (v / pieTotal) * 100 : 0);

@@ -68,6 +68,67 @@ describe('calcHouseEquityByYear', () => {
   });
 });
 
+describe('calcRecommendations — savings is not an expense', () => {
+  // The real dataset that exposed the ratchet: 55 667 income, 47 468 of "fixed
+  // expenses" of which 15 727 is automated saving (15 227 to funds + 500 to a
+  // savings account), 65% target. Consumption is therefore 31 741.
+  const INCOME = 55_667;
+  const CONSUMPTION = 31_741;
+  const AUTOMATED = 15_727;
+  const PCT = 65;
+
+  it('bases the target on consumption only, so automating does not shrink it', () => {
+    const before = calcRecommendations(INCOME, INCOME, CONSUMPTION + 500, 0, PCT, 500);
+    const after = calcRecommendations(INCOME, INCOME, CONSUMPTION + AUTOMATED, 0, PCT, AUTOMATED);
+    // Same base (23 926) and therefore the same total target in both states.
+    expect(before.recommendedInvestment + 500).toBe(15_552);
+    expect(after.recommendedInvestment + AUTOMATED).toBe(AUTOMATED); // already past target
+  });
+
+  it('converges to 0 once the target is fully automated, instead of regenerating', () => {
+    const r = calcRecommendations(INCOME, INCOME, CONSUMPTION + AUTOMATED, 0, PCT, AUTOMATED);
+    expect(r.recommendedInvestment).toBe(0);
+  });
+
+  it('does not count automated saving against what is left to spend twice', () => {
+    const r = calcRecommendations(INCOME, INCOME, CONSUMPTION + AUTOMATED, 0, PCT, AUTOMATED);
+    // base 23 926 − 15 727 actually set aside = 8 199 spendable.
+    expect(r.recommendedSpending).toBe(8_199);
+  });
+
+  it('reports only the UNALLOCATED remainder of the target', () => {
+    // 10 000 of a 15 552 target already automated → 5 552 still to allocate.
+    const r = calcRecommendations(INCOME, INCOME, CONSUMPTION + 10_000, 0, PCT, 10_000);
+    expect(r.recommendedInvestment).toBe(5_552);
+  });
+
+  it('applying the recommendation is a fixed point (no treadmill)', () => {
+    let contributions = 0;
+    let last = calcRecommendations(INCOME, INCOME, CONSUMPTION, 0, PCT, 0);
+    // Act on the advice repeatedly; it must settle rather than keep asking.
+    for (let i = 0; i < 5; i++) {
+      contributions += last.recommendedInvestment;
+      last = calcRecommendations(INCOME, INCOME, CONSUMPTION + contributions, 0, PCT, contributions);
+    }
+    expect(last.recommendedInvestment).toBe(0);
+    expect(contributions).toBe(15_552);
+  });
+
+  it('never drives spending negative when saving already exceeds the base', () => {
+    const r = calcRecommendations(40_000, 40_000, 30_000 + 25_000, 0, 20, 25_000);
+    expect(r.recommendedSpending).toBe(0);
+    expect(r.recommendedInvestment).toBe(0);
+  });
+
+  it('leaves the conservative advisory unallocated-only too', () => {
+    // Volatile income, 20% target → 30% floor of a 20 000 base = 6 000, less the
+    // 2 000 already automated.
+    const r = calcRecommendations(50_000, 50_000, 30_000 + 2_000, 0.2, 20, 2_000);
+    expect(r.conservativeMode).toBe(true);
+    expect(r.suggestedInvestment).toBe(4_000);
+  });
+});
+
 describe('calcRecommendations', () => {
   it('returns zeros when fixed expenses exceed income', () => {
     const r = calcRecommendations(30_000, 30_000, 40_000, 0, 20);

@@ -129,32 +129,59 @@ export interface BudgetRecommendation {
  */
 export const CONSERVATIVE_FLOOR_RATIO = 0.30;
 
+/**
+ * Split the month into what to spend and what still to set aside.
+ *
+ * `savingsContributions` is the slice of `totalFixedExpenses` that is an
+ * automated move into savings rather than consumption (see
+ * `savingsContributionTotal`). It matters because saving is NOT an expense:
+ * budgeting the target off `income − everything` made acting on the advice
+ * shrink the very base the next target was computed from, so each accepted
+ * recommendation produced a new, smaller one and the number could never be
+ * satisfied — the same ratcheting failure documented on CONSERVATIVE_FLOOR_RATIO
+ * above, and the reason that floor is absolute.
+ *
+ * So the base is income minus CONSUMPTION only, the target is a share of that
+ * base (a stable total), and `recommendedInvestment` reports what is still
+ * unallocated after the automations already running. Automate the whole target
+ * and it converges to 0 instead of regenerating.
+ *
+ * `savingsContributions` defaults to 0, which reproduces the previous behaviour
+ * exactly for callers that do not track it.
+ */
 export function calcRecommendations(
   effectiveIncome: number,
   averageIncome: number,
   totalFixedExpenses: number,
   volatility: number,
-  savingsTargetPercent: number = 20
+  savingsTargetPercent: number = 20,
+  savingsContributions: number = 0,
 ): BudgetRecommendation {
-  const residual = effectiveIncome - totalFixedExpenses;
+  const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions);
+  // Income left after the real bills — the pool that is split into saving and spending.
+  const base = effectiveIncome - spendFixed;
   const shortfall = averageIncome > 0 ? (averageIncome - effectiveIncome) / averageIncome : 0;
   // Shortfall takes priority when both triggers fire, since it's the more concrete signal.
   const conservativeReason: ConservativeReason =
     shortfall > 0.10 ? 'shortfall' : volatility > 0.15 ? 'volatility' : null;
   const conservativeMode = conservativeReason !== null;
-  if (residual <= 0) return { recommendedSpending: 0, recommendedInvestment: 0, conservativeMode: true, conservativeReason, suggestedInvestment: 0 };
+  if (base <= 0) return { recommendedSpending: 0, recommendedInvestment: 0, conservativeMode: true, conservativeReason, suggestedInvestment: 0 };
   // The plan follows the user's chosen savings target exactly — manual edits stick.
   const investRatio = savingsTargetPercent / 100;
   // Conservative mode only *suggests* reaching the floor; it never overrides the plan.
   const suggestedRatio = conservativeMode
     ? Math.min(0.95, Math.max(investRatio, CONSERVATIVE_FLOOR_RATIO))
     : investRatio;
+  const targetTotal = base * investRatio;
+  // Already saving more than the target? Then that larger amount is what actually
+  // leaves the pool, so spending must reflect it rather than the unmet target.
+  const setAside = Math.max(targetTotal, savingsContributions);
   return {
-    recommendedSpending: Math.round(residual * (1 - investRatio)),
-    recommendedInvestment: Math.round(residual * investRatio),
+    recommendedSpending: Math.round(Math.max(0, base - setAside)),
+    recommendedInvestment: Math.round(Math.max(0, targetTotal - savingsContributions)),
     conservativeMode,
     conservativeReason,
-    suggestedInvestment: Math.round(residual * suggestedRatio),
+    suggestedInvestment: Math.round(Math.max(0, base * suggestedRatio - savingsContributions)),
   };
 }
 

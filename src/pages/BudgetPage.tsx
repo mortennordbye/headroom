@@ -41,7 +41,7 @@ import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeSta
 import { suggestTransferRules } from '../lib/transferSuggestions';
 import { RULES_ANCHOR } from '../components/CategoryRules';
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
-import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries } from '../lib/savingsRate';
+import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries, isSavingsRow } from '../lib/savingsRate';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -82,6 +82,7 @@ const EXPENSE_TYPE_COLOR: Record<ExpenseType, string> = {
   variable: CHART.forest,   // variable spend
   subscription: CHART.slate, // subscriptions
   insurance: CHART.rust,    // insurance
+  saving: CHART.brass,      // money retained, not spent
 };
 const expenseColor = (type?: ExpenseType) => EXPENSE_TYPE_COLOR[type ?? 'fixed'];
 
@@ -101,6 +102,7 @@ function EnvelopeBar({ envelope, formatCurrency, labels }: {
 }) {
   const color = ENVELOPE_STATUS_COLOR[envelope.status];
   const pct = envelope.budgeted > 0 ? Math.min(100, (envelope.actual / envelope.budgeted) * 100) : 0;
+
   return (
     <div className="mt-2 pl-[15px] space-y-1">
       <ProgressBar pct={pct} heightClass="h-[3px]" color={color} />
@@ -269,25 +271,73 @@ const BudgetPage: React.FC = () => {
   const totalMonthlyDebtService = debts.reduce((sum, d) => sum + d.minPayment, 0);
   // Sort biggest-first so the distribution reads as a clean ranking. Uses the
   // month's recorded expenses when time-travelling (see viewFixedExpenses).
-  const sortedExpenses = [...viewFixedExpenses].sort((a, b) => b.amount - a.amount);
+  // The distribution chart mirrors the Faste utgifter table, so it plots the same
+  // rows against the same total (see sortedSpendExpenses). Savings has its own
+  // table and its own slice in the plan breakdown; including it here would make
+  // the percentages disagree with the table directly above it.
 
   // Group the fixed-expense list by type so each category (Fast / Variabel /
   // Abonnement / Forsikring) reads as its own labelled block. Every expense is
   // still shown; only the visual grouping changes. Untyped legacy rows fall into
   // 'fixed', matching `expenseColor` and `fixedExpenseTotalsByType`.
-  const fixedExpenseGroups = useMemo(() => {
+  //
+  // Rows whose destination is a savings vehicle are pulled OUT of this list and
+  // shown in their own "Sparing" section: moving money to funds or a savings
+  // account is not an expense, and burying it here made a large transfer read as
+  // a bill (and pushed "faste utgifter" to a share of income that looked alarming).
+  // Debt/mortgage paydown deliberately stays an expense — the gross payment is
+  // mostly interest and it does leave for good.
+  const savingRows = useMemo(
+    () => viewFixedExpenses.filter((e) => isSavingsRow(e)),
+    [viewFixedExpenses],
+  );
+  const spendRows = useMemo(
+    () => viewFixedExpenses.filter((e) => !isSavingsRow(e)),
+    [viewFixedExpenses],
+  );
+  const spendFixedTotal = useMemo(
+    () => spendRows.reduce((sum, e) => sum + e.amount, 0),
+    [spendRows],
+  );
+  const sortedSpendExpenses = useMemo(
+    () => [...spendRows].sort((a, b) => b.amount - a.amount),
+    [spendRows],
+  );
+
+  // The savings target in kroner, resolved the same way calcRecommendations does
+  // it: a share of income minus CONSUMPTION (never of everything, or automating a
+  // transfer would shrink the target it is measured against). Shown beside the
+  // savings list, which is the one place it belongs.
+  const savingsTargetAmount = useMemo(
+    () => Math.max(0, Math.round((effectiveIncome - spendFixedTotal) * (savingsTargetPercent / 100))),
+    [effectiveIncome, spendFixedTotal, savingsTargetPercent],
+  );
+  const savingsProgressPct = savingsTargetAmount > 0
+    ? (savingsContributions / savingsTargetAmount) * 100
+    : 0;
+  const savingsRemaining = Math.max(0, savingsTargetAmount - savingsContributions);
+
+  const spendGroups = useMemo(() => {
     const order: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance'];
     const byType = new Map<ExpenseType, FixedExpense[]>();
-    for (const e of viewFixedExpenses) {
+    for (const e of spendRows) {
       const type = e.type ?? 'fixed';
       const bucket = byType.get(type);
       if (bucket) bucket.push(e);
       else byType.set(type, [e]);
     }
     return order
-      .map((type) => ({ type, expenses: byType.get(type) ?? [] }))
+      .map((type) => ({ type: type as ExpenseType, expenses: byType.get(type) ?? [] }))
       .filter((g) => g.expenses.length > 0);
-  }, [viewFixedExpenses]);
+  }, [spendRows]);
+
+  // The savings table's single group. Kept as a group so it renders through the
+  // very same row renderer as the expenses table (editing, delete, destination
+  // label all behave identically) while living in its own card.
+  const savingGroup = useMemo(
+    () => ({ type: 'saving' as ExpenseType, expenses: savingRows }),
+    [savingRows],
+  );
 
   // --- Validation helpers ---
   const parsePositiveNumber = (val: string): number | null => {
@@ -342,6 +392,12 @@ const BudgetPage: React.FC = () => {
     }
     if (e.destinationKind === 'bufferAccount') {
       return t.expenseDestination.buffer;
+    }
+    if (e.destinationKind === 'portfolio') {
+      return t.expenseDestination.portfolio;
+    }
+    if (e.destinationKind === 'bsu') {
+      return t.expenseDestination.bsu;
     }
     if (e.destinationKind === 'debt') {
       const d = debts.find(x => x.id === e.debtId);
@@ -631,6 +687,104 @@ const BudgetPage: React.FC = () => {
     </select>
   ) : null;
 
+  // One category block (coloured edge + tinted header + its rows). Defined as a
+  // closure rather than a child component so it keeps using the editing state,
+  // envelope reconciliation and handlers above without threading ~15 props, and
+  // can be rendered by BOTH the expenses table and the savings table below.
+  const renderGroup = (group: { type: ExpenseType; expenses: FixedExpense[] }, hideHeader = false) => (
+            // Each category is its own card: a coloured left edge + a tinted
+            // header band make the grouping unmistakable, and the rows live
+            // inside so a category reads as one bounded block.
+            <div
+              key={group.type}
+              className="mt-3 first:mt-0 rounded-[10px] border border-[var(--border)] overflow-hidden"
+              style={{ borderLeft: `3px solid ${expenseColor(group.type)}` }}
+            >
+              {!hideHeader && (
+              <div
+                className="flex items-center gap-2 px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider"
+                style={{
+                  color: 'var(--text-1)',
+                  background: `color-mix(in srgb, ${expenseColor(group.type)} 9%, transparent)`,
+                }}
+              >
+                <span className="w-[8px] h-[8px] rounded-[2px] shrink-0" style={{ background: expenseColor(group.type) }} />
+                {group.type === 'saving' ? t.budgetPage.savingsCardTitle : t.expenseType[group.type]}
+              </div>
+              )}
+              <div className="px-3.5">
+              {group.expenses.map((expense) => {
+            // Envelope reconciliation, shown only for a linked expense that has
+            // real spend this month (keeps the list quiet for non-syncers). When
+            // several expenses share a category, the shared bar renders once,
+            // under the first of them.
+            const envelope = reconciliation.byExpenseId.get(expense.id);
+            const showEnvelope = !!envelope && envelope.actual > 0 && envelope.expenseIds[0] === expense.id;
+            const isOver = envelope?.status === 'over';
+            return (
+            <div
+              key={expense.id}
+              className={`relative py-4 border-b border-[var(--border)] last:border-0 ${isOver ? 'pl-2.5' : ''}`}
+            >
+              {/* Over-budget accent: a rounded bar inset from the row edges so
+                  two adjacent over-budget rows read separately, not as one bar. */}
+              {isOver && <span aria-hidden className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-full bg-[var(--rust)]" />}
+              <div className="flex items-center justify-between group">
+                {expensesReadOnly ? (
+                  <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] min-w-0">
+                    <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
+                    <span className="truncate">{expense.name}</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`${t.edit} — ${expense.name}`}
+                    className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
+                    onClick={() => openExpenseDialog(expense)}
+                  >
+                    <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
+                    <span className="truncate">{expense.name}</span>
+                  </button>
+                )}
+                <div className="flex items-center gap-3">
+                  {expensesReadOnly ? (
+                    <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">
+                      {formatCurrency(expense.amount)}
+                    </span>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`${t.edit} — ${expense.name}`}
+                        className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
+                        onClick={() => openExpenseDialog(expense)}
+                      >
+                        {formatCurrency(expense.amount)}
+                      </button>
+                      <button
+                        onClick={() => removeFixedExpense(expense.id, expense.name)}
+                        aria-label={`${t.delete} — ${expense.name}`}
+                        className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              {expense.destinationKind && destinationLabelFor(expense) && (
+                <div className="mt-1 pl-[15px] flex items-center gap-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                  <span aria-hidden>→</span> {destinationLabelFor(expense)}
+                </div>
+              )}
+              {showEnvelope && <EnvelopeBar envelope={envelope} formatCurrency={formatCurrency} labels={{ left: t.envelopeLeft, over: t.envelopeOver }} />}
+            </div>
+            );
+              })}
+              </div>
+            </div>
+  );
+
   return (
     <div className="space-y-6 md:space-y-7">
       {/* Hero header */}
@@ -751,7 +905,7 @@ const BudgetPage: React.FC = () => {
         />
         <StatCard title={t.monthlyBudget} value={formatCurrency(monthlyBudget)} accent />
         <StatCard title={t.dailyBudget} value={formatCurrency(dailyBudget)} />
-        <StatCard title={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} />
+        <StatCard title={t.fixedCosts} value={formatCurrency(spendFixedTotal)} />
       </div>
 
       {/* Imported payslip for this month */}
@@ -790,9 +944,11 @@ const BudgetPage: React.FC = () => {
 
       <SmartRecommendations />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
-        {/* Fixed Expenses */}
-        <Card data-tour="fixed-expenses" padding="none" className="lg:col-span-1 p-5 md:p-7 space-y-5">
+      {/* What leaves the account each month, split into the money that is spent
+          and the money that is merely moved. Side by side: both are lists of the
+          same shape, and neither deserves a quarter-width column. */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 items-stretch">
+        <Card data-tour="fixed-expenses" padding="none" className="lg:col-span-4 p-5 md:p-7 space-y-5">
           <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
             <SectionLabel>{t.fixedCosts}</SectionLabel>
             {!expensesReadOnly && (
@@ -875,100 +1031,10 @@ const BudgetPage: React.FC = () => {
             </div>
           )}
           <div>
-            {fixedExpenseGroups.map((group) => (
-              // Each category is its own card: a coloured left edge + a tinted
-              // header band make the grouping unmistakable, and the rows live
-              // inside so a category reads as one bounded block.
-              <div
-                key={group.type}
-                className="mt-3 first:mt-0 rounded-[10px] border border-[var(--border)] overflow-hidden"
-                style={{ borderLeft: `3px solid ${EXPENSE_TYPE_COLOR[group.type]}` }}
-              >
-                <div
-                  className="flex items-center gap-2 px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider"
-                  style={{
-                    color: 'var(--text-1)',
-                    background: `color-mix(in srgb, ${EXPENSE_TYPE_COLOR[group.type]} 9%, transparent)`,
-                  }}
-                >
-                  <span className="w-[8px] h-[8px] rounded-[2px] shrink-0" style={{ background: EXPENSE_TYPE_COLOR[group.type] }} />
-                  {t.expenseType[group.type]}
-                </div>
-                <div className="px-3.5">
-                {group.expenses.map((expense) => {
-              // Envelope reconciliation, shown only for a linked expense that has
-              // real spend this month (keeps the list quiet for non-syncers). When
-              // several expenses share a category, the shared bar renders once,
-              // under the first of them.
-              const envelope = reconciliation.byExpenseId.get(expense.id);
-              const showEnvelope = !!envelope && envelope.actual > 0 && envelope.expenseIds[0] === expense.id;
-              const isOver = envelope?.status === 'over';
-              return (
-              <div
-                key={expense.id}
-                className={`relative py-4 border-b border-[var(--border)] last:border-0 ${isOver ? 'pl-2.5' : ''}`}
-              >
-                {/* Over-budget accent: a rounded bar inset from the row edges so
-                    two adjacent over-budget rows read separately, not as one bar. */}
-                {isOver && <span aria-hidden className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-full bg-[var(--rust)]" />}
-                <div className="flex items-center justify-between group">
-                  {expensesReadOnly ? (
-                    <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] min-w-0">
-                      <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
-                      <span className="truncate">{expense.name}</span>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label={`${t.edit} — ${expense.name}`}
-                      className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
-                      onClick={() => openExpenseDialog(expense)}
-                    >
-                      <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
-                      <span className="truncate">{expense.name}</span>
-                    </button>
-                  )}
-                  <div className="flex items-center gap-3">
-                    {expensesReadOnly ? (
-                      <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">
-                        {formatCurrency(expense.amount)}
-                      </span>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          aria-label={`${t.edit} — ${expense.name}`}
-                          className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
-                          onClick={() => openExpenseDialog(expense)}
-                        >
-                          {formatCurrency(expense.amount)}
-                        </button>
-                        <button
-                          onClick={() => removeFixedExpense(expense.id, expense.name)}
-                          aria-label={`${t.delete} — ${expense.name}`}
-                          className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {expense.destinationKind && destinationLabelFor(expense) && (
-                  <div className="mt-1 pl-[15px] flex items-center gap-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-                    <span aria-hidden>→</span> {destinationLabelFor(expense)}
-                  </div>
-                )}
-                {showEnvelope && <EnvelopeBar envelope={envelope} formatCurrency={formatCurrency} labels={{ left: t.envelopeLeft, over: t.envelopeOver }} />}
-              </div>
-              );
-                })}
-                </div>
-              </div>
-            ))}
+            {spendGroups.map((g) => renderGroup(g))}
             <div className="pt-5 flex justify-between items-baseline">
               <SectionLabel>{t.aggregate}</SectionLabel>
-              <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(totalFixedExpenses)}</span>
+              <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(spendFixedTotal)}</span>
             </div>
             {totalMonthlyDebtService > 0 && (
               <div className="flex justify-between items-baseline text-[12px]" style={{ color: 'var(--text-3)' }}>
@@ -979,18 +1045,24 @@ const BudgetPage: React.FC = () => {
           </div>
         </Card>
 
-        {/* Distribution of the fixed expenses above — plan-side, no transactions.
+        {/* Distribution of the expenses to its left — plan-side, no transactions.
+            Sits in the middle and takes the widest share: it is the one card
+            whose readability is bound by width (label + bar + value) rather than
+            by row height. Its height follows the row count rather than
+            stretching to match its neighbours.
             The category/trend/budget charts that used to share this card moved
             below the divider, since they are transaction-derived. */}
-        <Card padding="none" className="lg:col-span-2 p-5 md:p-7 flex flex-col gap-5">
+        <Card padding="none" className="lg:col-span-5 p-5 md:p-7 flex flex-col gap-5">
           <SectionLabel className="pb-4 border-b border-[var(--border)]">
             {t.distributionAnalysis}
           </SectionLabel>
-          <div className="flex-1 min-h-[280px] md:min-h-[340px] w-full">
+          {/* Height follows the row count (~40px a bar) rather than stretching to a
+              neighbour, so the bars sit at a readable density whatever the list size. */}
+          <div className="w-full flex-1" style={{ minHeight: Math.max(320, sortedSpendExpenses.length * 34) }}>
             <Suspense fallback={<ChartSkeleton />}>
               <BudgetDistributionChart
-                data={sortedExpenses}
-                totalFixedExpenses={totalFixedExpenses}
+                data={sortedSpendExpenses}
+                totalFixedExpenses={spendFixedTotal}
                 expenseColor={expenseColor}
                 formatCurrency={formatCurrency}
                 formatCurrencyShort={formatCurrencyShort}
@@ -998,7 +1070,83 @@ const BudgetPage: React.FC = () => {
               />
             </Suspense>
           </div>
+        </Card>
 
+        {/* Saving — its own table, deliberately NOT part of the fixed-expense list.
+            Money moved to a savings account, funds or BSU is retained, not spent,
+            so it gets its own total and is excluded from "faste utgifter". Rows
+            render through the same renderGroup as the expenses table. */}
+        <Card padding="none" className="lg:col-span-3 p-5 md:p-7 space-y-5 flex flex-col">
+          <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
+            <SectionLabel>{t.budgetPage.savingsCardTitle}</SectionLabel>
+            {!expensesReadOnly && (
+              <button
+                onClick={() => openExpenseDialog()}
+                aria-label={`${t.add} — ${t.budgetPage.savingsCardTitle}`}
+                className="text-[var(--accent)] hover:opacity-70 transition-opacity"
+              >
+                <PlusCircle size={18} strokeWidth={2} />
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] leading-snug" style={{ color: 'var(--text-3)' }}>
+            {t.budgetPage.savingsCardHint}
+          </p>
+
+          {/* Target progress. This is what makes the column worth its width: the
+              list alone is short, and the question it always raises — "is this
+              enough?" — is answered right here rather than on another page. */}
+          <div className="rounded-[10px] border border-[var(--border)] p-3.5 space-y-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                {t.budgetPage.savingsTargetLabel}
+              </span>
+              <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{savingsTargetPercent} %</span>
+            </div>
+            <div className="font-mono text-[19px] font-medium tabular-nums" style={{ color: 'var(--text-1)' }}>
+              {formatCurrency(savingsTargetAmount)}
+            </div>
+            <ProgressBar
+              pct={savingsProgressPct}
+              color={savingsRemaining === 0 ? 'var(--positive)' : 'var(--brass)'}
+              heightClass="h-1.5"
+            />
+            <div className="space-y-1.5 text-[12px]">
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--text-2)' }}>{t.budgetPage.savingsAutomated}</span>
+                <span className="font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>{formatCurrency(savingsContributions)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--text-2)' }}>{t.budgetPage.savingsRemaining}</span>
+                <span className="font-mono tabular-nums" style={{ color: savingsRemaining > 0 ? 'var(--brass)' : 'var(--positive)' }}>
+                  {formatCurrency(savingsRemaining)}
+                </span>
+              </div>
+            </div>
+            {savingsRemaining > 0 && (
+              <Link
+                to="/assets"
+                className="inline-block text-[11px] font-semibold uppercase tracking-wider hover:opacity-70 transition-opacity"
+                style={{ color: 'var(--accent)' }}
+              >
+                {t.budgetPage.savingsAllocateCta}
+              </Link>
+            )}
+          </div>
+
+          <div className="flex-1 flex flex-col">
+            {savingRows.length === 0 ? (
+              <p className="text-[13px]" style={{ color: 'var(--text-3)' }}>{t.budgetPage.savingsCardEmpty}</p>
+            ) : (
+              <>
+                {renderGroup(savingGroup, true)}
+                <div className="pt-5 mt-auto flex justify-between items-baseline">
+                  <SectionLabel>{t.aggregate}</SectionLabel>
+                  <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(savingsContributions)}</span>
+                </div>
+              </>
+            )}
+          </div>
         </Card>
       </div>
 

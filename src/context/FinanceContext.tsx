@@ -9,7 +9,7 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculations';
-import { savingsContributionTotal, isSavingsDestination } from '../lib/savingsRate';
+import { savingsContributionTotal, isSavingsRow } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
@@ -60,7 +60,11 @@ import { DEFAULT_FORECAST_ASSUMPTIONS, type ForecastAssumptions } from '../lib/f
 // --- Types ---
 
 // Category of a fixed expense — drives its colour role in the budget charts.
-export type ExpenseType = 'fixed' | 'variable' | 'subscription' | 'insurance';
+// 'saving' is money moved rather than spent (to a savings account, funds, BSU).
+// It is a first-class type so a row can be classified as saving in the dialog,
+// and so the Budget page can keep it out of "faste utgifter" and out of the
+// investing recommendation without inferring intent from the destination alone.
+export type ExpenseType = 'fixed' | 'variable' | 'subscription' | 'insurance' | 'saving';
 
 export interface FixedExpense {
   id: string;
@@ -1751,7 +1755,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // the rows whose budgets should be matched against real transactions so a
   // bill isn't charged once as a budget and again as an imported payment.
   const spendFixedExpenses = useMemo(() =>
-    viewFixedExpenses.filter(e => !isSavingsDestination(e.destinationKind)),
+    viewFixedExpenses.filter(e => !isSavingsRow(e)),
   [viewFixedExpenses]);
 
   // Year-one mortgage interest (rentefradrag): reduces alminnelig inntekt at 22%,
@@ -1833,8 +1837,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [incomeSeries]);
 
   const { recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason } = useMemo(() =>
-    calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent),
-  [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent]);
+    // savingsContributions is passed so the target is a share of CONSUMPTION,
+    // not of everything: automating a transfer must not shrink the base the next
+    // target is computed from. See calcRecommendations.
+    calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent, savingsContributions),
+  [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent, savingsContributions]);
 
   const setMonthlyIncomeForMonth = useCallback((key: string, amount: number) => {
     setMonthlyIncomes(prev => ({ ...prev, [key]: amount }));
