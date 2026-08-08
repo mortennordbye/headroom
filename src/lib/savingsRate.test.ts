@@ -59,13 +59,15 @@ const fixed = (amount: number, destinationKind?: FixedExpense['destinationKind']
   ({ id: `f-${amount}-${destinationKind ?? 'none'}`, name: 'x', amount, type: 'fixed', destinationKind });
 
 describe('savingsContributionTotal', () => {
-  it('counts savings and buffer destinations, not ordinary expenses', () => {
+  it('counts every retained-money destination, not ordinary expenses', () => {
     const total = savingsContributionTotal([
       fixed(12000),                     // rent
       fixed(5000, 'savingsAccount'),
       fixed(2000, 'bufferAccount'),
+      fixed(4000, 'portfolio'),
+      fixed(1000, 'bsu'),
     ]);
-    expect(total).toBe(7000);
+    expect(total).toBe(12000);
   });
 
   it('excludes mortgage and debt destinations (gross payment, not principal)', () => {

@@ -8,21 +8,27 @@ import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
 
 /**
- * The part of the fixed-expense list that is money moved into savings rather
- * than spent (a `savingsAccount` / `bufferAccount` automation). It leaves
- * free-to-spend like any other fixed expense, but it is still the user's money,
- * so the savings rate must not subtract it as if it were consumption.
+ * True for a destination where the whole expense amount stays the user's money:
+ * a cash savings account, the emergency buffer, the investment portfolio, or BSU.
  *
- * `mortgage` / `debt` destinations are deliberately NOT included: only the
- * principal portion of those builds equity and this list holds the gross
- * payment, so counting them whole would overstate the rate.
+ * `mortgage` / `debt` are deliberately excluded: only the principal portion of
+ * those builds equity and a `FixedExpense` holds the gross payment, so counting
+ * them whole would overstate the rate.
+ */
+export function isSavingsDestination(kind: FixedExpense['destinationKind']): boolean {
+  return kind === 'savingsAccount' || kind === 'bufferAccount'
+    || kind === 'portfolio' || kind === 'bsu';
+}
+
+/**
+ * The part of the fixed-expense list that is money moved into savings rather
+ * than spent. It leaves free-to-spend like any other fixed expense, but it is
+ * still the user's money, so the savings rate must not subtract it as if it
+ * were consumption.
  */
 export function savingsContributionTotal(fixedExpenses: FixedExpense[]): number {
   return fixedExpenses.reduce(
-    (sum, e) =>
-      e.destinationKind === 'savingsAccount' || e.destinationKind === 'bufferAccount'
-        ? sum + amount(e.amount)
-        : sum,
+    (sum, e) => (isSavingsDestination(e.destinationKind) ? sum + amount(e.amount) : sum),
     0,
   );
 }

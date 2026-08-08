@@ -10,3 +10,4 @@ export { SummaryTile } from './SummaryTile';
 export { NumberRow } from './NumberRow';
 export { SliderRow } from './SliderRow';
 export { SegmentedControl } from './SegmentedControl';
+export { ToggleRow } from './ToggleRow';

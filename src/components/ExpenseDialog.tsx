@@ -30,26 +30,37 @@ const input = 'w-full bg-[var(--bg-raised)] border border-[var(--border)] rounde
 export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
   const { t, assets, debts, housingMode, formatCurrency } = useFinance();
   const savings = assets.savingsAccounts ?? [];
-  // Save targets: the emergency-fund buffer (always available, a single scalar)
-  // plus every named savings account. BUFFER_ID is a sentinel — real savings ids
-  // never collide with it.
+  // Save targets: the single-scalar balances (emergency buffer, investment
+  // portfolio, BSU) plus every named savings account. The `__…__` ids are
+  // sentinels — real savings ids never collide with them.
   const BUFFER_ID = '__buffer__';
+  const PORTFOLIO_ID = '__portfolio__';
+  const BSU_ID = '__bsu__';
+  const SCALAR_SAVE_IDS: Record<string, ExpenseDestinationKind> = {
+    [BUFFER_ID]: 'bufferAccount', [PORTFOLIO_ID]: 'portfolio', [BSU_ID]: 'bsu',
+  };
   const saveOptions = [
     { v: BUFFER_ID, l: t.expenseDestination.buffer },
+    { v: PORTFOLIO_ID, l: t.expenseDestination.portfolio },
+    { v: BSU_ID, l: t.expenseDestination.bsu },
     ...savings.map(s => ({ v: s.id, l: `${t.expenseDestination.savings}: ${s.name}` })),
   ];
+  // The sentinel matching this expense's stored scalar destination, if any.
+  const storedScalarId = Object.keys(SCALAR_SAVE_IDS)
+    .find(id => SCALAR_SAVE_IDS[id] === expense?.destinationKind);
 
   const [name, setName] = useState(expense?.name ?? '');
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
   const [type, setType] = useState<ExpenseType>(expense?.type ?? 'fixed');
   const [flow, setFlow] = useState<Flow>(
-    expense?.destinationKind === 'savingsAccount' || expense?.destinationKind === 'bufferAccount' ? 'save'
+    expense?.destinationKind === 'savingsAccount' || storedScalarId ? 'save'
       : expense?.destinationKind === 'mortgage' || expense?.destinationKind === 'debt' ? 'debt'
         : 'none',
   );
   const [savingsId, setSavingsId] = useState(
-    expense?.destinationKind === 'bufferAccount' ? BUFFER_ID : expense?.savingsAccountId ?? saveOptions[0].v,
+    storedScalarId ?? expense?.savingsAccountId ?? saveOptions[0].v,
   );
+  const [paused, setPaused] = useState(!!expense?.automationPaused);
   const debtOptions = [
     ...(housingMode !== 'first_buyer' ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }] : []),
     ...debts.map(d => ({ v: `debt:${d.id}`, l: `${t.expenseDestination.debt}: ${d.name}` })),
@@ -70,7 +81,10 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
   ];
 
   const targetName =
-    flow === 'save' ? (savingsId === BUFFER_ID ? t.expenseDestination.buffer : savings.find(s => s.id === savingsId)?.name ?? '')
+    flow === 'save'
+      ? (savingsId in SCALAR_SAVE_IDS
+        ? saveOptions.find(o => o.v === savingsId)!.l
+        : savings.find(s => s.id === savingsId)?.name ?? '')
       : debtTarget === 'mortgage' ? t.expenseDestination.mortgage
         : debts.find(d => `debt:${d.id}` === debtTarget)?.name ?? '';
 
@@ -82,16 +96,20 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     let destinationKind: ExpenseDestinationKind | undefined;
     let savingsAccountId: string | undefined;
     let debtId: string | undefined;
-    if (flow === 'save' && savingsId === BUFFER_ID) destinationKind = 'bufferAccount';
+    if (flow === 'save' && savingsId in SCALAR_SAVE_IDS) destinationKind = SCALAR_SAVE_IDS[savingsId];
     else if (flow === 'save' && savingsId) { destinationKind = 'savingsAccount'; savingsAccountId = savingsId; }
     else if (flow === 'debt' && debtTarget === 'mortgage') destinationKind = 'mortgage';
     else if (flow === 'debt' && debtTarget.startsWith('debt:')) { destinationKind = 'debt'; debtId = debtTarget.slice(5); }
 
     // Stamp lastPostedMonth to now when a destination is newly assigned (so the
     // first move happens next month); keep it when the destination is unchanged.
+    // Resuming from a pause restamps too, so the paused months are never
+    // back-posted — the money genuinely didn't move while it was paused.
     const sameDest = expense?.destinationKind === destinationKind
       && expense?.savingsAccountId === savingsAccountId && expense?.debtId === debtId;
-    const lastPostedMonth = !destinationKind ? undefined : sameDest ? expense?.lastPostedMonth : currentMonthKey();
+    const resumed = !!expense?.automationPaused && !paused;
+    const lastPostedMonth = !destinationKind ? undefined
+      : sameDest && !resumed ? expense?.lastPostedMonth : currentMonthKey();
 
     onSave({
       name: name.trim(),
@@ -102,6 +120,7 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
       destinationKind,
       savingsAccountId,
       debtId,
+      automationPaused: destinationKind && paused ? true : undefined,
       lastPostedMonth,
     });
   };
@@ -214,6 +233,21 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
                 </>
               )}
             </div>
+          )}
+
+          {flow !== 'none' && (
+            <label className="flex items-start gap-2.5 mt-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={paused}
+                onChange={e => setPaused(e.target.checked)}
+                className="mt-0.5 w-4 h-4 shrink-0 accent-[var(--forest)] cursor-pointer"
+              />
+              <span>
+                <span className="block text-[12.5px] font-medium text-[var(--text-1)]">{t.expenseDestination.pauseLabel}</span>
+                <span className="block text-[11px] text-[var(--text-3)] mt-0.5 leading-snug">{t.expenseDestination.pauseHint}</span>
+              </span>
+            </label>
           )}
         </div>
 

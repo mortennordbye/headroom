@@ -26,7 +26,7 @@ export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
     'categoryRules', 'labelRules', 'transferRules', 'categoryBudgets', 'recurringTemplates',
   ],
   assetsDebt: [
-    'debts', 'netWorthHistory', 'balanceSnapshots', 'goals', 'residences', 'secondHomeScenarios',
+    'debts', 'netWorthHistory', 'balanceSnapshots', 'goals', 'savingsAllocations', 'residences', 'secondHomeScenarios',
     'boligAssumptions',
   ],
   included: [
@@ -39,6 +39,7 @@ export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
     'incomeReminderDismissedMonth', 'conservativeNudgeDismissedMonth', 'payday', 'aiContext', 'profile',
     'capacityOverrides', 'employerSalaryOverride',
     'dismissedLinkSuggestions', 'dismissedRecurringSuggestions', 'transferHintDismissed',
+    'automationEnabled',
   ],
 };
 

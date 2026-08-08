@@ -27,6 +27,7 @@ import {
   ArrowRight,
   History,
   CalendarClock,
+  RefreshCw,
   Bell,
   User,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ import { summarizeExport, totalRecords, type SummaryItem } from '../lib/exportSu
 import { IMPORT_SECTIONS, filterPayloadToSections, type ImportSectionKey } from '../lib/importSections';
 import { formatBytes } from '../lib/format';
 import { NAV_GROUPS, ALWAYS_VISIBLE_NAV } from '../components/navItems';
+import { ToggleRow } from '../components/ui/ToggleRow';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { Button } from '../components/ui/Button';
@@ -112,6 +114,8 @@ export default function SettingsPage() {
     restoreDismissedTips,
     hiddenNavItems,
     toggleNavItem,
+    automationEnabled,
+    setAutomationEnabled,
     importAll,
     buildPayload,
     resetAll,
@@ -747,6 +751,19 @@ export default function SettingsPage() {
               </p>
             </div>
             <PaydayField />
+          </div>
+        </Card>
+
+        {/* ──── Balance automations master switch (span 12) ──── */}
+        <Card padding="lg" className="md:col-span-12">
+          <SectionLabel icon={<RefreshCw />}>{t.settings.automation.title}</SectionLabel>
+          <div className="mt-3">
+            <ToggleRow
+              label={t.settings.automation.toggleLabel}
+              checked={automationEnabled}
+              onChange={setAutomationEnabled}
+              hint={t.settings.automation.desc}
+            />
           </div>
         </Card>
 

@@ -496,6 +496,57 @@ Remaining / intentionally out of v1:
   always-live, independent of `useBalanceHistory` (unlike the mortgage tools). Fine by design;
   noted in case historical scenario tracking is ever wanted.
 
+## Balance automations — deferred bits (shipped 2026-08)
+
+Shipped: the monthly automation runner now covers **portfolio (aksjer/ASK) and BSU** as
+fixed-expense destinations, and **OTP/IPS pension contributions** as synthesized rules that need
+no budget line (`src/lib/pensionAccrual.ts` projects pension state onto the same `AutomationRule`
+shape, so both sources share one runner, one catch-up prompt and one double-apply guard —
+`src/lib/automation.ts`). User control: a Settings master switch (`automationEnabled`), a
+per-expense pause (`FixedExpense.automationPaused`), and per-scheme opt-ins on the Pension page
+(`pension.otpAutoPost` / `ipsAutoPost`, both default **false**). Plus the savings-target split
+(`src/lib/savingsAllocation.ts`, `src/components/SavingsAllocationPanel.tsx`): a percentage
+allocation of `recommendedInvestment` across destinations, with a one-click "create these as fixed
+expenses" that hands them to the runner. `savingsContributionTotal` now counts portfolio/BSU as
+retained money, not spend (`src/lib/savingsRate.ts` `isSavingsDestination`).
+
+Deliberately deferred:
+
+- **Assumed growth never posts, and there is no suggestion flow for it.** Only contributions are
+  written to a balance; `otpGrowthRate` / `ipsGrowthRate` / `growthReturnRate` stay in the
+  projections. That is the intended safety property (compounding a guess into a stored balance
+  would launder it into recorded net worth, and `balanceSnapshots` would freeze it into history) —
+  but the agreed design also had a *suggestion* half that was not built: "this balance is 8 months
+  old; at 7% it would now be ~X — confirm or enter the real number". **What would unblock**: a
+  decision on where the suggestion lives (a card on Assets/Pension vs the monthly reconcile prompt
+  below). **Where**: `src/lib/pensionAccrual.ts` (contributions only), `src/pages/AssetPage.tsx`,
+  `src/pages/PensionPage.tsx`.
+- **No staleness surfacing on user-entered balances.** External feeds have `*Stale` flags, retry
+  and refresh affordances; the user's own balances have no "last confirmed" concept at all
+  (`src/lib/provenance.ts` is value-vs-default only). The cheap version needs no schema change:
+  derive last-touched as the most recent month in `balanceSnapshots` where the value *changed*.
+  Then an age dimension on `ProvenanceBadge` and a monthly reconcile prompt (the `NumberRow` grid
+  in `src/components/HistoryManagerModal.tsx` already renders exactly this form). **Where**:
+  `src/lib/provenance.ts`, `src/components/ui/ProvenanceBadge.tsx`, `src/lib/snapshots.ts`.
+- **Estimates that are fetched but never applied.** `PropertyValueEstimate` computes a house value
+  from the live SSB square-metre price with no "use this" action, and
+  `homeowner.notifiedRate`/`notifiedRateFrom` never applies itself when its month arrives — both
+  are places the app already knows the answer and still lets the stored value rot. **Where**:
+  `src/components/PropertyValueEstimate.tsx`, `HomeownerData` in `src/context/FinanceContext.tsx`.
+- **Editing an allocation percentage does not update the expenses it created.** The created
+  `FixedExpense` keeps its original amount; the panel shows the divergence (an "Aktiv · X" chip
+  against the newly planned figure) but offers no re-sync action. Deferred because a sync would
+  have to decide whether the allocation or the expense is authoritative, and silently rewriting a
+  budget line the user may have since edited by hand is worse than showing the gap. **What would
+  unblock**: agreeing the allocation is authoritative, then a "sync amounts" button.
+  **Where**: `src/components/SavingsAllocationPanel.tsx`, `src/lib/savingsAllocation.ts`.
+- **The savings target shrinks as you automate, by construction.** `recommendedInvestment` is a
+  share of the residual, and committing savings as a fixed expense reduces the residual — so the
+  target falls each time you act on it. Surfaced honestly (the panel shows "already automated" and
+  a per-row active chip) rather than fixed, because "% of what is left uncommitted" is a coherent
+  definition and changing it would move a number used across Dashboard/Assets/Forecast.
+  **Where**: `calcRecommendations` in `src/lib/calculations.ts`.
+
 ## Savings rate (Spareandel) — remaining gaps
 
 Fixed (2026-07): three bugs made the savings rate read far worse than reality.

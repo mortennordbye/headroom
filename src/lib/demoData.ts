@@ -93,6 +93,12 @@ export function getDemoData(): Partial<ExportPayload> {
     folketrygdSingle: true,
     pensionPayoutYears: 10,
     afpEligible: true,
+    // Contribution automation on, stamped to the current month so the demo shows
+    // the feature switched on without opening a catch-up prompt on first view.
+    otpAutoPost: true,
+    ipsAutoPost: true,
+    otpLastPostedMonth: ym(now),
+    ipsLastPostedMonth: ym(now),
   };
   const demoDebts: Debt[] = [
     { id: 'demo-debt-1', name: 'Studielån (Lånekassen)', type: 'student', balance: 284000, rate: 4.9, minPayment: 3200 },
@@ -416,6 +422,13 @@ export function getDemoData(): Partial<ExportPayload> {
       { id: 'demo-goal-1', name: 'Bufferkonto', target: 100000, source: 'bufferAccount' },
       { id: 'demo-goal-2', name: 'Oppussing', target: 150000, source: 'manual', manualCurrent: 40000 },
       { id: 'demo-goal-3', name: 'Sommerferie', target: 50000, source: 'savingsAccount', savingsAccountId: 'demo-sav-2' },
+    ],
+
+    savingsAllocations: [
+      { id: 'demo-alloc-1', percent: 40, destinationKind: 'portfolio' },
+      { id: 'demo-alloc-2', percent: 25, destinationKind: 'bufferAccount' },
+      { id: 'demo-alloc-3', percent: 25, destinationKind: 'mortgage' },
+      { id: 'demo-alloc-4', percent: 10, destinationKind: 'savingsAccount', savingsAccountId: 'demo-sav-2' },
     ],
 
     secondHomeScenarios: [

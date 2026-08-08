@@ -36,6 +36,7 @@ import DebtSection from '../components/DebtSection';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
+import { SavingsAllocationPanel } from '../components/SavingsAllocationPanel';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
@@ -555,9 +556,18 @@ const AssetPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Wealth tax (formuesskatt) — Norway only */}
-      {region === 'no' && (
-        <Card padding="none" className="p-5 md:p-7">
+      {/* Savings-target split + wealth tax, paired so neither stretches across the
+          full width on a wide screen. Falls back to a single column when only one
+          of them renders (history view, or a non-Norwegian region). */}
+      <div className={`grid grid-cols-1 gap-4 md:gap-6 items-stretch ${
+        hist.isLive && region === 'no' ? 'lg:grid-cols-2' : 'lg:grid-cols-1'}`}>
+        {/* Where the savings target goes. Live only: a past month's plan is not
+            recorded, and creating expenses from a historical view makes no sense. */}
+        {hist.isLive && <SavingsAllocationPanel />}
+
+        {/* Wealth tax (formuesskatt) — Norway only */}
+        {region === 'no' && (
+        <Card padding="none" className="p-5 md:p-7 flex flex-col">
           <div className="flex items-baseline justify-between gap-3 flex-wrap pb-4 border-b border-[var(--border)]">
             <SectionLabel>{t.wealthTax.title}</SectionLabel>
             <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>{TAX_YEAR}</span>
@@ -595,9 +605,10 @@ const AssetPage: React.FC = () => {
               <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{formatCurrency(Math.round(wealthTax.taxableBase))}</span>
             </div>
           </div>
-          <p className="mt-4 text-[11px] leading-[1.5]" style={{ color: 'var(--text-3)' }}>{t.wealthTax.note}</p>
+          <p className="text-[11px] leading-[1.5] mt-auto pt-4" style={{ color: 'var(--text-3)' }}>{t.wealthTax.note}</p>
         </Card>
-      )}
+        )}
+      </div>
 
       {/* Allocation snapshot + liquidity split */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-stretch">
