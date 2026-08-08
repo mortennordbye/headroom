@@ -13,12 +13,33 @@
 // balance/rate snapshot and returns resolved absolute new balances.
 import { addMonthsKey, monthsBetween } from './date';
 
-export type AutomationTargetKind = 'savingsAccount' | 'bufferAccount' | 'mortgage' | 'debt';
+/**
+ * Targets that are one plain scalar balance grown by the monthly amount. They
+ * differ only in which state field they read/write, so the runner treats them
+ * uniformly via `AutomationState.scalars`.
+ *
+ * `pensionOtp`/`pensionIps` are the only kinds NOT reachable from a fixed
+ * expense: OTP is paid by the employer and IPS is configured as a yearly figure
+ * on the Pension page, so neither passes through the budget. FinanceContext
+ * synthesizes their rules from pension state instead (see lib/pensionAccrual.ts)
+ * and feeds them to this same runner, so they inherit the catch-up prompt, the
+ * double-apply guard and the stacking behaviour for free.
+ */
+export type ScalarTargetKind = 'bufferAccount' | 'portfolio' | 'bsu' | 'pensionOtp' | 'pensionIps';
+
+export const SCALAR_TARGETS: readonly ScalarTargetKind[] =
+  ['bufferAccount', 'portfolio', 'bsu', 'pensionOtp', 'pensionIps'] as const;
+
+export type AutomationTargetKind = ScalarTargetKind | 'savingsAccount' | 'mortgage' | 'debt';
 export type HousingMode = 'first_buyer' | 'homeowner' | 'transitioning';
 
-// A destination-bearing fixed expense projected to the shape the runner needs.
+const isScalarTarget = (k: AutomationTargetKind): k is ScalarTargetKind =>
+  (SCALAR_TARGETS as readonly string[]).includes(k);
+
+// A destination-bearing fixed expense (or a synthesized pension contribution)
+// projected to the shape the runner needs.
 export interface AutomationRule {
-  id: string;                 // the fixed expense's id
+  id: string;                 // the fixed expense's id, or 'pension:otp' / 'pension:ips'
   name: string;
   amount: number;             // positive monthly kr (the expense amount)
   targetKind: AutomationTargetKind;
@@ -31,7 +52,8 @@ export interface AutomationRule {
 /** Live balances/rates the runner needs to resolve absolute new values. */
 export interface AutomationState {
   savings: Record<string, number>;                       // by savingsAccountId
-  buffer: number;                                        // assets.bufferAccount (the single emergency-fund scalar)
+  /** The single-scalar balances, keyed by the target kind that writes them. */
+  scalars: Record<ScalarTargetKind, number>;
   mortgage: number;                                      // assets.houseDebt (the mirrored balance)
   mortgageRate: number;                                  // annual %, homeowner.rente | loan.rente by mode
   debts: Record<string, { balance: number; rate: number }>; // by debtId; rate is annual %
@@ -88,10 +110,10 @@ export function computeAutomationPostings(
   // Working copies so two expenses pointed at the same target stack rather than
   // clobber (each posting's newBalance already includes the earlier ones).
   const savings = { ...state.savings };
+  const scalars = { ...state.scalars };
   const debts: Record<string, { balance: number; rate: number }> =
     Object.fromEntries(Object.entries(state.debts).map(([id, d]) => [id, { ...d }]));
   let mortgage = state.mortgage;
-  let buffer = state.buffer;
 
   const out: ResolvedPosting[] = [];
   for (const rule of rules) {
@@ -106,10 +128,11 @@ export function computeAutomationPostings(
       if (!rule.savingsAccountId || !(rule.savingsAccountId in savings)) continue;
       newBalance = Math.round(savings[rule.savingsAccountId] + rule.amount * monthsDue);
       savings[rule.savingsAccountId] = newBalance;
-    } else if (rule.targetKind === 'bufferAccount') {
-      // Single emergency-fund scalar — grows like a savings account, no id needed.
-      newBalance = Math.round(buffer + rule.amount * monthsDue);
-      buffer = newBalance;
+    } else if (isScalarTarget(rule.targetKind)) {
+      // A single named scalar (emergency fund, portfolio, BSU, OTP, IPS) — grows
+      // like a savings account, no id needed.
+      newBalance = Math.round(scalars[rule.targetKind] + rule.amount * monthsDue);
+      scalars[rule.targetKind] = newBalance;
     } else if (rule.targetKind === 'mortgage') {
       if (state.housingMode === 'first_buyer') continue; // no mortgage exists in this mode
       const res = applyAmortization(mortgage, state.mortgageRate, rule.amount, monthsDue);

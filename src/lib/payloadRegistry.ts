@@ -182,6 +182,9 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     dismissedLinkSuggestions: { group: 'reset', demo: 'preference', read: whenArray('dismissedLinkSuggestions'), default: [] },
     dismissedRecurringSuggestions: { group: 'reset', demo: 'preference', read: whenArray('dismissedRecurringSuggestions'), default: [] },
     transferHintDismissed: { group: 'reset', demo: 'preference', read: whenBoolean('transferHintDismissed'), default: false },
+    // Pre-feature blobs have no flag — absent → true on load, so the fixed-expense
+    // destinations that already posted before the master switch existed keep working.
+    automationEnabled: { group: 'reset', demo: 'preference', read: whenBoolean('automationEnabled'), default: true },
 
     // ── Group B: apply only when present (identical on load + import) ──
     lang: { group: 'preserve', demo: 'preference', read: whenTruthy('lang') },
@@ -207,6 +210,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     overtime: { group: 'preserve', demo: 'personal', read: whenArray('overtime') },
     hoursSnapshots: { group: 'preserve', demo: 'personal', read: whenArray('hoursSnapshots') },
     goals: { group: 'preserve', demo: 'personal', read: whenArray('goals') },
+    savingsAllocations: { group: 'preserve', demo: 'personal', read: whenArray('savingsAllocations') },
     region: { group: 'preserve', demo: 'preference', read: whenOneOf('region', ['no', 'generic']) },
     customTaxRatePct: { group: 'preserve', demo: 'preference', read: whenNumber('customTaxRatePct') },
     // Migrate the pre-rename '/loan' path to '/bolig' so a hidden tab stays hidden.

@@ -9,10 +9,11 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculations';
-import { savingsContributionTotal } from '../lib/savingsRate';
+import { savingsContributionTotal, isSavingsDestination } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
-import { calcTaxByRegion } from '../lib/norwegianTax';
+import type { SavingsAllocation } from '../lib/savingsAllocation';
+import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { calcBsuTaxCredit } from '../lib/bsu';
 import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
@@ -29,7 +30,11 @@ import { excludedTransferIds, type TransferRule } from '../lib/transferRules';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
-import { computeAutomationPostings, type AutomationRule, type AutomationState, type ResolvedPosting } from '../lib/automation';
+import {
+  computeAutomationPostings,
+  type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
+} from '../lib/automation';
+import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
@@ -81,14 +86,22 @@ export interface FixedExpense {
   match?: string;
   /**
    * Optional automation destination. When set, this recurring expense moves a
-   * balance every month: grow a savings account, or pay down the mortgage / a
-   * debt by the principal portion (amortization-aware, see src/lib/automation.ts).
+   * balance every month: grow a savings account, the emergency buffer, the
+   * investment portfolio or BSU, or pay down the mortgage / a debt by the
+   * principal portion (amortization-aware, see src/lib/automation.ts).
    * The expense's `amount` is what moves; it's already counted in the budget, so
    * the money leaves free-to-spend and lands in the destination — no double count.
    */
   destinationKind?: ExpenseDestinationKind;
   savingsAccountId?: string;   // set iff destinationKind === 'savingsAccount'
   debtId?: string;             // set iff destinationKind === 'debt'
+  /**
+   * Pause this expense's automation without losing its destination config: the
+   * expense keeps its budget line, but stops moving the balance. Resuming
+   * restamps `lastPostedMonth` to the current month, so the paused months are
+   * never back-posted — a pause means the money genuinely didn't move.
+   */
+  automationPaused?: boolean;
   /** 'yyyy-MM' last month the automation posted; absent = never. Double-apply
    *  guard. Set to the current month when a destination is first assigned, so the
    *  first move happens the NEXT month. */
@@ -100,7 +113,11 @@ export interface FixedExpense {
   bufferTargetAmount?: number;
 }
 
-export type ExpenseDestinationKind = 'savingsAccount' | 'bufferAccount' | 'mortgage' | 'debt';
+// The destinations reachable from a fixed expense. A strict subset of
+// `AutomationTargetKind` (src/lib/automation.ts): the pension targets are driven
+// by the Pension page, not by a budget line, so they are deliberately absent.
+export type ExpenseDestinationKind =
+  | 'savingsAccount' | 'bufferAccount' | 'portfolio' | 'bsu' | 'mortgage' | 'debt';
 
 // Non-mortgage debts (studielån, forbrukslån, kredittkort, …). Modeled separately
 // from the mortgage (which lives in Assets.houseDebt) and reduce net worth.
@@ -199,9 +216,10 @@ export interface SavingsAccount {
 // persisted view state). Single-month posts apply silently; a gap of ≥2 months
 // surfaces here so the user can confirm a potentially large back-post.
 export interface PendingCatchup {
-  expenseId: string;         // the fixed expense whose automation is behind
+  /** The rule that is behind: a fixed expense id, or a `pension:*` rule id. */
+  expenseId: string;
   name: string;
-  targetKind: ExpenseDestinationKind;
+  targetKind: AutomationTargetKind;
   monthsDue: number;
   /** Signed change to the target if the full catch-up is applied (+savings /
    *  −paydown), for the confirmation message. Handlers recompute from live
@@ -245,6 +263,18 @@ export interface Pension {
   folketrygdSingle: boolean;           // garantipensjon floor: true = enslig (høy sats), false = gift/samboer
   pensionPayoutYears: number;          // years OTP/IPS are drawn down over (default 10)
   afpEligible: boolean;                // qualifies for ny privat AFP (self-certified)
+  /**
+   * Per-target opt-in for the monthly contribution automation (see
+   * src/lib/pensionAccrual.ts). Off by default so an existing user's balances are
+   * never touched until they ask. Only CONTRIBUTIONS post; the growth rates above
+   * stay in the projection and are never written into a stored balance.
+   */
+  otpAutoPost: boolean;
+  ipsAutoPost: boolean;
+  /** 'yyyy-MM' last month each contribution posted; absent = never. Double-apply
+   *  guard, mirroring `FixedExpense.lastPostedMonth`. */
+  otpLastPostedMonth?: string;
+  ipsLastPostedMonth?: string;
 }
 
 export interface LoanData {
@@ -541,6 +571,8 @@ export const DEFAULT_PENSION: Pension = {
   folketrygdSingle: true,
   pensionPayoutYears: 10,
   afpEligible: false,
+  otpAutoPost: false,
+  ipsAutoPost: false,
 };
 
 // Single source of the persisted-field list (§8.10). The object-field defaults
@@ -781,8 +813,18 @@ interface FinanceDataContextType {
   addGoal: (g: Omit<Goal, 'id'>) => void;
   updateGoal: (id: string, patch: Partial<Omit<Goal, 'id'>>) => void;
   removeGoal: (id: string) => void;
+  /** How the savings target splits across destinations (a plan, not a mover —
+   *  see src/lib/savingsAllocation.ts). */
+  savingsAllocations: SavingsAllocation[];
+  addSavingsAllocation: (a: Omit<SavingsAllocation, 'id'>) => void;
+  updateSavingsAllocation: (id: string, patch: Partial<Omit<SavingsAllocation, 'id'>>) => void;
+  removeSavingsAllocation: (id: string) => void;
   /** Multi-month automation catch-ups awaiting confirmation (fixed-expense
    *  destinations that fell behind — see the automation runner). */
+  /** Master switch for every balance automation. Off = nothing posts and nothing
+   *  prompts, but each rule keeps its config and stamp so it resumes on re-enable. */
+  automationEnabled: boolean;
+  setAutomationEnabled: (on: boolean) => void;
   pendingCatchups: PendingCatchup[];
   confirmCatchup: (expenseId: string) => void;
   declineCatchup: (expenseId: string) => void;
@@ -954,6 +996,7 @@ export interface ExportPayload {
   overtime?: OvertimeEntry[];
   hoursSnapshots?: HoursSnapshot[];
   goals?: Goal[];
+  savingsAllocations?: SavingsAllocation[];
   region?: Region;
   customTaxRatePct?: number;
   employerCostConfig?: EmployerCostConfig;
@@ -979,6 +1022,9 @@ export interface ExportPayload {
   dismissedRecurringSuggestions?: string[];
   /** Budget "these transfers still count as spend" hint — dismissed for good. */
   transferHintDismissed?: boolean;
+  /** Master switch for the balance automations. Absent on pre-feature blobs →
+   *  defaults to true, so existing destination-bearing expenses keep posting. */
+  automationEnabled?: boolean;
 }
 
 export interface DailyDataEntry {
@@ -1081,6 +1127,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [overtime, setOvertime] = useState<OvertimeEntry[]>([]);
   const [hoursSnapshots, setHoursSnapshots] = useState<HoursSnapshot[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [savingsAllocations, setSavingsAllocations] = useState<SavingsAllocation[]>([]);
   const [inflation, setInflation] = useState<InflationPoint[]>([]);
   const [inflationStale, setInflationStale] = useState<boolean>(false);
   const [kvmpris, setKvmpris] = useState<KvmprisData | null>(null);
@@ -1107,6 +1154,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [dismissedLinkSuggestions, setDismissedLinkSuggestions] = useState<string[]>([]);
   const [dismissedRecurringSuggestions, setDismissedRecurringSuggestions] = useState<string[]>([]);
   const [transferHintDismissed, setTransferHintDismissed] = useState(false);
+  const [automationEnabled, setAutomationEnabled] = useState(true);
   const [demoMode, setDemoMode] = useState(false);
   // Public demo instance (server DEMO_MODE, read at boot from /api/config). Demo
   // mode is then permanent: there is no real data to restore and every write is
@@ -1178,20 +1226,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang,
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
-    jobs, salaries, bonuses, overtime, hoursSnapshots, goals,
+    jobs, salaries, bonuses, overtime, hoursSnapshots, goals, savingsAllocations,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
-    dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed,
+    dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
-    goals, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    goals, savingsAllocations, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
-    dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed]);
+    dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled]);
 
   // The one place that applies a loaded/imported blob → app state (§4.2), with
   // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
@@ -1225,7 +1273,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       houseGrowthRate: setHouseGrowthRate, cashGrowthRate: setCashGrowthRate, cryptoGrowthRate: setCryptoGrowthRate,
       displayCurrency: setDisplayCurrency, nokToUsd: setNokToUsdState, customCurrencyCode: setCustomCurrencyCode,
       customCurrencyRate: setCustomCurrencyRate, jobs: setJobs, salaries: setSalaries, bonuses: setBonuses,
-      overtime: setOvertime, hoursSnapshots: setHoursSnapshots, goals: setGoals, region: setRegion,
+      overtime: setOvertime, hoursSnapshots: setHoursSnapshots, goals: setGoals,
+      savingsAllocations: setSavingsAllocations, region: setRegion,
       customTaxRatePct: setCustomTaxRatePct, employerCostConfig: setEmployerCostConfig,
       billingConfig: setBillingConfig, hiddenNavItems: setHiddenNavItems,
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
@@ -1235,7 +1284,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       capacityOverrides: setCapacityOverrides, employerSalaryOverride: setEmployerSalaryOverride,
       dismissedLinkSuggestions: setDismissedLinkSuggestions,
       dismissedRecurringSuggestions: setDismissedRecurringSuggestions,
-      transferHintDismissed: setTransferHintDismissed,
+      transferHintDismissed: setTransferHintDismissed, automationEnabled: setAutomationEnabled,
     };
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
@@ -1702,8 +1751,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // the rows whose budgets should be matched against real transactions so a
   // bill isn't charged once as a budget and again as an imported payment.
   const spendFixedExpenses = useMemo(() =>
-    viewFixedExpenses.filter(e =>
-      e.destinationKind !== 'savingsAccount' && e.destinationKind !== 'bufferAccount'),
+    viewFixedExpenses.filter(e => !isSavingsDestination(e.destinationKind)),
   [viewFixedExpenses]);
 
   // Year-one mortgage interest (rentefradrag): reduces alminnelig inntekt at 22%,
@@ -2167,6 +2215,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const overtimeCrud = useMemo(() => makeCrud<OvertimeEntry>(setOvertime, 'ot'), []);
   const hoursCrud = useMemo(() => makeCrud<HoursSnapshot>(setHoursSnapshots, 'hrs'), []);
   const goalsCrud = useMemo(() => makeCrud<Goal>(setGoals, 'goal'), []);
+  const allocationsCrud = useMemo(() => makeCrud<SavingsAllocation>(setSavingsAllocations, 'alloc'), []);
   const residencesCrud = useMemo(() => makeCrud<Residence>(setResidences, 'res'), []);
   const secondHomeCrud = useMemo(() => makeCrud<SecondHomeScenario>(setSecondHomeScenarios, 'sh'), []);
 
@@ -2210,6 +2259,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const updateGoal = goalsCrud.update;
   const removeGoal = goalsCrud.remove;
 
+  const addSavingsAllocation = allocationsCrud.add;
+  const updateSavingsAllocation = allocationsCrud.update;
+  const removeSavingsAllocation = allocationsCrud.remove;
+
   // ── Fixed-expense automations (a recurring expense that moves a balance) ──────
   // A fixed expense with a `destinationKind` grows a savings account or pays down
   // the mortgage / a debt each month by its amount. See src/lib/automation.ts.
@@ -2217,32 +2270,63 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Multi-month catch-ups awaiting confirmation (view state, not persisted).
   const [pendingCatchups, setPendingCatchups] = useState<PendingCatchup[]>([]);
 
-  // Project the destination-bearing fixed expenses to the runner's rule shape.
-  const automationRules = useMemo<AutomationRule[]>(() => fixedExpenses
-    .filter(e => e.destinationKind)
-    .map(e => ({
-      id: e.id,
-      name: e.name,
-      amount: e.amount,
-      targetKind: e.destinationKind!,
-      savingsAccountId: e.savingsAccountId,
-      debtId: e.debtId,
-      // A destination is stamped with lastPostedMonth on assignment, so this
-      // fallback only matters for imported data — start it next month.
-      startMonth: addMonthsKey(currentMonthKey(), 1),
-      lastPostedMonth: e.lastPostedMonth,
-    })), [fixedExpenses]);
+  // Project the destination-bearing fixed expenses to the runner's rule shape,
+  // then append the pension contributions (which have no budget line of their
+  // own — see src/lib/pensionAccrual.ts). One rule list, one runner, so both
+  // sources share the catch-up prompt and the double-apply guard.
+  const automationRules = useMemo<AutomationRule[]>(() => {
+    // The runner always targets the real current month, so pensionable income
+    // must be read there too — not at the month the user happens to be viewing.
+    const nowKey = currentMonthKey();
+    const expenseRules: AutomationRule[] = fixedExpenses
+      .filter(e => e.destinationKind && !e.automationPaused)
+      .map(e => ({
+        id: e.id,
+        name: e.name,
+        amount: e.amount,
+        targetKind: e.destinationKind!,
+        savingsAccountId: e.savingsAccountId,
+        debtId: e.debtId,
+        // A destination is stamped with lastPostedMonth on assignment, so this
+        // fallback only matters for imported data — start it next month.
+        startMonth: addMonthsKey(nowKey, 1),
+        lastPostedMonth: e.lastPostedMonth,
+      }));
+    return [
+      ...expenseRules,
+      ...pensionAccrualRules({
+        otpAutoPost: pension.otpAutoPost,
+        ipsAutoPost: pension.ipsAutoPost,
+        otpEmployerPct: pension.otpEmployerPct,
+        otpEmployeePct: pension.otpEmployeePct,
+        // Same cap the Pension page applies, so the posted amount always matches
+        // the "contribution per year" figure shown there.
+        ipsAnnualContribution: Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION),
+        otpLastPostedMonth: pension.otpLastPostedMonth,
+        ipsLastPostedMonth: pension.ipsLastPostedMonth,
+        pensionableIncome: calcActiveGrossAnnual(salaries, jobs, nowKey),
+        currentMonth: nowKey,
+      }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
+    ];
+  }, [fixedExpenses, pension, salaries, jobs, t]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
   const automationState = useMemo<AutomationState>(() => ({
     savings: Object.fromEntries((assets.savingsAccounts ?? []).map(s => [s.id, s.balance])),
-    buffer: assets.bufferAccount,
+    scalars: {
+      bufferAccount: assets.bufferAccount,
+      portfolio: assets.portfolio,
+      bsu: assets.bsu,
+      pensionOtp: pension.otpBalance,
+      pensionIps: pension.ipsBalance,
+    },
     mortgage: assets.houseDebt,
     mortgageRate: housingMode === 'homeowner' ? homeowner.rente : loan.rente,
     debts: Object.fromEntries(debts.map(d => [d.id, { balance: d.balance, rate: d.rate }])),
     housingMode,
-  }), [assets.savingsAccounts, assets.bufferAccount, assets.houseDebt, housingMode, homeowner.rente, loan.rente, debts]);
+  }), [assets.savingsAccounts, assets.bufferAccount, assets.portfolio, assets.bsu, assets.houseDebt,
+      pension.otpBalance, pension.ipsBalance, housingMode, homeowner.rente, loan.rente, debts]);
 
   // Apply a resolved posting's absolute new balance to the right slice. Debt
   // writes are batched by the caller (a single setDebts) to avoid stale-closure
@@ -2255,6 +2339,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         updateSavingsAccount(p.savingsAccountId, { balance: p.newBalance });
       } else if (p.targetKind === 'bufferAccount') {
         updateAsset('bufferAccount', p.newBalance);
+      } else if (p.targetKind === 'portfolio') {
+        // Only the balance moves: a contribution grows the cost basis, so
+        // `unrealizedGain` is deliberately left alone.
+        updateAsset('portfolio', p.newBalance);
+      } else if (p.targetKind === 'bsu') {
+        updateAsset('bsu', p.newBalance);
+      } else if (p.targetKind === 'pensionOtp') {
+        updatePension('otpBalance', p.newBalance);
+      } else if (p.targetKind === 'pensionIps') {
+        updatePension('ipsBalance', p.newBalance);
       } else if (p.targetKind === 'mortgage') {
         // updateHomeowner mirrors the balance into assets.houseDebt + transition.
         updateHomeowner('currentMortgageBalance', p.newBalance);
@@ -2264,11 +2358,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       }
     }
     if (hasDebtPatch) setDebts(debts.map(d => (d.id in debtPatch ? { ...d, balance: debtPatch[d.id] } : d)));
-  }, [updateSavingsAccount, updateAsset, updateHomeowner, debts]);
+  }, [updateSavingsAccount, updateAsset, updatePension, updateHomeowner, debts]);
 
-  // Stamp lastPostedMonth on the posted expenses.
+  // Stamp lastPostedMonth on the posted rules. Fixed expenses carry their own
+  // stamp; the two synthesized pension rules stamp onto the pension slice.
   const stampPosted = useCallback((ids: Set<string>, month: string) => {
-    setFixedExpenses(prev => prev.map(e => (ids.has(e.id) ? { ...e, lastPostedMonth: month } : e)));
+    const expenseIds = new Set([...ids].filter(id => !isPensionRuleId(id)));
+    if (expenseIds.size) {
+      setFixedExpenses(prev => prev.map(e => (expenseIds.has(e.id) ? { ...e, lastPostedMonth: month } : e)));
+    }
+    const otp = ids.has(PENSION_OTP_RULE_ID);
+    const ips = ids.has(PENSION_IPS_RULE_ID);
+    if (otp || ips) {
+      setPension(prev => ({
+        ...prev,
+        ...(otp ? { otpLastPostedMonth: month } : {}),
+        ...(ips ? { ipsLastPostedMonth: month } : {}),
+      }));
+    }
   }, []);
 
   // The monthly runner. Modeled on the balanceSnapshots effect: gated by
@@ -2278,14 +2385,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded.current) return;
     const currentMonth = currentMonthKey();
-    const postings = computeAutomationPostings(automationRules, automationState, currentMonth);
+    // The master switch: off resolves to no postings at all, which clears any
+    // prompt below and skips every write. Each rule keeps its config and its
+    // stamp, so flipping it back on resumes rather than restarts (a long pause
+    // then surfaces as a catch-up prompt).
+    const postings = automationEnabled
+      ? computeAutomationPostings(automationRules, automationState, currentMonth)
+      : [];
 
     const multi = postings.filter(p => p.monthsDue >= 2);
     const nextPending: PendingCatchup[] = multi.map(p => {
       const base = p.targetKind === 'savingsAccount' ? (automationState.savings[p.savingsAccountId!] ?? 0)
-        : p.targetKind === 'bufferAccount' ? automationState.buffer
         : p.targetKind === 'mortgage' ? automationState.mortgage
-        : (automationState.debts[p.debtId!]?.balance ?? 0);
+        : p.targetKind === 'debt' ? (automationState.debts[p.debtId!]?.balance ?? 0)
+        : automationState.scalars[p.targetKind];
       return {
         expenseId: p.rule.id,
         name: p.rule.name,
@@ -2306,7 +2419,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     applyPostingBalances(immediate);
     stampPosted(new Set(immediate.map(p => p.rule.id)), currentMonth);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [automationRules, automationState]);
+  }, [automationRules, automationState, automationEnabled]);
 
   const confirmCatchup = useCallback((expenseId: string) => {
     const currentMonth = currentMonthKey();
@@ -2709,7 +2822,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     overtime, addOvertime, updateOvertime, removeOvertime,
     hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
     goals, addGoal, updateGoal, removeGoal,
-    pendingCatchups, confirmCatchup, declineCatchup,
+    savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
+    automationEnabled, setAutomationEnabled, pendingCatchups, confirmCatchup, declineCatchup,
     employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
     inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris,
@@ -2736,7 +2850,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     bonuses, addBonus, updateBonus, removeBonus, overtime, addOvertime, updateOvertime,
     removeOvertime, hoursSnapshots, addHoursSnapshot, updateHoursSnapshot, removeHoursSnapshot,
     goals, addGoal, updateGoal, removeGoal,
-    pendingCatchups, confirmCatchup, declineCatchup,
+    savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
+    automationEnabled, setAutomationEnabled, pendingCatchups, confirmCatchup, declineCatchup,
     employerCostConfig, updateEmployerCostConfig,
     billingConfig, updateBillingConfig, inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris,

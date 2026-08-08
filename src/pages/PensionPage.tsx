@@ -16,6 +16,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { SummaryTile } from '../components/ui/SummaryTile';
 import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
+import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
 import { projectPensionWealth } from '../lib/pension';
 import { currentMonthKey } from '../lib/date';
@@ -34,8 +35,40 @@ const LineRow: React.FC<{ label: string; value: string; strong?: boolean; muted?
   </div>
 );
 
+// The per-scheme opt-in that keeps a pension balance from going stale: it posts
+// that scheme's monthly CONTRIBUTION (never its assumed return) into the stored
+// balance. Disabled — with the reason shown — when there is nothing to post yet.
+const AutoPostToggle: React.FC<{
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  monthly: number;
+  lastPostedMonth?: string;
+  blockedReason: string | null;
+}> = ({ label, checked, onChange, monthly, lastPostedMonth, blockedReason }) => {
+  const { t, formatCurrency, automationEnabled } = useFinance();
+  const pa = t.pensionAutomation;
+  const detail = !checked ? undefined
+    : !automationEnabled ? pa.masterOff
+      : lastPostedMonth ? pa.lastPosted.replace('{month}', lastPostedMonth)
+        : pa.neverPosted;
+  return (
+    <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+      <ToggleRow
+        label={label}
+        checked={checked}
+        onChange={onChange}
+        hint={blockedReason ?? pa.perMonth.replace('{amount}', formatCurrency(monthly))}
+        detail={detail}
+        disabled={!!blockedReason}
+      />
+    </div>
+  );
+};
+
 const PensionPage: React.FC = () => {
   const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile } = useFinance();
+  const pa = t.pensionAutomation;
   const reduced = useReducedMotion();
 
   // Time machine: when viewing a past month, render that month's pension snapshot (read-only).
@@ -251,6 +284,12 @@ const PensionPage: React.FC = () => {
       {/* Actual OTP/IPS balance history (renders only when ≥2 months recorded) */}
       <Suspense fallback={null}><PensionHistoryChart /></Suspense>
 
+      {/* Keeping the balances current: each card below carries an opt-in that
+          posts that scheme's monthly contribution into its stored balance. */}
+      {hist.isLive && (
+        <p className="text-[11.5px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{pa.intro}</p>
+      )}
+
       {/* Settings — OTP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card padding="lg">
@@ -270,6 +309,16 @@ const PensionPage: React.FC = () => {
           <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
             {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
           </p>
+          {hist.isLive && (
+            <AutoPostToggle
+              label={pa.otpToggle}
+              checked={livePension.otpAutoPost}
+              onChange={(on) => updatePension('otpAutoPost', on)}
+              monthly={otpAnnualContribution / 12}
+              lastPostedMonth={livePension.otpLastPostedMonth}
+              blockedReason={otpAnnualContribution > 0 ? null : pa.otpNeedsIncome}
+            />
+          )}
         </Card>
 
         {/* Settings — IPS */}
@@ -294,6 +343,16 @@ const PensionPage: React.FC = () => {
               {`${t.ipsHint}${t.pensionPage.ipsSavePre}${formatCurrency(ipsTaxSaving)}${t.pensionPage.ipsSaveSuf}`}
             </span>
           </div>
+          {hist.isLive && (
+            <AutoPostToggle
+              label={pa.ipsToggle}
+              checked={livePension.ipsAutoPost}
+              onChange={(on) => updatePension('ipsAutoPost', on)}
+              monthly={ipsAnnualContribution / 12}
+              lastPostedMonth={livePension.ipsLastPostedMonth}
+              blockedReason={ipsAnnualContribution > 0 ? null : pa.ipsNeedsContribution}
+            />
+          )}
         </Card>
       </div>
 

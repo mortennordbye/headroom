@@ -13,7 +13,7 @@ const rule = (over: Partial<AutomationRule> = {}): AutomationRule => ({
 
 const state = (over: Partial<AutomationState> = {}): AutomationState => ({
   savings: { 'sav-1': 1000 },
-  buffer: 20_000,
+  scalars: { bufferAccount: 20_000, portfolio: 300_000, bsu: 50_000, pensionOtp: 210_000, pensionIps: 48_000 },
   mortgage: 1_000_000,
   mortgageRate: 5,
   debts: { 'debt-1': { balance: 50_000, rate: 12 } },
@@ -82,6 +82,43 @@ describe('computeAutomationPostings — buffer account', () => {
     );
     expect(a.newBalance).toBe(20_500);          // 20 000 + 500
     expect(b.newBalance).toBe(21_500);          // + 1000, stacked on the first
+  });
+});
+
+describe('computeAutomationPostings — the other scalar targets', () => {
+  const scalar = (targetKind: AutomationRule['targetKind'], over: Partial<AutomationRule> = {}) =>
+    rule({ targetKind, savingsAccountId: undefined, lastPostedMonth: '2026-06', ...over });
+
+  it.each([
+    ['portfolio', 300_500],
+    ['bsu', 50_500],
+    ['pensionOtp', 210_500],
+    ['pensionIps', 48_500],
+  ] as const)('grows %s by amount × monthsDue', (kind, expected) => {
+    const [p] = computeAutomationPostings([scalar(kind)], state(), '2026-07');
+    expect(p.targetKind).toBe(kind);
+    expect(p.newBalance).toBe(expected);
+  });
+
+  it('keeps each scalar target independent (no cross-contamination)', () => {
+    const posts = computeAutomationPostings(
+      [scalar('portfolio', { id: 'p' }), scalar('bsu', { id: 'b', amount: 1000 })],
+      state(), '2026-07',
+    );
+    expect(posts.map(p => p.newBalance)).toEqual([300_500, 51_000]);
+  });
+
+  it('rounds a fractional monthly contribution (OTP is a % of salary)', () => {
+    const [p] = computeAutomationPostings([scalar('pensionOtp', { amount: 1583.3333 })], state(), '2026-07');
+    expect(p.newBalance).toBe(211_583);
+  });
+
+  it('catches up missed pension months in one posting', () => {
+    const [p] = computeAutomationPostings(
+      [scalar('pensionOtp', { amount: 1000, lastPostedMonth: '2026-04' })], state(), '2026-07',
+    );
+    expect(p.monthsDue).toBe(3);
+    expect(p.newBalance).toBe(213_000);
   });
 });
 

@@ -45,6 +45,7 @@ const defPension: Pension = {
   otpBalance: 9, otpEmployerPct: 9, otpEmployeePct: 9, otpGrowthRate: 9,
   ipsBalance: 9, ipsAnnualContribution: 9, ipsGrowthRate: 9, birthYear: 9, retirementAge: 9,
   folketrygdBeholdning: 9, folketrygdSingle: true, pensionPayoutYears: 9, afpEligible: false,
+  otpAutoPost: false, ipsAutoPost: false,
 };
 const defHomeowner: HomeownerData = {
   currentMortgageBalance: 9, originalLoanAmount: 9, rente: 9, nedbetalingstid: 9, termingebyr: 9,
@@ -80,6 +81,7 @@ const canonicalPension: Pension = {
   otpBalance: 100, otpEmployerPct: 6, otpEmployeePct: 1, otpGrowthRate: 4,
   ipsBalance: 200, ipsAnnualContribution: 300, ipsGrowthRate: 6, birthYear: 1988, retirementAge: 68,
   folketrygdBeholdning: 850000, folketrygdSingle: false, pensionPayoutYears: 12, afpEligible: true,
+  otpAutoPost: true, ipsAutoPost: true,
 };
 const canonicalHomeowner: HomeownerData = {
   currentMortgageBalance: 2000000, originalLoanAmount: 2600000, rente: 5, nedbetalingstid: 22, termingebyr: 55,
@@ -173,6 +175,10 @@ function fullPayload(): ExportPayload {
     overtime: canonicalOvertime,
     hoursSnapshots: canonicalHours,
     goals: canonicalGoals,
+    savingsAllocations: [
+      { id: 'al-1', percent: 60, destinationKind: 'portfolio' as const },
+      { id: 'al-2', percent: 40, destinationKind: 'savingsAccount' as const, savingsAccountId: 'sav-1' },
+    ],
     region: 'generic',
     customTaxRatePct: 28,
     employerCostConfig: { ...DEFAULT_EMPLOYER_COST_CONFIG },
@@ -192,6 +198,7 @@ function fullPayload(): ExportPayload {
     dismissedLinkSuggestions: ['fe-1'],
     dismissedRecurringSuggestions: ['spotify'],
     transferHintDismissed: true,
+    automationEnabled: false,
   };
 }
 
@@ -207,21 +214,21 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 58 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(58);
+  it('registers exactly the 60 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(60);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (35) or preserve (23)', () => {
+  it('partitions every field into reset (36) or preserve (24)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
-    expect(reset).toHaveLength(35);
-    expect(preserve).toHaveLength(23);
+    expect(reset).toHaveLength(36);
+    expect(preserve).toHaveLength(24);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([
       'lang', 'savingsTargetPercent', 'growthReturnRate', 'forecastAssumptions', 'houseGrowthRate',
       'cashGrowthRate', 'cryptoGrowthRate', 'displayCurrency', 'nokToUsd', 'customCurrencyCode',
-      'customCurrencyRate', 'jobs', 'salaries', 'residences', 'secondHomeScenarios', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'region',
+      'customCurrencyRate', 'jobs', 'salaries', 'residences', 'secondHomeScenarios', 'bonuses', 'overtime', 'hoursSnapshots', 'goals', 'savingsAllocations', 'region',
       'customTaxRatePct', 'hiddenNavItems', 'profile',
     ]));
   });
