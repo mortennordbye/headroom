@@ -21,14 +21,27 @@ export function isSavingsDestination(kind: FixedExpense['destinationKind']): boo
 }
 
 /**
+ * True for a row that is money retained rather than spent — either because it is
+ * explicitly typed as saving, or because it moves a balance to a savings
+ * vehicle. Both count: the type is the user's own classification, and the
+ * destination is what actually moves the money. A row can legitimately have one
+ * without the other (a saving typed but not yet pointed anywhere, or a legacy
+ * row with a destination and no type).
+ */
+export function isSavingsRow(e: Pick<FixedExpense, 'type' | 'destinationKind'>): boolean {
+  return e.type === 'saving' || isSavingsDestination(e.destinationKind);
+}
+
+/**
  * The part of the fixed-expense list that is money moved into savings rather
  * than spent. It leaves free-to-spend like any other fixed expense, but it is
  * still the user's money, so the savings rate must not subtract it as if it
- * were consumption.
+ * were consumption — and the investing recommendation must count it as already
+ * set aside rather than asking for it again.
  */
 export function savingsContributionTotal(fixedExpenses: FixedExpense[]): number {
   return fixedExpenses.reduce(
-    (sum, e) => (isSavingsDestination(e.destinationKind) ? sum + amount(e.amount) : sum),
+    (sum, e) => (isSavingsRow(e) ? sum + amount(e.amount) : sum),
     0,
   );
 }

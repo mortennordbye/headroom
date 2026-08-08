@@ -11,7 +11,7 @@ const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max
 
 // Untyped legacy/imported rows count as 'fixed' — matching `expenseColor`'s
 // `type ?? 'fixed'` fallback on the Budget page.
-const TYPE_ORDER: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance'];
+const TYPE_ORDER: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance', 'saving'];
 
 export interface FixedExpenseTypeTotal {
   type: ExpenseType;

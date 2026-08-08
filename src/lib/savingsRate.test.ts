@@ -59,6 +59,18 @@ const fixed = (amount: number, destinationKind?: FixedExpense['destinationKind']
   ({ id: `f-${amount}-${destinationKind ?? 'none'}`, name: 'x', amount, type: 'fixed', destinationKind });
 
 describe('savingsContributionTotal', () => {
+  it('counts a row typed as saving even without a destination', () => {
+    // The type is the user's own classification: it must leave the investing
+    // recommendation whether or not a destination has been picked yet.
+    const typed = { ...fixed(3000), type: 'saving' as const };
+    expect(savingsContributionTotal([typed, fixed(12000)])).toBe(3000);
+  });
+
+  it('does not double-count a row that is both typed saving and has a destination', () => {
+    const both = { ...fixed(4000, 'portfolio'), type: 'saving' as const };
+    expect(savingsContributionTotal([both])).toBe(4000);
+  });
+
   it('counts every retained-money destination, not ordinary expenses', () => {
     const total = savingsContributionTotal([
       fixed(12000),                     // rent
