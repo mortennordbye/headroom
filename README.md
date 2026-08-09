@@ -41,7 +41,7 @@ cloud and no account to create. Pick one:
 |---|---|---|
 | **[A. Download the app](#a-download-the-app)** | Anyone who just wants to use it | A Mac or Windows PC |
 | **[B. Docker](#b-docker)** | Keeping it always-on, on a laptop, server or NAS | Docker |
-| **[C. Build it yourself](#c-build-it-yourself)** | Changing the code, or preferring not to run a binary someone else built | Node 22 and git |
+| **[C. Build it yourself](#c-build-it-yourself)** | Changing the code, or preferring not to run a binary someone else built | Node 24 and git |
 
 They are the same application. The desktop app runs the same server, the same SQLite database and
 the same backups as the container, only wrapped so it starts on its own.
@@ -132,7 +132,7 @@ cd headroom
 make build              # builds the image and starts it on http://localhost:8080
 ```
 
-**As a Mac or Windows app** (needs [Node 22](https://nodejs.org/)):
+**As a Mac or Windows app** (needs [Node 24](https://nodejs.org/)):
 
 ```bash
 git clone https://github.com/mortennordbye/headroom.git
@@ -440,7 +440,7 @@ headroom
 | [**Dependency Review**](.github/workflows/dependency-review.yml) | PRs | Blocks PRs that introduce known-vulnerable dependencies |
 | [**Scorecard**](.github/workflows/scorecard.yml) | Push to `main`, weekly | OpenSSF supply-chain score published to the Security tab |
 | [**Container Scan**](.github/workflows/container-scan.yml) | Push to `main`, weekly | Trivy scan of the image; findings to the Security tab |
-| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root + `server/` + `desktop/`, GitHub Actions) |
+| [**Dependabot**](.github/dependabot.yml) | Weekly | Grouped dependency-update PRs (npm root, `server/`+`desktop/` paired, GitHub Actions, Docker). Security fixes and non-major bumps [auto-merge](.github/workflows/dependabot-auto-merge.yml) once the required checks pass |
 
 ---
 

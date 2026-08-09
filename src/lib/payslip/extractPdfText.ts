@@ -40,12 +40,12 @@ async function renderPage(page: PDFPageProxy, scale: number): Promise<string> {
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
-  await page.render({ canvasContext: ctx, viewport }).promise;
+  await page.render({ canvas, viewport }).promise;
   return canvas.toDataURL('image/png');
 }
 
+// Tearing down is `doc.loadingTask.destroy()`, not `doc.destroy()` — pdf.js 6
+// dropped destroy() from the document proxy and left it only on the task.
 async function open(file: File): Promise<PDFDocumentProxy> {
   const data = new Uint8Array(await file.arrayBuffer());
   return pdfjs.getDocument({ data }).promise;
@@ -67,7 +67,7 @@ export async function extractPayslipPages(file: File): Promise<string[][]> {
     }
     return pages;
   } finally {
-    await doc.destroy();
+    await doc.loadingTask.destroy();
   }
 }
 
@@ -83,6 +83,6 @@ export async function renderPdfPage(file: File, pageIndex: number, scale = 2): P
     page.cleanup();
     return url;
   } finally {
-    await doc.destroy();
+    await doc.loadingTask.destroy();
   }
 }

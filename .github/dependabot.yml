@@ -16,6 +16,14 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps):"
+    # Keep the base image on the Node LTS line. Digest and minor refreshes still
+    # come through, which is how a rebuilt base carrying CVE fixes arrives, but
+    # majors are ignored so Dependabot can't move us off LTS — it proposed Node 25,
+    # an odd-numbered release that was already end-of-life. Bump the major by hand
+    # when the next LTS ships (October of even-numbered years).
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     groups:
       docker:
         patterns: ["*"]
@@ -31,37 +39,33 @@ updates:
       npm-minor-patch:
         update-types: ["minor", "patch"]
       # Without this, security updates ignore groups entirely and arrive as one
-      # PR per package.
-      npm-security:
+      # PR per package. The name is load-bearing: dependabot-auto-merge.yml keys
+      # off it to merge security fixes at any size, majors included. Keep the two
+      # in sync.
+      security:
         applies-to: security-updates
         patterns: ["*"]
 
-  # The desktop app pins its own copy of the server's runtime deps (it runs them
-  # under Electron's Node), so it needs its own update stream.
+  # server/ and desktop/ declare the same four runtime dependencies, because the
+  # desktop app runs the server under Electron's Node and needs an ABI-matched
+  # build of better-sqlite3. desktop/deps.test.js fails the build when the two
+  # drift, so a shared bump has to arrive as ONE PR touching both directories —
+  # split across two, each is red on its own and neither can merge.
   - package-ecosystem: "npm"
-    directory: "/desktop"
+    directories:
+      - "/server"
+      - "/desktop"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps):"
     open-pull-requests-limit: 5
     groups:
-      npm-minor-patch:
-        update-types: ["minor", "patch"]
-      npm-security:
-        applies-to: security-updates
+      # A catch-all rather than minor/patch: majors need grouping too, or they
+      # arrive unpaired and unmergeable. express-rate-limit 7 to 8 and
+      # better-sqlite3 12 to 13 each did exactly that.
+      server-desktop:
         patterns: ["*"]
-
-  - package-ecosystem: "npm"
-    directory: "/server"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "chore(deps):"
-    open-pull-requests-limit: 5
-    groups:
-      npm-minor-patch:
-        update-types: ["minor", "patch"]
-      npm-security:
+      security:
         applies-to: security-updates
         patterns: ["*"]

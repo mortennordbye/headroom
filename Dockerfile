@@ -1,7 +1,13 @@
 # syntax=docker/dockerfile:1
 
+# Node 24 "Krypton" is the active LTS line (security-supported into 2028). Both
+# stages share one base so a build pulls a single image and Dependabot has a
+# single digest to keep fresh. Dependabot is pinned off Docker major bumps
+# (.github/dependabot.yml) so this can't drift onto a non-LTS release.
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS base
+
 # Stage 1: build frontend
-FROM node:22-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS frontend-build
+FROM base AS frontend-build
 WORKDIR /app
 COPY package*.json ./
 # Cache-mount the npm download dir so a rebuild (or a lockfile change) reuses
@@ -16,34 +22,35 @@ COPY public ./public
 RUN npm run build
 
 # Stage 2: production
-FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
+FROM base
 WORKDIR /app
 # su-exec lets the entrypoint drop from root to `node` after fixing volume perms.
 RUN apk add --no-cache su-exec
 COPY server/package*.json ./
-# better-sqlite3 compiles a native addon; install the toolchain only for the
-# duration of `npm ci`, then drop it so it doesn't bloat the image or widen the
-# attack surface (the compiled .node binary persists).
-RUN --mount=type=cache,target=/root/.npm \
-    apk add --no-cache --virtual .build-deps python3 make g++ \
-  && npm ci --omit=dev \
-  && apk del .build-deps
-COPY server/index.js ./
-COPY server/auth.js ./
-COPY server/demo.js ./
-COPY server/cpiWindow.js ./
-COPY server/seed.js ./
-COPY server/ssb.js ./
-COPY server/boligPrices.js ./
-COPY server/wageStats.js ./
-COPY server/norgesBank.js ./
-COPY server/postnummer.js ./
+# better-sqlite3 >=13 ships prebuilt musl binaries for both arches we build, so
+# `--ignore-scripts` skips the node-gyp rebuild npm would otherwise trigger for
+# any package with a binding.gyp. That drops the python3/make/g++ toolchain layer
+# entirely — faster builds, smaller attack surface. None of the four runtime
+# dependencies needs an install script for anything else.
+#
+# The prune then drops what only a from-source build would have needed: the other
+# seven platforms' prebuilt binaries and the bundled SQLite amalgamation, about
+# 24 MB that nothing can reach at runtime.
+#
+# The trade-off in both is that a mistake would surface at runtime rather than at
+# build time, so the last step loads the addon: if the prebuild is missing or the
+# prune took too much, the build breaks loudly right here.
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts \
+  && keep="$(node -p "require('node:path').basename(require('/app/node_modules/better-sqlite3/lib/binding').getPrebuildPath())")" \
+  && find node_modules/better-sqlite3/prebuilds -name '*.node' ! -name "$keep" -delete \
+  && rm -rf node_modules/better-sqlite3/deps node_modules/better-sqlite3/src \
+  && node -e "require('better-sqlite3')"
+# Wildcard rather than a file-per-line list, so adding a server module doesn't
+# silently ship an image missing it. `*.js` can't match server/node_modules (the
+# glob doesn't cross `/`) and .dockerignore keeps *.test.js out of the context.
+COPY server/*.js server/docker-entrypoint.sh ./
 # postnummer.js reads ./data/postnummer.tsv relative to its own dir (/app).
 COPY server/data ./data
-COPY server/bank.js ./
-COPY server/backup.js ./
-COPY server/bankSync.js ./
-COPY server/docker-entrypoint.sh ./
 COPY --from=frontend-build /app/dist ./dist
 RUN chmod +x docker-entrypoint.sh && mkdir -p /data && chown -R node:node /app /data
 ENV DATA_DIR=/data

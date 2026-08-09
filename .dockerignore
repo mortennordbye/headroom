@@ -1,5 +1,9 @@
-node_modules/
+# At any depth: a bare `node_modules/` only matched the root one, so server/ and
+# desktop/ (450 MB, plus host-ABI native binaries) were being sent to the daemon
+# on every build and could have overwritten the image's own `npm ci` output.
+**/node_modules/
 dist/
+desktop/release/
 .git/
 .claude/
 data/database.sqlite
@@ -25,3 +29,4 @@ BACKLOG.md
 # so the image build doesn't compile them (the bare `*.test.ts` only matched root).
 **/*.test.ts
 **/*.test.tsx
+**/*.test.js
