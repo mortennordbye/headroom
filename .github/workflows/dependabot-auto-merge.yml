@@ -19,10 +19,20 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Majors stay manual. For a grouped PR, update-type is the largest bump in
-      # the group, so one major keeps the whole batch out of auto-merge.
-      - name: Enable auto-merge for patch and minor updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+      # Two rules:
+      #  - Security fixes merge at any size, majors included. A known CVE sitting
+      #    unmerged is the larger risk, and nothing lands unchecked either way:
+      #    auto-merge only fires once the required checks (typecheck, lint, the
+      #    full test suite, dependency-review and both container arches) are green.
+      #  - Everything else merges up to minor. For a grouped PR, update-type is the
+      #    largest bump in the group, so one major keeps the whole batch out.
+      #
+      # `security` is the name given to every `applies-to: security-updates` group
+      # in dependabot.yml — that's the signal rather than the `ghsa-id` output,
+      # which needs alert-lookup, which needs a PAT carrying security_events. Same
+      # answer, one less credential to rotate.
+      - name: Enable auto-merge
+        if: steps.metadata.outputs.dependency-group == 'security' || steps.metadata.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

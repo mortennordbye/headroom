@@ -623,23 +623,23 @@ Remaining:
 
 ## Blocked major dependency upgrades (2026-08)
 
-Two Dependabot majors cannot merge as-is. Both stay open and re-run CI on every rebase, so
-they are worth closing out rather than leaving to rot.
+Everything else is on its latest stable release as of the 2026-08 audit; this is the one
+holdout.
 
-- **`pdfjs-dist` 4.10.38 → 6.x needs real code changes.** The payslip importer breaks on the
-  v6 API: `page.render()` no longer accepts a bare `{ canvasContext, viewport }`
-  (`RenderParameters` changed shape), and `PDFDocumentProxy.destroy()` was removed in favour of
-  the loading task's own cleanup. Deferred because the fix is a genuine rewrite of the render
-  and teardown path, not a version bump, and the importer has no browser-level test to catch a
-  regression. **What would unblock**: port the three call sites to the v6 API and re-verify
-  against a real payslip PDF end to end (parsing is covered by fixtures, but the pdf.js
-  extraction layer is not). **Where**: `src/lib/payslip/extractPdfText.ts` lines 45, 70, 86;
-  open PR #24.
-- **`typescript` 6.0.3 → 7.0.2 is blocked upstream.** `npm ci` fails outright: `typescript-eslint@8.63.0`
-  declares `peer typescript ">=4.8.4 <6.1.0"`, so the resolver cannot satisfy TS 7 alongside the
-  current lint stack. Nothing to fix in this repo. **What would unblock**: a `typescript-eslint`
-  release widening its peer range to TS 7; then the bump is mechanical. **Where**:
-  `package.json` (`typescript`, `typescript-eslint`); open PR #27.
+- **`typescript` 6.0.3 → 7.0.2 is blocked upstream.** `typescript-eslint@8.66.0` (the newest
+  release — there is no v9) declares `peer typescript ">=4.8.4 <6.1.0"`, so the resolver cannot
+  satisfy TS 7 alongside the current lint stack, and `npm ci` fails outright. Nothing to fix in
+  this repo. **What would unblock**: a `typescript-eslint` release widening its peer range to
+  TS 7; the bump is mechanical after that. **Where**: `package.json` (`typescript`,
+  `typescript-eslint`).
+
+- **Docker base-image majors are bumped by hand.** `.github/dependabot.yml` ignores
+  `version-update:semver-major` for the `node` image so Dependabot cannot drift the Dockerfile
+  off the LTS line (it proposed Node 25, already end-of-life). Digest and minor refreshes still
+  arrive automatically. **What this needs**: move the pin to the next LTS when it ships, in
+  October of even-numbered years — Node 26 in October 2026. **Where**: `Dockerfile` (the shared
+  `base` stage), `node-version` in `.github/workflows/build.yml` and `desktop-build.yml`, and
+  the two "Node 24" mentions in `README.md`.
 
 ## Public demo mode (2026-08) — deferred items
 
