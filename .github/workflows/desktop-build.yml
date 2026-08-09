@@ -3,14 +3,14 @@ name: Desktop build
 # Builds the Mac and Windows installers. Runs on PRs that touch the code they
 # package (so a break surfaces before release rather than at release), and is
 # called by the release workflow to produce the real artifacts.
+#
+# There is deliberately no `paths:` filter here. A required status check has to
+# report on EVERY pull request — a filtered-out workflow reports nothing at all,
+# and a PR waiting on a check that will never arrive is stuck forever. So the
+# filtering moved into the `changes` job, and the `gate` job at the bottom always
+# reports. `gate` is the one to mark required; the three build jobs are not.
 on:
   pull_request:
-    paths:
-      - 'desktop/**'
-      - 'server/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/desktop-build.yml'
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -32,8 +32,47 @@ defaults:
     shell: bash
 
 jobs:
+  # The path filter that used to live under `on:`. Kept to `contents: read` on
+  # purpose: release.yml calls this workflow with only that permission, and a
+  # reusable workflow cannot request more than its caller was granted.
+  changes:
+    name: Detect packaged changes
+    runs-on: ubuntu-latest
+    outputs:
+      packaged: ${{ steps.filter.outputs.packaged }}
+    steps:
+      # Only a pull_request needs a diff — a release call or a manual run always
+      # builds. On a PR, checkout lands on the merge commit, so HEAD^1 is the base
+      # and `git diff HEAD^1 HEAD` is exactly this PR's changes; depth 2 is enough
+      # to have both, and avoids cloning the full history.
+      - name: Checkout
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      - name: Decide whether the installers need building
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT" != 'pull_request' ]]; then
+            echo 'packaged=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          echo "Changed files:"; echo "$changed"
+          # Keep this list in step with what the installers actually package.
+          if grep -qE '^(desktop/|server/|package\.json$|package-lock\.json$|\.github/workflows/desktop-build\.yml$)' <<< "$changed"; then
+            echo 'packaged=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'packaged=false' >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: ${{ matrix.label }}
+    needs: changes
+    if: needs.changes.outputs.packaged == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -108,3 +147,30 @@ jobs:
             desktop/release/*.exe
           if-no-files-found: error
           retention-days: 7
+
+  # The single check to mark required. It reports on every PR: green when the
+  # installers built, green when nothing they package changed, red otherwise.
+  # `always()` is what makes it report even when `build` was skipped — without it
+  # a skipped dependency skips this too, which is the whole failure mode.
+  gate:
+    name: Desktop installers
+    runs-on: ubuntu-latest
+    needs: [changes, build]
+    if: always()
+    steps:
+      - name: Report
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          # A broken detector must not pass as "nothing to build" — that would
+          # wave through exactly the breakage this check exists to catch.
+          if [[ "$CHANGES" != 'success' ]]; then
+            echo "::error::Change detection $CHANGES — cannot tell whether the installers needed building."
+            exit 1
+          fi
+          case "$BUILD" in
+            success) echo 'Installers built.' ;;
+            skipped) echo 'Nothing the installers package changed; not built.' ;;
+            *)       echo "::error::Desktop build $BUILD."; exit 1 ;;
+          esac

@@ -436,7 +436,7 @@ headroom
 |----------|---------|---------|
 | [**CI**](.github/workflows/build.yml) | Push to `main`, PRs, manual | Typecheck, lint, test, then build and push the Docker image to GHCR |
 | [**Release**](.github/workflows/release.yml) | Push to `main` | release-please keeps a release PR open; merging it cuts the release and attaches the desktop installers |
-| [**Desktop build**](.github/workflows/desktop-build.yml) | PRs touching `desktop/`/`server/`, manual | Builds the Mac and Windows installers so a break surfaces before release |
+| [**Desktop build**](.github/workflows/desktop-build.yml) | All PRs, manual | Builds the Mac and Windows installers so a break surfaces before release. Installers build only when a PR touches what they package; the `Desktop installers` check reports either way, so it can be a required check |
 | [**Dependency Review**](.github/workflows/dependency-review.yml) | PRs | Blocks PRs that introduce known-vulnerable dependencies |
 | [**Scorecard**](.github/workflows/scorecard.yml) | Push to `main`, weekly | OpenSSF supply-chain score published to the Security tab |
 | [**Container Scan**](.github/workflows/container-scan.yml) | Push to `main`, weekly | Trivy scan of the image; findings to the Security tab |
