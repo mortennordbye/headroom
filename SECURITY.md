@@ -12,3 +12,5 @@ https://github.com/mortennordbye/headroom/security/advisories/new
 (the "Report a vulnerability" button under this repository's **Security** tab;
 private vulnerability reporting is enabled). You will receive an acknowledgement
 within 48 hours.
+
+<!-- gate skip-path verification, reverted immediately -->
