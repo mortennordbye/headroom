@@ -609,6 +609,11 @@ export const translations = {
       readOnly: 'Skrivebeskyttet historikk – gå til i dag for å redigere',
       asOf: 'per',
       editMonth: 'Rediger måneden',
+      projected: 'Framskrevet – dette er ikke registrerte tall, men det de faste overføringene har flyttet innen da.',
+      horizonReached: 'Lenger fram enn to år framskriver vi ikke – inntekten holdes på dagens nivå.',
+      growthToggle: 'Med avkastning',
+      growthOnHint: 'Antatt avkastning er lagt til overføringene. Tallene følger forutsetningene dine, ikke bare det du har satt opp.',
+      growthOffHint: 'Bare de faste overføringene. Hver krone kan spores til noe du selv har satt opp – slå på for å legge til antatt avkastning.',
     },
     salary: {
       importPayslip: {
@@ -2474,6 +2479,11 @@ export const translations = {
       readOnly: 'Read-only history — go to today to edit',
       asOf: 'as of',
       editMonth: 'Edit month',
+      projected: 'Projected — not recorded figures, but what your standing transfers will have moved by then.',
+      horizonReached: 'We do not project beyond two years — income is held at today\'s level.',
+      growthToggle: 'With growth',
+      growthOnHint: 'Assumed growth is added on top of the transfers. The figures now follow your assumptions, not just what you set up.',
+      growthOffHint: 'The standing transfers only. Every krone traces to something you configured — switch on to add assumed growth.',
     },
     salary: {
       importPayslip: {

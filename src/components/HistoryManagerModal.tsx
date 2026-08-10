@@ -10,6 +10,7 @@ import {
   nearestSnapshot,
   historyRows,
   buildManualSnapshot,
+  snapshotBalances,
   type SnapshotBalances,
 } from '../lib/snapshots';
 
@@ -43,31 +44,6 @@ function StatePill({ state, hm, liveLabel }: {
       {tone.label}
     </span>
   );
-}
-
-/** The initial balances for the editor: the existing snapshot, else the nearest
- *  recorded month, else the live state. */
-function balancesFrom(base: BalanceSnapshot, live: {
-  savingsTargetPercent: number; growthReturnRate: number; houseGrowthRate: number;
-}): SnapshotBalances {
-  const a = base.assets;
-  return {
-    savingsAccounts: (a.savingsAccounts ?? []).map(s => ({ ...s })),
-    bsu: a.bsu ?? 0,
-    bufferAccount: a.bufferAccount ?? 0,
-    portfolio: a.portfolio ?? 0,
-    crypto: a.crypto ?? 0,
-    houseValue: a.houseValue ?? 0,
-    houseDebt: a.houseDebt ?? 0,
-    debts: (base.debts ?? []).map(d => ({ ...d })),
-    otpBalance: base.pension?.otpBalance ?? 0,
-    ipsBalance: base.pension?.ipsBalance ?? 0,
-    assumptions: base.assumptions ?? {
-      savingsTargetPercent: live.savingsTargetPercent,
-      growthReturnRate: live.growthReturnRate,
-      houseGrowthRate: live.houseGrowthRate,
-    },
-  };
 }
 
 export default function HistoryManagerModal({ onClose, initialMonth }: HistoryManagerModalProps) {
@@ -125,7 +101,7 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
     return (
       <SnapshotEditor
         monthTitle={monthLabel(editing)}
-        initial={balancesFrom(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate })}
+        initial={snapshotBalances(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate })}
         base={base}
         onCancel={done}
         onSave={(balances) => {

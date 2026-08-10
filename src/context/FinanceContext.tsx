@@ -621,6 +621,12 @@ interface FinanceSettingsContextType {
   setCustomCurrencyRate: (rate: number) => void;
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
+  /** On a projected (future) month, whether to compound the assumed growth rates
+   *  on top of the automated transfers. Off by default: a projection made only of
+   *  transfers you configured is reproducible by hand, one built on a slider is
+   *  not. View state like `currentMonth` — deliberately not persisted. */
+  projectionIncludeGrowth: boolean;
+  setProjectionIncludeGrowth: (v: boolean) => void;
   savingsTargetPercent: number;
   setSavingsTargetPercent: (val: number) => void;
   growthReturnRate: number;
@@ -740,6 +746,14 @@ interface FinanceDataContextType {
   removePayslip: (monthKey: string) => void;
   netWorthHistory: Record<string, number>;
   balanceSnapshots: Record<string, BalanceSnapshot>;
+  /** Today's balances in snapshot shape — the record the capture effect stores,
+   *  and the base a projected future month grows forward from. */
+  liveBalanceSnapshot: BalanceSnapshot;
+  /** The automation rule set and the balances it acts on. Exposed so a future
+   *  month can be projected with the same pure runner that posts the real one;
+   *  the runner itself is driven off the real clock and ignores the picked month. */
+  automationRules: AutomationRule[];
+  automationState: AutomationState;
   /** Backfill/edit a manual snapshot for a past month (source forced to 'manual'). */
   setManualSnapshot: (monthKey: string, snapshot: BalanceSnapshot) => void;
   /** Delete a manual snapshot. Auto snapshots are left alone (they re-capture). */
@@ -1101,6 +1115,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const n = new Date();
     return new Date(n.getFullYear(), n.getMonth(), 1);
   });
+  // Same rationale as `currentMonth`: a view control, so it is neither persisted
+  // nor exported. Each session starts on the reproducible, contributions-only view.
+  const [projectionIncludeGrowth, setProjectionIncludeGrowth] = useState(false);
 
   const [income, setIncome] = useState<number>(55000);
   const [monthlyIncomes, setMonthlyIncomes] = useState<Record<string, number>>({});
@@ -2099,6 +2116,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorth]);
 
+  // Today's balances in snapshot shape. Two readers: the capture effect below
+  // stores it as this month's record, and a projected future month grows it
+  // forward (see `useBalanceHistory`). One memo so the two can never disagree
+  // about which fields make up "the balance state".
+  const liveBalanceSnapshot = useMemo<BalanceSnapshot>(() => ({
+    assets, loan, pension, homeowner, transition, housingMode, debts,
+    v: 2,
+    fixedExpenses,
+    assumptions: { savingsTargetPercent, growthReturnRate, houseGrowthRate },
+    categoryBudgets,
+    source: 'auto',
+  }), [assets, loan, pension, homeowner, transition, housingMode, debts,
+       fixedExpenses, savingsTargetPercent, growthReturnRate, houseGrowthRate, categoryBudgets]);
+
   // Capture the full balance state for the current calendar month whenever it
   // changes, so the balance pages can be viewed historically later. This state is
   // not month-scoped, so we always target the real current month regardless of the
@@ -2106,14 +2137,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded.current) return;
     const nowKey = format(new Date(), 'yyyy-MM');
-    const snap: BalanceSnapshot = {
-      assets, loan, pension, homeowner, transition, housingMode, debts,
-      v: 2,
-      fixedExpenses,
-      assumptions: { savingsTargetPercent, growthReturnRate, houseGrowthRate },
-      categoryBudgets,
-      source: 'auto',
-    };
+    const snap = liveBalanceSnapshot;
     // Skip the rewrite when the stored snapshot is structurally identical —
     // the slices get fresh identities on every load/adopt, and rewriting the
     // entry anyway would dirty the data on a plain open (3.2).
@@ -2122,8 +2146,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         ? prev
         : { ...prev, [nowKey]: snap }
     ));
-  }, [assets, loan, pension, homeowner, transition, housingMode, debts,
-      fixedExpenses, savingsTargetPercent, growthReturnRate, houseGrowthRate, categoryBudgets]);
+  }, [liveBalanceSnapshot]);
 
   // The current home's value and mortgage are one real quantity stored in three
   // slices (assets drives net worth; homeowner drives LTV/payment; transition
@@ -2798,6 +2821,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     lang, setLang, t, displayCurrency, setDisplayCurrency, nokToUsd, setNokToUsd,
     customCurrencyCode, setCustomCurrencyCode, customCurrencyRate, setCustomCurrencyRate,
     currentMonth, setCurrentMonth,
+    projectionIncludeGrowth, setProjectionIncludeGrowth,
     savingsTargetPercent, setSavingsTargetPercent,
     growthReturnRate, setGrowthReturnRate, forecastAssumptions, setForecastAssumptions,
     houseGrowthRate, setHouseGrowthRate,
@@ -2825,7 +2849,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded,
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
-    currentMonth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
+    currentMonth, projectionIncludeGrowth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
     cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, aiContext, profile, updateProfile,
     capacityOverrides, setCapacityOverride, employerSalaryOverride, setEmployerSalaryOverride,
     dismissedLinkSuggestions, dismissLinkSuggestion, dismissedRecurringSuggestions, dismissRecurringSuggestion,
@@ -2847,7 +2871,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     income, setIncome,
     monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip,
-    netWorthHistory, balanceSnapshots,
+    netWorthHistory, balanceSnapshots, liveBalanceSnapshot,
+    automationRules, automationState,
     setManualSnapshot, deleteManualSnapshot, clearHistory,
     fixedExpenses, setFixedExpenses,
     debts, setDebts,
@@ -2881,7 +2906,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
     payslips, setPayslip, removePayslip, netWorthHistory,
-    balanceSnapshots, setManualSnapshot, deleteManualSnapshot, clearHistory,
+    balanceSnapshots, liveBalanceSnapshot, automationRules, automationState,
+    setManualSnapshot, deleteManualSnapshot, clearHistory,
     fixedExpenses, debts, dailyTransactions,
     setDailyTransactionsTracked, accountLabels, setAccountLabel, applyBankSync,
     categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule,
