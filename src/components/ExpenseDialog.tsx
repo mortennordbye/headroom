@@ -127,9 +127,16 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     const lastPostedMonth = !destinationKind ? undefined
       : sameDest && !resumed ? expense?.lastPostedMonth : currentMonthKey();
 
+    // A percentage-based saving derives its amount, so typing one here means
+    // "pin it": the row stops following income. Editing only the name or the
+    // destination leaves it tracking, which is why this keys on the amount
+    // actually changing rather than on the dialog being opened.
+    const amountPinned = !!expense?.amountPercent && amt !== expense.amount;
+
     onSave({
       name: name.trim(),
       amount: amt,
+      amountPercent: amountPinned ? undefined : expense?.amountPercent,
       type,
       category: isCategoryKey(category) ? category : undefined,
       match: match.trim() || undefined,
@@ -163,6 +170,11 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
 
   const selectCls = `${input} appearance-none cursor-pointer pr-9`;
 
+  // The dialog names itself after what it is currently building, so switching the
+  // type chip to Sparing rewords the whole form rather than leaving "utgift" on a
+  // saving. Editing keeps the row's own name as the title.
+  const isSaving = type === 'saving';
+
   return (
     <ModalShell
       title={expense ? expense.name : t.expenseDialog.addTitle}
@@ -173,15 +185,15 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
       footer={
         <div className="flex gap-2.5 pt-4 mt-1">
           <button onClick={onClose} className="flex-1 py-3 rounded-[10px] text-[14px] font-medium text-[var(--text-2)] bg-[var(--bg-elev)] hover:bg-[var(--bg-raised)] transition-colors">{t.cancel}</button>
-          <button onClick={submit} className="flex-1 py-3 rounded-[10px] text-[14px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-colors">{t.expenseDialog.save}</button>
+          <button onClick={submit} className="flex-1 py-3 rounded-[10px] text-[14px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)] transition-colors">{isSaving ? t.expenseDialog.saveSaving : t.expenseDialog.save}</button>
         </div>
       }
     >
-      <p className="text-[12px] text-[var(--text-3)] mt-1 mb-1">{t.expenseDialog.subtitle}</p>
+      <p className="text-[12px] text-[var(--text-3)] mt-1 mb-1">{isSaving ? t.expenseDialog.savingSubtitle : t.expenseDialog.subtitle}</p>
       <div className="space-y-4 max-h-[64vh] overflow-y-auto -mx-1 px-1 pt-3">
         {/* essentials */}
         <div>
-          <label className={lbl}>{t.newExpenseName.replace(':', '')}</label>
+          <label className={lbl}>{isSaving ? t.expenseDialog.savingNameLabel : t.newExpenseName.replace(':', '')}</label>
           <input className={input} autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={t.budgetPage.expenseNamePlaceholder} />
         </div>
         <div>
@@ -190,6 +202,11 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
             <input className={`${input} font-mono tabular-nums text-[17px] font-semibold pr-[72px]`} inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
             <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[13px] text-[var(--text-3)] pointer-events-none">{t.expenseDialog.perMonth}</span>
           </div>
+          {!!expense?.amountPercent && (
+            <p className="text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--brass)' }}>
+              {t.expenseDialog.percentPinHint.replace('{percent}', String(expense.amountPercent))}
+            </p>
+          )}
         </div>
         <div>
           <label className={lbl}>{t.expenseTypeLabel.replace(':', '')}</label>

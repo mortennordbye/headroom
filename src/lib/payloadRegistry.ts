@@ -21,7 +21,7 @@ import { DEFAULT_BOLIG_ASSUMPTIONS } from './secondHome';
 import { DEFAULT_PROFILE } from './profile';
 import { DEFAULT_CAPACITY_OVERRIDES } from './capacityOverrides';
 import { dedupeBankTransactions } from './bankDedup';
-import { migrateSavingsAccounts, migrateSnapshotSavings } from './savingsMigration';
+import { migrateSavingsAccounts, migrateSnapshotSavings, migrateSavingsExpenseType } from './savingsMigration';
 
 // Every persisted field. `currentMonth` is view state — added by the callers
 // that need it, never built here — so it is the one `ExportPayload` key excluded.
@@ -127,7 +127,10 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
       group: 'reset', demo: 'personal', default: {},
       read: (data) => (data.balanceSnapshots !== undefined ? migrateSnapshotSavings(data.balanceSnapshots) : ABSENT),
     },
-    fixedExpenses: { group: 'reset', demo: 'personal', read: whenTruthy('fixedExpenses'), default: d.fixedExpenses },
+    fixedExpenses: {
+      group: 'reset', demo: 'personal', default: d.fixedExpenses,
+      read: (data) => (data.fixedExpenses ? migrateSavingsExpenseType(data.fixedExpenses) : ABSENT),
+    },
     dailyTransactions: {
       group: 'reset', demo: 'personal', default: [],
       read: (data) => (data.dailyTransactions ? dedupeBankTransactions(data.dailyTransactions) : ABSENT),

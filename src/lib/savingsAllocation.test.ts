@@ -102,3 +102,63 @@ describe('destinationKey', () => {
     expect(destinationKey({ destinationKind: 'portfolio' })).toBe('portfolio');
   });
 });
+
+describe('resolveAllocation — fixed-kroner rows', () => {
+  const pctRow = (id: string, percent: number): SavingsAllocation =>
+    ({ id, percent, destinationKind: 'portfolio' });
+  const krRow = (id: string, amount: number): SavingsAllocation =>
+    ({ id, percent: 0, mode: 'amount', amount, destinationKind: 'bufferAccount' });
+
+  it('takes fixed rows off the top and splits only the rest by percent', () => {
+    // 10 000 target, 2 000 pinned → the 50% row gets half of the remaining 8 000.
+    const plan = resolveAllocation([krRow('a', 2000), pctRow('b', 50)], 10_000);
+    expect(plan.rows.map(r => r.amount)).toEqual([2000, 4000]);
+    expect(plan.totalAmount).toBe(6000);
+    expect(plan.remainder).toBe(4000);
+  });
+
+  it('pays a fixed row its exact amount regardless of the percentages', () => {
+    const plan = resolveAllocation([krRow('a', 1500), pctRow('b', 100)], 10_000);
+    expect(plan.rows[0].amount).toBe(1500);
+    expect(plan.rows[1].amount).toBe(8500);
+    expect(plan.remainder).toBe(0);
+  });
+
+  it('never lets rounding drift a fixed row off its stated amount', () => {
+    // Three 33.33% rows over an awkward remainder still leave 777 untouched.
+    const plan = resolveAllocation(
+      [krRow('a', 777), pctRow('b', 33.33), pctRow('c', 33.33), pctRow('d', 33.34)],
+      10_001,
+    );
+    expect(plan.rows[0].amount).toBe(777);
+    expect(plan.rows.slice(1).reduce((s, r) => s + r.amount, 0)).toBe(10_001 - 777);
+  });
+
+  it('flags over-allocation when fixed rows alone exceed the target', () => {
+    const plan = resolveAllocation([krRow('a', 12_000)], 10_000);
+    expect(plan.overAllocated).toBe(true);
+    expect(plan.rows[0].amount).toBe(12_000);
+    expect(plan.remainder).toBe(-2000);
+  });
+
+  it('still pays fixed rows when the target is zero, and reports the overdraw', () => {
+    const plan = resolveAllocation([krRow('a', 500), pctRow('b', 50)], 0);
+    expect(plan.rows.map(r => r.amount)).toEqual([500, 0]);
+    expect(plan.remainder).toBe(-500);
+  });
+
+  it('treats a missing mode as percent, so stored data is unchanged', () => {
+    const legacy = resolveAllocation([pctRow('a', 40), pctRow('b', 60)], 10_000);
+    expect(legacy.rows.map(r => r.amount)).toEqual([4000, 6000]);
+    expect(legacy.overAllocated).toBe(false);
+  });
+
+  it('guards a blank or NaN fixed amount as 0 rather than NaN', () => {
+    const plan = resolveAllocation(
+      [{ id: 'a', percent: 0, mode: 'amount', amount: NaN, destinationKind: 'bsu' }, pctRow('b', 50)],
+      10_000,
+    );
+    expect(plan.rows[0].amount).toBe(0);
+    expect(plan.rows[1].amount).toBe(5000);
+  });
+});

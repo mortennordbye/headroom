@@ -185,6 +185,27 @@ export function calcRecommendations(
   };
 }
 
+/**
+ * The inverse of `calcRecommendations`' target: the `savingsTargetPercent` that
+ * makes the plan set aside `saving` kroner a month.
+ *
+ * It exists so the Budget page's editable pills can be typed in kroner and come
+ * back unchanged. Getting the denominator wrong here is silent and expensive:
+ * dividing by `income − totalFixedExpenses` (savings included) rather than
+ * `base` (consumption only) inflates the stored percent by exactly the ratio of
+ * the two pools — a ~3x overshoot once most of the target is automated.
+ *
+ * `committed` is the saving already running as fixed expenses. The plan can't
+ * undo those from a pill, so the result never implies less than them; and a
+ * percent above 100 is not representable, so the ask is capped at `base`.
+ * Returns a whole percent, matching what the badge shows and stores.
+ */
+export function savingsTargetPercentFor(saving: number, base: number, committed: number = 0): number {
+  if (!(base > 0)) return 0;
+  const clamped = Math.min(Math.max(saving, Math.max(0, committed)), base);
+  return Math.round((clamped / base) * 100);
+}
+
 export type EmergencyFundStatus = 'low' | 'adequate' | 'strong';
 
 export interface EmergencyFundResult {

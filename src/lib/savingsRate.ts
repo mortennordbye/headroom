@@ -47,6 +47,56 @@ export function savingsContributionTotal(fixedExpenses: FixedExpense[]): number 
 }
 
 /**
+ * Income minus CONSUMPTION — the pool a savings plan is a share of, and the same
+ * quantity `calcRecommendations` calls `base`. Savings rows are excluded on
+ * purpose: a saving is not a cost, and subtracting it would take a share of a
+ * pool the saving had already been removed from.
+ */
+export function savingsBase(effectiveIncome: number, fixedExpenses: FixedExpense[]): number {
+  const consumption = fixedExpenses.reduce(
+    (sum, e) => (isSavingsRow(e) ? sum : sum + amount(e.amount)),
+    0,
+  );
+  return Math.max(0, (Number.isFinite(effectiveIncome) ? effectiveIncome : 0) - consumption);
+}
+
+/**
+ * Resolve percentage-based savings rows into this month's kroner.
+ *
+ * A savings row may store `amountPercent` instead of a frozen `amount`, meaning
+ * "this share of the month's savings base". That is what makes a transfer follow
+ * income: import a bigger payslip and the amount moved rises with it, instead of
+ * the target rising while the transfer stays put.
+ *
+ * Only savings rows are resolved. A bill must not shrink because a month was
+ * lean — that is exactly the difference between a cost and a saving.
+ *
+ * Returns the same array (and the same row objects) when there is nothing to
+ * resolve, so callers memoized on identity don't churn.
+ */
+export function resolveSavingsAmounts(
+  fixedExpenses: FixedExpense[],
+  effectiveIncome: number,
+): FixedExpense[] {
+  const hasPercent = fixedExpenses.some(e => isPercentSavings(e));
+  if (!hasPercent) return fixedExpenses;
+  const base = savingsBase(effectiveIncome, fixedExpenses);
+  return fixedExpenses.map(e =>
+    isPercentSavings(e)
+      ? { ...e, amount: Math.round((base * (e.amountPercent as number)) / 100) }
+      : e,
+  );
+}
+
+/** A savings row driven by a share of the base rather than a fixed amount. */
+export function isPercentSavings(e: FixedExpense): boolean {
+  return isSavingsRow(e)
+    && typeof e.amountPercent === 'number'
+    && Number.isFinite(e.amountPercent)
+    && e.amountPercent > 0;
+}
+
+/**
  * The user's savings target restated as a share of income, so it can be
  * compared against (and drawn on top of) the income-denominated rate from
  * `monthlyCashflow`.

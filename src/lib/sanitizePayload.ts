@@ -72,8 +72,11 @@ const NUMBER_RECORDS = ['monthlyIncomes', 'netWorthHistory', 'categoryBudgets'] 
 // Numeric fields of the array-of-objects payload fields, as item schemas
 // (same number-marks-numeric convention as `objectSchemas`).
 const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
-  fixedExpenses: { amount: 0 },
+  fixedExpenses: { amount: 0, amountPercent: 0 },
   dailyTransactions: { amount: 0 },
+  // A percentage row carries its share here; an imported "50" as a string must
+  // coerce, or the resolver reads it as absent and the row silently freezes.
+  savingsAllocations: { percent: 0, amount: 0 },
   debts: { balance: 0, rate: 0, minPayment: 0, creditLimit: 0 },
   // Second-home scenarios are flat by design so every numeric input is coerced
   // here (non-numeric keys — id/name/strategy — pass through untouched).

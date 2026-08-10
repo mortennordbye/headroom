@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { savingsRateStatus, savingsContributionTotal, targetRateOfIncome, planSavingsRateSeries } from './savingsRate';
+import { savingsRateStatus, savingsContributionTotal, targetRateOfIncome, planSavingsRateSeries, savingsBase, resolveSavingsAmounts } from './savingsRate';
 import type { MonthlyCashflowRow } from './monthlyCashflow';
 import type { FixedExpense } from '../context/FinanceContext';
 
@@ -155,5 +155,126 @@ describe('planSavingsRateSeries', () => {
 
   it('goes negative when fixed expenses exceed income', () => {
     expect(planSavingsRateSeries(['2026-07'], {}, 20000, 30000)[0].rate).toBe(-50);
+  });
+});
+
+// A savings transfer is not consumption. Four different screens have now shipped
+// the same defect — dividing by, or bucketing against, `totalFixedExpenses`
+// (which HOLDS the savings) where consumption-only was meant. These pin the
+// arithmetic every one of those call sites has to do, so the next screen that
+// needs "what do they actually spend" has a named, tested quantity to copy.
+describe('consumption vs the raw fixed-expense total', () => {
+  const rows: FixedExpense[] = [
+    { id: 'a', name: 'Boliglån', amount: 18000, type: 'fixed' },
+    { id: 'b', name: 'Mat', amount: 6000, type: 'variable' },
+    { id: 'c', name: 'Spotify', amount: 139, type: 'subscription' },
+    { id: 'd', name: 'Aksjer og fond', amount: 13444, type: 'saving', destinationKind: 'portfolio' },
+    { id: 'e', name: 'Ferie/Gaver', amount: 500, type: 'saving', destinationKind: 'savingsAccount', savingsAccountId: 's1' },
+  ];
+  const total = rows.reduce((s, e) => s + e.amount, 0);
+  const contributions = savingsContributionTotal(rows);
+
+  it('separates the total into consumption and saving with nothing lost', () => {
+    expect(contributions).toBe(13944);
+    expect(total - contributions).toBe(24139);
+  });
+
+  it('a mortgage paydown counts as consumption here, not saving', () => {
+    // Only the principal builds equity and the row holds the gross payment, so
+    // counting it whole would overstate the rate. See isSavingsDestination.
+    const withPaydown = [...rows, { id: 'f', name: 'Ekstra avdrag', amount: 2000, type: 'fixed' as const, destinationKind: 'mortgage' as const }];
+    expect(savingsContributionTotal(withPaydown)).toBe(contributions);
+  });
+
+  it('counts a saving with no destination yet, so it never reads as a bill', () => {
+    const orphan = [...rows, { id: 'g', name: 'Sparing', amount: 1000, type: 'saving' as const }];
+    expect(savingsContributionTotal(orphan)).toBe(contributions + 1000);
+  });
+});
+
+describe('savingsBase / resolveSavingsAmounts', () => {
+  const bill = (id: string, amount: number): FixedExpense => ({ id, name: id, amount, type: 'fixed' });
+  const pctSaving = (id: string, amountPercent: number): FixedExpense =>
+    ({ id, name: id, amount: 0, type: 'saving', destinationKind: 'portfolio', amountPercent });
+  const krSaving = (id: string, amount: number): FixedExpense =>
+    ({ id, name: id, amount, type: 'saving', destinationKind: 'savingsAccount', savingsAccountId: 's1' });
+
+  it('bases the pool on consumption only, ignoring savings rows', () => {
+    const rows = [bill('rent', 18000), krSaving('fund', 13444)];
+    // 55 491 − 18 000 consumption. The 13 444 saving is NOT subtracted.
+    expect(savingsBase(55491, rows)).toBe(37491);
+  });
+
+  it('resolves a percentage row against that pool', () => {
+    const rows = [bill('rent', 20000), pctSaving('fund', 50)];
+    // base 30 000 → 50% → 15 000.
+    expect(resolveSavingsAmounts(rows, 50000)[1].amount).toBe(15000);
+  });
+
+  it('follows income up — the whole point of the feature', () => {
+    const rows = [bill('rent', 20000), pctSaving('fund', 50)];
+    const lean = resolveSavingsAmounts(rows, 50000)[1].amount;
+    const fat = resolveSavingsAmounts(rows, 70000)[1].amount;
+    expect(lean).toBe(15000);
+    expect(fat).toBe(25000);
+  });
+
+  it('leaves fixed-amount savings and every spending row alone', () => {
+    const rows = [bill('rent', 20000), krSaving('buffer', 500)];
+    const out = resolveSavingsAmounts(rows, 90000);
+    // Same array identity: nothing to resolve, so memoized callers don't churn.
+    expect(out).toBe(rows);
+  });
+
+  it('never shrinks a bill when the month is lean', () => {
+    const rows = [bill('rent', 20000), pctSaving('fund', 50)];
+    const out = resolveSavingsAmounts(rows, 21000);
+    expect(out[0].amount).toBe(20000);
+    expect(out[1].amount).toBe(500);
+  });
+
+  it('resolves to 0 rather than negative when consumption exceeds income', () => {
+    const rows = [bill('rent', 40000), pctSaving('fund', 50)];
+    expect(resolveSavingsAmounts(rows, 30000)[1].amount).toBe(0);
+  });
+
+  it('ignores amountPercent on a non-savings row', () => {
+    const rows: FixedExpense[] = [{ id: 'x', name: 'x', amount: 900, type: 'fixed', amountPercent: 50 }];
+    expect(resolveSavingsAmounts(rows, 50000)[0].amount).toBe(900);
+  });
+
+  it('guards a NaN or non-positive percent by keeping the stored amount', () => {
+    const rows: FixedExpense[] = [
+      { id: 'a', name: 'a', amount: 700, type: 'saving', destinationKind: 'bsu', amountPercent: NaN },
+      { id: 'b', name: 'b', amount: 800, type: 'saving', destinationKind: 'bsu', amountPercent: 0 },
+    ];
+    const out = resolveSavingsAmounts(rows, 50000);
+    expect(out.map(e => e.amount)).toEqual([700, 800]);
+  });
+
+  it('feeds savingsContributionTotal the resolved amount', () => {
+    const rows = [bill('rent', 20000), pctSaving('fund', 50)];
+    expect(savingsContributionTotal(resolveSavingsAmounts(rows, 50000))).toBe(15000);
+  });
+});
+
+describe('kr ⇄ % round-trip', () => {
+  // The panel converts a fixed amount into a share of the base when you flip a
+  // row to %. Switching a unit must not move the money, so the share has to
+  // carry enough precision to resolve back to the same krone.
+  const shareOfBase = (amount: number, base: number) => Math.round((amount / base) * 1_000_000) / 10_000;
+
+  it('returns the same kroner after kr → % → kr', () => {
+    for (const base of [31_491, 23_750, 51_491, 9_806, 7]) {
+      for (const amount of [500, 1, 13_444, 6_270, Math.floor(base / 3)]) {
+        if (amount > base) continue;
+        const pct = shareOfBase(amount, base);
+        const rows: FixedExpense[] = [
+          { id: 'bill', name: 'bill', amount: 0, type: 'fixed' },
+          { id: 's', name: 's', amount: 0, type: 'saving', destinationKind: 'portfolio', amountPercent: pct },
+        ];
+        expect(resolveSavingsAmounts(rows, base)[1].amount).toBe(amount);
+      }
+    }
   });
 });

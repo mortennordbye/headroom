@@ -22,6 +22,7 @@ import {
   calcEmergencyFundStatus, calcDebtToIncome, bufferRecommendation,
 } from '../lib/calculations';
 import { calcDebtBalanceByYear } from '../lib/debt';
+import { essentialMonthlyExpenses } from '../lib/fixedExpenseTotals';
 import GoalsSection from '../components/GoalsSection';
 import InsightBanner from '../components/InsightBanner';
 import HistoryInsights from '../components/HistoryInsights';
@@ -59,7 +60,9 @@ const DashboardPage: React.FC = () => {
     prevMonthSpending,
     currentMonthSpending,
     recommendedSpending,
-    recommendedInvestment,
+    plannedMonthlySaving,
+    savingsContributions,
+    fixedExpenses,
     monthlyBudget,
     conservativeMode,
     totalResidual,
@@ -115,13 +118,21 @@ const DashboardPage: React.FC = () => {
   // of the SAME denominator (this month's income), unclamped — an overspent
   // month shows spent > its true share and a negative remainder. The bar
   // segments below clamp only for rendering.
-  const budgetUsedPctRaw = effectiveIncome > 0 ? (totalFixedExpenses / effectiveIncome) * 100 : 0;
+  //
+  // Saving is its own segment rather than part of "Faste kostnader": lumping it
+  // in made this page report 45 685 kr of fixed costs where the Budget page said
+  // 31 741 under the very same label. The four segments still sum to income
+  // exactly, because `remainingBudget` subtracts the whole fixed total.
+  const budgetFixed = Math.max(0, totalFixedExpenses - savingsContributions);
+  const budgetUsedPctRaw = effectiveIncome > 0 ? (budgetFixed / effectiveIncome) * 100 : 0;
+  const savingPctRaw = effectiveIncome > 0 ? (savingsContributions / effectiveIncome) * 100 : 0;
   const spentPctRaw = effectiveIncome > 0 ? (totalSpent / effectiveIncome) * 100 : 0;
   const remainingBudget = effectiveIncome - totalFixedExpenses - totalSpent;
   const remainingPctRaw = effectiveIncome > 0 ? (remainingBudget / effectiveIncome) * 100 : 0;
   const budgetUsedPct = Math.min(100, budgetUsedPctRaw);
-  const spentPct = Math.min(100 - budgetUsedPct, spentPctRaw);
-  const availablePct = Math.max(0, 100 - budgetUsedPct - spentPct);
+  const savingPct = Math.min(100 - budgetUsedPct, savingPctRaw);
+  const spentPct = Math.min(100 - budgetUsedPct - savingPct, spentPctRaw);
+  const availablePct = Math.max(0, 100 - budgetUsedPct - savingPct - spentPct);
   const incomeDiff = incomeDiffPct(effectiveIncome, averageIncome);
   const incomeDelta = prevMonthIncome > 0 ? ((effectiveIncome - prevMonthIncome) / prevMonthIncome) * 100 : null;
   // The chip compares the context's transfer-netted pair, not totalSpent —
@@ -129,7 +140,11 @@ const DashboardPage: React.FC = () => {
   const spendingDelta = prevMonthSpending > 0 ? ((currentMonthSpending - prevMonthSpending) / prevMonthSpending) * 100 : null;
 
   // ─── Financial-resilience metrics ───
-  const emergencyFund = calcEmergencyFundStatus(assets.bufferAccount, totalFixedExpenses);
+  // `essentialMonthlyExpenses`, not the raw total: the runway is what the buffer
+  // has to cover if income stops, and neither a subscription nor a savings
+  // transfer survives that month. Passing the raw total also disagreed with
+  // EmergencyFundGauge on this very page, which has always used the essentials.
+  const emergencyFund = calcEmergencyFundStatus(assets.bufferAccount, essentialMonthlyExpenses(fixedExpenses));
   const [bufferDialogOpen, setBufferDialogOpen] = useState(false);
   // Recommended contribution + the target to build toward: an existing buffer Goal
   // if set, else the 3-month minimum (current buffer + its shortfall to that band).
@@ -176,7 +191,7 @@ const DashboardPage: React.FC = () => {
     return prev > 0 ? ((curr - prev) / prev) * 100 : null;
   }, [netWorthSeries]);
 
-  const annualSavings = Math.max(0, recommendedInvestment * 12);
+  const annualSavings = Math.max(0, plannedMonthlySaving * 12);
   const cashStart = sumSavings(assets) + assets.bsu + assets.bufferAccount;
   const projectionRates = { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate };
   const projectionStart = { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity };
@@ -216,11 +231,14 @@ const DashboardPage: React.FC = () => {
   // month is its manual override or the salary-derived income — so the bars are
   // always contiguous months, not just whichever months happen to have overrides.
   const investmentBars = useMemo(() => {
-    // Match the recommendation/projection definition: invest a share of the
-    // monthly *residual* (income − fixed expenses), not of gross income. Fixed
-    // expenses aren't historized, so the current total is the best proxy.
+    // Match the recommendation/projection definition: a share of the monthly
+    // residual, where "residual" is income − CONSUMPTION. Saving is not an
+    // expense, so subtracting it here too would take the share of a pool the
+    // saving had already been removed from (see calcRecommendations `base`).
+    // Fixed expenses aren't historized, so the current total is the best proxy.
+    const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions);
     const investFrom = (monthlyIncome: number) =>
-      Math.max(0, monthlyIncome - totalFixedExpenses) * (savingsTargetPercent / 100);
+      Math.max(0, monthlyIncome - spendFixed) * (savingsTargetPercent / 100);
     const months: { key: string; label: string; value: number; projected?: boolean }[] =
       incomeSeries.map(({ month, value }) => ({
         key: month,
@@ -238,7 +256,7 @@ const DashboardPage: React.FC = () => {
       }
     }
     return months;
-  }, [incomeSeries, savingsTargetPercent, totalFixedExpenses, dateLocale]);
+  }, [incomeSeries, savingsTargetPercent, totalFixedExpenses, savingsContributions, dateLocale]);
 
   // ─── Insight 2: top categories MoM (shared categoryMoM math; localize at render) ───
   const categoryDeltas = useMemo(() => {
@@ -552,12 +570,16 @@ const DashboardPage: React.FC = () => {
             aria-label={t.budgetComposition}
           >
             {budgetUsedPct > 0 && <div style={{ width: `${budgetUsedPct}%`, background: 'var(--teal)' }} />}
+            {savingPct > 0 && <div style={{ width: `${savingPct}%`, background: 'var(--brass)' }} />}
             {spentPct > 0 && <div style={{ width: `${spentPct}%`, background: 'var(--warning)' }} />}
             {availablePct > 0 && <div style={{ width: `${availablePct}%`, background: 'var(--positive)' }} />}
           </div>
 
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            <LegendItem dot="var(--teal)" name={t.fixedCosts} value={formatCurrency(totalFixedExpenses)} pct={`${budgetUsedPctRaw.toFixed(1)}%`} />
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <LegendItem dot="var(--teal)" name={t.fixedCosts} value={formatCurrency(budgetFixed)} pct={`${budgetUsedPctRaw.toFixed(1)}%`} />
+            {savingsContributions > 0 && (
+              <LegendItem dot="var(--brass)" name={t.budgetPage.savingSlice} value={formatCurrency(savingsContributions)} pct={`${savingPctRaw.toFixed(1)}%`} />
+            )}
             <LegendItem dot="var(--warning)" name={t.monthSpent} value={formatCurrency(totalSpent)} pct={`${spentPctRaw.toFixed(1)}%`} />
             <LegendItem
               dot="var(--positive)"
@@ -661,7 +683,7 @@ const DashboardPage: React.FC = () => {
               </div>
               <SectionLabel>{t.dashboardPage.monthlyInvestment}</SectionLabel>
               <div className="text-[24px] font-bold tracking-[-0.02em] leading-none mt-2">
-                {formatCurrency(recommendedInvestment)}
+                {formatCurrency(plannedMonthlySaving)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
                 {format(currentMonth, 'MMM', { locale: dateLocale })} · {Math.round(savingsTargetPercent)}% {t.dashboardPage.savingsRate}

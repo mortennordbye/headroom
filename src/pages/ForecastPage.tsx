@@ -26,7 +26,7 @@ const ForecastPage: React.FC = () => {
   const {
     t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
     formatCurrency, region, customTaxRatePct, pension,
-    recommendedInvestment, growthReturnRate, inflation, annualMortgageInterest,
+    plannedMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest,
     assets, houseGrowthRate, netInvestment, netCrypto, totalDebt,
     forecastAssumptions: fa, setForecastAssumptions,
   } = useFinance();
@@ -119,9 +119,9 @@ const ForecastPage: React.FC = () => {
   const savingsSeed = useMemo(() => {
     const net = calcTaxByRegion(currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
     if (net <= 0) return 25;
-    const pct = (recommendedInvestment * 12 / net) * 100;
+    const pct = (plannedMonthlySaving * 12 / net) * 100;
     return Number.isFinite(pct) && pct > 0 ? Math.min(90, Math.round(pct)) : 25;
-  }, [currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, recommendedInvestment]);
+  }, [currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, plannedMonthlySaving]);
 
   // Assumptions are persisted per scenario (null-until-dragged, so each slider
   // keeps following its live-data seed until the user sets it). Scenario B seeds
@@ -218,7 +218,15 @@ const ForecastPage: React.FC = () => {
   // clears that number, so it stays comparable to today's expenses. Only shown
   // when there are essential expenses to anchor the target on.
   const fire = useMemo(() => {
-    const annualEssential = totalFixedExpenses * 12;
+    // Consumption only. The 4% rule sizes a pot against what you SPEND, and a
+    // savings transfer is not spend — you stop making it the day you stop
+    // earning, so funding it forever inflates the target by 25x a cost that
+    // will not exist (4,2 mkr on a 13 944 kr/mo plan).
+    //
+    // Deliberately NOT `essentialMonthlyExpenses`: that helper also drops
+    // subscriptions, which is right for an emergency runway (you cancel them)
+    // and wrong here (you keep paying for them in retirement).
+    const annualEssential = Math.max(0, totalFixedExpenses - savingsContributions) * 12;
     const fiNumber = 25 * annualEssential;
     if (fiNumber <= 0) return null;
     const progressPct = Math.max(0, Math.min(100, (totalEquity / fiNumber) * 100));
@@ -230,7 +238,7 @@ const ForecastPage: React.FC = () => {
       fiYear: hit ? hit.yearLabel : null,
       yearsToFi: hit ? hit.yearIndex : null,
     };
-  }, [totalFixedExpenses, totalEquity, projection]);
+  }, [totalFixedExpenses, savingsContributions, totalEquity, projection]);
 
   // Prepay mortgage vs invest: the extra krone earns the after-tax mortgage rate
   // if it pays down deductible debt, or the expected return if invested. The
