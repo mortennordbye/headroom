@@ -44,6 +44,7 @@ describe('resolveAllocation', () => {
     const plan = resolveAllocation([alloc(70), alloc(50, { destinationKind: 'bsu' })], 10_000);
     expect(plan.totalPercent).toBe(120);
     expect(plan.overAllocated).toBe(true);
+    expect(plan.overReason).toBe('percent');
   });
 
   it('resolves every row to 0 for a non-positive target but keeps the plan', () => {
@@ -137,8 +138,17 @@ describe('resolveAllocation — fixed-kroner rows', () => {
   it('flags over-allocation when fixed rows alone exceed the target', () => {
     const plan = resolveAllocation([krRow('a', 12_000)], 10_000);
     expect(plan.overAllocated).toBe(true);
+    // 'fixed', not 'percent': the percentages are blameless, and telling the
+    // user to adjust them points at the wrong control.
+    expect(plan.overReason).toBe('fixed');
     expect(plan.rows[0].amount).toBe(12_000);
     expect(plan.remainder).toBe(-2000);
+  });
+
+  it('does not flag fixed rows that exactly consume the target', () => {
+    const plan = resolveAllocation([krRow('a', 500), krRow('b', 500)], 1000);
+    expect(plan.overReason).toBe(null);
+    expect(plan.remainder).toBe(0);
   });
 
   it('still pays fixed rows when the target is zero, and reports the overdraw', () => {
@@ -160,5 +170,58 @@ describe('resolveAllocation — fixed-kroner rows', () => {
     );
     expect(plan.rows[0].amount).toBe(0);
     expect(plan.rows[1].amount).toBe(5000);
+  });
+});
+
+describe('resolveAllocation — rest rows', () => {
+  const pctRow = (id: string, percent: number): SavingsAllocation =>
+    ({ id, percent, destinationKind: 'portfolio' });
+  const krRow = (id: string, amount: number): SavingsAllocation =>
+    ({ id, percent: 0, mode: 'amount', amount, destinationKind: 'bufferAccount' });
+  const restRow = (id: string): SavingsAllocation =>
+    ({ id, percent: 0, mode: 'rest', destinationKind: 'bsu' });
+
+  it('gives the rest row everything the fixed and percent rows leave', () => {
+    // The shape from the bug report: two pinned transfers, and the remainder
+    // into funds — with no percentage arithmetic asked of the user.
+    const plan = resolveAllocation([krRow('a', 500), krRow('b', 500), restRow('c')], 15_552);
+    expect(plan.rows.map(r => r.amount)).toEqual([500, 500, 14_552]);
+    expect(plan.remainder).toBe(0);
+    expect(plan.overReason).toBe(null);
+  });
+
+  it('leaves nothing unallocated alongside percentages that fall short', () => {
+    const plan = resolveAllocation([pctRow('a', 60), restRow('b')], 10_000);
+    expect(plan.rows.map(r => r.amount)).toEqual([6000, 4000]);
+    expect(plan.remainder).toBe(0);
+  });
+
+  it('takes no percentage of its own, so the total still reads as the percent rows', () => {
+    const plan = resolveAllocation([pctRow('a', 40), restRow('b')], 10_000);
+    expect(plan.totalPercent).toBe(40);
+    expect(plan.overReason).toBe(null);
+  });
+
+  it('gets 0 when the percentages already claim everything', () => {
+    const plan = resolveAllocation([pctRow('a', 100), restRow('b')], 10_000);
+    expect(plan.rows.map(r => r.amount)).toEqual([10_000, 0]);
+  });
+
+  it('gets 0 rather than a negative share when the plan is over-allocated', () => {
+    const plan = resolveAllocation([pctRow('a', 130), restRow('b')], 10_000);
+    expect(plan.rows[1].amount).toBe(0);
+    expect(plan.overReason).toBe('percent');
+  });
+
+  it('splits evenly between several rest rows, to the exact krone', () => {
+    const plan = resolveAllocation([restRow('a'), restRow('b'), restRow('c')], 10_000);
+    expect(plan.rows.map(r => r.amount).sort()).toEqual([3333, 3333, 3334]);
+    expect(plan.totalAmount).toBe(10_000);
+  });
+
+  it('resolves to 0 on a lean month without disturbing the fixed rows', () => {
+    const plan = resolveAllocation([krRow('a', 500), restRow('b')], 0);
+    expect(plan.rows.map(r => r.amount)).toEqual([500, 0]);
+    expect(plan.overReason).toBe('fixed');
   });
 });

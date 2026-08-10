@@ -18,46 +18,52 @@ import { currentMonthKey } from '../lib/date';
 
 const selectCls = 'appearance-none cursor-pointer bg-[var(--bg-raised)] border border-[var(--border)] rounded-[9px] pl-3 pr-8 py-2 text-[13px] text-[var(--text-1)] outline-none focus:border-[var(--forest)] transition-colors';
 const pctInputCls = 'w-[68px] bg-[var(--bg-raised)] border border-[var(--border)] rounded-[9px] px-2.5 py-2 text-[13px] font-mono tabular-nums text-right text-[var(--text-1)] outline-none focus:border-[var(--forest)] transition-colors';
+// Stands in for the number input on a 'rest' row, which has no number to type.
+// Same box so the columns still line up down the list.
+const restSlotCls = 'min-w-[68px] bg-[var(--bg-raised)] border border-[var(--border)] rounded-[9px] px-2.5 py-2 text-[12px] text-center select-none';
 
-type RowMode = 'percent' | 'amount';
+type RowMode = 'percent' | 'amount' | 'rest';
 
 /**
- * The %/kr switch. Both options are always visible with the active one filled —
- * a single button showing only the current unit read as a label rather than a
- * control, so the choice that makes a transfer follow income went unnoticed.
+ * The %/kr/rest switch. Every option is always visible with the active one
+ * filled — a single button showing only the current unit read as a label rather
+ * than a control, so the choice that makes a transfer follow income went
+ * unnoticed. `modes` narrows the set: a live expense can be a percentage or an
+ * amount, but not "the rest", which only means something inside a plan.
  */
-function ModeToggle({ mode, onChange, labels }: {
+function ModeToggle({ mode, onChange, modes, labels }: {
   mode: RowMode;
   onChange: (m: RowMode) => void;
-  labels: { group: string; percentHint: string; amountHint: string };
+  modes: RowMode[];
+  labels: { group: string; percent: string; amount: string; rest: string;
+            percentHint: string; amountHint: string; restHint: string };
 }) {
-  const seg = (m: RowMode, text: string, hint: string) => {
-    const on = mode === m;
-    return (
-      <button
-        type="button"
-        onClick={() => onChange(m)}
-        aria-pressed={on}
-        title={hint}
-        className="px-2 py-1 text-[12px] font-medium transition-colors"
-        style={{
-          background: on ? 'var(--bg-elev)' : 'transparent',
-          color: on ? 'var(--text-1)' : 'var(--text-3)',
-        }}
-      >
-        {text}
-      </button>
-    );
-  };
+  const text: Record<RowMode, string> = { percent: labels.percent, amount: labels.amount, rest: labels.rest };
+  const hint: Record<RowMode, string> = { percent: labels.percentHint, amount: labels.amountHint, rest: labels.restHint };
   return (
     <div
       role="group"
       aria-label={labels.group}
       className="inline-flex rounded-[9px] border border-[var(--border)] overflow-hidden"
     >
-      {seg('percent', '%', labels.percentHint)}
-      <span aria-hidden className="w-px" style={{ background: 'var(--border)' }} />
-      {seg('amount', 'kr', labels.amountHint)}
+      {modes.map((m, i) => (
+        <React.Fragment key={m}>
+          {i > 0 && <span aria-hidden className="w-px" style={{ background: 'var(--border)' }} />}
+          <button
+            type="button"
+            onClick={() => onChange(m)}
+            aria-pressed={mode === m}
+            title={hint[m]}
+            className="px-2 py-1 text-[12px] font-medium transition-colors"
+            style={{
+              background: mode === m ? 'var(--bg-elev)' : 'transparent',
+              color: mode === m ? 'var(--text-1)' : 'var(--text-3)',
+            }}
+          >
+            {text[m]}
+          </button>
+        </React.Fragment>
+      ))}
     </div>
   );
 }
@@ -70,7 +76,7 @@ interface PanelProps {
 
 export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) => {
   const {
-    t, assets, debts, housingMode, formatCurrency, recommendedInvestment,
+    t, assets, debts, housingMode, formatCurrency, plannedMonthlySaving,
     savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
     fixedExpenses, viewFixedExpenses, setFixedExpenses, automationEnabled, effectiveIncome,
   } = useFinance();
@@ -78,8 +84,12 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   const [created, setCreated] = useState(0);
   const modeLabels = {
     group: sa.toggleMode,
+    percent: '%',
+    amount: 'kr',
+    rest: sa.modeRestShort,
     percentHint: sa.modePercentHint,
     amountHint: sa.modeAmountHint,
+    restHint: sa.modeRestHint,
   };
 
   // Memoized because the `?? []` fallback is a fresh array each render, which
@@ -97,9 +107,14 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     ...debts.map(d => ({ v: `debt:${d.id}`, l: `${t.expenseDestination.debt}: ${d.name}` })),
   ], [t, savingsAccounts, debts, housingMode]);
 
+  // The pot is the WHOLE savings target, not the slice still uncommitted.
+  // `recommendedInvestment` is the target minus what is already automated, so
+  // dividing that made an activated plan appear to empty itself: every row read
+  // 0 kr and a valid 100 % split was flagged as over-allocated. The rows below
+  // pair with their "Active · X" chips only when both count the same pot.
   const plan = useMemo(
-    () => resolveAllocation(savingsAllocations, Math.max(0, recommendedInvestment)),
-    [savingsAllocations, recommendedInvestment],
+    () => resolveAllocation(savingsAllocations, Math.max(0, plannedMonthlySaving)),
+    [savingsAllocations, plannedMonthlySaving],
   );
 
   const savingsIds = savingsAccounts.map(s => s.id);
@@ -108,11 +123,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   // Two jobs: it stops a second click duplicating a transfer, and it lets each
   // row show what is actually running rather than only what is planned.
   //
-  // This matters because committing savings as a fixed expense shrinks the
-  // residual, and the target is a share OF that residual — so the target falls
-  // as you automate. That is correct (it is headroom you have not committed
-  // yet), but it reads as the plan changing under you unless both numbers are
-  // on screen. Hence the header's second line and the per-row chip.
+  // The header's second line reports the same total, so "of the target above,
+  // this much is already running" is answerable without adding the chips up.
   const committedByKey = useMemo(() => {
     const m = new Map<string, number>();
     for (const e of viewFixedExpenses) {
@@ -146,6 +158,17 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
 
   const labelFor = (row: AllocationRow) =>
     options.find(o => o.v === destinationKey(row))?.l ?? sa.targetMissing;
+
+  /**
+   * The percentage that keeps `row` at the kroner it is moving right now, for
+   * the moment it switches to '%'. A fixed row's own kroner are outside
+   * `shareTarget` (they were taken off the top), so they rejoin the pool it is
+   * about to become a share of.
+   */
+  const percentFor = (row: AllocationRow): number | undefined => {
+    const pool = plan.shareTarget + (row.mode === 'amount' ? row.amount : 0);
+    return pool > 0 ? Math.round((row.amount / pool) * 1000) / 10 : undefined;
+  };
 
   const setTarget = (id: string, value: string) => {
     const patch: Partial<AllocationRow> = {
@@ -201,7 +224,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
       <div className="flex items-baseline justify-between gap-3 flex-wrap pb-4 border-b border-[var(--border)]">
         {!bare && <SectionLabel>{sa.title}</SectionLabel>}
         <span className="text-[12px] font-mono tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
-          <span className="block">{formatCurrency(Math.max(0, recommendedInvestment))} {sa.perMonth}</span>
+          <span className="block">{formatCurrency(Math.max(0, plannedMonthlySaving))} {sa.perMonth}</span>
           {committedTotal > 0 && (
             <span className="block mt-0.5" style={{ color: 'var(--text-3)' }}>
               {sa.alreadyAutomated.replace('{amount}', formatCurrency(committedTotal))}
@@ -216,6 +239,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
         <span className="font-semibold" style={{ color: 'var(--brass)' }}>%</span> {sa.modeExplainPercent}
         {' · '}
         <span className="font-semibold" style={{ color: 'var(--text-1)' }}>kr</span> {sa.modeExplainAmount}
+        {' · '}
+        <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{sa.modeRestShort}</span> {sa.modeExplainRest}
       </p>
 
       {isEmpty ? (
@@ -253,6 +278,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
               )}
               <ModeToggle
                 mode={isPercentSavings(e) ? 'percent' : 'amount'}
+                modes={['percent', 'amount']}
                 labels={modeLabels}
                 onChange={m => patchExpense(e.id, m === 'amount'
                   ? { amountPercent: undefined }
@@ -292,7 +318,11 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                 </select>
                 <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-2)]" />
               </div>
-              {row.mode === 'amount' ? (
+              {row.mode === 'rest' ? (
+                <span className={restSlotCls} style={{ color: 'var(--text-3)' }} title={sa.modeRestHint}>
+                  {sa.modeRestShort}
+                </span>
+              ) : row.mode === 'amount' ? (
                 <input
                   className={pctInputCls}
                   inputMode="decimal"
@@ -309,17 +339,29 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                   onChange={e => updateSavingsAllocation(row.id, { percent: Number(e.target.value) || 0 })}
                 />
               )}
-              {/* Percent tracks income once activated; kr stays put. The toggle is
-                  the whole "auto increase" decision, so it sits on the row. */}
+              {/* Percent tracks income once activated; kr stays put; rest absorbs
+                  what the others leave. The toggle is the whole "auto increase"
+                  decision, so it sits on the row. */}
               <ModeToggle
-                mode={row.mode === 'amount' ? 'amount' : 'percent'}
+                mode={row.mode ?? 'percent'}
+                modes={['percent', 'amount', 'rest']}
                 labels={modeLabels}
-                onChange={m => updateSavingsAllocation(row.id, {
-                  mode: m,
-                  // Carry the current figure across so switching unit never
-                  // changes what is saved.
-                  amount: m === 'amount' ? row.amount : undefined,
-                })}
+                onChange={m => {
+                  // Carry the current figure across in BOTH directions, so
+                  // switching unit never changes what is saved. Leaving kr or
+                  // rest for % used to fall back on the row's stored percent,
+                  // which is 0 on a row that has never been a percentage — the
+                  // amount dropped to nothing on a click that promised not to
+                  // change it. Only on a real change, so re-clicking the mode
+                  // you are already in cannot round the share you typed.
+                  const changed = m !== (row.mode ?? 'percent');
+                  const percent = changed && m === 'percent' ? percentFor(row) : undefined;
+                  updateSavingsAllocation(row.id, {
+                    mode: m,
+                    amount: m === 'amount' ? row.amount : undefined,
+                    ...(percent !== undefined ? { percent } : {}),
+                  });
+                }}
               />
               {committedByKey.has(destinationKey(row)) && (
                 <span
@@ -347,13 +389,20 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
 
           <div className="flex items-center justify-between gap-3 pt-3 mt-1 border-t border-[var(--border)] text-[12.5px]">
             <span style={{ color: plan.overAllocated ? 'var(--negative)' : 'var(--text-2)' }}>
-              {plan.totalPercent.toFixed(plan.totalPercent % 1 === 0 ? 0 : 1)} %
-              {plan.remainder !== 0 && !plan.overAllocated && (
+              {/* Only the percentage rows are summarised as a percentage. A plan
+                  made of kr and rest rows has no meaningful total here, and
+                  printing "0 %" over a full split read as a failure. */}
+              {plan.totalPercent > 0 && `${plan.totalPercent.toFixed(plan.totalPercent % 1 === 0 ? 0 : 1)} %`}
+              {plan.remainder > 0 && !plan.overAllocated && (
                 <span style={{ color: 'var(--text-3)' }}>
-                  {` · ${sa.unallocated.replace('{amount}', formatCurrency(plan.remainder))}`}
+                  {plan.totalPercent > 0 ? ' · ' : ''}
+                  {sa.unallocated.replace('{amount}', formatCurrency(plan.remainder))}
                 </span>
               )}
-              {plan.overAllocated && <span>{` · ${sa.overAllocated}`}</span>}
+              {plan.overReason === 'percent' && <span>{` · ${sa.overPercent}`}</span>}
+              {plan.overReason === 'fixed' && (
+                <span>{` · ${sa.overFixed.replace('{amount}', formatCurrency(-plan.remainder))}`}</span>
+              )}
             </span>
             <span className="font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>{formatCurrency(plan.totalAmount)}</span>
           </div>
