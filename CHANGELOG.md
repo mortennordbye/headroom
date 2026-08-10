@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.4.0](https://github.com/mortennordbye/headroom/compare/v3.3.0...v3.4.0) (2026-08-10)
+
+
+### Features
+
+* make saving follow income and report it as saving everywhere ([#119](https://github.com/mortennordbye/headroom/issues/119)) ([0849f1a](https://github.com/mortennordbye/headroom/commit/0849f1ac19c98064f50d2fa3f48aa18531d3f343))
+
 ## [3.3.0](https://github.com/mortennordbye/headroom/compare/v3.2.0...v3.3.0) (2026-08-08)
 
 
