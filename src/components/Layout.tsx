@@ -18,6 +18,7 @@ import {
 import { format, parse, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { useFinanceSettings } from '../context/FinanceContext';
+import { PROJECTION_HORIZON_MONTHS } from '../lib/snapshots';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import OnboardingTour from './onboarding/OnboardingTour';
@@ -36,7 +37,7 @@ const BALANCE_SCOPED_ROUTES = ['/assets', '/bolig', '/pension'];
 const HIDE_TIME_MARKER_ROUTES = ['/settings', '/year'];
 
 const Layout: React.FC = () => {
-  const { t, lang, currentMonth, setCurrentMonth, dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded, hiddenNavItems, demoMode, toggleDemoMode, demoLocked, startOnboarding } = useFinanceSettings();
+  const { t, lang, currentMonth, setCurrentMonth, projectionIncludeGrowth, setProjectionIncludeGrowth, dataLoadFailed, saveFailed, justSaved, retrySave, dataReloaded, dismissDataReloaded, hiddenNavItems, demoMode, toggleDemoMode, demoLocked, startOnboarding } = useFinanceSettings();
   const hist = useBalanceHistory();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
@@ -55,17 +56,27 @@ const Layout: React.FC = () => {
   const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
 
   // One shared month control. Budget & Dashboard are always month-scoped; balance
-  // pages ride the same picker but only once there's recorded history to travel to
-  // (else just the static "today" marker). Settings hides it entirely.
+  // pages ride the same picker in both directions — back through recorded
+  // snapshots, forward into a projection — so it shows regardless of history.
+  // Settings hides it entirely.
   const isMonthScoped = MONTH_SCOPED_ROUTES.includes(location.pathname);
   const isBalanceRoute = BALANCE_SCOPED_ROUTES.includes(location.pathname);
-  const showPicker = isMonthScoped || (isBalanceRoute && hist.hasHistory);
+  const showPicker = isMonthScoped || isBalanceRoute;
   const hideTimeMarker = HIDE_TIME_MARKER_ROUTES.includes(location.pathname);
 
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
   const viewKey = format(currentMonth, 'yyyy-MM');
+  // The projection holds income at today's figure, so it stops being meaningful
+  // well before it stops being computable. Cap the forward reach rather than
+  // inventing a fourth "too far ahead" state for every balance page to render.
+  const maxMonth = addMonths(startOfMonth(today), PROJECTION_HORIZON_MONTHS);
+  const canStepForward = currentMonth < maxMonth;
+  const stepMonth = (delta: number) => {
+    const next = addMonths(currentMonth, delta);
+    setCurrentMonth(next > maxMonth ? maxMonth : next);
+  };
 
   // Month ⇄ URL. On first mount, adopt a valid ?m=YYYY-MM so a refresh or shared
   // link lands on that month.
@@ -73,8 +84,11 @@ const Layout: React.FC = () => {
     const m = searchParams.get('m');
     if (m && /^\d{4}-\d{2}$/.test(m)) {
       const parsed = startOfMonth(parse(m, 'yyyy-MM', new Date()));
-      if (!isNaN(parsed.getTime()) && format(parsed, 'yyyy-MM') !== viewKey) {
-        setCurrentMonth(parsed);
+      // Clamp here too: the steppers stop at the horizon, but a shared or stale
+      // link carries a raw month and would otherwise project decades ahead.
+      const clamped = parsed > maxMonth ? maxMonth : parsed;
+      if (!isNaN(parsed.getTime()) && format(clamped, 'yyyy-MM') !== viewKey) {
+        setCurrentMonth(clamped);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,7 +108,10 @@ const Layout: React.FC = () => {
   // Balance pages are read-only for any non-current month, and snap the picked
   // month to the nearest recorded snapshot — surface both cues in the chip.
   const balanceReadOnly = isBalanceRoute && !hist.isLive;
-  const snappedToEarlier = balanceReadOnly && hist.activeKey !== viewKey;
+  const snappedToEarlier = balanceReadOnly && !hist.isProjected && hist.activeKey !== viewKey;
+  // A projection is a computed figure, not a record, so it gets its own cue and
+  // its own control: whether assumed growth rides along with the transfers.
+  const showProjectionControls = isBalanceRoute && hist.isProjected;
   const statusColor = isCurrentMonth
     ? 'var(--positive)'
     : isPast
@@ -192,14 +209,15 @@ const Layout: React.FC = () => {
                   // Left/Right step months when focus is anywhere in the picker
                   // (e.g. on a stepper button), so it's operable without the mouse.
                   if (e.key === 'ArrowLeft') { e.preventDefault(); setCurrentMonth(subMonths(currentMonth, 1)); }
-                  else if (e.key === 'ArrowRight') { e.preventDefault(); setCurrentMonth(addMonths(currentMonth, 1)); }
+                  else if (e.key === 'ArrowRight' && canStepForward) { e.preventDefault(); stepMonth(1); }
                 }}
                 className="flex items-center gap-1 rounded-[6px] border p-1 transition-colors"
                 style={{
                   background: statusBg,
                   borderColor: isCurrentMonth ? 'color-mix(in srgb, var(--positive) 35%, transparent)' : 'var(--border)',
                 }}
-                title={balanceReadOnly ? t.timeMachine.readOnly : statusLabel}
+                title={showProjectionControls ? t.timeMachine.projected
+                  : balanceReadOnly ? t.timeMachine.readOnly : statusLabel}
               >
                 <button
                   onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
@@ -212,7 +230,9 @@ const Layout: React.FC = () => {
                   <ChevronLeft size={15} strokeWidth={2} />
                 </button>
                 <div className="flex items-center gap-1.5 px-2 min-w-[104px] justify-center">
-                  {balanceReadOnly ? (
+                  {showProjectionControls ? (
+                    <TrendingUp size={12} strokeWidth={2} style={{ color: statusColor }} aria-hidden />
+                  ) : balanceReadOnly ? (
                     <Lock size={12} strokeWidth={2} style={{ color: statusColor }} aria-hidden />
                   ) : (
                     <span
@@ -226,11 +246,13 @@ const Layout: React.FC = () => {
                   </span>
                 </div>
                 <button
-                  onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                  onClick={() => stepMonth(1)}
+                  disabled={!canStepForward}
                   aria-label={t.nextMonth}
-                  className="grid place-items-center w-7 h-7 rounded-[4px] transition-colors"
-                  style={{ color: 'var(--text-2)' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
+                  title={canStepForward ? undefined : t.timeMachine.horizonReached}
+                  className="grid place-items-center w-7 h-7 rounded-[4px] transition-colors disabled:cursor-not-allowed"
+                  style={{ color: 'var(--text-2)', opacity: canStepForward ? 1 : 0.35 }}
+                  onMouseEnter={e => { if (canStepForward) e.currentTarget.style.color = 'var(--text-1)'; }}
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}
                 >
                   <ChevronRight size={15} strokeWidth={2} />
@@ -245,7 +267,28 @@ const Layout: React.FC = () => {
                   {t.timeMachine.asOf} {format(parse(hist.activeKey, 'yyyy-MM', new Date()), 'MMM yyyy', { locale: dateLocale })}
                 </span>
               )}
-              {balanceReadOnly && (
+              {showProjectionControls && (
+                <button
+                  onClick={() => setProjectionIncludeGrowth(!projectionIncludeGrowth)}
+                  aria-pressed={projectionIncludeGrowth}
+                  aria-label={t.timeMachine.growthToggle}
+                  /* Visible at every width, unlike the other header actions: this
+                     is the only control over what a projected figure means, and
+                     the phone is where these pages actually get read. The label
+                     folds away on small screens; the icon and state carry it. */
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 h-8 rounded-[6px] text-[12px] font-semibold border transition-colors"
+                  style={{
+                    borderColor: projectionIncludeGrowth ? 'var(--violet)' : 'var(--border)',
+                    background: projectionIncludeGrowth ? 'var(--violet-bg)' : 'transparent',
+                    color: projectionIncludeGrowth ? 'var(--violet)' : 'var(--text-2)',
+                  }}
+                  title={projectionIncludeGrowth ? t.timeMachine.growthOnHint : t.timeMachine.growthOffHint}
+                >
+                  <TrendingUp size={12} strokeWidth={2} />
+                  <span className="hidden sm:inline">{t.timeMachine.growthToggle}</span>
+                </button>
+              )}
+              {balanceReadOnly && !hist.isProjected && (
                 <button
                   onClick={() => setEditMonthOpen(true)}
                   className="hidden sm:inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-[12px] font-semibold border transition-colors"

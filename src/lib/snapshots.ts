@@ -21,31 +21,45 @@ export function nearestSnapshot(
 }
 
 /**
- * Map the single shared month to the balance snapshot a balance page should show.
- * The whole app tracks one freely-picked month; balance pages can't render a month
- * that was never recorded, so:
- *   - current or future month → live (editable current state).
+ * How the picked month relates to reality:
+ *   'live'      — today. Real balances, editable.
+ *   'recorded'  — a past month, read back from a captured snapshot.
+ *   'projected' — a future month, computed from today's balances plus the
+ *                 automation that has not run yet. Never stored, never editable.
+ */
+export type MonthMode = 'live' | 'recorded' | 'projected';
+
+/**
+ * How far ahead a balance page will project. Beyond this the picker stops
+ * stepping: the projection holds income at today's figure, so a balance five
+ * years out would read as precision it does not have.
+ */
+export const PROJECTION_HORIZON_MONTHS = 24;
+
+/**
+ * Map the single shared month to what a balance page should show.
+ * The whole app tracks one freely-picked month, and a balance page can only
+ * render a month it can account for:
+ *   - future month → 'projected'; the caller computes it from live state.
+ *   - current month → 'live' (editable current state).
  *   - past month → the latest recorded snapshot at or before it, else the earliest
  *     recorded month, so we never land on an empty month.
- * `isLive` is derived from the *resolved* month, not the picked one: if we snapped
+ * The mode is derived from the *resolved* month, not the picked one: if we snapped
  * to the current month (because nothing older exists — e.g. only this month has been
  * captured, the common case), the page is live and editable, never today's data
  * shown read-only under a past label.
  */
-export function snapToRecordedMonth(
+export function resolveMonthView(
   recordedKeys: string[],
   viewKey: string,
   nowKey: string,
-): { activeKey: string; isLive: boolean } {
-  const resolve = (): string => {
-    if (viewKey >= nowKey) return nowKey;
-    const sorted = [...recordedKeys].sort();
-    const atOrBefore = sorted.filter(k => k <= viewKey);
-    if (atOrBefore.length) return atOrBefore[atOrBefore.length - 1];
-    return sorted[0] ?? nowKey;
-  };
-  const activeKey = resolve();
-  return { activeKey, isLive: activeKey === nowKey };
+): { activeKey: string; mode: MonthMode } {
+  if (viewKey > nowKey) return { activeKey: viewKey, mode: 'projected' };
+  if (viewKey === nowKey) return { activeKey: nowKey, mode: 'live' };
+  const sorted = [...recordedKeys].sort();
+  const atOrBefore = sorted.filter(k => k <= viewKey);
+  const activeKey = atOrBefore.length ? atOrBefore[atOrBefore.length - 1] : (sorted[0] ?? nowKey);
+  return { activeKey, mode: activeKey === nowKey ? 'live' : 'recorded' };
 }
 
 /** The balances a person can realistically reconstruct for a past month. */
@@ -61,6 +75,31 @@ export interface SnapshotBalances {
   otpBalance: number;
   ipsBalance: number;
   assumptions?: { savingsTargetPercent: number; growthReturnRate: number; houseGrowthRate: number };
+}
+
+/**
+ * Read the balances back out of a snapshot. Used both to seed the manual-backfill
+ * editor and as the starting point a forward projection grows from, so the two
+ * always agree on which fields count as "a balance".
+ */
+export function snapshotBalances(
+  base: BalanceSnapshot,
+  fallbackAssumptions: { savingsTargetPercent: number; growthReturnRate: number; houseGrowthRate: number },
+): SnapshotBalances {
+  const a = base.assets;
+  return {
+    savingsAccounts: (a.savingsAccounts ?? []).map(s => ({ ...s })),
+    bsu: a.bsu ?? 0,
+    bufferAccount: a.bufferAccount ?? 0,
+    portfolio: a.portfolio ?? 0,
+    crypto: a.crypto ?? 0,
+    houseValue: a.houseValue ?? 0,
+    houseDebt: a.houseDebt ?? 0,
+    debts: (base.debts ?? []).map(d => ({ ...d })),
+    otpBalance: base.pension?.otpBalance ?? 0,
+    ipsBalance: base.pension?.ipsBalance ?? 0,
+    assumptions: base.assumptions ?? fallbackAssumptions,
+  };
 }
 
 /**
