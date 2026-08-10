@@ -31,13 +31,16 @@ export function fixedExpenseTotalsByType(expenses: FixedExpense[]): FixedExpense
 
 /**
  * Monthly essential spend for the emergency-fund runway: every fixed-expense
- * line except `subscription`, which is discretionary (Netflix, Spotify — the
- * things you cancel in a real emergency). Counting subscriptions understated
- * the months a buffer covers; excluding them makes "months covered" reflect the
- * spend you actually can't drop. Untyped legacy rows count as 'fixed' (essential).
+ * line except `subscription` and `saving`. Subscriptions are discretionary
+ * (Netflix, Spotify — the things you cancel in a real emergency); a saving is
+ * not spend at all, and pausing the transfer is the FIRST thing you do in one,
+ * so counting it makes the buffer look short of a bill that doesn't exist.
+ * Untyped legacy rows count as 'fixed' (essential).
  */
+const NON_ESSENTIAL: ReadonlySet<ExpenseType> = new Set<ExpenseType>(['subscription', 'saving']);
+
 export function essentialMonthlyExpenses(expenses: FixedExpense[]): number {
   return expenses
-    .filter(e => (e.type ?? 'fixed') !== 'subscription')
+    .filter(e => !NON_ESSENTIAL.has(e.type ?? 'fixed'))
     .reduce((sum, e) => sum + amount(e.amount), 0);
 }

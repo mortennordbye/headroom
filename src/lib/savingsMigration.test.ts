@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { migrateSavingsAccounts, migrateSnapshotSavings } from './savingsMigration';
-import type { Assets, BalanceSnapshot } from '../context/FinanceContext';
+import { migrateSavingsAccounts, migrateSnapshotSavings, migrateSavingsExpenseType } from './savingsMigration';
+import type { Assets, BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
 
 const base: Assets = {
   portfolio: 0, unrealizedGain: 0, taxRate: 30, bsu: 0, bsuAnnualContribution: 0, savings: 0, savingsAccounts: [],
@@ -52,5 +52,51 @@ describe('migrateSnapshotSavings', () => {
     const snap = { housingMode: 'first_buyer' } as unknown as BalanceSnapshot;
     const out = migrateSnapshotSavings({ '2026-01': snap });
     expect(out['2026-01']).toBe(snap);
+  });
+});
+
+describe('migrateSavingsExpenseType', () => {
+  const row = (over: Partial<FixedExpense>): FixedExpense =>
+    ({ id: 'x', name: 'x', amount: 100, ...over });
+
+  it('retypes a savings destination stored as a spending type', () => {
+    const out = migrateSavingsExpenseType([
+      row({ id: 'a', name: 'Aksjer og fond', amount: 13444, type: 'fixed', destinationKind: 'portfolio' }),
+      row({ id: 'b', name: 'Ferie/Gaver', amount: 500, type: 'fixed', destinationKind: 'savingsAccount', savingsAccountId: 's1' }),
+    ]);
+    expect(out.map(e => e.type)).toEqual(['saving', 'saving']);
+    // Everything else survives untouched.
+    expect(out[1]).toMatchObject({ id: 'b', name: 'Ferie/Gaver', amount: 500, savingsAccountId: 's1' });
+  });
+
+  it('covers every savings destination, and no others', () => {
+    const kinds = ['savingsAccount', 'bufferAccount', 'portfolio', 'bsu'] as const;
+    for (const k of kinds) {
+      expect(migrateSavingsExpenseType([row({ type: 'fixed', destinationKind: k })])[0].type).toBe('saving');
+    }
+    // A paydown is not a saving: a FixedExpense holds the gross payment, most of
+    // which is interest, so retyping it would overstate the savings rate.
+    for (const k of ['mortgage', 'debt'] as const) {
+      expect(migrateSavingsExpenseType([row({ type: 'fixed', destinationKind: k })])[0].type).toBe('fixed');
+    }
+  });
+
+  it('leaves an ordinary expense and an untyped legacy row alone', () => {
+    const plain = row({ id: 'p', type: 'subscription' });
+    const legacy = row({ id: 'l' });
+    const out = migrateSavingsExpenseType([plain, legacy]);
+    expect(out[0]).toBe(plain);
+    expect(out[1]).toBe(legacy);
+  });
+
+  it('is idempotent and preserves identity when there is nothing to fix', () => {
+    const already = row({ type: 'saving', destinationKind: 'portfolio' });
+    const once = migrateSavingsExpenseType([already]);
+    expect(once[0]).toBe(already);
+    expect(migrateSavingsExpenseType(once)).toEqual(once);
+  });
+
+  it('retypes a row that has a savings destination but no type at all', () => {
+    expect(migrateSavingsExpenseType([row({ destinationKind: 'bsu' })])[0].type).toBe('saving');
   });
 });

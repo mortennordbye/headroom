@@ -52,7 +52,7 @@ function SankeyNode({ x, y, width, height, index, payload, containerWidth }: Nod
 export default function MoneyFlowSankey() {
   const {
     t, region, grossAnnualIncome, customTaxRatePct, pension, annualMortgageInterest,
-    totalFixedExpenses, recommendedInvestment, formatCurrency,
+    totalFixedExpenses, savingsContributions, plannedMonthlySaving, formatCurrency,
   } = useFinance();
 
   const data = useMemo(() => {
@@ -60,8 +60,13 @@ export default function MoneyFlowSankey() {
     const grossM = grossAnnualIncome / 12;
     const taxM = b.totalTax / 12;
     const netM = b.netMonthly;
-    const fixed = Math.min(totalFixedExpenses, netM);
-    const savings = Math.min(recommendedInvestment, Math.max(0, netM - fixed));
+    // The whole point of this diagram is where the money goes, so a savings
+    // transfer must flow to `savings`, not hide inside `fixed`. `totalFixedExpenses`
+    // holds both, and `recommendedInvestment` is only the not-yet-allocated
+    // remainder — using that pair drew "Faste utgifter 45 685 → Sparing 1 494"
+    // for a plan that actually spends 31 741 and saves 15 438.
+    const fixed = Math.min(Math.max(0, totalFixedExpenses - savingsContributions), netM);
+    const savings = Math.min(plannedMonthlySaving, Math.max(0, netM - fixed));
     const discretionary = Math.max(0, netM - fixed - savings);
 
     // Round the remainder bucket LAST so the net node's outflows sum exactly to
@@ -97,7 +102,7 @@ export default function MoneyFlowSankey() {
     const nodes = usedIdx.map(i => allNodes[i]);
     const links = rawLinks.map(l => ({ ...l, source: remap.get(l.source)!, target: remap.get(l.target)! }));
     return { nodes, links, grossM };
-  }, [region, grossAnnualIncome, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, totalFixedExpenses, recommendedInvestment, t]);
+  }, [region, grossAnnualIncome, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, totalFixedExpenses, savingsContributions, plannedMonthlySaving, t]);
 
   if (!(data.grossM > 0)) {
     return (

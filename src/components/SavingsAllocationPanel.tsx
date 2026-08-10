@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, Plus, Trash2, Wand2 } from 'lucide-react';
-import { useFinance, type ExpenseDestinationKind } from '../context/FinanceContext';
+import { useFinance, type ExpenseDestinationKind, type FixedExpense } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
 import { resolveAllocation, isCreatableRow, destinationKey, type AllocationRow } from '../lib/savingsAllocation';
+import { savingsBase, isSavingsRow, isPercentSavings } from '../lib/savingsRate';
 import { currentMonthKey } from '../lib/date';
 
 // Turns the savings target (residual × savingsTargetPercent) into a per-destination
@@ -18,14 +19,68 @@ import { currentMonthKey } from '../lib/date';
 const selectCls = 'appearance-none cursor-pointer bg-[var(--bg-raised)] border border-[var(--border)] rounded-[9px] pl-3 pr-8 py-2 text-[13px] text-[var(--text-1)] outline-none focus:border-[var(--forest)] transition-colors';
 const pctInputCls = 'w-[68px] bg-[var(--bg-raised)] border border-[var(--border)] rounded-[9px] px-2.5 py-2 text-[13px] font-mono tabular-nums text-right text-[var(--text-1)] outline-none focus:border-[var(--forest)] transition-colors';
 
-export const SavingsAllocationPanel: React.FC = () => {
+type RowMode = 'percent' | 'amount';
+
+/**
+ * The %/kr switch. Both options are always visible with the active one filled —
+ * a single button showing only the current unit read as a label rather than a
+ * control, so the choice that makes a transfer follow income went unnoticed.
+ */
+function ModeToggle({ mode, onChange, labels }: {
+  mode: RowMode;
+  onChange: (m: RowMode) => void;
+  labels: { group: string; percentHint: string; amountHint: string };
+}) {
+  const seg = (m: RowMode, text: string, hint: string) => {
+    const on = mode === m;
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(m)}
+        aria-pressed={on}
+        title={hint}
+        className="px-2 py-1 text-[12px] font-medium transition-colors"
+        style={{
+          background: on ? 'var(--bg-elev)' : 'transparent',
+          color: on ? 'var(--text-1)' : 'var(--text-3)',
+        }}
+      >
+        {text}
+      </button>
+    );
+  };
+  return (
+    <div
+      role="group"
+      aria-label={labels.group}
+      className="inline-flex rounded-[9px] border border-[var(--border)] overflow-hidden"
+    >
+      {seg('percent', '%', labels.percentHint)}
+      <span aria-hidden className="w-px" style={{ background: 'var(--border)' }} />
+      {seg('amount', 'kr', labels.amountHint)}
+    </div>
+  );
+}
+
+interface PanelProps {
+  /** Drop the Card chrome — set when the panel is rendered inside a modal, which
+   *  brings its own panel surface and heading. */
+  bare?: boolean;
+}
+
+export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) => {
   const {
     t, assets, debts, housingMode, formatCurrency, recommendedInvestment,
     savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
-    fixedExpenses, setFixedExpenses, automationEnabled,
+    fixedExpenses, viewFixedExpenses, setFixedExpenses, automationEnabled, effectiveIncome,
   } = useFinance();
   const sa = t.savingsAllocation;
   const [created, setCreated] = useState(0);
+  const modeLabels = {
+    group: sa.toggleMode,
+    percentHint: sa.modePercentHint,
+    amountHint: sa.modeAmountHint,
+  };
 
   // Memoized because the `?? []` fallback is a fresh array each render, which
   // would otherwise invalidate the options memo below on every render.
@@ -60,7 +115,7 @@ export const SavingsAllocationPanel: React.FC = () => {
   // on screen. Hence the header's second line and the per-row chip.
   const committedByKey = useMemo(() => {
     const m = new Map<string, number>();
-    for (const e of fixedExpenses) {
+    for (const e of viewFixedExpenses) {
       if (!e.destinationKind || e.automationPaused) continue;
       const k = destinationKey({
         destinationKind: e.destinationKind, savingsAccountId: e.savingsAccountId, debtId: e.debtId,
@@ -68,12 +123,26 @@ export const SavingsAllocationPanel: React.FC = () => {
       m.set(k, (m.get(k) ?? 0) + e.amount);
     }
     return m;
-  }, [fixedExpenses]);
+  }, [viewFixedExpenses]);
   const committedTotal = [...committedByKey.values()].reduce((s, n) => s + n, 0);
 
   const creatable = plan.rows.filter(
     r => isCreatableRow(r, savingsIds, debtIds) && !committedByKey.has(destinationKey(r)),
   );
+
+  // Live savings rows that no plan row covers. Without these the panel is only
+  // half the picture — it would show what you intend and hide what is already
+  // running, which is precisely the split that made saving need two entry points.
+  const plannedKeys = new Set(savingsAllocations.map(destinationKey));
+  const liveOnly = viewFixedExpenses.filter(
+    e => isSavingsRow(e) && e.destinationKind && !plannedKeys.has(destinationKey({
+      destinationKind: e.destinationKind, savingsAccountId: e.savingsAccountId, debtId: e.debtId,
+    })),
+  );
+  const isEmpty = savingsAllocations.length === 0 && liveOnly.length === 0;
+
+  const patchExpense = (id: string, patch: Partial<FixedExpense>) =>
+    setFixedExpenses(fixedExpenses.map(e => (e.id === id ? { ...e, ...patch } : e)));
 
   const labelFor = (row: AllocationRow) =>
     options.find(o => o.v === destinationKey(row))?.l ?? sa.targetMissing;
@@ -89,6 +158,20 @@ export const SavingsAllocationPanel: React.FC = () => {
     updateSavingsAllocation(id, patch);
   };
 
+  // A percentage row is activated as a percentage: it stores its share of the
+  // savings BASE, so the transfer follows income instead of freezing at whatever
+  // this month happened to be. Share of the base rather than of the target, so
+  // later editing the target percent doesn't silently re-scale live transfers.
+  // A zero base (income below consumption) has no share to take, so the row
+  // falls back to the resolved amount.
+  const base = savingsBase(effectiveIncome, viewFixedExpenses);
+  // Four decimals, not two. At a ~31 000 base a 0.01-point rounding is worth
+  // ~1.6 kr, so a coarser share made switching kr → % move the amount by a krone
+  // — changing a unit must never change what you save. Four decimals keeps the
+  // round-trip exact to the krone for any realistic base.
+  const percentOfBase = (amount: number): number | undefined =>
+    base > 0 ? Math.round((amount / base) * 1_000_000) / 10_000 : undefined;
+
   const createExpenses = () => {
     setFixedExpenses([
       ...fixedExpenses,
@@ -96,7 +179,12 @@ export const SavingsAllocationPanel: React.FC = () => {
         id: crypto.randomUUID(),
         name: labelFor(row),
         amount: row.amount,
-        type: 'fixed' as const,
+        amountPercent: row.mode === 'amount' ? undefined : percentOfBase(row.amount),
+        // 'saving', not 'fixed': these rows move money into a savings vehicle, and
+        // anything keyed on `type` alone (row colour, essentialMonthlyExpenses)
+        // otherwise reads them as bills. See migrateSavingsExpenseType, which
+        // repairs the rows earlier versions of this line wrote.
+        type: 'saving' as const,
         destinationKind: row.destinationKind,
         savingsAccountId: row.savingsAccountId,
         debtId: row.debtId,
@@ -108,10 +196,10 @@ export const SavingsAllocationPanel: React.FC = () => {
     setCreated(creatable.length);
   };
 
-  return (
-    <Card padding="none" className="p-5 md:p-7 flex flex-col">
+  const body = (
+    <>
       <div className="flex items-baseline justify-between gap-3 flex-wrap pb-4 border-b border-[var(--border)]">
-        <SectionLabel>{sa.title}</SectionLabel>
+        {!bare && <SectionLabel>{sa.title}</SectionLabel>}
         <span className="text-[12px] font-mono tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
           <span className="block">{formatCurrency(Math.max(0, recommendedInvestment))} {sa.perMonth}</span>
           {committedTotal > 0 && (
@@ -122,11 +210,75 @@ export const SavingsAllocationPanel: React.FC = () => {
         </span>
       </div>
       <p className="mt-3 text-[12px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{sa.intro}</p>
+      {/* Says out loud what the per-row switch does. The difference between the
+          two modes is the whole feature, and a two-letter toggle can't carry it. */}
+      <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
+        <span className="font-semibold" style={{ color: 'var(--brass)' }}>%</span> {sa.modeExplainPercent}
+        {' · '}
+        <span className="font-semibold" style={{ color: 'var(--text-1)' }}>kr</span> {sa.modeExplainAmount}
+      </p>
 
-      {savingsAllocations.length === 0 ? (
+      {isEmpty ? (
         <p className="mt-5 text-[13px]" style={{ color: 'var(--text-3)' }}>{sa.empty}</p>
       ) : (
         <div className="mt-5 space-y-2.5">
+          {/* Already running. Editable in place so this view is the single place
+              saving is set up; the destination is fixed because changing it would
+              silently redirect a transfer that has already posted. */}
+          {liveOnly.map(e => (
+            <div key={e.id} className="flex items-center gap-2.5 flex-wrap">
+              <span
+                className="truncate max-w-[190px] px-3 py-2 rounded-[9px] border border-[var(--border)] text-[13px]"
+                style={{ background: 'var(--bg-raised)', color: 'var(--text-1)' }}
+                title={e.name}
+              >
+                {e.name}
+              </span>
+              {isPercentSavings(e) ? (
+                <input
+                  className={pctInputCls}
+                  inputMode="decimal"
+                  value={e.amountPercent}
+                  aria-label={sa.percentLabel}
+                  onChange={ev => patchExpense(e.id, { amountPercent: Number(ev.target.value) || 0 })}
+                />
+              ) : (
+                <input
+                  className={pctInputCls}
+                  inputMode="decimal"
+                  value={e.amount}
+                  aria-label={sa.amountLabel}
+                  onChange={ev => patchExpense(e.id, { amount: Number(ev.target.value) || 0 })}
+                />
+              )}
+              <ModeToggle
+                mode={isPercentSavings(e) ? 'percent' : 'amount'}
+                labels={modeLabels}
+                onChange={m => patchExpense(e.id, m === 'amount'
+                  ? { amountPercent: undefined }
+                  : { amountPercent: percentOfBase(e.amount) })}
+              />
+              <span
+                className="text-[10.5px] font-medium px-2 py-0.5 rounded-full"
+                style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}
+                title={sa.activeHint}
+              >
+                {sa.activeShort}
+              </span>
+              <span className="ml-auto text-[13px] font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>
+                {formatCurrency(e.amount)}
+              </span>
+              <button
+                type="button"
+                onClick={() => setFixedExpenses(fixedExpenses.filter(x => x.id !== e.id))}
+                aria-label={`${sa.removeRow} — ${e.name}`}
+                className="p-1.5 rounded-[7px] hover:bg-[var(--bg-raised)] transition-colors"
+                style={{ color: 'var(--text-3)' }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
           {plan.rows.map(row => (
             <div key={row.id} className="flex items-center gap-2.5 flex-wrap">
               <div className="relative">
@@ -140,14 +292,35 @@ export const SavingsAllocationPanel: React.FC = () => {
                 </select>
                 <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-2)]" />
               </div>
-              <input
-                className={pctInputCls}
-                inputMode="decimal"
-                value={row.percent}
-                aria-label={sa.percentLabel}
-                onChange={e => updateSavingsAllocation(row.id, { percent: Number(e.target.value) || 0 })}
+              {row.mode === 'amount' ? (
+                <input
+                  className={pctInputCls}
+                  inputMode="decimal"
+                  value={row.amount ?? 0}
+                  aria-label={sa.amountLabel}
+                  onChange={e => updateSavingsAllocation(row.id, { amount: Number(e.target.value) || 0 })}
+                />
+              ) : (
+                <input
+                  className={pctInputCls}
+                  inputMode="decimal"
+                  value={row.percent}
+                  aria-label={sa.percentLabel}
+                  onChange={e => updateSavingsAllocation(row.id, { percent: Number(e.target.value) || 0 })}
+                />
+              )}
+              {/* Percent tracks income once activated; kr stays put. The toggle is
+                  the whole "auto increase" decision, so it sits on the row. */}
+              <ModeToggle
+                mode={row.mode === 'amount' ? 'amount' : 'percent'}
+                labels={modeLabels}
+                onChange={m => updateSavingsAllocation(row.id, {
+                  mode: m,
+                  // Carry the current figure across so switching unit never
+                  // changes what is saved.
+                  amount: m === 'amount' ? row.amount : undefined,
+                })}
               />
-              <span className="text-[13px]" style={{ color: 'var(--text-3)' }}>%</span>
               {committedByKey.has(destinationKey(row)) && (
                 <span
                   className="text-[10.5px] font-medium px-2 py-0.5 rounded-full"
@@ -213,6 +386,12 @@ export const SavingsAllocationPanel: React.FC = () => {
       {!automationEnabled && (
         <p className="mt-3 text-[12px]" style={{ color: 'var(--warning)' }}>{t.pensionAutomation.masterOff}</p>
       )}
-    </Card>
+    </>
   );
+
+  // In a modal the surrounding ModalShell already supplies the panel and title,
+  // so the Card chrome would double up.
+  return bare
+    ? <div className="flex flex-col">{body}</div>
+    : <Card padding="none" className="p-5 md:p-7 flex flex-col">{body}</Card>;
 };

@@ -3,7 +3,8 @@
 // logic: normalise a loaded/imported assets blob into a savingsAccounts array,
 // and mirror that onto stored balance snapshots. Behaviour is byte-for-byte the
 // same as the inline versions these replaced.
-import type { Assets, SavingsAccount, BalanceSnapshot } from '../context/FinanceContext';
+import type { Assets, SavingsAccount, BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
+import { isSavingsDestination } from './savingsRate';
 
 // Stable-ish unique id (also used by FinanceContext's array CRUD helpers). Not
 // cryptographic — just needs to avoid collisions within a session.
@@ -36,6 +37,26 @@ export function migrateSavingsAccounts(a: Assets): SavingsAccount[] {
   }
   const legacy = typeof a.savings === 'number' && Number.isFinite(a.savings) ? a.savings : 0;
   return legacy > 0 ? [{ id: makeId('sav'), name: 'Sparekonto', balance: legacy }] : [];
+}
+
+// Repair rows that move money into a savings vehicle but are stored with a
+// spending `type`. Every writer before the 'saving' type existed — and
+// SavingsAllocationPanel after it — stamped `type: 'fixed'`, so a stock transfer
+// persisted as a fixed expense. The Budget page hid it because `isSavingsRow`
+// also matches on the destination, but anything keyed on `type` alone read it as
+// a bill: it drew the 'fixed' colour, and `essentialMonthlyExpenses` counted it
+// as spend you cannot cancel, shrinking the emergency-fund runway.
+//
+// The destination is the reliable signal — it is what actually moves the money —
+// so it wins over the stored type. Idempotent: rows already typed 'saving', and
+// rows with no savings destination, come back untouched (same object identity,
+// so a loaded blob with nothing to fix keeps its array reference).
+export function migrateSavingsExpenseType(expenses: FixedExpense[]): FixedExpense[] {
+  return expenses.map(e =>
+    isSavingsDestination(e.destinationKind) && e.type !== 'saving'
+      ? { ...e, type: 'saving' as const }
+      : e,
+  );
 }
 
 // One-time migration of stored balance snapshots, mirroring what applyPayload

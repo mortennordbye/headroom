@@ -697,3 +697,20 @@ second data path — the packaged app runs the same server, API and SQLite stora
   path. Deferred because it needs a Windows machine. **What would unblock**: installing and
   launching the `.exe` once. **Where**: `.github/workflows/desktop-build.yml` (matrix),
   `desktop/electron-builder.yml` (`nsis`).
+
+## Savings allocation splits the remainder, not the target (2026-08)
+
+`SavingsAllocationPanel` is titled "Fordeling av sparemålet", but its percentages resolve against
+the *unallocated* part of the target, not the whole target: `resolveAllocation(savingsAllocations,
+Math.max(0, recommendedInvestment))`. With 500 kr already automated and a 15 438 kr target, a row
+set to 90% yields 90% of the remaining 14 938 = 13 444 kr, not 90% of 15 438 = 13 894 kr. The
+header does show both figures ("… per måned" plus "Allerede automatisert: …"), so nothing lies —
+but the number a user predicts from "90% av sparemålet" is not the number they get.
+
+Deferred because either reading is defensible and switching denominators changes the amounts of
+any allocation already set up, which is a behaviour change the savings work above did not need.
+Fixing it well probably means labelling the percent column explicitly ("% av det som gjenstår")
+rather than changing the math. **What would unblock**: a decision on which quantity the percentages
+should mean. **Where**: `src/components/SavingsAllocationPanel.tsx` (the `plan` memo),
+`src/lib/savingsAllocation.ts` (`resolveAllocation`), `src/i18n/translations.ts`
+(`savingsAllocation.*`).

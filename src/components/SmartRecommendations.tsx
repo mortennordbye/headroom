@@ -3,31 +3,35 @@ import { format } from 'date-fns';
 import { AlertTriangle, TrendingUp, Edit2, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
+import { savingsTargetPercentFor } from '../lib/calculations';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 
 // Category roles (shared by the pills, allocation strip and legend).
+// Saving has ONE colour and ONE name across this card. It used to have two of
+// each — brass "Sparing" for what was already automated, slate "Investering" for
+// the rest of the target — which read as two separate pots and made a fully
+// automated plan show "Investering 0 kr" next to a healthy "Kan bruke".
 const ROLE_FIXED = 'var(--teal)';
 const ROLE_SPEND = 'var(--forest-light)';
-const ROLE_INVEST = 'var(--slate)';
 const ROLE_SAVED = 'var(--brass)';
 
 interface EditablePillProps {
   label: string;
   value: number;
-  color: 'sky' | 'emerald';
+  roleColor: string;
   formatCurrency: (v: number) => string;
   onCommit: (newValue: number) => void;
   hint?: string;
+  /** Muted second line under the value (e.g. "1 494 kr ufordelt"). */
+  note?: string;
 }
 
-function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: EditablePillProps) {
+function EditablePill({ label, value, roleColor, formatCurrency, onCommit, hint, note }: EditablePillProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 'sky' = "kan bruke" (forest-light), 'emerald' = "investering" (slate).
-  const roleColor = color === 'sky' ? ROLE_SPEND : ROLE_INVEST;
   const bg = 'bg-[var(--bg-raised)] border-[var(--border)]';
 
   useEffect(() => {
@@ -72,6 +76,9 @@ function EditablePill({ label, value, color, formatCurrency, onCommit, hint }: E
           {formatCurrency(value)}
         </span>
       )}
+      {note && (
+        <span className="text-[10px] text-[var(--text-3)] leading-tight">{note}</span>
+      )}
       {hint && (
         <span className="text-[10px] text-[var(--warning)] leading-tight">{hint}</span>
       )}
@@ -98,7 +105,7 @@ export default function SmartRecommendations() {
     setSavingsTargetPercent,
     formatCurrency,
     formatCurrencyShort,
-    totalResidual,
+    effectiveIncome,
   } = useFinance();
 
   const [editingPct, setEditingPct] = useState(false);
@@ -126,17 +133,29 @@ export default function SmartRecommendations() {
     setEditingPct(false);
   };
 
-  const handleSpendingEdit = (newSpending: number) => {
-    if (totalResidual <= 0) return;
-    const clamped = Math.min(newSpending, totalResidual);
-    setSavingsTargetPercent(Math.round(((totalResidual - clamped) / totalResidual) * 100));
+  // The pool the plan actually splits, and the split itself. `spendFixed` is the
+  // real bills; saving is not one of them, so it stays inside the pool.
+  //
+  // This MUST be the same denominator calcRecommendations divides by
+  // (src/lib/calculations.ts `base`). It used to be `totalResidual`, which
+  // subtracts the savings contributions too — so typing a figure into a pill
+  // wrote a percentage against a smaller pool and came back inflated, by ~3x
+  // once most of the target was automated. `plannedSaving + recommendedSpending`
+  // equals `base` exactly, which is what makes the pills a clean two-way split.
+  const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions);
+  const base = effectiveIncome - spendFixed;
+  const plannedSaving = savingsContributions + Math.max(0, recommendedInvestment);
+
+  // A pill can only move the part of the split that is still a plan: saving
+  // already committed as a fixed expense can't be undone from here, so the
+  // spend pill can't claim it and the saving pill can't drop below it.
+  const commitPool = (saving: number) => {
+    if (base <= 0) return;
+    setSavingsTargetPercent(savingsTargetPercentFor(saving, base, savingsContributions));
   };
 
-  const handleInvestmentEdit = (newInvest: number) => {
-    if (totalResidual <= 0) return;
-    const clamped = Math.min(newInvest, totalResidual);
-    setSavingsTargetPercent(Math.round((clamped / totalResidual) * 100));
-  };
+  const handleSpendingEdit = (newSpending: number) => commitPool(base - Math.max(0, newSpending));
+  const handleSavingEdit = (newSaving: number) => commitPool(Math.max(0, newSaving));
 
   const recordedMonthCount = Object.keys(monthlyIncomes).length;
 
@@ -150,18 +169,24 @@ export default function SmartRecommendations() {
   // the fixed-costs bar — otherwise a big automated transfer reads as "85% of my
   // income goes to bills". `totalFixedExpenses` still holds both, so the
   // consumption slice is it minus the savings contributions.
+  //
+  // Three slices, never four: the part of the saving target not yet pointed at a
+  // destination is drawn INSIDE the saving band (dimmed) instead of as its own
+  // colour, because it is the same money at a different stage, not a fourth
+  // category. `unfunded` is what the Sparing card calls "Ledig å fordele".
+  const unfunded = Math.max(0, recommendedInvestment);
   const pieData = [
-    { name: t.fixedCosts, value: Math.max(0, totalFixedExpenses - savingsContributions), color: ROLE_FIXED },
-    ...(savingsContributions > 0
-      ? [{ name: t.budgetPage.savingSlice, value: savingsContributions, color: ROLE_SAVED }]
+    { name: t.fixedCosts, value: spendFixed, color: ROLE_FIXED, unfunded: 0 },
+    ...(plannedSaving > 0
+      ? [{ name: t.budgetPage.savingSlice, value: plannedSaving, color: ROLE_SAVED, unfunded }]
       : []),
-    { name: t.canSpend, value: recommendedSpending, color: ROLE_SPEND },
-    ...(recommendedInvestment > 0
-      ? [{ name: t.shouldInvest, value: recommendedInvestment, color: ROLE_INVEST }]
-      : []),
+    { name: t.canSpend, value: recommendedSpending, color: ROLE_SPEND, unfunded: 0 },
   ];
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
   const slicePct = (v: number) => (pieTotal > 0 ? (v / pieTotal) * 100 : 0);
+  const unfundedNote = unfunded > 0
+    ? t.savingsAllocation.unallocated.replace('{amount}', formatCurrency(unfunded))
+    : undefined;
 
   return (
     <Card data-tour="budget-plan" padding="none" className="p-5 md:p-7">
@@ -230,18 +255,19 @@ export default function SmartRecommendations() {
             <EditablePill
               label={t.canSpend}
               value={recommendedSpending}
-              color="sky"
+              roleColor={ROLE_SPEND}
               formatCurrency={formatCurrency}
               onCommit={handleSpendingEdit}
             />
             <EditablePill
-              label={t.shouldInvest}
-              value={recommendedInvestment}
-              color="emerald"
+              label={t.budgetPage.savingSlice}
+              value={plannedSaving}
+              roleColor={ROLE_SAVED}
               formatCurrency={formatCurrency}
-              onCommit={handleInvestmentEdit}
+              onCommit={handleSavingEdit}
+              note={unfundedNote}
               hint={conservativeMode && suggestedInvestment > recommendedInvestment
-                ? `${t.common.recommended}: ${formatCurrency(suggestedInvestment)}`
+                ? `${t.common.recommended}: ${formatCurrency(savingsContributions + suggestedInvestment)}`
                 : undefined}
             />
           </div>
@@ -260,7 +286,7 @@ export default function SmartRecommendations() {
               return (
                 <div
                   key={i}
-                  className="flex items-center justify-center font-mono text-[10px] transition-opacity"
+                  className="relative flex items-center justify-center font-mono text-[10px] transition-opacity"
                   style={{
                     width: `${pct}%`,
                     background: entry.color,
@@ -272,7 +298,18 @@ export default function SmartRecommendations() {
                   onMouseLeave={() => setHoveredSlice(null)}
                   onClick={() => togglePin(i)}
                 >
-                  {pct >= 10 ? `${pct.toFixed(0)}%` : ''}
+                  {/* The not-yet-allocated tail of the saving band, dimmed in place
+                      rather than split off into a colour of its own. */}
+                  {entry.unfunded > 0 && (
+                    <span
+                      className="absolute inset-y-0 right-0"
+                      style={{
+                        width: `${(entry.unfunded / entry.value) * 100}%`,
+                        background: 'color-mix(in srgb, var(--bg) 55%, transparent)',
+                      }}
+                    />
+                  )}
+                  <span className="relative">{pct >= 10 ? `${pct.toFixed(0)}%` : ''}</span>
                 </div>
               );
             })}

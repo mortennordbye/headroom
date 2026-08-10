@@ -41,7 +41,7 @@ import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeSta
 import { suggestTransferRules } from '../lib/transferSuggestions';
 import { RULES_ANCHOR } from '../components/CategoryRules';
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
-import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries, isSavingsRow } from '../lib/savingsRate';
+import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries, isSavingsRow, isPercentSavings } from '../lib/savingsRate';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -54,6 +54,8 @@ import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
 import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
 import ConfirmModal from '../components/ConfirmModal';
+import { ModalShell } from '../components/ui/ModalShell';
+import { SavingsAllocationPanel } from '../components/SavingsAllocationPanel';
 import { UndoToast } from '../components/ui/UndoToast';
 import { StatCard } from '../components/ui/StatCard';
 import { Card } from '../components/ui/Card';
@@ -375,6 +377,10 @@ const BudgetPage: React.FC = () => {
   // money" destination, and advanced tracking/matching options.
   const [expenseDialog, setExpenseDialog] = useState<{ editing?: FixedExpense } | null>(null);
   const openExpenseDialog = (editing?: FixedExpense) => setExpenseDialog({ editing });
+  // Saving has ONE setup surface. The Sparing card's "+" and its "fordel
+  // sparemålet" link both open it: two doors onto the same thing was the reason
+  // a savings row could be created as a fixed expense in the first place.
+  const [allocationOpen, setAllocationOpen] = useState(false);
   const saveExpense = (payload: Omit<FixedExpense, 'id'>) => {
     setFixedExpenses(
       expenseDialog?.editing
@@ -729,7 +735,9 @@ const BudgetPage: React.FC = () => {
               {/* Over-budget accent: a rounded bar inset from the row edges so
                   two adjacent over-budget rows read separately, not as one bar. */}
               {isOver && <span aria-hidden className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-full bg-[var(--rust)]" />}
-              <div className="flex items-center justify-between group">
+              {/* gap-3 so a truncated name never butts straight into the amount
+                  ("Aksjer og…13 444,00 kr") in the narrow Sparing column. */}
+              <div className="flex items-center justify-between gap-3 group">
                 {expensesReadOnly ? (
                   <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] min-w-0">
                     <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: expenseColor(expense.type) }} />
@@ -746,7 +754,7 @@ const BudgetPage: React.FC = () => {
                     <span className="truncate">{expense.name}</span>
                   </button>
                 )}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   {expensesReadOnly ? (
                     <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">
                       {formatCurrency(expense.amount)}
@@ -775,6 +783,13 @@ const BudgetPage: React.FC = () => {
               {expense.destinationKind && destinationLabelFor(expense) && (
                 <div className="mt-1 pl-[15px] flex items-center gap-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
                   <span aria-hidden>→</span> {destinationLabelFor(expense)}
+                </div>
+              )}
+              {/* A percentage row's amount is derived, so say so — otherwise next
+                  month's different figure looks like the app changed it. */}
+              {isPercentSavings(expense) && (
+                <div className="mt-0.5 pl-[15px] text-[10px] uppercase tracking-wider" style={{ color: 'var(--brass)' }}>
+                  {t.budgetPage.savingsFollowsIncome.replace('{percent}', String(expense.amountPercent))}
                 </div>
               )}
               {showEnvelope && <EnvelopeBar envelope={envelope} formatCurrency={formatCurrency} labels={{ left: t.envelopeLeft, over: t.envelopeOver }} />}
@@ -1081,7 +1096,7 @@ const BudgetPage: React.FC = () => {
             <SectionLabel>{t.budgetPage.savingsCardTitle}</SectionLabel>
             {!expensesReadOnly && (
               <button
-                onClick={() => openExpenseDialog()}
+                onClick={() => setAllocationOpen(true)}
                 aria-label={`${t.add} — ${t.budgetPage.savingsCardTitle}`}
                 className="text-[var(--accent)] hover:opacity-70 transition-opacity"
               >
@@ -1123,15 +1138,6 @@ const BudgetPage: React.FC = () => {
                 </span>
               </div>
             </div>
-            {savingsRemaining > 0 && (
-              <Link
-                to="/assets"
-                className="inline-block text-[11px] font-semibold uppercase tracking-wider hover:opacity-70 transition-opacity"
-                style={{ color: 'var(--accent)' }}
-              >
-                {t.budgetPage.savingsAllocateCta}
-              </Link>
-            )}
           </div>
 
           <div className="flex-1 flex flex-col">
@@ -1609,6 +1615,18 @@ const BudgetPage: React.FC = () => {
           onSave={saveExpense}
           onClose={() => setExpenseDialog(null)}
         />
+      )}
+      {allocationOpen && (
+        <ModalShell
+          // Named after the card it opens from, not after "fordeling" — it is now
+          // the whole savings view, not just the split.
+          title={t.budgetPage.savingsCardTitle}
+          onClose={() => setAllocationOpen(false)}
+          closeLabel={t.onboarding.close}
+          panelClassName="sm:min-w-[520px] sm:max-w-[600px] w-full max-h-[80vh] overflow-y-auto"
+        >
+          <SavingsAllocationPanel bare />
+        </ModalShell>
       )}
       {editingTx && <EditTransactionModal tx={editingTx} onClose={() => setEditingTx(null)} />}
       {pendingDelete && (

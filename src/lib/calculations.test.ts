@@ -13,6 +13,7 @@ import {
   calcBridgeLoanCost,
   calcHomeownerMortgageStatus,
   calcNetWorthProjectionByBucket,
+  savingsTargetPercentFor,
 } from './calculations';
 
 describe('calcMonthlyPayment', () => {
@@ -460,5 +461,49 @@ describe('calcNetWorthProjectionByBucket', () => {
       });
       expect(p[0].wealthTax).toBe(47_400);
     });
+  });
+});
+
+describe('savingsTargetPercentFor', () => {
+  // The Budget page's real shape: income minus consumption is the pool the plan
+  // splits, and part of the saving is already running as fixed expenses.
+  const income = 55491;
+  const spendFixed = 31741;
+  const base = income - spendFixed; // 23 750
+
+  const plannedSaving = (pct: number, committed: number) => {
+    const r = calcRecommendations(income, income, spendFixed + committed, 0, pct, committed);
+    return committed + r.recommendedInvestment;
+  };
+
+  it('round-trips a kr amount back through calcRecommendations', () => {
+    for (const committed of [0, 500, 13944]) {
+      for (const want of [5000, 10000, 15438, 20000]) {
+        const pct = savingsTargetPercentFor(want, base, committed);
+        // An ask below what is already automated settles at the committed floor:
+        // a pill cannot delete a fixed expense.
+        const expected = Math.max(want, committed);
+        // A whole-percent target can only land within half a percent of the ask.
+        expect(Math.abs(plannedSaving(pct, committed) - expected)).toBeLessThanOrEqual(base / 200 + 1);
+      }
+    }
+  });
+
+  it('divides by the consumption-only pool, not income minus everything', () => {
+    const committed = 13944;
+    // The old code divided by `income - (spendFixed + committed)` = 9 806, which
+    // turned a 15 438 kr ask into a target far past 100%.
+    expect(savingsTargetPercentFor(15438, base, committed)).toBe(65);
+    expect(Math.round((15438 / (base - committed)) * 100)).toBeGreaterThan(100);
+  });
+
+  it('never implies less saving than is already committed', () => {
+    expect(savingsTargetPercentFor(0, base, 13944)).toBe(savingsTargetPercentFor(13944, base, 0));
+  });
+
+  it('caps at 100% and guards a non-positive base', () => {
+    expect(savingsTargetPercentFor(999999, base, 0)).toBe(100);
+    expect(savingsTargetPercentFor(5000, 0, 0)).toBe(0);
+    expect(savingsTargetPercentFor(5000, -10, 0)).toBe(0);
   });
 });

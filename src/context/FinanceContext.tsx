@@ -9,7 +9,7 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculations';
-import { savingsContributionTotal, isSavingsRow } from '../lib/savingsRate';
+import { savingsContributionTotal, isSavingsRow, resolveSavingsAmounts } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
@@ -115,6 +115,17 @@ export interface FixedExpense {
    *  job and self-removes. Presence marks a "buffer builder"; once
    *  `assets.bufferAccount` reaches it, the expense is deleted automatically. */
   bufferTargetAmount?: number;
+  /**
+   * Savings rows only: this row's share of the month's savings base
+   * (income − consumption), in percent, INSTEAD of a fixed `amount`. When set,
+   * `amount` is derived each month by `resolveSavingsAmounts` — so importing a
+   * bigger payslip raises what actually moves, rather than only raising the
+   * target while the transfer stays frozen.
+   *
+   * Deliberately not honoured for spending rows: a bill does not get cheaper
+   * because a month was lean. Opt-in — an absent value keeps the fixed amount.
+   */
+  amountPercent?: number;
 }
 
 // The destinations reachable from a fixed expense. A strict subset of
@@ -879,7 +890,12 @@ interface FinanceDerivedContextType {
    *  (before manual overrides). Used to reconstruct income for past months. */
   derivedNetMonthlyFor: (monthKey: string) => number;
   recommendedSpending: number;
+  /** Only the UNALLOCATED remainder of the savings target — 0 once it is fully
+   *  automated. For "how much is saved each month", use `plannedMonthlySaving`. */
   recommendedInvestment: number;
+  /** Automated contributions + the unallocated remainder: the month's whole
+   *  saving, and the figure any projection should annualise. */
+  plannedMonthlySaving: number;
   suggestedInvestment: number;
   conservativeMode: boolean;
   conservativeReason: ConservativeReason;
@@ -1728,35 +1744,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const prevMonthKey = format(subMonths(currentMonth, 1), 'yyyy-MM');
   const prevMonthIncome = monthlyIncomes[prevMonthKey] ?? 0;
 
-  // The fixed expenses to *view* for the selected month. Live config for the
-  // current (and future) month; for a past month with a recorded snapshot, that
-  // month's captured expenses, so budget/envelope math reflects what was actually
-  // fixed then rather than today's amounts. Editors always mutate live
-  // `fixedExpenses`; this is read-only view data (see BudgetPage's read-only gate).
-  const fixedExpensesFromSnapshot = monthKey < currentMonthKey()
-    && balanceSnapshots[monthKey]?.fixedExpenses !== undefined;
-  const viewFixedExpenses = fixedExpensesFromSnapshot
-    ? balanceSnapshots[monthKey].fixedExpenses!
-    : fixedExpenses;
-
-  const totalFixedExpenses = useMemo(() =>
-    viewFixedExpenses.reduce((sum, item) => sum + item.amount, 0),
-  [viewFixedExpenses]);
-
-  // The slice of totalFixedExpenses that is moved into savings rather than spent.
-  // Budgeting treats it like any other fixed expense (it does leave free-to-spend),
-  // but the savings rate must add it back or automating more savings reads as a
-  // *worse* rate. See src/lib/savingsRate.ts.
-  const savingsContributions = useMemo(() =>
-    savingsContributionTotal(viewFixedExpenses),
-  [viewFixedExpenses]);
-
-  // The same split as a list, for envelope reconciliation in monthlyCashflow:
-  // the rows whose budgets should be matched against real transactions so a
-  // bill isn't charged once as a budget and again as an imported payment.
-  const spendFixedExpenses = useMemo(() =>
-    viewFixedExpenses.filter(e => !isSavingsRow(e)),
-  [viewFixedExpenses]);
 
   // Year-one mortgage interest (rentefradrag): reduces alminnelig inntekt at 22%,
   // so it's fed into every income-tax calc as an interest deduction. Balance/rate/
@@ -1811,6 +1798,45 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     monthlyIncomes[monthKey] ?? derivedMonthlyIncome,
   [monthlyIncomes, monthKey, derivedMonthlyIncome]);
 
+  // The fixed expenses to *view* for the selected month. Live config for the
+  // current (and future) month; for a past month with a recorded snapshot, that
+  // month's captured expenses, so budget/envelope math reflects what was actually
+  // fixed then rather than today's amounts. Editors always mutate live
+  // `fixedExpenses`; this is read-only view data (see BudgetPage's read-only gate).
+  const fixedExpensesFromSnapshot = monthKey < currentMonthKey()
+    && balanceSnapshots[monthKey]?.fixedExpenses !== undefined;
+  // Percentage-based savings rows are resolved to kroner here, so every total,
+  // chart, envelope and the automation runner below read one derived amount
+  // rather than each recomputing it. A snapshot is NOT resolved: it captured
+  // what actually applied in that month, and re-deriving it against today's
+  // income would rewrite history.
+  const liveFixedExpenses = useMemo(
+    () => resolveSavingsAmounts(fixedExpenses, effectiveIncome),
+    [fixedExpenses, effectiveIncome],
+  );
+  const viewFixedExpenses = fixedExpensesFromSnapshot
+    ? balanceSnapshots[monthKey].fixedExpenses!
+    : liveFixedExpenses;
+
+  const totalFixedExpenses = useMemo(() =>
+    viewFixedExpenses.reduce((sum, item) => sum + item.amount, 0),
+  [viewFixedExpenses]);
+
+  // The slice of totalFixedExpenses that is moved into savings rather than spent.
+  // Budgeting treats it like any other fixed expense (it does leave free-to-spend),
+  // but the savings rate must add it back or automating more savings reads as a
+  // *worse* rate. See src/lib/savingsRate.ts.
+  const savingsContributions = useMemo(() =>
+    savingsContributionTotal(viewFixedExpenses),
+  [viewFixedExpenses]);
+
+  // The same split as a list, for envelope reconciliation in monthlyCashflow:
+  // the rows whose budgets should be matched against real transactions so a
+  // bill isn't charged once as a budget and again as an imported payment.
+  const spendFixedExpenses = useMemo(() =>
+    viewFixedExpenses.filter(e => !isSavingsRow(e)),
+  [viewFixedExpenses]);
+
   // Last-12-months income series (relative to the selected month): each month is
   // its manual override if set, otherwise the income derived for THAT month. This
   // reflects real income history — averaging only the overrides map (any months
@@ -1842,6 +1868,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // target is computed from. See calcRecommendations.
     calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent, savingsContributions),
   [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent, savingsContributions]);
+
+  // The whole month's saving: what already moves automatically PLUS whatever is
+  // still unallocated. `recommendedInvestment` alone is only the remainder, so
+  // long-range projections that used it went to zero for the most disciplined
+  // case — a fully automated target — and understated net worth by the entire
+  // contribution. Anything asking "how much do they save a month?" wants this.
+  const plannedMonthlySaving = savingsContributions + Math.max(0, recommendedInvestment);
 
   const setMonthlyIncomeForMonth = useCallback((key: string, amount: number) => {
     setMonthlyIncomes(prev => ({ ...prev, [key]: amount }));
@@ -2285,7 +2318,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // The runner always targets the real current month, so pensionable income
     // must be read there too — not at the month the user happens to be viewing.
     const nowKey = currentMonthKey();
-    const expenseRules: AutomationRule[] = fixedExpenses
+    // Resolve percentage-based savings against the income of the month being
+    // POSTED, not the month being viewed: browsing last March must not decide
+    // what moves today. `liveFixedExpenses` is keyed on the viewed month, so it
+    // is deliberately not reused here.
+    const postingRows = resolveSavingsAmounts(
+      fixedExpenses,
+      monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey),
+    );
+    const expenseRules: AutomationRule[] = postingRows
       .filter(e => e.destinationKind && !e.automationPaused)
       .map(e => ({
         id: e.id,
@@ -2315,7 +2356,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [fixedExpenses, pension, salaries, jobs, t]);
+  }, [fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, pension, salaries, jobs, t]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
@@ -2871,7 +2912,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
-    recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
+    recommendedSpending, recommendedInvestment, plannedMonthlySaving, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, savingsContributions, spendFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
@@ -2880,7 +2921,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
-    recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason,
+    recommendedSpending, recommendedInvestment, plannedMonthlySaving, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, savingsContributions, spendFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
