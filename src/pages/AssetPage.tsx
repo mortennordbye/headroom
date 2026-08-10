@@ -638,7 +638,10 @@ const AssetPage: React.FC = () => {
 
       {/* Debt (non-mortgage) — a live editor/planner, so it has no historical
           view; hide it in the time machine instead of showing today's debts. */}
-      {hist.isLive && <DebtSection />}
+      {/* Shown for every month, with the rows resolved for the one on screen: a
+          recorded month reads its snapshot, a projected one its amortized
+          balances. Watching a debt fall is half the point of looking forward. */}
+      <DebtSection debts={debts} readOnly={!hist.isLive} />
 
       {/* Mortgage payoff over time */}
       <Card padding="none" className="p-5 md:p-7 space-y-4">

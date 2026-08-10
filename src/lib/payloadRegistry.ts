@@ -185,6 +185,9 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     dismissedLinkSuggestions: { group: 'reset', demo: 'preference', read: whenArray('dismissedLinkSuggestions'), default: [] },
     dismissedRecurringSuggestions: { group: 'reset', demo: 'preference', read: whenArray('dismissedRecurringSuggestions'), default: [] },
     transferHintDismissed: { group: 'reset', demo: 'preference', read: whenBoolean('transferHintDismissed'), default: false },
+    // Whether a projected month adds assumed growth to the automated transfers.
+    // A preference, not personal data, so a demo keeps the presenter's choice.
+    projectionIncludeGrowth: { group: 'reset', demo: 'preference', read: whenBoolean('projectionIncludeGrowth'), default: false },
     // Pre-feature blobs have no flag — absent → true on load, so the fixed-expense
     // destinations that already posted before the master switch existed keep working.
     automationEnabled: { group: 'reset', demo: 'preference', read: whenBoolean('automationEnabled'), default: true },

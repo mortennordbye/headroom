@@ -39,7 +39,7 @@ export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
     'incomeReminderDismissedMonth', 'conservativeNudgeDismissedMonth', 'payday', 'aiContext', 'profile',
     'capacityOverrides', 'employerSalaryOverride',
     'dismissedLinkSuggestions', 'dismissedRecurringSuggestions', 'transferHintDismissed',
-    'automationEnabled',
+    'automationEnabled', 'projectionIncludeGrowth',
   ],
 };
 

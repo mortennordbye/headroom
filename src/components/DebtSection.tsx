@@ -29,8 +29,27 @@ interface ModalConfig {
   error?: string;
 }
 
-export default function DebtSection() {
-  const { t, lang, debts, setDebts, totalDebt, formatCurrency } = useFinance();
+interface DebtSectionProps {
+  /**
+   * The rows to show. Defaults to the live debts. A recorded or projected month
+   * passes its own resolved rows, so the card can never show today's balances
+   * under another month's label.
+   */
+  debts?: Debt[];
+  /**
+   * Drop every write affordance and the payoff planner. History is a record and a
+   * projection is a computation — neither is a place to plan from, and the planner
+   * reasons about the real current month regardless of what is on screen.
+   */
+  readOnly?: boolean;
+}
+
+export default function DebtSection({ debts: debtsProp, readOnly = false }: DebtSectionProps = {}) {
+  const { t, lang, debts: liveDebts, setDebts, formatCurrency } = useFinance();
+  const debts = debtsProp ?? liveDebts;
+  // Summed from the rows on screen rather than read off the context, so the total
+  // can never disagree with the ledger above it.
+  const totalDebt = debts.reduce((s, dbt) => s + Math.max(0, dbt.balance), 0);
   const reduced = useReducedMotion();
   // Deferment is a real-world timeline, so measure it from the actual current
   // month, not the header picker's month.
@@ -122,9 +141,11 @@ export default function DebtSection() {
           <Landmark size={14} strokeWidth={2} className="text-[var(--text-2)]" />
           <SectionLabel>{d.title}</SectionLabel>
         </div>
-        <button onClick={openAdd} className="text-[var(--accent)] hover:opacity-70 transition-opacity" aria-label={d.add}>
-          <PlusCircle size={18} strokeWidth={2} />
-        </button>
+        {!readOnly && (
+          <button onClick={openAdd} className="text-[var(--accent)] hover:opacity-70 transition-opacity" aria-label={d.add}>
+            <PlusCircle size={18} strokeWidth={2} />
+          </button>
+        )}
       </div>
 
       {debts.length === 0 ? (
@@ -138,7 +159,13 @@ export default function DebtSection() {
               const a = debt.revolving || deferred ? null : amortize(debt.balance, debt.rate, debt.minPayment);
               return (
                 <div key={debt.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0 gap-3">
-                  <button type="button" aria-label={`${t.edit} — ${debt.name}`} className="min-w-0 cursor-pointer text-left" onClick={() => openEdit(debt)}>
+                  <button
+                    type="button"
+                    disabled={readOnly}
+                    aria-label={`${t.edit} — ${debt.name}`}
+                    className={`min-w-0 text-left ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
+                    onClick={() => openEdit(debt)}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: DEBT_TYPE_COLOR[debt.type] }} />
                       <span className="text-[13px] font-medium text-[var(--text-1)] truncate">{debt.name}</span>
@@ -163,12 +190,20 @@ export default function DebtSection() {
                     </div>
                   </button>
                   <div className="flex items-center gap-3 shrink-0">
-                    <button type="button" aria-label={`${t.edit} — ${debt.name}`} className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer" onClick={() => openEdit(debt)}>
+                    <button
+                      type="button"
+                      disabled={readOnly}
+                      aria-label={`${t.edit} — ${debt.name}`}
+                      className={`text-[13px] font-mono font-medium text-[var(--text-1)] ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
+                      onClick={() => openEdit(debt)}
+                    >
                       {formatCurrency(debt.balance)}
                     </button>
-                    <button onClick={() => setPendingDelete(debt)} className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all" aria-label={`${t.delete} — ${debt.name}`}>
-                      <Trash2 size={14} />
-                    </button>
+                    {!readOnly && (
+                      <button onClick={() => setPendingDelete(debt)} className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all" aria-label={`${t.delete} — ${debt.name}`}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -179,7 +214,10 @@ export default function DebtSection() {
             </div>
           </div>
 
-          {/* Payoff planner */}
+          {/* Payoff planner — live only. It plans forward from the real current
+              month, so hanging it off a recorded or projected balance would be
+              answering a question nobody asked. */}
+          {!readOnly && (
           <div className="pt-5 border-t border-[var(--border)] space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <SectionLabel>{d.planner}</SectionLabel>
@@ -233,6 +271,7 @@ export default function DebtSection() {
             {/* Plan-vs-actual against recorded snapshots (renders only when ≥2 months) */}
             <DebtPaydownVsPlanChart />
           </div>
+          )}
         </>
       )}
 

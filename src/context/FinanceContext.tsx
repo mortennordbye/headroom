@@ -624,7 +624,7 @@ interface FinanceSettingsContextType {
   /** On a projected (future) month, whether to compound the assumed growth rates
    *  on top of the automated transfers. Off by default: a projection made only of
    *  transfers you configured is reproducible by hand, one built on a slider is
-   *  not. View state like `currentMonth` — deliberately not persisted. */
+   *  not. Persisted, so the choice survives a reload like any other preference. */
   projectionIncludeGrowth: boolean;
   setProjectionIncludeGrowth: (v: boolean) => void;
   savingsTargetPercent: number;
@@ -1056,6 +1056,7 @@ export interface ExportPayload {
   dismissedRecurringSuggestions?: string[];
   /** Budget "these transfers still count as spend" hint — dismissed for good. */
   transferHintDismissed?: boolean;
+  projectionIncludeGrowth?: boolean;
   /** Master switch for the balance automations. Absent on pre-feature blobs →
    *  defaults to true, so existing destination-bearing expenses keep posting. */
   automationEnabled?: boolean;
@@ -1115,8 +1116,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const n = new Date();
     return new Date(n.getFullYear(), n.getMonth(), 1);
   });
-  // Same rationale as `currentMonth`: a view control, so it is neither persisted
-  // nor exported. Each session starts on the reproducible, contributions-only view.
+  // Defaults to the reproducible, contributions-only view; persisted from there.
   const [projectionIncludeGrowth, setProjectionIncludeGrowth] = useState(false);
 
   const [income, setIncome] = useState<number>(55000);
@@ -1268,6 +1268,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
+    projectionIncludeGrowth,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
@@ -1276,7 +1277,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     goals, savingsAllocations, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
-    dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled]);
+    dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
+    projectionIncludeGrowth]);
 
   // The one place that applies a loaded/imported blob → app state (§4.2), with
   // sanitization at the boundary (§1.5). `resetMissing` is the ONLY difference
@@ -1322,6 +1324,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       dismissedLinkSuggestions: setDismissedLinkSuggestions,
       dismissedRecurringSuggestions: setDismissedRecurringSuggestions,
       transferHintDismissed: setTransferHintDismissed, automationEnabled: setAutomationEnabled,
+      projectionIncludeGrowth: setProjectionIncludeGrowth,
     };
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
