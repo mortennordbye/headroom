@@ -714,3 +714,30 @@ rather than changing the math. **What would unblock**: a decision on which quant
 should mean. **Where**: `src/components/SavingsAllocationPanel.tsx` (the `plan` memo),
 `src/lib/savingsAllocation.ts` (`resolveAllocation`), `src/i18n/translations.ts`
 (`savingsAllocation.*`).
+
+## Projected months — the debt card and the growth toggle
+
+Shipped (2026-08): balance pages resolve a future month as a *projection* instead of collapsing
+it onto today. `resolveMonthView` (`src/lib/snapshots.ts`) returns `recorded` / `live` /
+`projected`; `projectSnapshotBalances` (`src/lib/projectBalances.ts`) grows today's balances with
+`computeAutomationPostings` and optional per-bucket growth, and the result is rendered through the
+existing `snapshot ?? live` path on Formue, Bolig and Pensjon. Capped at 24 months, read-only,
+never persisted.
+
+Remaining 1 — **`DebtSection` is hidden on any non-live month.** Debt balances *are* projected
+(amortization runs, and the net-worth totals on the page already reflect it), but the card itself
+is gated out at `src/pages/AssetPage.tsx:641` (`hist.isLive && <DebtSection />`). It cannot simply
+be un-gated: `DebtSection` reads `debts` straight from `useFinance()` (`src/components/DebtSection.tsx:33`),
+so showing it on a projected month would render *live* balances under a projected label — the exact
+bug the projection work fixed elsewhere. **What would unblock**: take the resolved rows as a prop
+(AssetPage already computes them at `:106`) and give the section a read-only mode, so the same card
+serves live, recorded and projected months. Worth doing — watching a debt fall is one of the more
+motivating things to project. **Where**: `src/components/DebtSection.tsx`, `src/pages/AssetPage.tsx:106,641`.
+
+Remaining 2 — **the "with growth" toggle resets every session.** `projectionIncludeGrowth` is view
+state next to `currentMonth` (`src/context/FinanceContext.tsx`), deliberately not persisted, so the
+projection always opens on the reproducible contributions-only view. Persisting it means adding the
+field to every site the persist/export payload is hand-maintained in (autosave payload + dep array,
+`applyData`, `importAll`, demo snapshot, `SettingsPage` export) — see the warning in `CLAUDE.md`.
+**What would unblock**: a decision that the preference is worth that surface area.
+**Where**: `src/context/FinanceContext.tsx`, `src/components/Layout.tsx` (the toggle).
