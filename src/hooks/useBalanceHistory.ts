@@ -19,8 +19,6 @@ export interface BalanceHistory {
   isProjected: boolean;
   /** The snapshot for the active month: recorded, projected, or null when live. */
   snapshot: BalanceSnapshot | null;
-  /** True when there's at least one recorded snapshot to travel to. */
-  hasHistory: boolean;
 }
 
 /**
@@ -77,16 +75,11 @@ export function useBalanceHistory(): BalanceHistory {
   }, [mode, liveBalanceSnapshot, automationRules, automationState, activeKey, nowKey, rates,
       savingsTargetPercent, growthReturnRate, houseGrowthRate]);
 
-  // "Has history" counts recorded months other than the live one — that's what
-  // makes the time machine worth showing.
-  const hasHistory = recordedKeys.some(k => k !== nowKey);
-
   return {
     activeKey,
     mode,
     isLive: mode === 'live',
     isProjected: mode === 'projected',
     snapshot: mode === 'live' ? null : mode === 'projected' ? projected : balanceSnapshots[activeKey] ?? null,
-    hasHistory,
   };
 }
