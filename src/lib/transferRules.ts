@@ -10,7 +10,7 @@
 // spend, the savings rate, and the category charts. Purely additive — an
 // unmatched row keeps its current "counts as spend" default. Pure + unit-tested.
 import type { DailyTransaction } from '../context/FinanceContext';
-import { buildMatchHaystack } from './text';
+import { buildMatchHaystack, normalizeMatchText } from './text';
 import { findInternalTransferIds } from './transfers';
 import { isSpend } from './monthlyCashflow';
 
@@ -27,7 +27,7 @@ export function matchesTransferRule(
   if (!rules || !rules.length) return false;
   const hay = buildMatchHaystack(tx.merchant, tx.description);
   for (const r of rules) {
-    const m = (r.match || '').trim().toLowerCase();
+    const m = normalizeMatchText(r.match);
     if (m && hay.includes(m)) return true;
   }
   return false;

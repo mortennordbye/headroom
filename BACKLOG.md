@@ -697,3 +697,20 @@ second data path — the packaged app runs the same server, API and SQLite stora
   path. Deferred because it needs a Windows machine. **What would unblock**: installing and
   launching the `.exe` once. **Where**: `.github/workflows/desktop-build.yml` (matrix),
   `desktop/electron-builder.yml` (`nsis`).
+
+## Stale auto categories never re-label (2026-08)
+
+The auto-categorize effect in `FinanceContext` only (re)labels rows that are unlabeled or
+auto-`other`, so a confident auto label from an older ruleset stays put forever. Seven `Vipps*`
+rows in real data are still labelled `transfers` from back when `vipps` was a transfers keyword —
+Blivakker (cosmetics), NetOnNet and Elektroimportøren (electronics), Ryde and Voi (e-scooters).
+The engine now has correct answers for all of them, but the rows are stuck: they inflate
+"Overføringer" and, because transfers are netted out of spend, hide real spending.
+
+Deferred because the safe general fix is not obvious — re-running every auto row on every ruleset
+change would also churn labels the user is happy with, and there is no record of *which* ruleset
+version produced a given label. **What would unblock**: either stamping rows with a ruleset
+version so only outdated ones re-run, or a one-time migration that clears auto labels matching the
+known-removed keywords. In the meantime these are fixable by hand in the ledger.
+**Where**: `src/context/FinanceContext.tsx` (the auto-categorize `useEffect`, ~line 1712),
+`src/lib/categorize.ts` (the `transfers` block's `vipps` note).

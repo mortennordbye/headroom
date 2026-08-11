@@ -9,19 +9,22 @@
 // resolve CSS var()). The palette is deliberately small — identity is carried
 // primarily by the icon + label, colour is a secondary accent.
 import {
-  ShoppingCart, Utensils, Car, HeartPulse, Clapperboard, ShoppingBag,
-  Zap, Repeat, Home, ArrowLeftRight, TrendingUp, Circle, type LucideIcon,
+  ShoppingCart, Utensils, Car, HeartPulse, Scissors, Clapperboard, ShoppingBag,
+  Zap, Repeat, Home, Plane, Umbrella, ArrowLeftRight, TrendingUp, Circle, type LucideIcon,
 } from 'lucide-react';
 
 export type CategoryKey =
   | 'groceries'
   | 'dining'
   | 'transport'
+  | 'travel'
   | 'health'
+  | 'personalcare'
   | 'entertainment'
   | 'shopping'
   | 'utilities'
   | 'subscriptions'
+  | 'insurance'
   | 'housing'
   | 'transfers'
   | 'income'
@@ -38,11 +41,14 @@ export const CATEGORIES: CategoryMeta[] = [
   { key: 'groceries',     color: '#1F5A42', icon: ShoppingCart },   // forest
   { key: 'dining',        color: '#B5533A', icon: Utensils },       // rust
   { key: 'transport',     color: '#5B7280', icon: Car },            // slate
+  { key: 'travel',        color: '#5B7280', icon: Plane },          // slate
   { key: 'health',        color: '#3F7373', icon: HeartPulse },     // teal
+  { key: 'personalcare',  color: '#3F7373', icon: Scissors },       // teal
   { key: 'entertainment', color: '#7FCBA0', icon: Clapperboard },   // forest-light
   { key: 'shopping',      color: '#B5533A', icon: ShoppingBag },    // rust
   { key: 'utilities',     color: '#5B7280', icon: Zap },            // slate
   { key: 'subscriptions', color: '#3F7373', icon: Repeat },         // teal
+  { key: 'insurance',     color: '#5F6555', icon: Umbrella },       // text-dim
   { key: 'housing',       color: '#1F5A42', icon: Home },           // forest
   { key: 'transfers',     color: '#5F6555', icon: ArrowLeftRight }, // text-dim
   { key: 'income',        color: '#7FCBA0', icon: TrendingUp },     // forest-light

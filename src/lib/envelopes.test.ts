@@ -292,11 +292,12 @@ describe('suggestCategoryForExpenseName', () => {
     expect(suggestCategoryForExpenseName('Mobil')).toBe('utilities');
     expect(suggestCategoryForExpenseName('Trening')).toBe('health');
     expect(suggestCategoryForExpenseName('Servering')).toBe('dining');
+    expect(suggestCategoryForExpenseName('Innboforsikring')).toBe('insurance');
   });
 
   it('returns undefined for names with no confident match', () => {
     expect(suggestCategoryForExpenseName('Boliglån')).toBeUndefined();
-    expect(suggestCategoryForExpenseName('Forsikring')).toBeUndefined();
+    expect(suggestCategoryForExpenseName('Vedlikehold')).toBeUndefined();
   });
 });
 

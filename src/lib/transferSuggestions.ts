@@ -11,7 +11,7 @@
 // Suggestions are proposals only — a payment to a person and a credit-card
 // settlement look alike from the outside, so the user confirms each one.
 import type { DailyTransaction } from '../context/FinanceContext';
-import { buildMatchHaystack } from './text';
+import { buildMatchHaystack, normalizeMatchText } from './text';
 import { isSpend } from './monthlyCashflow';
 import { findInternalTransferIds } from './transfers';
 import { matchesTransferRule, type TransferRule } from './transferRules';
@@ -59,7 +59,7 @@ function destinationKey(tx: DailyTransaction): string | null {
     const dest = to[1].replace(/\s+(betalt|paid|betaling)\b.*$/, '').trim();
     if (dest.length >= 3) return dest;
   }
-  const merchant = (tx.merchant ?? '').trim().toLowerCase();
+  const merchant = normalizeMatchText(tx.merchant);
   return merchant.length >= 3 ? merchant : null;
 }
 

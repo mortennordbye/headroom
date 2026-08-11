@@ -6,7 +6,7 @@ import { categoryMeta, isCategoryKey } from '../lib/categories';
 import { CHART } from '../lib/chartColors';
 import { categoryMoM } from '../lib/categoryStats';
 import { txDisplayName } from '../lib/labelRules';
-import { buildMatchHaystack } from '../lib/text';
+import { buildMatchHaystack, normalizeMatchText } from '../lib/text';
 import { DeltaChip } from './ui/DeltaChip';
 import { ProgressBar } from './ui/ProgressBar';
 
@@ -42,13 +42,13 @@ export function CategoryBreakdown({ onEditTransaction }: { onEditTransaction?: (
   // in. Same haystack as the ledger search. Newest first, capped so a broad
   // query can't render thousands of rows.
   const SEARCH_LIMIT = 100;
-  const query = search.trim().toLowerCase();
+  const query = normalizeMatchText(search);
   const matches = useMemo(() => {
     if (!query) return [];
     return dailyTransactions
       .filter((tx) => {
         const hay = buildMatchHaystack(tx.merchant, tx.description) +
-          txDisplayName(tx, labelRules).toLowerCase() + ' ' + tx.amount;
+          normalizeMatchText(txDisplayName(tx, labelRules)) + ' ' + tx.amount;
         return hay.includes(query);
       })
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
