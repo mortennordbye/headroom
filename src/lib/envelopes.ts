@@ -12,7 +12,7 @@ import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
 import { isSpend } from './spend';
 import { isCategoryKey, type CategoryKey } from './categories';
 import { spendByCategory } from './categoryStats';
-import { buildMatchHaystack } from './text';
+import { buildMatchHaystack, normalizeMatchText } from './text';
 
 export type EnvelopeStatus = 'under' | 'near' | 'over';
 
@@ -93,7 +93,7 @@ export function reconcile(
   // 1. Pattern envelopes (fixed expenses with a `match`).
   const patternEnvelopes: Envelope[] = [];
   for (const e of fixedExpenses) {
-    const m = (e.match ?? '').trim().toLowerCase();
+    const m = normalizeMatchText(e.match);
     if (!m) continue;
     const key = `exp:${e.id}`;
     const env: Envelope = {
@@ -178,6 +178,7 @@ const NAME_HINTS: [CategoryKey, string[]][] = [
   ['transport', ['transport', 'buss', 'kollektiv', 'drivstoff', 'bensin', 'fuel', 'reise', 'parkering']],
   ['health', ['trening', 'gym', 'helse', 'health', 'fitness', 'sats']],
   ['utilities', ['strøm', 'strom', 'electric', 'power', 'mobil', 'telefon', 'phone', 'internett', 'internet', 'bredbånd']],
+  ['insurance', ['forsikring', 'insurance']],
   ['entertainment', ['underholdning', 'entertainment', 'kino', 'gaming']],
   ['shopping', ['shopping', 'klær', 'clothes', 'shopp']],
 ];

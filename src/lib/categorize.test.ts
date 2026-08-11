@@ -79,8 +79,8 @@ describe('categorize', () => {
     expect(categorize({ merchant: 'Vipps*Some Store AS' }).category).not.toBe('transfers');
   });
 
-  it('leaves lodging MCC (3501–3999) unmapped → other', () => {
-    expect(categorize({ merchant: 'Hotel Roma', mcc: '3700' }).category).toBe('other');
+  it('maps lodging MCC (3501–3999) to travel', () => {
+    expect(categorize({ merchant: 'Sconosciuto SRL', mcc: '3700' }).category).toBe('travel');
   });
 
   it('is case-insensitive and matches inside the description too', () => {
@@ -94,6 +94,47 @@ describe('categorize', () => {
 
   it('falls back to "other" for an unknown merchant with no MCC', () => {
     expect(categorize({ merchant: 'Some Random LLC' }).category).toBe('other');
+  });
+
+  // Card feeds glue the payment rail onto the merchant with '*' or '_*'. The
+  // shared normalizer splits it off, which is what exposes the real merchant to
+  // the keyword table.
+  it.each([
+    ['GOOGLE*CLOUD VDZGVZ', 'subscriptions'],
+    ['Vipps*Fly Chicken App', 'dining'],
+    ['Vipps*NETONNET', 'shopping'],
+    ['SVEA*BIKESHOP.NO', 'shopping'],
+    ['Vipps*Ryde Technology AS', 'transport'],
+  ])('sees through the payment-rail prefix on %s → %s', (merchant, expected) => {
+    expect(categorize({ merchant }).category).toBe(expected);
+  });
+
+  it('matches a merchant the feed truncated mid-word', () => {
+    // Statements cut the merchant at ~22 chars: "DON HAPPY CASH AND CAR(RY)",
+    // "Oslo Street F(ood)".
+    expect(categorize({ merchant: 'DON HAPPY CASH AND CAR' }).category).toBe('groceries');
+    expect(categorize({ merchant: 'Oslo Street F B5PEZ664' }).category).toBe('dining');
+  });
+
+  it.each([
+    ['Hotel at Booking.com', 'travel'],
+    ['GJENSIDIGE FORSIKRING ASA', 'insurance'],
+    ['TOLO BARBERSHOP', 'personalcare'],
+  ])('routes %s to the %s category', (merchant, expected) => {
+    expect(categorize({ merchant }).category).toBe(expected);
+  });
+
+  it('lets a more specific category win over shopping\'s broad "shop" keyword', () => {
+    expect(categorize({ merchant: 'TOLO BARBERSHOP' }).category).toBe('personalcare');
+    expect(categorize({ merchant: 'The Coffee Shop' }).category).toBe('dining');
+  });
+
+  it('treats an otherwise unknown .no merchant as a web shop', () => {
+    expect(categorize({ merchant: 'STOVSUGERPOSER.NO' }).category).toBe('shopping');
+    // …but only at a domain boundary — "NO" as a plain word must not trigger it.
+    expect(categorize({ merchant: 'SCM NO Kort 25' }).category).toBe('other');
+    // A keyword still wins over the fallback.
+    expect(categorize({ merchant: 'DOMENESHOP.NO' }).category).toBe('subscriptions');
   });
 
   it('always returns a valid canonical key with source "auto"', () => {
@@ -126,6 +167,13 @@ describe('categorizeWithRules', () => {
 
   it('never relabels income, even if a rule would match', () => {
     expect(categorizeWithRules({ merchant: 'JOJOERoma', kind: 'income' }, rules).category).toBe('income');
+  });
+
+  it('still matches a rule the user typed with the rail prefix in it', () => {
+    // Both sides go through the same normalizer, so a rule saved as
+    // "Vipps*Kitch n" keeps matching after the '*' becomes a space.
+    const r: CategoryRule[] = [{ id: '3', match: 'Vipps*Kitch n Netthandel', category: 'shopping' }];
+    expect(categorizeWithRules({ merchant: 'Vipps*Kitch n Netthandel' }, r).category).toBe('shopping');
   });
 
   it('ignores blank rule matches', () => {

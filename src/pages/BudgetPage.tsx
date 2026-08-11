@@ -26,7 +26,7 @@ import SpendVsPlan from '../components/SpendVsPlan';
 import { AccountBadge } from '../components/AccountBadge';
 import { accountGroupKey } from '../lib/account';
 import { txDisplayName } from '../lib/labelRules';
-import { buildMatchHaystack } from '../lib/text';
+import { buildMatchHaystack, normalizeMatchText } from '../lib/text';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
@@ -640,10 +640,10 @@ const BudgetPage: React.FC = () => {
 
   // Free-text ledger search over merchant + description + display label + amount.
   // Empty query matches everything; otherwise a case-insensitive substring test.
-  const query = search.trim().toLowerCase();
+  const query = normalizeMatchText(search);
   const searchMatch = (tx: DailyTransaction) => {
     if (!query) return true;
-    const hay = `${buildMatchHaystack(tx.merchant, tx.description)}${txDisplayName(tx, labelRules).toLowerCase()} ${tx.amount} `;
+    const hay = `${buildMatchHaystack(tx.merchant, tx.description)}${normalizeMatchText(txDisplayName(tx, labelRules))} ${tx.amount} `;
     return hay.includes(query);
   };
   const rowMatch = (tx: DailyTransaction) => accountMatch(tx) && searchMatch(tx);

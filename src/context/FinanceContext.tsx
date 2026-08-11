@@ -25,6 +25,7 @@ import { translations, type Language, type Translations } from '../i18n/translat
 // Re-exported so existing consumers can keep importing these from the context.
 export type { Language } from '../i18n/translations';
 import { categorizeWithRules, type CategoryRule } from '../lib/categorize';
+import { buildMatchHaystack, normalizeMatchText } from '../lib/text';
 import type { LabelRule } from '../lib/labelRules';
 import { excludedTransferIds, type TransferRule } from '../lib/transferRules';
 import type { CategoryKey } from '../lib/categories';
@@ -1746,8 +1747,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       // re-label. Without a rule, keep confident auto labels and only (re)label
       // the unlabeled / auto-'other' pile as the built-in ruleset improves.
       const matchedByRule = categoryRules.some((r) => {
-        const m = (r.match || '').trim().toLowerCase();
-        return m && ` ${t.merchant ?? ''} ${t.description ?? ''} `.toLowerCase().includes(m);
+        const m = normalizeMatchText(r.match);
+        return !!m && buildMatchHaystack(t.merchant, t.description).includes(m);
       });
       if (!matchedByRule && t.category && t.category !== 'other') return t;
       if (ruleHit.category === t.category) return t;
