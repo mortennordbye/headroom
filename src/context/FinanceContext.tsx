@@ -12,6 +12,7 @@ import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculatio
 import { savingsContributionTotal, isSavingsRow, resolveSavingsAmounts } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
+import { markGainReview } from '../lib/gainReview';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { calcBsuTaxCredit } from '../lib/bsu';
@@ -263,6 +264,11 @@ export interface Assets {
   cryptoUnrealizedGain: number;
   cryptoTaxRate: number;
   bufferAccount: number;
+  /** Month (YYYY-MM) an automation paid into the portfolio and the unrealized
+   *  gain still needs the user's eyes. Cleared when they answer or skip. */
+  gainReviewMonth?: string;
+  /** Total paid into the portfolio that month, for the prompt's copy. */
+  gainReviewAmount?: number;
 }
 
 export interface Pension {
@@ -858,6 +864,9 @@ interface FinanceDataContextType {
   pendingCatchups: PendingCatchup[];
   confirmCatchup: (expenseId: string) => void;
   declineCatchup: (expenseId: string) => void;
+  /** Answer the outstanding portfolio gain review: `next` writes the figures the
+   *  user read off the broker, `null` skips. Either way the marker clears. */
+  resolveGainReview: (next: { unrealizedGain: number; portfolio: number } | null) => void;
   employerCostConfig: EmployerCostConfig;
   updateEmployerCostConfig: (key: keyof EmployerCostConfig, value: number) => void;
   billingConfig: BillingRateConfig;
@@ -2416,8 +2425,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         updateAsset('bufferAccount', p.newBalance);
       } else if (p.targetKind === 'portfolio') {
         // Only the balance moves: a contribution grows the cost basis, so
-        // `unrealizedGain` is deliberately left alone.
-        updateAsset('portfolio', p.newBalance);
+        // `unrealizedGain` is deliberately left alone. That leaves the gain
+        // stale against the real account — market movement has no source here —
+        // so the posting also marks the month for the user to reconcile.
+        setAssets(prev => ({
+          ...prev,
+          portfolio: p.newBalance,
+          ...markGainReview(prev, currentMonthKey(), p.newBalance - prev.portfolio),
+        }));
       } else if (p.targetKind === 'bsu') {
         updateAsset('bsu', p.newBalance);
       } else if (p.targetKind === 'pensionOtp') {
@@ -2514,6 +2529,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     stampPosted(new Set([expenseId]), currentMonth);
     setPendingCatchups(prev => prev.filter(p => p.expenseId !== expenseId));
   }, [automationRules, automationState, applyPostingBalances, stampPosted]);
+
+  // One write for both figures and the marker, so answering the prompt can't
+  // land as three separate saves (or leave the marker set if one of them fails).
+  const resolveGainReview = useCallback((next: { unrealizedGain: number; portfolio: number } | null) => {
+    setAssets(prev => ({
+      ...prev,
+      ...(next ?? {}),
+      gainReviewMonth: undefined,
+      gainReviewAmount: undefined,
+    }));
+  }, []);
 
   // A buffer-builder contribution (created from the emergency-fund recommendation)
   // self-removes once the buffer reaches its target. Watching the balance — not
@@ -2901,6 +2927,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     goals, addGoal, updateGoal, removeGoal,
     savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
     automationEnabled, setAutomationEnabled, pendingCatchups, confirmCatchup, declineCatchup,
+    resolveGainReview,
     employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
     inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris,
@@ -2930,6 +2957,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     goals, addGoal, updateGoal, removeGoal,
     savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
     automationEnabled, setAutomationEnabled, pendingCatchups, confirmCatchup, declineCatchup,
+    resolveGainReview,
     employerCostConfig, updateEmployerCostConfig,
     billingConfig, updateBillingConfig, inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris,

@@ -4,6 +4,7 @@ import { FinanceProvider, useFinance, useFinanceSettings } from './context/Finan
 import { ErrorBoundary } from './components/ErrorBoundary';
 import UpdatePrompt from './components/UpdatePrompt';
 import CatchupPrompt from './components/CatchupPrompt';
+import GainReviewPrompt from './components/GainReviewPrompt';
 import LoginScreen from './components/LoginScreen';
 import Layout from './components/Layout';
 import { Skeleton } from './components/ui/Skeleton';
@@ -75,6 +76,7 @@ function App() {
       </AuthGate>
       <UpdatePrompt />
       <CatchupPrompt />
+      <GainReviewPrompt />
     </FinanceProvider>
   );
 }
