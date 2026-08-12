@@ -210,13 +210,13 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
         </div>
         <div>
           <label className={lbl}>{t.expenseTypeLabel.replace(':', '')}</label>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {TYPE_ORDER.map(ty => (
               <button
                 key={ty}
                 type="button"
                 onClick={() => chooseType(ty)}
-                className={`flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-[9px] border text-[12px] font-medium transition-colors ${type === ty
+                className={`flex items-center gap-1.5 py-2.5 px-3 rounded-[9px] border text-[12px] font-medium transition-colors ${type === ty
                   ? 'border-[var(--border-strong)] bg-[color-mix(in_srgb,var(--text-1)_8%,transparent)] text-[var(--text-1)]'
                   : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-2)] hover:text-[var(--text-1)]'}`}
               >
