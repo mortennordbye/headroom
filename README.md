@@ -84,6 +84,10 @@ Apple removed that shortcut for unsigned apps in macOS 15.)
 
 You only do this once. After that it opens by double-clicking like anything else.
 
+Want to check the file is the one CI built before you run it? Every release also carries a
+`SHA256SUMS.txt`. Compare it against your download with `sha256sum -c SHA256SUMS.txt` (macOS:
+`shasum -a 256 -c`), or on Windows `Get-FileHash Headroom-Setup-<version>.exe` in PowerShell.
+
 Would rather not click past a security warning at all? [Build it yourself](#c-build-it-yourself).
 An app compiled on your own machine never triggers it.
 
@@ -159,9 +163,14 @@ For how the wrapper works and how releases are cut, see [`desktop/README.md`](de
 
 New versions never touch your data. To move to a newer version:
 
-**The desktop app (A):** download the new installer from the
-[latest release](https://github.com/mortennordbye/headroom/releases/latest) and install it over the
-old one. Your data sits in a separate folder, so it carries over untouched.
+**The desktop app (A):** it tells you. On launch it checks whether a newer release exists and, if so,
+offers to open the download page — or to skip that version and stop asking about it. You can also
+just download the new installer from the
+[latest release](https://github.com/mortennordbye/headroom/releases/latest) yourself. Either way,
+install it over the old one: your data sits in a separate folder, so it carries over untouched.
+
+The check asks GitHub for the latest release number and nothing else — it sends no data about you and
+nothing about your finances. If it cannot reach GitHub it stays quiet.
 
 **Docker (B) — pre-built image:**
 

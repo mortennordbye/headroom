@@ -7,11 +7,16 @@
 
 const { app, BrowserWindow, dialog, session, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const net = require('net');
 const { fork } = require('child_process');
+const { findUpdate, LATEST_PAGE } = require('./update');
 
 const SERVER_ENTRY = path.join(__dirname, 'server', 'index.js');
 const DATA_DIR = path.join(app.getPath('userData'), 'data');
+// Deliberately outside DATA_DIR: that folder is the user's financial data, and
+// what it holds is what the backups and the export promise to hold.
+const UPDATE_STATE = path.join(app.getPath('userData'), 'update-state.json');
 const HOST = '127.0.0.1';
 // A fixed default port keeps the app's origin stable across launches, which the
 // Enable Banking redirect URL depends on (it's registered upstream, so it can't
@@ -121,6 +126,43 @@ function createWindow() {
   mainWindow.loadURL(origin);
 }
 
+function readSkippedVersion() {
+  try {
+    return JSON.parse(fs.readFileSync(UPDATE_STATE, 'utf8')).skippedVersion ?? null;
+  } catch {
+    return null; // no file yet, or it got mangled — either way, nothing is skipped
+  }
+}
+
+// Once per launch, after the window is up so a slow API call never delays the
+// start. Silent unless there is genuinely something newer.
+async function checkForUpdate() {
+  // In development app.getVersion() is desktop/package.json's, which trails the
+  // released tag between releases — every `npm start` would nag.
+  if (!app.isPackaged) return;
+  const current = app.getVersion();
+  const version = await findUpdate({ currentVersion: current, skippedVersion: readSkippedVersion() });
+  if (!version || !mainWindow || mainWindow.isDestroyed()) return;
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Update available',
+    message: `Headroom ${version} is available`,
+    detail: `You have ${current}. Installing the new version over this one leaves your data untouched.`,
+    buttons: ['Download', 'Later', 'Skip this version'],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response === 0) shell.openExternal(LATEST_PAGE);
+  if (response === 2) {
+    try {
+      fs.writeFileSync(UPDATE_STATE, `${JSON.stringify({ skippedVersion: version })}\n`);
+    } catch (err) {
+      // Worst case the prompt comes back next launch. Not worth a second dialog.
+      console.error(`[update] could not remember the skipped version: ${err.message}`);
+    }
+  }
+}
+
 async function start() {
   const port = await pickPort();
   if (!port) {
@@ -134,6 +176,9 @@ async function start() {
   startServer(port);
   if (!(await waitForServer())) return fatal('The Headroom server did not start in time.');
   createWindow();
+  // Not awaited: the app is usable while this runs, and a failure here must not
+  // reach start()'s catch, which treats what it gets as fatal.
+  checkForUpdate().catch((err) => console.error(`[update] check failed: ${err.message}`));
 }
 
 // A second instance would open a second server against the same SQLite file.

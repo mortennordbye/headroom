@@ -14,7 +14,7 @@ const { execFileSync } = require('child_process');
 const { listPackage } = require('@electron/asar');
 
 const releaseDir = path.join(__dirname, '..', 'release');
-const REQUIRED = ['/server/index.js', '/server/dist/index.html', '/main.js'];
+const REQUIRED = ['/server/index.js', '/server/dist/index.html', '/main.js', '/update.js'];
 
 // mac: release/mac-<arch>/Headroom.app/Contents/Resources/app.asar
 // win: release/win-unpacked/resources/app.asar

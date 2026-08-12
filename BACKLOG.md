@@ -666,20 +666,35 @@ Two gaps were knowingly left.
 ## Desktop app (2026-08) — unsigned builds and bank linking
 
 Shipped: an Electron wrapper (`desktop/`) that runs `server/index.js` in a child process and ships
-it as a Mac/Windows download, built by `.github/workflows/desktop-release.yml` on a `v*` tag. No
-second data path — the packaged app runs the same server, API and SQLite storage as the container.
+it as a Mac/Windows download, built by `.github/workflows/desktop-build.yml` and attached to the
+release by `release.yml`. No second data path — the packaged app runs the same server, API and
+SQLite storage as the container. All three artifacts have now been installed and launched by hand
+(macOS arm64 and Intel, Windows 11 x64).
 
-- **The installers are unsigned, so every user meets a scare dialog on first launch.** macOS is
-  ad-hoc signed (`identity: '-'`), which is the minimum that stops Apple Silicon rejecting a
-  downloaded app as "damaged", but Gatekeeper still reports an unidentified developer, and Windows
-  still shows SmartScreen. Deferred because removing them costs money, not work: an Apple Developer
-  account ($99/yr) for signing plus notarization, and a Windows signing certificate (Azure Trusted
-  Signing, ~$10/month) — and a SmartScreen reputation that only builds after enough downloads.
-  **What would unblock**: buying the certificates, then adding the credentials as repository
-  secrets, setting `mac.identity` + `notarize` and `win.signtoolOptions`, and re-enabling
-  `CSC_IDENTITY_AUTO_DISCOVERY`. The entitlements file is already notarization-ready.
-  **Where**: `desktop/electron-builder.yml`, `desktop/build/entitlements.mac.plist`,
-  `.github/workflows/desktop-release.yml`.
+- **Windows signing is wired but switched off — it needs the SignPath Foundation application.**
+  `desktop-build.yml` uploads the unsigned `.exe`, submits it to SignPath and ships the signed one
+  back, all skipped while the `SIGNPATH_API_TOKEN` secret is empty, so releases still go out
+  unsigned. Deferred because the certificate is an application to a third party (days to weeks),
+  not work in this repo. Note the trade before applying: the certificate is issued to SignPath
+  Foundation, so that is the publisher Windows names, and their terms require publishing a code
+  signing policy in the README once it is live. **What would unblock**: applying at signpath.org,
+  then setting the secret plus the four `SIGNPATH_*` repository variables — no code change.
+  **Where**: `.github/workflows/desktop-build.yml` (`SIGN_WINDOWS`), `desktop/README.md` (the
+  step-by-step and the required policy wording).
+- **macOS is still unsigned, and only money fixes it.** Ad-hoc signing (`identity: '-'`) is the
+  minimum that stops Apple Silicon rejecting a downloaded app as "damaged", but Gatekeeper still
+  reports an unidentified developer. There is no free-for-open-source equivalent of SignPath on
+  Apple's side. **What would unblock**: an Apple Developer account ($99/yr), then the credentials as
+  repository secrets, `mac.identity` + `notarize` set, and `CSC_IDENTITY_AUTO_DISCOVERY` re-enabled.
+  The entitlements file is already notarization-ready. **Where**: `desktop/electron-builder.yml`,
+  `desktop/build/entitlements.mac.plist`, `.github/workflows/desktop-build.yml`.
+- **The update check only notifies; it does not install.** `update.js` compares the running version
+  against the latest GitHub release and `main.js` offers Download / Later / Skip. Deferred the
+  self-installing version because Squirrel.Mac refuses the ad-hoc macOS signature, so
+  `electron-updater` would be Windows-only — a dependency, a `latest.yml` publishing step and two
+  divergent update paths to maintain, for half the platforms. **What would unblock**: signing both
+  platforms (the two items above); at that point `electron-updater` with `autoDownload` is worth it.
+  **Where**: `desktop/update.js`, `desktop/main.js` (`checkForUpdate`), `desktop/electron-builder.yml`.
 - **Bank linking is untested in the desktop app and probably needs work.** The Enable Banking flow
   redirects to the bank and back to a registered callback URL. `main.js` sends off-origin
   navigations to the system browser, so BankID opens correctly, but the callback then lands in the
@@ -689,14 +704,6 @@ second data path — the packaged app runs the same server, API and SQLite stora
   private key, which a downloader will not have. **What would unblock**: register a custom protocol
   (`headroom://`) as the redirect target and handle `open-url` / `second-instance` in the wrapper.
   **Where**: `desktop/main.js` (`FIRST_PORT`, `will-navigate`), `server/bank.js`.
-- **The Windows installer has never been launched.** Both macOS builds have been run from the CI
-  artifacts (arm64 natively, Intel under Rosetta 2: signature verified, server up, window
-  rendered), but nothing has run the `.exe`. CI checks that the archive holds the server and the
-  frontend, which is not the same as the app starting: the Windows-specific risks are the
-  better-sqlite3 native binary loading from `app.asar.unpacked` and the NSIS per-user install
-  path. Deferred because it needs a Windows machine. **What would unblock**: installing and
-  launching the `.exe` once. **Where**: `.github/workflows/desktop-build.yml` (matrix),
-  `desktop/electron-builder.yml` (`nsis`).
 
 ## Stale auto categories never re-label (2026-08)
 

@@ -19,6 +19,12 @@ on:
         type: string
         required: false
         default: ''
+    secrets:
+      SIGNPATH_API_TOKEN:
+        description: >-
+          SignPath.io API token. Optional — without it the Windows installer
+          ships unsigned, exactly as it did before.
+        required: false
 
 permissions:
   contents: read
@@ -32,9 +38,10 @@ defaults:
     shell: bash
 
 jobs:
-  # The path filter that used to live under `on:`. Kept to `contents: read` on
-  # purpose: release.yml calls this workflow with only that permission, and a
-  # reusable workflow cannot request more than its caller was granted.
+  # The path filter that used to live under `on:`. Kept to the workflow-level
+  # `contents: read` on purpose — it only needs a diff. A reusable workflow
+  # cannot request more than its caller granted, so any job that needs more
+  # (see `build`) also has to be granted it in release.yml.
   changes:
     name: Detect packaged changes
     runs-on: ubuntu-latest
@@ -74,6 +81,19 @@ jobs:
     needs: changes
     if: needs.changes.outputs.packaged == 'true'
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      # The SignPath action reads the job's details and downloads the artifact it
+      # just uploaded. Harmless when signing is off.
+      actions: read
+    env:
+      # The `secrets` context is not available in a step-level `if`, so the whole
+      # gate lives here. Release calls only (a Foundation signing request needs a
+      # human to approve it, which would hang every PR — and a fork PR must never
+      # see the token), and only once the token exists. `format` forces a string:
+      # `inputs` is null on a pull_request, and comparing null to '' is not
+      # reliably false.
+      SIGN_WINDOWS: ${{ format('{0}', inputs.version) != '' && secrets.SIGNPATH_API_TOKEN != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -137,6 +157,44 @@ jobs:
       - name: Verify the package contents
         working-directory: desktop
         run: npm run verify
+
+      # Windows code signing, free for open source via SignPath Foundation. This
+      # is what turns "Windows protected your PC — unknown publisher" into a
+      # named publisher; nothing else about the installer can.
+      #
+      # Inert until the certificate exists: with no SIGNPATH_API_TOKEN the two
+      # steps are skipped and the installer ships unsigned exactly as before.
+      # Turning it on is four repository variables and one secret, no code change
+      # — see desktop/README.md.
+      - name: Upload the unsigned installer for signing
+        id: unsigned
+        if: matrix.runner == 'windows-latest' && env.SIGN_WINDOWS == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          # Deliberately not named desktop-*: release.yml attaches every artifact
+          # matching that pattern to the release, and this is the unsigned copy.
+          name: unsigned-windows
+          path: desktop/release/*.exe
+          if-no-files-found: error
+
+      - name: Sign the installer
+        if: matrix.runner == 'windows-latest' && env.SIGN_WINDOWS == 'true'
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          # A Foundation policy requires a human to approve each release, so the
+          # job waits rather than fails. An hour is generous; past that the
+          # release is better re-run than left holding a runner.
+          wait-for-completion-timeout-in-seconds: 3600
+          # The signed .exe lands back on top of the unsigned one, so the upload
+          # below ships the signed installer without knowing signing happened.
+          output-artifact-directory: desktop/release
 
       - name: Upload installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

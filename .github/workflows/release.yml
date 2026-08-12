@@ -41,9 +41,17 @@ jobs:
     name: Desktop
     needs: release-please
     if: needs.release-please.outputs.released == 'true'
+    permissions:
+      contents: read
+      # The Windows signing step downloads the artifact it just uploaded.
+      actions: read
     uses: ./.github/workflows/desktop-build.yml
     with:
       version: ${{ needs.release-please.outputs.version }}
+    secrets:
+      # Absent until the SignPath Foundation certificate is set up, which is
+      # fine — the build treats an empty token as "ship unsigned".
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
 
   attach:
     name: Attach installers
@@ -58,6 +66,14 @@ jobs:
           path: installers
           pattern: desktop-*
           merge-multiple: true
+
+      # Until the installers are signed, a checksum is the only thing a cautious
+      # downloader can check the file against. Cheap to publish, so publish it.
+      - name: Checksum the installers
+        working-directory: installers
+        run: |
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Upload to the release
         env:

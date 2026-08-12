@@ -11,6 +11,7 @@ directories:
 # by walking up from server/ to the app root.
 files:
   - main.js
+  - update.js
   - package.json
   - server/**
 
