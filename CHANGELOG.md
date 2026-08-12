@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.5.0](https://github.com/mortennordbye/headroom/compare/v3.4.0...v3.5.0) (2026-08-12)
+
+
+### Features
+
+* **desktop:** check for a new release on launch ([b5acb82](https://github.com/mortennordbye/headroom/commit/b5acb8264a1005b3071e82954cf74edfa03b550e))
+* project future months on the balance pages ([#123](https://github.com/mortennordbye/headroom/issues/123)) ([776f586](https://github.com/mortennordbye/headroom/commit/776f586358c092b067d1b950a5d1b3e913010915))
+* prompt for the unrealized gain after a portfolio contribution ([#127](https://github.com/mortennordbye/headroom/issues/127)) ([57a62a4](https://github.com/mortennordbye/headroom/commit/57a62a47bd6f1ec54af366e2d4db8da2f796cba9))
+* show the debt card on recorded and projected months, persist the growth toggle ([#125](https://github.com/mortennordbye/headroom/issues/125)) ([9dc907c](https://github.com/mortennordbye/headroom/commit/9dc907c008c27fb693e12e93cdda8efa41611bbe))
+* shrink the Annet pile in transaction categorization ([#126](https://github.com/mortennordbye/headroom/issues/126)) ([d1ea4ac](https://github.com/mortennordbye/headroom/commit/d1ea4ac24b4c6f213551e571a7a1d472aa4c3b67))
+* split the savings target with a "rest" row, over the whole target ([#121](https://github.com/mortennordbye/headroom/issues/121)) ([1a1da42](https://github.com/mortennordbye/headroom/commit/1a1da42017008dd06a17f419d5633eecd0d956f9))
+
 ## [3.4.0](https://github.com/mortennordbye/headroom/compare/v3.3.0...v3.4.0) (2026-08-10)
 
 
