@@ -61,12 +61,39 @@ export function savingsBase(effectiveIncome: number, fixedExpenses: FixedExpense
 }
 
 /**
- * Resolve percentage-based savings rows into this month's kroner.
+ * The share of `base` that keeps `amount` moving — the conversion behind a
+ * kr → % switch. Undefined when there is no base to take a share of.
  *
- * A savings row may store `amountPercent` instead of a frozen `amount`, meaning
- * "this share of the month's savings base". That is what makes a transfer follow
- * income: import a bigger payslip and the amount moved rises with it, instead of
- * the target rising while the transfer stays put.
+ * Four decimals, not two. At a ~31 000 base a 0.01-point rounding is worth
+ * ~1.6 kr, so a coarser share made switching kr → % move the amount by a krone
+ * — changing a unit must never change what you save. Four decimals keeps the
+ * round-trip exact to the krone for any realistic base.
+ */
+export function percentOfSavingsBase(amount: number, base: number): number | undefined {
+  return base > 0 ? Math.round((amount / base) * 1_000_000) / 10_000 : undefined;
+}
+
+/**
+ * The month's savings target in kroner: the share of the savings base the plan
+ * sets aside. The same quantity `calcRecommendations` computes as `targetTotal`,
+ * restated here so `resolveSavingsAmounts` can size a 'rest' row without
+ * reaching for the whole recommendation.
+ */
+export function savingsTargetAmount(base: number, savingsTargetPercent: number): number {
+  const pct = Number.isFinite(savingsTargetPercent)
+    ? Math.min(100, Math.max(0, savingsTargetPercent))
+    : 0;
+  return Math.round((Math.max(0, base) * pct) / 100);
+}
+
+/**
+ * Resolve derived savings rows into this month's kroner.
+ *
+ * A savings row may be sized in one of three ways instead of a frozen `amount`:
+ * `amountPercent` is "this share of the month's savings base", and `amountRest`
+ * is "whatever the other savings rows leave of the savings target". Both make a
+ * transfer follow income: import a bigger payslip and the amount moved rises
+ * with it, instead of the target rising while the transfer stays put.
  *
  * Only savings rows are resolved. A bill must not shrink because a month was
  * lean — that is exactly the difference between a cost and a saving.
@@ -77,23 +104,46 @@ export function savingsBase(effectiveIncome: number, fixedExpenses: FixedExpense
 export function resolveSavingsAmounts(
   fixedExpenses: FixedExpense[],
   effectiveIncome: number,
+  savingsTargetPercent: number,
 ): FixedExpense[] {
   const hasPercent = fixedExpenses.some(e => isPercentSavings(e));
-  if (!hasPercent) return fixedExpenses;
+  const restCount = fixedExpenses.reduce((n, e) => (isRestSavings(e) ? n + 1 : n), 0);
+  if (!hasPercent && restCount === 0) return fixedExpenses;
   const base = savingsBase(effectiveIncome, fixedExpenses);
-  return fixedExpenses.map(e =>
+  const resolved = fixedExpenses.map(e =>
     isPercentSavings(e)
       ? { ...e, amount: Math.round((base * (e.amountPercent as number)) / 100) }
       : e,
   );
+  if (restCount === 0) return resolved;
+  // What the other savings rows already claim of the target — percentages
+  // resolved above, fixed rows at their stated kroner. Neither depends on a
+  // 'rest' row, so this can't feed back on itself.
+  const claimed = resolved.reduce(
+    (sum, e) => (isSavingsRow(e) && !isRestSavings(e) ? sum + amount(e.amount) : sum),
+    0,
+  );
+  const pool = Math.max(0, savingsTargetAmount(base, savingsTargetPercent) - claimed);
+  // Split evenly between the rest rows, the odd kroner to the first, so they sum
+  // to exactly the pool. More than one is unusual but well-defined — two rows
+  // asking for "the rest" get half each. Same rule as resolveAllocation.
+  const each = Math.floor(pool / restCount);
+  let extra = pool - each * restCount;
+  return resolved.map(e => (isRestSavings(e) ? { ...e, amount: each + (extra-- > 0 ? 1 : 0) } : e));
 }
 
 /** A savings row driven by a share of the base rather than a fixed amount. */
 export function isPercentSavings(e: FixedExpense): boolean {
   return isSavingsRow(e)
+    && !e.amountRest
     && typeof e.amountPercent === 'number'
     && Number.isFinite(e.amountPercent)
     && e.amountPercent > 0;
+}
+
+/** A savings row that takes whatever the other savings rows leave of the target. */
+export function isRestSavings(e: FixedExpense): boolean {
+  return isSavingsRow(e) && e.amountRest === true;
 }
 
 /**

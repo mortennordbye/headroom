@@ -41,7 +41,7 @@ import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeSta
 import { suggestTransferRules } from '../lib/transferSuggestions';
 import { RULES_ANCHOR } from '../components/CategoryRules';
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
-import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries, isSavingsRow, isPercentSavings } from '../lib/savingsRate';
+import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries, isSavingsRow, isPercentSavings, isRestSavings } from '../lib/savingsRate';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -785,11 +785,14 @@ const BudgetPage: React.FC = () => {
                   <span aria-hidden>→</span> {destinationLabelFor(expense)}
                 </div>
               )}
-              {/* A percentage row's amount is derived, so say so — otherwise next
-                  month's different figure looks like the app changed it. */}
-              {isPercentSavings(expense) && (
+              {/* A derived row's amount is recomputed monthly, so say so —
+                  otherwise next month's different figure looks like the app
+                  changed it. */}
+              {(isPercentSavings(expense) || isRestSavings(expense)) && (
                 <div className="mt-0.5 pl-[15px] text-[10px] uppercase tracking-wider" style={{ color: 'var(--brass)' }}>
-                  {t.budgetPage.savingsFollowsIncome.replace('{percent}', String(expense.amountPercent))}
+                  {isRestSavings(expense)
+                    ? t.budgetPage.savingsTakesRest
+                    : t.budgetPage.savingsFollowsIncome.replace('{percent}', String(expense.amountPercent))}
                 </div>
               )}
               {showEnvelope && <EnvelopeBar envelope={envelope} formatCurrency={formatCurrency} labels={{ left: t.envelopeLeft, over: t.envelopeOver }} />}
