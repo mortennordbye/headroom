@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.0](https://github.com/mortennordbye/headroom/compare/v3.5.0...v3.6.0) (2026-08-13)
+
+
+### Features
+
+* size a saving as an amount, a share or the rest ([#128](https://github.com/mortennordbye/headroom/issues/128)) ([13f7baf](https://github.com/mortennordbye/headroom/commit/13f7baf3470796366d180bf92c9fd5ff3b91b5eb))
+
 ## [3.5.0](https://github.com/mortennordbye/headroom/compare/v3.4.0...v3.5.0) (2026-08-12)
 
 
