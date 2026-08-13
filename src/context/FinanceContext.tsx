@@ -128,6 +128,14 @@ export interface FixedExpense {
    * because a month was lean. Opt-in — an absent value keeps the fixed amount.
    */
   amountPercent?: number;
+  /**
+   * Savings rows only: this row takes whatever the other savings rows leave of
+   * the month's savings target, INSTEAD of a fixed `amount` or a percentage.
+   * Same derivation rules as `amountPercent` (and mutually exclusive with it) —
+   * `amount` is recomputed each month by `resolveSavingsAmounts`, so the split
+   * always adds up without arithmetic on the user's part.
+   */
+  amountRest?: boolean;
 }
 
 // The destinations reachable from a fixed expense. A strict subset of
@@ -1841,8 +1849,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // what actually applied in that month, and re-deriving it against today's
   // income would rewrite history.
   const liveFixedExpenses = useMemo(
-    () => resolveSavingsAmounts(fixedExpenses, effectiveIncome),
-    [fixedExpenses, effectiveIncome],
+    () => resolveSavingsAmounts(fixedExpenses, effectiveIncome, savingsTargetPercent),
+    [fixedExpenses, effectiveIncome, savingsTargetPercent],
   );
   const viewFixedExpenses = fixedExpensesFromSnapshot
     ? balanceSnapshots[monthKey].fixedExpenses!
@@ -2361,6 +2369,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const postingRows = resolveSavingsAmounts(
       fixedExpenses,
       monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey),
+      savingsTargetPercent,
     );
     const expenseRules: AutomationRule[] = postingRows
       .filter(e => e.destinationKind && !e.automationPaused)
@@ -2392,7 +2401,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, pension, salaries, jobs, t]);
+  }, [fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).

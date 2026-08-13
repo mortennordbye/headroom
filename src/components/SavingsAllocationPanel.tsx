@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, Plus, Trash2, Wand2 } from 'lucide-react';
 import { useFinance, type ExpenseDestinationKind, type FixedExpense } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
+import { SavingsModeToggle } from './SavingsModeToggle';
 import { resolveAllocation, isCreatableRow, destinationKey, type AllocationRow } from '../lib/savingsAllocation';
-import { savingsBase, isSavingsRow, isPercentSavings } from '../lib/savingsRate';
+import { savingsBase, isSavingsRow, isPercentSavings, isRestSavings, percentOfSavingsBase } from '../lib/savingsRate';
 import { currentMonthKey } from '../lib/date';
 
 // Turns the savings target (residual × savingsTargetPercent) into a per-destination
@@ -21,52 +22,6 @@ const pctInputCls = 'w-[68px] bg-[var(--bg-raised)] border border-[var(--border)
 // Stands in for the number input on a 'rest' row, which has no number to type.
 // Same box so the columns still line up down the list.
 const restSlotCls = 'min-w-[68px] bg-[var(--bg-raised)] border border-[var(--border)] rounded-[9px] px-2.5 py-2 text-[12px] text-center select-none';
-
-type RowMode = 'percent' | 'amount' | 'rest';
-
-/**
- * The %/kr/rest switch. Every option is always visible with the active one
- * filled — a single button showing only the current unit read as a label rather
- * than a control, so the choice that makes a transfer follow income went
- * unnoticed. `modes` narrows the set: a live expense can be a percentage or an
- * amount, but not "the rest", which only means something inside a plan.
- */
-function ModeToggle({ mode, onChange, modes, labels }: {
-  mode: RowMode;
-  onChange: (m: RowMode) => void;
-  modes: RowMode[];
-  labels: { group: string; percent: string; amount: string; rest: string;
-            percentHint: string; amountHint: string; restHint: string };
-}) {
-  const text: Record<RowMode, string> = { percent: labels.percent, amount: labels.amount, rest: labels.rest };
-  const hint: Record<RowMode, string> = { percent: labels.percentHint, amount: labels.amountHint, rest: labels.restHint };
-  return (
-    <div
-      role="group"
-      aria-label={labels.group}
-      className="inline-flex rounded-[9px] border border-[var(--border)] overflow-hidden"
-    >
-      {modes.map((m, i) => (
-        <React.Fragment key={m}>
-          {i > 0 && <span aria-hidden className="w-px" style={{ background: 'var(--border)' }} />}
-          <button
-            type="button"
-            onClick={() => onChange(m)}
-            aria-pressed={mode === m}
-            title={hint[m]}
-            className="px-2 py-1 text-[12px] font-medium transition-colors"
-            style={{
-              background: mode === m ? 'var(--bg-elev)' : 'transparent',
-              color: mode === m ? 'var(--text-1)' : 'var(--text-3)',
-            }}
-          >
-            {text[m]}
-          </button>
-        </React.Fragment>
-      ))}
-    </div>
-  );
-}
 
 interface PanelProps {
   /** Drop the Card chrome — set when the panel is rendered inside a modal, which
@@ -188,12 +143,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   // A zero base (income below consumption) has no share to take, so the row
   // falls back to the resolved amount.
   const base = savingsBase(effectiveIncome, viewFixedExpenses);
-  // Four decimals, not two. At a ~31 000 base a 0.01-point rounding is worth
-  // ~1.6 kr, so a coarser share made switching kr → % move the amount by a krone
-  // — changing a unit must never change what you save. Four decimals keeps the
-  // round-trip exact to the krone for any realistic base.
-  const percentOfBase = (amount: number): number | undefined =>
-    base > 0 ? Math.round((amount / base) * 1_000_000) / 10_000 : undefined;
+  const percentOfBase = (amount: number) => percentOfSavingsBase(amount, base);
 
   const createExpenses = () => {
     setFixedExpenses([
@@ -202,7 +152,10 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
         id: crypto.randomUUID(),
         name: labelFor(row),
         amount: row.amount,
-        amountPercent: row.mode === 'amount' ? undefined : percentOfBase(row.amount),
+        amountPercent: row.mode === 'amount' || row.mode === 'rest' ? undefined : percentOfBase(row.amount),
+        // A 'rest' row activates as a rest row, so the live expense keeps
+        // absorbing what the others leave instead of freezing at today's split.
+        amountRest: row.mode === 'rest' ? true : undefined,
         // 'saving', not 'fixed': these rows move money into a savings vehicle, and
         // anything keyed on `type` alone (row colour, essentialMonthlyExpenses)
         // otherwise reads them as bills. See migrateSavingsExpenseType, which
@@ -259,7 +212,11 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
               >
                 {e.name}
               </span>
-              {isPercentSavings(e) ? (
+              {isRestSavings(e) ? (
+                <span className={restSlotCls} style={{ color: 'var(--text-3)' }} title={sa.modeRestHint}>
+                  {sa.modeRestShort}
+                </span>
+              ) : isPercentSavings(e) ? (
                 <input
                   className={pctInputCls}
                   inputMode="decimal"
@@ -276,13 +233,19 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                   onChange={ev => patchExpense(e.id, { amount: Number(ev.target.value) || 0 })}
                 />
               )}
-              <ModeToggle
-                mode={isPercentSavings(e) ? 'percent' : 'amount'}
-                modes={['percent', 'amount']}
+              <SavingsModeToggle
+                mode={isRestSavings(e) ? 'rest' : isPercentSavings(e) ? 'percent' : 'amount'}
+                modes={['percent', 'amount', 'rest']}
                 labels={modeLabels}
-                onChange={m => patchExpense(e.id, m === 'amount'
-                  ? { amountPercent: undefined }
-                  : { amountPercent: percentOfBase(e.amount) })}
+                // `e` is a resolved row, so `e.amount` is this month's kroner —
+                // pin those on the way to 'kr'. The stored amount underneath a
+                // derived row is only the figure it was created with, and
+                // falling back to it would move the money on a unit change.
+                onChange={m => patchExpense(e.id, {
+                  amount: e.amount,
+                  amountPercent: m === 'percent' ? percentOfBase(e.amount) : undefined,
+                  amountRest: m === 'rest' ? true : undefined,
+                })}
               />
               <span
                 className="text-[10.5px] font-medium px-2 py-0.5 rounded-full"
@@ -342,7 +305,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
               {/* Percent tracks income once activated; kr stays put; rest absorbs
                   what the others leave. The toggle is the whole "auto increase"
                   decision, so it sits on the row. */}
-              <ModeToggle
+              <SavingsModeToggle
                 mode={row.mode ?? 'percent'}
                 modes={['percent', 'amount', 'rest']}
                 labels={modeLabels}

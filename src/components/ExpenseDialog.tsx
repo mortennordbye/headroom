@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, Minus, PiggyBank, ArrowLeft, Info } from 'lucide-react';
 import { ModalShell } from './ui/ModalShell';
+import { SavingsModeToggle, type SavingsMode } from './SavingsModeToggle';
 import { useFinance, type FixedExpense, type ExpenseType, type ExpenseDestinationKind } from '../context/FinanceContext';
 import { currentMonthKey } from '../lib/date';
 import { parseLocaleNumber, isNonEmpty } from '../lib/validators';
 import { CATEGORIES, isCategoryKey } from '../lib/categories';
 import { CHART } from '../lib/chartColors';
+import { resolveSavingsAmounts, savingsBase, percentOfSavingsBase } from '../lib/savingsRate';
 
 // The add/edit dialog for a fixed expense. Replaces the flat EditModal form with
 // a grouped layout: essentials up front, the automation destination reframed as
@@ -25,11 +27,19 @@ interface Props {
   onClose: () => void;
 }
 
-const lbl = 'block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-2)] mb-2';
+const lblBare = 'block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-2)]';
+const lbl = `${lblBare} mb-2`;
 const input = 'w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[10px] px-3.5 py-3 text-[15px] text-[var(--text-1)] outline-none focus:border-[var(--forest)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--forest)_30%,transparent)] placeholder:text-[var(--text-3)] transition-colors';
 
+// Stands in for a real id while adding, so the draft can be resolved alongside
+// the live rows without being mistaken for one of them.
+const DRAFT_ID = '__draft__';
+
 export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
-  const { t, assets, debts, housingMode, formatCurrency } = useFinance();
+  const {
+    t, assets, debts, housingMode, formatCurrency,
+    fixedExpenses, effectiveIncome, savingsTargetPercent,
+  } = useFinance();
   const savings = assets.savingsAccounts ?? [];
   // Save targets: the single-scalar balances (emergency buffer, investment
   // portfolio, BSU) plus every named savings account. The `__…__` ids are
@@ -52,6 +62,13 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
 
   const [name, setName] = useState(expense?.name ?? '');
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
+  // How a saving is sized. 'percent' and 'rest' are derived every month, so the
+  // kroner box is replaced by the share (or by nothing at all) and the amount is
+  // computed below rather than typed.
+  const [mode, setMode] = useState<SavingsMode>(
+    expense?.amountRest ? 'rest' : expense?.amountPercent ? 'percent' : 'amount',
+  );
+  const [percent, setPercent] = useState(expense?.amountPercent ? String(expense.amountPercent) : '');
   const [type, setType] = useState<ExpenseType>(expense?.type ?? 'fixed');
   const [flow, setFlow] = useState<Flow>(
     expense?.destinationKind === 'savingsAccount' || storedScalarId ? 'save'
@@ -96,6 +113,64 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     ...CATEGORIES.filter(c => c.key !== 'income').map(c => ({ value: c.key, label: t.categoryLabels[c.key] })),
   ];
 
+  // The dialog names itself after what it is currently building, so switching the
+  // type chip to Sparing rewords the whole form rather than leaving "utgift" on a
+  // saving. Editing keeps the row's own name as the title.
+  const isSaving = type === 'saving';
+  // Only a saving can be derived — a bill does not get cheaper because a month
+  // was lean. Deriving the mode rather than resetting it on every type change
+  // keeps the two controls from drifting apart.
+  const effMode: SavingsMode = isSaving ? mode : 'amount';
+  const typedAmount = parseLocaleNumber(amount);
+  const typedPercent = parseLocaleNumber(percent);
+
+  // The live rows with this dialog's draft standing in for the row being edited
+  // (or appended, when adding). Both the amount below and the kr → % conversion
+  // are derived from THIS list rather than the stored one: a row on its way to
+  // becoming a saving leaves consumption, which moves the savings base it is
+  // about to be a share of. Reading the two off different lists made switching
+  // unit change the amount — the one thing it must never do.
+  const draftId = expense?.id ?? DRAFT_ID;
+  const draftRows = useMemo(() => {
+    const draft: FixedExpense = {
+      ...(expense ?? { name, destinationKind: 'portfolio' }),
+      id: draftId,
+      amount: typedAmount || 0,
+      type: 'saving',
+      amountPercent: effMode === 'percent' && typedPercent > 0 ? typedPercent : undefined,
+      amountRest: effMode === 'rest' ? true : undefined,
+    };
+    return expense
+      ? fixedExpenses.map(e => (e.id === draftId ? draft : e))
+      : [...fixedExpenses, draft];
+  }, [expense, draftId, name, typedAmount, typedPercent, effMode, fixedExpenses]);
+
+  // What this row actually moves this month. For a derived saving that is not
+  // the typed number, so it is resolved by the same function the budget uses.
+  // A 'rest' row in particular can only be sized against its siblings.
+  const resolvedAmount = useMemo(() => {
+    if (effMode === 'amount') return typedAmount || 0;
+    // A blank or garbage share moves nothing — say 0 rather than falling back on
+    // the kroner stored underneath, which is only what the row last resolved to.
+    if (effMode === 'percent' && !(typedPercent > 0)) return 0;
+    return resolveSavingsAmounts(draftRows, effectiveIncome, savingsTargetPercent)
+      .find(e => e.id === draftId)?.amount ?? 0;
+  }, [effMode, typedAmount, typedPercent, draftRows, draftId, effectiveIncome, savingsTargetPercent]);
+
+  // Carry the current figure across when the unit changes: leaving kr for % takes
+  // the share that keeps the same kroner moving, and coming back pins whatever
+  // the derived row resolves to now. Switching a unit must never change what is
+  // saved. Only fills a blank share, so a typed one is never rounded on a
+  // re-click of the mode already selected.
+  const chooseMode = (m: SavingsMode) => {
+    if (m === 'percent' && !(typedPercent > 0)) {
+      const share = percentOfSavingsBase(resolvedAmount, savingsBase(effectiveIncome, draftRows));
+      if (share !== undefined) setPercent(String(share));
+    }
+    if (m === 'amount') setAmount(String(resolvedAmount));
+    setMode(m);
+  };
+
   const targetName =
     flow === 'save'
       ? (savingsId in SCALAR_SAVE_IDS
@@ -106,8 +181,14 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
 
   const submit = () => {
     if (!isNonEmpty(name)) { setError(t.newExpenseName + t.validation.requiredSuffix); return; }
-    const amt = parseLocaleNumber(amount);
-    if (!(amt > 0)) { setError(t.newAmount + t.validation.positiveAmountSuffix); return; }
+    if (effMode === 'amount' && !(typedAmount > 0)) { setError(t.newAmount + t.validation.positiveAmountSuffix); return; }
+    if (effMode === 'percent' && !(typedPercent > 0)) { setError(t.savingsAllocation.percentLabel + t.validation.positiveAmountSuffix); return; }
+    // A derived row stores this month's kroner too: every reader that hasn't
+    // been through the resolver (an export, a snapshot) still sees a real
+    // figure. It is recomputed from the share on the next render. A 'rest' row
+    // legitimately resolves to 0 when the target is already spoken for, so it
+    // is not held to the positive-amount rule.
+    const amt = effMode === 'amount' ? typedAmount : resolvedAmount;
 
     let destinationKind: ExpenseDestinationKind | undefined;
     let savingsAccountId: string | undefined;
@@ -127,16 +208,11 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     const lastPostedMonth = !destinationKind ? undefined
       : sameDest && !resumed ? expense?.lastPostedMonth : currentMonthKey();
 
-    // A percentage-based saving derives its amount, so typing one here means
-    // "pin it": the row stops following income. Editing only the name or the
-    // destination leaves it tracking, which is why this keys on the amount
-    // actually changing rather than on the dialog being opened.
-    const amountPinned = !!expense?.amountPercent && amt !== expense.amount;
-
     onSave({
       name: name.trim(),
       amount: amt,
-      amountPercent: amountPinned ? undefined : expense?.amountPercent,
+      amountPercent: effMode === 'percent' ? typedPercent : undefined,
+      amountRest: effMode === 'rest' ? true : undefined,
       type,
       category: isCategoryKey(category) ? category : undefined,
       match: match.trim() || undefined,
@@ -169,11 +245,16 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
   };
 
   const selectCls = `${input} appearance-none cursor-pointer pr-9`;
-
-  // The dialog names itself after what it is currently building, so switching the
-  // type chip to Sparing rewords the whole form rather than leaving "utgift" on a
-  // saving. Editing keeps the row's own name as the title.
-  const isSaving = type === 'saving';
+  const sa = t.savingsAllocation;
+  const modeLabels = {
+    group: sa.toggleMode,
+    percent: '%',
+    amount: 'kr',
+    rest: sa.modeRestShort,
+    percentHint: sa.modePercentHint,
+    amountHint: sa.modeAmountHint,
+    restHint: sa.modeRestHint,
+  };
 
   return (
     <ModalShell
@@ -197,14 +278,48 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
           <input className={input} autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={t.budgetPage.expenseNamePlaceholder} />
         </div>
         <div>
-          <label className={lbl}>{t.expenseDialog.amountLabel}</label>
-          <div className="relative">
-            <input className={`${input} font-mono tabular-nums text-[17px] font-semibold pr-[72px]`} inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
-            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[13px] text-[var(--text-3)] pointer-events-none">{t.expenseDialog.perMonth}</span>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <label className={lblBare}>{t.expenseDialog.amountLabel}</label>
+            {/* Fixed kroner, a share of the savings base, or the rest of the
+                target. Only a saving can be derived, so the switch appears with
+                the type rather than sitting inert on a bill. */}
+            {isSaving && (
+              <SavingsModeToggle
+                mode={effMode}
+                modes={['amount', 'percent', 'rest']}
+                labels={modeLabels}
+                size="md"
+                onChange={chooseMode}
+              />
+            )}
           </div>
-          {!!expense?.amountPercent && (
+          {effMode === 'rest' ? (
+            <div className={`${input} font-mono tabular-nums text-[17px] font-semibold flex items-baseline justify-between`}>
+              <span>{formatCurrency(resolvedAmount)}</span>
+              <span className="text-[13px] font-sans text-[var(--text-3)]">{t.expenseDialog.perMonth}</span>
+            </div>
+          ) : (
+            <div className="relative">
+              <input
+                className={`${input} font-mono tabular-nums text-[17px] font-semibold pr-[72px]`}
+                inputMode="decimal"
+                value={effMode === 'percent' ? percent : amount}
+                aria-label={effMode === 'percent' ? sa.percentLabel : t.expenseDialog.amountLabel}
+                onChange={e => (effMode === 'percent' ? setPercent : setAmount)(e.target.value)}
+                placeholder="0"
+              />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[13px] text-[var(--text-3)] pointer-events-none">
+                {effMode === 'percent' ? '%' : t.expenseDialog.perMonth}
+              </span>
+            </div>
+          )}
+          {/* A derived amount changes on its own every month, so show what it
+              comes to now — otherwise next month's different figure looks like
+              the app moved the money on its own. */}
+          {effMode !== 'amount' && (
             <p className="text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--brass)' }}>
-              {t.expenseDialog.percentPinHint.replace('{percent}', String(expense.amountPercent))}
+              {(effMode === 'percent' ? t.expenseDialog.percentModeHint : t.expenseDialog.restModeHint)
+                .replace('{amount}', formatCurrency(resolvedAmount))}
             </p>
           )}
         </div>
@@ -245,7 +360,7 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
                 <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-2)]" />
               </div>
               <Explainer text={t.expenseDialog.explainSave
-                .replace('{amount}', formatCurrency(parseLocaleNumber(amount) || 0))
+                .replace('{amount}', formatCurrency(resolvedAmount))
                 .replace('{target}', targetName)} />
             </div>
           )}
