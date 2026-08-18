@@ -53,6 +53,7 @@ export function summarizeExport(p: Partial<ExportPayload>): SummarySection[] {
       key: 'budget',
       items: [
         { key: 'fixedExpenses', kind: 'count', count: len(p.fixedExpenses) },
+        { key: 'savings', kind: 'count', count: len(p.savings) },
         { key: 'transactions', kind: 'count', count: len(p.dailyTransactions) },
         { key: 'categoryBudgets', kind: 'count', count: keys(p.categoryBudgets) },
         { key: 'recurringTemplates', kind: 'count', count: len(p.recurringTemplates) },

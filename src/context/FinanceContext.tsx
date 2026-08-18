@@ -9,7 +9,7 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculations';
-import { savingsContributionTotal, isSavingsRow, resolveSavingsAmounts } from '../lib/savingsRate';
+import { savingsContributionTotal, savingsBase, resolveSavingsAmounts } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { markGainReview } from '../lib/gainReview';
@@ -62,11 +62,10 @@ import { DEFAULT_FORECAST_ASSUMPTIONS, type ForecastAssumptions } from '../lib/f
 // --- Types ---
 
 // Category of a fixed expense — drives its colour role in the budget charts.
-// 'saving' is money moved rather than spent (to a savings account, funds, BSU).
-// It is a first-class type so a row can be classified as saving in the dialog,
-// and so the Budget page can keep it out of "faste utgifter" and out of the
-// investing recommendation without inferring intent from the destination alone.
-export type ExpenseType = 'fixed' | 'variable' | 'subscription' | 'insurance' | 'saving';
+// Money *retained* rather than spent is not on this list: a saving is its own
+// record type (`Saving` below), in its own array, so nothing has to infer intent
+// from a type-plus-destination pair the way it did while the two shared a shape.
+export type ExpenseType = 'fixed' | 'variable' | 'subscription' | 'insurance';
 
 export interface FixedExpense {
   id: string;
@@ -91,15 +90,17 @@ export interface FixedExpense {
    */
   match?: string;
   /**
-   * Optional automation destination. When set, this recurring expense moves a
-   * balance every month: grow a savings account, the emergency buffer, the
-   * investment portfolio or BSU, or pay down the mortgage / a debt by the
-   * principal portion (amortization-aware, see src/lib/automation.ts).
-   * The expense's `amount` is what moves; it's already counted in the budget, so
-   * the money leaves free-to-spend and lands in the destination — no double count.
+   * Optional paydown destination. When set, this recurring expense pays down the
+   * mortgage or a debt by the principal portion every month (amortization-aware,
+   * see src/lib/automation.ts). The expense's `amount` is what leaves; it's
+   * already counted in the budget, so the money leaves free-to-spend and reduces
+   * the balance — no double count.
+   *
+   * Paydown stays an expense on purpose: a `FixedExpense` holds the GROSS
+   * payment, which is mostly interest, and the money does leave for good. Money
+   * that stays yours is a `Saving` instead.
    */
   destinationKind?: ExpenseDestinationKind;
-  savingsAccountId?: string;   // set iff destinationKind === 'savingsAccount'
   debtId?: string;             // set iff destinationKind === 'debt'
   /**
    * Pause this expense's automation without losing its destination config: the
@@ -112,37 +113,71 @@ export interface FixedExpense {
    *  guard. Set to the current month when a destination is first assigned, so the
    *  first move happens the NEXT month. */
   lastPostedMonth?: string;
-  /** Only for a `bufferAccount` destination created from the emergency-fund
-   *  recommendation: the buffer balance at which this contribution has done its
-   *  job and self-removes. Presence marks a "buffer builder"; once
-   *  `assets.bufferAccount` reaches it, the expense is deleted automatically. */
-  bufferTargetAmount?: number;
-  /**
-   * Savings rows only: this row's share of the month's savings base
-   * (income − consumption), in percent, INSTEAD of a fixed `amount`. When set,
-   * `amount` is derived each month by `resolveSavingsAmounts` — so importing a
-   * bigger payslip raises what actually moves, rather than only raising the
-   * target while the transfer stays frozen.
-   *
-   * Deliberately not honoured for spending rows: a bill does not get cheaper
-   * because a month was lean. Opt-in — an absent value keeps the fixed amount.
-   */
-  amountPercent?: number;
-  /**
-   * Savings rows only: this row takes whatever the other savings rows leave of
-   * the month's savings target, INSTEAD of a fixed `amount` or a percentage.
-   * Same derivation rules as `amountPercent` (and mutually exclusive with it) —
-   * `amount` is recomputed each month by `resolveSavingsAmounts`, so the split
-   * always adds up without arithmetic on the user's part.
-   */
-  amountRest?: boolean;
 }
 
-// The destinations reachable from a fixed expense. A strict subset of
+// The paydown destinations reachable from a fixed expense. A strict subset of
 // `AutomationTargetKind` (src/lib/automation.ts): the pension targets are driven
-// by the Pension page, not by a budget line, so they are deliberately absent.
-export type ExpenseDestinationKind =
-  | 'savingsAccount' | 'bufferAccount' | 'portfolio' | 'bsu' | 'mortgage' | 'debt';
+// by the Pension page, not by a budget line, and the retention targets belong to
+// `Saving` — so both are deliberately absent.
+export type ExpenseDestinationKind = 'mortgage' | 'debt';
+
+// Where a saving puts the money. Every one of these keeps the amount in the
+// user's name, which is exactly what separates a `Saving` from a `FixedExpense`:
+// paying down a loan is money gone, moving it to a fund is money moved.
+export type SavingDestinationKind = 'savingsAccount' | 'bufferAccount' | 'portfolio' | 'bsu';
+
+// Everywhere a destination can be either kind. The savings-target split
+// (src/lib/savingsAllocation.ts) is the case: a plan row may point at a savings
+// vehicle OR at the mortgage, and only on activation does it become a `Saving`
+// or a `FixedExpense` accordingly.
+export type AllocationDestinationKind = SavingDestinationKind | ExpenseDestinationKind;
+
+/** How a saving is sized. Absent reads as 'amount' — the same default the
+ *  allocation rows use (see `SavingsAllocation.mode`). */
+export type SavingMode = 'amount' | 'percent' | 'rest';
+
+/**
+ * A recurring monthly transfer into a savings vehicle.
+ *
+ * Not a fixed expense, and no longer stored as one. It does leave free-to-spend
+ * like a bill, so the budget still counts it — but it is not spend: the savings
+ * rate must add it back, the emergency-fund runway must not treat it as a cost
+ * you can't cancel, and pausing it is the first thing you do in a real emergency.
+ * Fields a bill needs and a transfer doesn't (`type`, `category`, `match` — the
+ * envelope machinery) are deliberately absent: reconciling a transfer to your own
+ * account against "spending" was never meaningful.
+ */
+export interface Saving {
+  id: string;
+  name: string;
+  /** This month's kroner. Derived by `resolveSavingsAmounts` unless mode is
+   *  'amount'; stored anyway so an export/snapshot that never runs the resolver
+   *  still shows a real figure. */
+  amount: number;
+  /** Absent = 'amount'. 'percent' and 'rest' are re-derived every month, so the
+   *  transfer follows income instead of freezing at whatever it was created at. */
+  mode?: SavingMode;
+  /** Share of the month's savings base, in percent. Set iff mode is 'percent'. */
+  percent?: number;
+  /** Required: a saving with nowhere to go isn't a saving. */
+  destinationKind: SavingDestinationKind;
+  savingsAccountId?: string;   // set iff destinationKind === 'savingsAccount'
+  /**
+   * Pause the transfer without losing its setup: the saving keeps its budget
+   * line, but stops moving the balance. Resuming restamps `lastPostedMonth` to
+   * the current month, so the paused months are never back-posted.
+   */
+  paused?: boolean;
+  /** 'yyyy-MM' last month the automation posted; absent = never. Double-apply
+   *  guard. Set to the current month on creation, so the first move happens the
+   *  NEXT month. */
+  lastPostedMonth?: string;
+  /** Only for a `bufferAccount` saving created from the emergency-fund
+   *  recommendation: the buffer balance at which this contribution has done its
+   *  job and self-removes. Presence marks a "buffer builder"; once
+   *  `assets.bufferAccount` reaches it, the saving is deleted automatically. */
+  bufferTargetAmount?: number;
+}
 
 // Non-mortgage debts (studielån, forbrukslån, kredittkort, …). Modeled separately
 // from the mortgage (which lives in Assets.houseDebt) and reduce net worth.
@@ -777,6 +812,10 @@ interface FinanceDataContextType {
   clearHistory: () => void;
   fixedExpenses: FixedExpense[];
   setFixedExpenses: (val: FixedExpense[]) => void;
+  /** Recurring transfers into a savings vehicle. Their own array, not a slice of
+   *  `fixedExpenses` — see the `Saving` type. */
+  savings: Saving[];
+  setSavings: (val: Saving[]) => void;
   debts: Debt[];
   setDebts: (val: Debt[]) => void;
   dailyTransactions: DailyTransaction[];
@@ -939,13 +978,16 @@ interface FinanceDerivedContextType {
   mortgageTermYears: number;
   annualMortgageInterest: number;
   totalResidual: number;
+  /** Everything that leaves free-to-spend every month: the fixed expenses PLUS
+   *  the savings transfers. Savings are not consumption, but they do leave the
+   *  account, so the budget still has to reserve them. */
   totalFixedExpenses: number;
-  /** The part of `totalFixedExpenses` that is an automated move into savings
-   *  (savingsAccount / bufferAccount), not consumption. */
+  /** The part of `totalFixedExpenses` that is a move into savings rather than
+   *  spend — i.e. the savings list's total. */
   savingsContributions: number;
-  /** `viewFixedExpenses` minus the savings automations — the rows that represent
-   *  real spending, for reconciliation against imported transactions. */
-  spendFixedExpenses: FixedExpense[];
+  /** Savings for the selected month: live config with derived amounts resolved,
+   *  or the recorded snapshot's savings when viewing a past month (read-only). */
+  viewSavings: Saving[];
   /** Fixed expenses for the selected month: live config, or the recorded
    *  snapshot's expenses when viewing a past month (read-only). */
   viewFixedExpenses: FixedExpense[];
@@ -981,12 +1023,18 @@ export interface BalanceSnapshot {
    *  `netWorthHistory` recorded at the time. */
   debts?: Debt[];
   /** Snapshot shape version. Absent = v1 (pre-completeness; only the fields
-   *  above). v2 adds the optional fields below. New fields stay optional and
-   *  guarded at read time so a v1 month never NaN-poisons a reader. */
+   *  above). v2 adds the optional fields below; v3 splits the savings out of
+   *  `fixedExpenses` into their own array. New fields stay optional and guarded
+   *  at read time so a v1 month never NaN-poisons a reader. */
   v?: number;
   /** Fixed-expense envelopes/budget composition as of that month, so historical
-   *  budget-vs-actual uses the amounts that were in force then, not today's. */
+   *  budget-vs-actual uses the amounts that were in force then, not today's.
+   *  On a pre-v3 snapshot this also held that month's savings; they are moved
+   *  out at load by `migrateSnapshotSavings`, amounts untouched. */
   fixedExpenses?: FixedExpense[];
+  /** Savings as of that month (v3+), so a historical month's savings rate and
+   *  target reflect what was actually running then. */
+  savings?: Saving[];
   /** Forward assumptions as of that month, so history-mode projections use the
    *  rates that were set then instead of the live ones. */
   assumptions?: {
@@ -1004,6 +1052,7 @@ export interface BalanceSnapshot {
 export interface ExportPayload {
   income: number;
   fixedExpenses: FixedExpense[];
+  savings: Saving[];
   dailyTransactions: DailyTransaction[];
   deletedBankIds?: string[];
   /** User-chosen friendly names for connected accounts, keyed by account key. */
@@ -1144,6 +1193,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [balanceSnapshots, setBalanceSnapshots] = useState<Record<string, BalanceSnapshot>>({});
   const [savingsTargetPercent, setSavingsTargetPercent] = useState<number>(DEFAULT_SAVINGS_TARGET_PCT);
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(DEFAULT_FIXED_EXPENSES);
+  const [savings, setSavings] = useState<Saving[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
   // Ids of bank-imported (eb-) rows the user deleted. Persisted so the server's
@@ -1276,7 +1326,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // The field literal is projected through the registry (`derivePayload`), so its
   // key type is `BuiltPayload` — omitting any persisted field FAILS TO COMPILE.
   const buildPayload = useCallback((): ExportPayload => derivePayload(PAYLOAD_REGISTRY, {
-    income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
+    income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, savings,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang,
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
@@ -1287,7 +1337,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
     projectionIncludeGrowth,
-  }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses,
+  }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, savings,
     dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
@@ -1319,7 +1369,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const setters: PayloadSetters = {
       income: setIncome, monthlyIncomes: setMonthlyIncomes, payslips: setPayslips,
       netWorthHistory: setNetWorthHistory, balanceSnapshots: setBalanceSnapshots,
-      fixedExpenses: setFixedExpenses, dailyTransactions: setDailyTransactions,
+      fixedExpenses: setFixedExpenses, savings: setSavings, dailyTransactions: setDailyTransactions,
       deletedBankIds: setDeletedBankIds, accountLabels: setAccountLabels, categoryRules: setCategoryRules,
       labelRules: setLabelRules, transferRules: setTransferRules, categoryBudgets: setCategoryBudgets, debts: setDebts, assets: setAssets,
       loan: setLoan, pension: setPension, recurringTemplates: setRecurringTemplates,
@@ -1843,37 +1893,49 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // `fixedExpenses`; this is read-only view data (see BudgetPage's read-only gate).
   const fixedExpensesFromSnapshot = monthKey < currentMonthKey()
     && balanceSnapshots[monthKey]?.fixedExpenses !== undefined;
-  // Percentage-based savings rows are resolved to kroner here, so every total,
-  // chart, envelope and the automation runner below read one derived amount
-  // rather than each recomputing it. A snapshot is NOT resolved: it captured
-  // what actually applied in that month, and re-deriving it against today's
-  // income would rewrite history.
-  const liveFixedExpenses = useMemo(
-    () => resolveSavingsAmounts(fixedExpenses, effectiveIncome, savingsTargetPercent),
-    [fixedExpenses, effectiveIncome, savingsTargetPercent],
-  );
   const viewFixedExpenses = fixedExpensesFromSnapshot
     ? balanceSnapshots[monthKey].fixedExpenses!
-    : liveFixedExpenses;
+    : fixedExpenses;
 
-  const totalFixedExpenses = useMemo(() =>
-    viewFixedExpenses.reduce((sum, item) => sum + item.amount, 0),
-  [viewFixedExpenses]);
+  // Income minus consumption — the pool a percentage saving is a share of, and
+  // the pool the savings target is measured against. Derived from the expenses
+  // alone: a saving is not a cost, so taking it off here would make the plan a
+  // share of a pool it had already been removed from.
+  const savingsPool = useMemo(
+    () => savingsBase(effectiveIncome, viewFixedExpenses),
+    [effectiveIncome, viewFixedExpenses],
+  );
 
-  // The slice of totalFixedExpenses that is moved into savings rather than spent.
-  // Budgeting treats it like any other fixed expense (it does leave free-to-spend),
-  // but the savings rate must add it back or automating more savings reads as a
-  // *worse* rate. See src/lib/savingsRate.ts.
+  // Percentage- and rest-based savings are resolved to kroner here, so every
+  // total, chart and the automation runner below read one derived amount rather
+  // than each recomputing it. A snapshot is NOT resolved: it captured what
+  // actually applied in that month, and re-deriving it against today's income
+  // would rewrite history.
+  const liveSavings = useMemo(
+    () => resolveSavingsAmounts(savings, savingsPool, savingsTargetPercent),
+    [savings, savingsPool, savingsTargetPercent],
+  );
+  // Memoized because the snapshot branch's `?? []` fallback is a fresh array on
+  // every render, which would invalidate every memo keyed on this.
+  const viewSavings = useMemo(
+    () => (fixedExpensesFromSnapshot ? (balanceSnapshots[monthKey].savings ?? []) : liveSavings),
+    [fixedExpensesFromSnapshot, balanceSnapshots, monthKey, liveSavings],
+  );
+
+  // What moves into savings rather than being spent. Budgeting treats it like a
+  // fixed expense (it does leave free-to-spend), but the savings rate must add it
+  // back or automating more savings reads as a *worse* rate. See savingsRate.ts.
   const savingsContributions = useMemo(() =>
-    savingsContributionTotal(viewFixedExpenses),
-  [viewFixedExpenses]);
+    savingsContributionTotal(viewSavings),
+  [viewSavings]);
 
-  // The same split as a list, for envelope reconciliation in monthlyCashflow:
-  // the rows whose budgets should be matched against real transactions so a
-  // bill isn't charged once as a budget and again as an imported payment.
-  const spendFixedExpenses = useMemo(() =>
-    viewFixedExpenses.filter(e => !isSavingsRow(e)),
-  [viewFixedExpenses]);
+  // Everything reserved before free-to-spend: bills plus transfers. Savings were
+  // part of this total back when they lived in the expense array, and every
+  // reader (Dashboard, Assets, Forecast, the Sankey) still means the same thing
+  // by it — so the split changes where the number comes from, not what it is.
+  const totalFixedExpenses = useMemo(() =>
+    viewFixedExpenses.reduce((sum, item) => sum + item.amount, 0) + savingsContributions,
+  [viewFixedExpenses, savingsContributions]);
 
   // Last-12-months income series (relative to the selected month): each month is
   // its manual override if set, otherwise the income derived for THAT month. This
@@ -2143,13 +2205,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // about which fields make up "the balance state".
   const liveBalanceSnapshot = useMemo<BalanceSnapshot>(() => ({
     assets, loan, pension, homeowner, transition, housingMode, debts,
-    v: 2,
+    v: 3,
     fixedExpenses,
+    savings,
     assumptions: { savingsTargetPercent, growthReturnRate, houseGrowthRate },
     categoryBudgets,
     source: 'auto',
   }), [assets, loan, pension, homeowner, transition, housingMode, debts,
-       fixedExpenses, savingsTargetPercent, growthReturnRate, houseGrowthRate, categoryBudgets]);
+       fixedExpenses, savings, savingsTargetPercent, growthReturnRate, houseGrowthRate, categoryBudgets]);
 
   // Capture the full balance state for the current calendar month whenever it
   // changes, so the balance pages can be viewed historically later. This state is
@@ -2354,38 +2417,49 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Multi-month catch-ups awaiting confirmation (view state, not persisted).
   const [pendingCatchups, setPendingCatchups] = useState<PendingCatchup[]>([]);
 
-  // Project the destination-bearing fixed expenses to the runner's rule shape,
-  // then append the pension contributions (which have no budget line of their
-  // own — see src/lib/pensionAccrual.ts). One rule list, one runner, so both
-  // sources share the catch-up prompt and the double-apply guard.
+  // Project the savings and the paydown-bearing fixed expenses to the runner's
+  // rule shape, then append the pension contributions (which have no budget line
+  // of their own — see src/lib/pensionAccrual.ts). One rule list, one runner, so
+  // every source shares the catch-up prompt and the double-apply guard.
   const automationRules = useMemo<AutomationRule[]>(() => {
     // The runner always targets the real current month, so pensionable income
     // must be read there too — not at the month the user happens to be viewing.
     const nowKey = currentMonthKey();
-    // Resolve percentage-based savings against the income of the month being
-    // POSTED, not the month being viewed: browsing last March must not decide
-    // what moves today. `liveFixedExpenses` is keyed on the viewed month, so it
-    // is deliberately not reused here.
-    const postingRows = resolveSavingsAmounts(
-      fixedExpenses,
-      monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey),
+    // Resolve derived savings against the income of the month being POSTED, not
+    // the month being viewed: browsing last March must not decide what moves
+    // today. `liveSavings` is keyed on the viewed month, so it is deliberately
+    // not reused here.
+    const postingSavings = resolveSavingsAmounts(
+      savings,
+      savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
       savingsTargetPercent,
     );
-    const expenseRules: AutomationRule[] = postingRows
+    const savingRules: AutomationRule[] = postingSavings
+      .filter(sv => !sv.paused)
+      .map(sv => ({
+        id: sv.id,
+        name: sv.name,
+        amount: sv.amount,
+        targetKind: sv.destinationKind,
+        savingsAccountId: sv.savingsAccountId,
+        // A saving is stamped with lastPostedMonth on creation, so this fallback
+        // only matters for imported data — start it next month.
+        startMonth: addMonthsKey(nowKey, 1),
+        lastPostedMonth: sv.lastPostedMonth,
+      }));
+    const expenseRules: AutomationRule[] = fixedExpenses
       .filter(e => e.destinationKind && !e.automationPaused)
       .map(e => ({
         id: e.id,
         name: e.name,
         amount: e.amount,
         targetKind: e.destinationKind!,
-        savingsAccountId: e.savingsAccountId,
         debtId: e.debtId,
-        // A destination is stamped with lastPostedMonth on assignment, so this
-        // fallback only matters for imported data — start it next month.
         startMonth: addMonthsKey(nowKey, 1),
         lastPostedMonth: e.lastPostedMonth,
       }));
     return [
+      ...savingRules,
       ...expenseRules,
       ...pensionAccrualRules({
         otpAutoPost: pension.otpAutoPost,
@@ -2401,7 +2475,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t]);
+  }, [savings, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
@@ -2459,12 +2533,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (hasDebtPatch) setDebts(debts.map(d => (d.id in debtPatch ? { ...d, balance: debtPatch[d.id] } : d)));
   }, [updateSavingsAccount, updateAsset, updatePension, updateHomeowner, debts]);
 
-  // Stamp lastPostedMonth on the posted rules. Fixed expenses carry their own
-  // stamp; the two synthesized pension rules stamp onto the pension slice.
+  // Stamp lastPostedMonth on the posted rules. Savings and fixed expenses each
+  // carry their own stamp; the two synthesized pension rules stamp onto the
+  // pension slice. Ids are uuids, so blind-patching both arrays by id is safe —
+  // a rule belongs to exactly one of them.
   const stampPosted = useCallback((ids: Set<string>, month: string) => {
-    const expenseIds = new Set([...ids].filter(id => !isPensionRuleId(id)));
-    if (expenseIds.size) {
-      setFixedExpenses(prev => prev.map(e => (expenseIds.has(e.id) ? { ...e, lastPostedMonth: month } : e)));
+    const rowIds = new Set([...ids].filter(id => !isPensionRuleId(id)));
+    if (rowIds.size) {
+      setSavings(prev => prev.map(sv => (rowIds.has(sv.id) ? { ...sv, lastPostedMonth: month } : sv)));
+      setFixedExpenses(prev => prev.map(e => (rowIds.has(e.id) ? { ...e, lastPostedMonth: month } : e)));
     }
     const otp = ids.has(PENSION_OTP_RULE_ID);
     const ips = ids.has(PENSION_IPS_RULE_ID);
@@ -2553,15 +2630,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // A buffer-builder contribution (created from the emergency-fund recommendation)
   // self-removes once the buffer reaches its target. Watching the balance — not
   // just monthly postings — means a manual top-up also completes it. Only ever
-  // deletes flagged buffer builders; other expenses are never touched.
+  // deletes flagged buffer builders; other savings are never touched.
   useEffect(() => {
     if (!loaded.current) return;
-    const done = bufferBuilderIdsToRemove(fixedExpenses, assets.bufferAccount);
+    const done = bufferBuilderIdsToRemove(savings, assets.bufferAccount);
     if (done.length === 0) return;
     const drop = new Set(done);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFixedExpenses(prev => prev.filter(e => !drop.has(e.id)));
-  }, [fixedExpenses, assets.bufferAccount]);
+    setSavings(prev => prev.filter(sv => !drop.has(sv.id)));
+  }, [savings, assets.bufferAccount]);
 
   // Set (or clear, with null / ≤0) a category's monthly budget cap.
   const setCategoryBudget = useCallback((category: CategoryKey, amount: number | null) => {
@@ -2914,6 +2991,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     automationRules, automationState,
     setManualSnapshot, deleteManualSnapshot, clearHistory,
     fixedExpenses, setFixedExpenses,
+    savings, setSavings,
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
     accountLabels, setAccountLabel, applyBankSync,
@@ -2945,7 +3023,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     restoreAssetTaxDefaults, restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   }), [
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
-    payslips, setPayslip, removePayslip, netWorthHistory,
+    payslips, setPayslip, removePayslip, netWorthHistory, savings,
     balanceSnapshots, liveBalanceSnapshot, automationRules, automationState,
     setManualSnapshot, deleteManualSnapshot, clearHistory,
     fixedExpenses, debts, dailyTransactions,
@@ -2981,7 +3059,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
-    totalResidual, totalFixedExpenses, savingsContributions, spendFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
+    totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   }), [
@@ -2990,7 +3068,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
-    totalResidual, totalFixedExpenses, savingsContributions, spendFixedExpenses, viewFixedExpenses, fixedExpensesFromSnapshot,
+    totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   ]);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { savingsRateStatus, savingsContributionTotal, targetRateOfIncome, planSavingsRateSeries, savingsBase, resolveSavingsAmounts, percentOfSavingsBase } from './savingsRate';
 import type { MonthlyCashflowRow } from './monthlyCashflow';
-import type { FixedExpense } from '../context/FinanceContext';
+import type { FixedExpense, Saving } from '../context/FinanceContext';
 
 const row = (month: string, income: number, rate: number, measured = true): MonthlyCashflowRow => ({
   month, income, variable: 0, expenses: 0, net: 0, rate, measured,
@@ -55,35 +55,18 @@ describe('savingsRateStatus', () => {
   });
 });
 
-const fixed = (amount: number, destinationKind?: FixedExpense['destinationKind']): FixedExpense =>
-  ({ id: `f-${amount}-${destinationKind ?? 'none'}`, name: 'x', amount, type: 'fixed', destinationKind });
+const sav = (amount: number, destinationKind: Saving['destinationKind'] = 'portfolio'): Saving =>
+  ({ id: `s-${amount}-${destinationKind}`, name: 'x', amount, destinationKind });
 
 describe('savingsContributionTotal', () => {
-  it('counts a row typed as saving even without a destination', () => {
-    // The type is the user's own classification: it must leave the investing
-    // recommendation whether or not a destination has been picked yet.
-    const typed = { ...fixed(3000), type: 'saving' as const };
-    expect(savingsContributionTotal([typed, fixed(12000)])).toBe(3000);
-  });
-
-  it('does not double-count a row that is both typed saving and has a destination', () => {
-    const both = { ...fixed(4000, 'portfolio'), type: 'saving' as const };
-    expect(savingsContributionTotal([both])).toBe(4000);
-  });
-
-  it('counts every retained-money destination, not ordinary expenses', () => {
+  it('sums every savings destination', () => {
     const total = savingsContributionTotal([
-      fixed(12000),                     // rent
-      fixed(5000, 'savingsAccount'),
-      fixed(2000, 'bufferAccount'),
-      fixed(4000, 'portfolio'),
-      fixed(1000, 'bsu'),
+      sav(5000, 'savingsAccount'),
+      sav(2000, 'bufferAccount'),
+      sav(4000, 'portfolio'),
+      sav(1000, 'bsu'),
     ]);
     expect(total).toBe(12000);
-  });
-
-  it('excludes mortgage and debt destinations (gross payment, not principal)', () => {
-    expect(savingsContributionTotal([fixed(9000, 'mortgage'), fixed(3000, 'debt')])).toBe(0);
   });
 
   it('is 0 for an empty list', () => {
@@ -91,8 +74,8 @@ describe('savingsContributionTotal', () => {
   });
 
   it('ignores a NaN/undefined amount instead of poisoning the total', () => {
-    const bad = { ...fixed(0, 'savingsAccount'), amount: undefined as unknown as number };
-    expect(savingsContributionTotal([bad, fixed(5000, 'savingsAccount')])).toBe(5000);
+    const bad = { ...sav(0, 'savingsAccount'), amount: undefined as unknown as number };
+    expect(savingsContributionTotal([bad, sav(5000, 'savingsAccount')])).toBe(5000);
   });
 });
 
@@ -164,156 +147,143 @@ describe('planSavingsRateSeries', () => {
 // arithmetic every one of those call sites has to do, so the next screen that
 // needs "what do they actually spend" has a named, tested quantity to copy.
 describe('consumption vs the raw fixed-expense total', () => {
-  const rows: FixedExpense[] = [
+  const bills: FixedExpense[] = [
     { id: 'a', name: 'Boliglån', amount: 18000, type: 'fixed' },
     { id: 'b', name: 'Mat', amount: 6000, type: 'variable' },
     { id: 'c', name: 'Spotify', amount: 139, type: 'subscription' },
-    { id: 'd', name: 'Aksjer og fond', amount: 13444, type: 'saving', destinationKind: 'portfolio' },
-    { id: 'e', name: 'Ferie/Gaver', amount: 500, type: 'saving', destinationKind: 'savingsAccount', savingsAccountId: 's1' },
   ];
-  const total = rows.reduce((s, e) => s + e.amount, 0);
-  const contributions = savingsContributionTotal(rows);
+  const savings: Saving[] = [
+    { id: 'd', name: 'Aksjer og fond', amount: 13444, destinationKind: 'portfolio' },
+    { id: 'e', name: 'Ferie/Gaver', amount: 500, destinationKind: 'savingsAccount', savingsAccountId: 's1' },
+  ];
+  const consumption = bills.reduce((n, e) => n + e.amount, 0);
+  const contributions = savingsContributionTotal(savings);
 
-  it('separates the total into consumption and saving with nothing lost', () => {
+  it('separates the reserved total into consumption and saving with nothing lost', () => {
     expect(contributions).toBe(13944);
-    expect(total - contributions).toBe(24139);
+    expect(consumption).toBe(24139);
+    // What `totalFixedExpenses` means: everything reserved before free-to-spend.
+    expect(consumption + contributions).toBe(38083);
   });
 
-  it('a mortgage paydown counts as consumption here, not saving', () => {
-    // Only the principal builds equity and the row holds the gross payment, so
-    // counting it whole would overstate the rate. See isSavingsDestination.
-    const withPaydown = [...rows, { id: 'f', name: 'Ekstra avdrag', amount: 2000, type: 'fixed' as const, destinationKind: 'mortgage' as const }];
-    expect(savingsContributionTotal(withPaydown)).toBe(contributions);
-  });
-
-  it('counts a saving with no destination yet, so it never reads as a bill', () => {
-    const orphan = [...rows, { id: 'g', name: 'Sparing', amount: 1000, type: 'saving' as const }];
-    expect(savingsContributionTotal(orphan)).toBe(contributions + 1000);
+  it('a mortgage paydown counts as consumption, not saving', () => {
+    // Only the principal builds equity and the expense holds the gross payment,
+    // so counting it whole would overstate the rate — which is why paydown stays
+    // a FixedExpense and never becomes a Saving.
+    const withPaydown: FixedExpense[] = [
+      ...bills,
+      { id: 'f', name: 'Ekstra avdrag', amount: 2000, type: 'fixed', destinationKind: 'mortgage' },
+    ];
+    expect(savingsBase(55491, withPaydown)).toBe(55491 - consumption - 2000);
   });
 });
 
 describe('savingsBase / resolveSavingsAmounts', () => {
   const bill = (id: string, amount: number): FixedExpense => ({ id, name: id, amount, type: 'fixed' });
-  const pctSaving = (id: string, amountPercent: number): FixedExpense =>
-    ({ id, name: id, amount: 0, type: 'saving', destinationKind: 'portfolio', amountPercent });
-  const krSaving = (id: string, amount: number): FixedExpense =>
-    ({ id, name: id, amount, type: 'saving', destinationKind: 'savingsAccount', savingsAccountId: 's1' });
+  const pctSaving = (id: string, percent: number): Saving =>
+    ({ id, name: id, amount: 0, mode: 'percent', percent, destinationKind: 'portfolio' });
+  const krSaving = (id: string, amount: number): Saving =>
+    ({ id, name: id, amount, mode: 'amount', destinationKind: 'savingsAccount', savingsAccountId: 's1' });
+  // The pool a saving is a share of, for an income and a bill list.
+  const poolOf = (income: number, bills: FixedExpense[]) => savingsBase(income, bills);
 
-  it('bases the pool on consumption only, ignoring savings rows', () => {
-    const rows = [bill('rent', 18000), krSaving('fund', 13444)];
-    // 55 491 − 18 000 consumption. The 13 444 saving is NOT subtracted.
-    expect(savingsBase(55491, rows)).toBe(37491);
+  it('bases the pool on the expenses alone — savings are not subtracted', () => {
+    // 55 491 − 18 000 consumption. The savings array is not part of this at all.
+    expect(savingsBase(55491, [bill('rent', 18000)])).toBe(37491);
   });
 
   it('resolves a percentage row against that pool', () => {
-    const rows = [bill('rent', 20000), pctSaving('fund', 50)];
     // base 30 000 → 50% → 15 000.
-    expect(resolveSavingsAmounts(rows, 50000, 20)[1].amount).toBe(15000);
+    const pool = poolOf(50000, [bill('rent', 20000)]);
+    expect(resolveSavingsAmounts([pctSaving('fund', 50)], pool, 20)[0].amount).toBe(15000);
   });
 
   it('follows income up — the whole point of the feature', () => {
-    const rows = [bill('rent', 20000), pctSaving('fund', 50)];
-    const lean = resolveSavingsAmounts(rows, 50000, 20)[1].amount;
-    const fat = resolveSavingsAmounts(rows, 70000, 20)[1].amount;
+    const bills = [bill('rent', 20000)];
+    const lean = resolveSavingsAmounts([pctSaving('fund', 50)], poolOf(50000, bills), 20)[0].amount;
+    const fat = resolveSavingsAmounts([pctSaving('fund', 50)], poolOf(70000, bills), 20)[0].amount;
     expect(lean).toBe(15000);
     expect(fat).toBe(25000);
   });
 
-  it('leaves fixed-amount savings and every spending row alone', () => {
-    const rows = [bill('rent', 20000), krSaving('buffer', 500)];
-    const out = resolveSavingsAmounts(rows, 90000, 20);
+  it('leaves fixed-amount savings alone', () => {
+    const rows = [krSaving('buffer', 500)];
+    const out = resolveSavingsAmounts(rows, poolOf(90000, [bill('rent', 20000)]), 20);
     // Same array identity: nothing to resolve, so memoized callers don't churn.
     expect(out).toBe(rows);
   });
 
-  it('never shrinks a bill when the month is lean', () => {
-    const rows = [bill('rent', 20000), pctSaving('fund', 50)];
-    const out = resolveSavingsAmounts(rows, 21000, 20);
-    expect(out[0].amount).toBe(20000);
-    expect(out[1].amount).toBe(500);
+  it('shrinks a percentage saving when the month is lean', () => {
+    const pool = poolOf(21000, [bill('rent', 20000)]);
+    expect(resolveSavingsAmounts([pctSaving('fund', 50)], pool, 20)[0].amount).toBe(500);
   });
 
   it('resolves to 0 rather than negative when consumption exceeds income', () => {
-    const rows = [bill('rent', 40000), pctSaving('fund', 50)];
-    expect(resolveSavingsAmounts(rows, 30000, 20)[1].amount).toBe(0);
-  });
-
-  it('ignores amountPercent on a non-savings row', () => {
-    const rows: FixedExpense[] = [{ id: 'x', name: 'x', amount: 900, type: 'fixed', amountPercent: 50 }];
-    expect(resolveSavingsAmounts(rows, 50000, 20)[0].amount).toBe(900);
+    const pool = poolOf(30000, [bill('rent', 40000)]);
+    expect(resolveSavingsAmounts([pctSaving('fund', 50)], pool, 20)[0].amount).toBe(0);
   });
 
   it('guards a NaN or non-positive percent by keeping the stored amount', () => {
-    const rows: FixedExpense[] = [
-      { id: 'a', name: 'a', amount: 700, type: 'saving', destinationKind: 'bsu', amountPercent: NaN },
-      { id: 'b', name: 'b', amount: 800, type: 'saving', destinationKind: 'bsu', amountPercent: 0 },
+    const rows: Saving[] = [
+      { id: 'a', name: 'a', amount: 700, mode: 'percent', percent: NaN, destinationKind: 'bsu' },
+      { id: 'b', name: 'b', amount: 800, mode: 'percent', percent: 0, destinationKind: 'bsu' },
     ];
-    const out = resolveSavingsAmounts(rows, 50000, 20);
+    const out = resolveSavingsAmounts(rows, 30000, 20);
     expect(out.map(e => e.amount)).toEqual([700, 800]);
   });
 
   it('feeds savingsContributionTotal the resolved amount', () => {
-    const rows = [bill('rent', 20000), pctSaving('fund', 50)];
-    expect(savingsContributionTotal(resolveSavingsAmounts(rows, 50000, 20))).toBe(15000);
+    const pool = poolOf(50000, [bill('rent', 20000)]);
+    expect(savingsContributionTotal(resolveSavingsAmounts([pctSaving('fund', 50)], pool, 20))).toBe(15000);
   });
 });
 
 describe('resolveSavingsAmounts — rest rows', () => {
-  const bill = (id: string, amount: number): FixedExpense => ({ id, name: id, amount, type: 'fixed' });
-  const krSaving = (id: string, amount: number): FixedExpense =>
-    ({ id, name: id, amount, type: 'saving', destinationKind: 'bufferAccount' });
-  const pctSaving = (id: string, amountPercent: number): FixedExpense =>
-    ({ id, name: id, amount: 0, type: 'saving', destinationKind: 'portfolio', amountPercent });
-  const restSaving = (id: string): FixedExpense =>
-    ({ id, name: id, amount: 0, type: 'saving', destinationKind: 'portfolio', amountRest: true });
+  const krSaving = (id: string, amount: number): Saving =>
+    ({ id, name: id, amount, mode: 'amount', destinationKind: 'bufferAccount' });
+  const pctSaving = (id: string, percent: number): Saving =>
+    ({ id, name: id, amount: 0, mode: 'percent', percent, destinationKind: 'portfolio' });
+  const restSaving = (id: string): Saving =>
+    ({ id, name: id, amount: 0, mode: 'rest', destinationKind: 'portfolio' });
 
-  // base 30 000, target 65 % → 19 500.
-  const income = 50000;
+  // base 30 000 (50 000 income − 20 000 of bills), target 65 % → 19 500.
+  const base = 30000;
 
-  it('takes what the other savings rows leave of the target', () => {
-    const rows = [bill('rent', 20000), krSaving('buffer', 500), restSaving('fund')];
-    expect(resolveSavingsAmounts(rows, income, 65)[2].amount).toBe(19000);
+  it('takes what the other savings leave of the target', () => {
+    const rows = [krSaving('buffer', 500), restSaving('fund')];
+    expect(resolveSavingsAmounts(rows, base, 65)[1].amount).toBe(19000);
   });
 
   it('counts a percentage sibling at its resolved amount, not its stored one', () => {
     // 10 % of 30 000 = 3 000, so the rest is 19 500 − 3 000.
-    const rows = [bill('rent', 20000), pctSaving('bsu', 10), restSaving('fund')];
-    const out = resolveSavingsAmounts(rows, income, 65);
-    expect(out[1].amount).toBe(3000);
-    expect(out[2].amount).toBe(16500);
+    const out = resolveSavingsAmounts([pctSaving('bsu', 10), restSaving('fund')], base, 65);
+    expect(out[0].amount).toBe(3000);
+    expect(out[1].amount).toBe(16500);
   });
 
   it('follows income up, like a percentage row', () => {
-    const rows = [bill('rent', 20000), krSaving('buffer', 500), restSaving('fund')];
-    expect(resolveSavingsAmounts(rows, 60000, 65)[2].amount).toBe(25500);
+    const rows = [krSaving('buffer', 500), restSaving('fund')];
+    // 60 000 income − 20 000 of bills → base 40 000, target 65 % → 26 000.
+    expect(resolveSavingsAmounts(rows, 40000, 65)[1].amount).toBe(25500);
   });
 
   it('resolves to 0 rather than negative when the target is already spoken for', () => {
-    const rows = [bill('rent', 20000), krSaving('buffer', 25000), restSaving('fund')];
-    expect(resolveSavingsAmounts(rows, income, 65)[2].amount).toBe(0);
+    const rows = [krSaving('buffer', 25000), restSaving('fund')];
+    expect(resolveSavingsAmounts(rows, base, 65)[1].amount).toBe(0);
   });
 
   it('splits the pool evenly between two rest rows, to the exact krone', () => {
-    const rows = [bill('rent', 20000), krSaving('buffer', 501), restSaving('a'), restSaving('b')];
-    const out = resolveSavingsAmounts(rows, income, 65);
+    const out = resolveSavingsAmounts([krSaving('buffer', 501), restSaving('a'), restSaving('b')], base, 65);
     // 19 500 − 501 = 18 999 → 9 500 / 9 499, summing exactly.
-    expect(out[2].amount + out[3].amount).toBe(18999);
-    expect(out[2].amount).toBe(9500);
-  });
-
-  it('ignores amountRest on a spending row', () => {
-    const rows: FixedExpense[] = [{ id: 'x', name: 'x', amount: 900, type: 'fixed', amountRest: true }];
-    expect(resolveSavingsAmounts(rows, income, 65)[0].amount).toBe(900);
-    // Nothing to resolve, so the same array comes back.
-    expect(resolveSavingsAmounts(rows, income, 65)).toBe(rows);
+    expect(out[1].amount + out[2].amount).toBe(18999);
+    expect(out[1].amount).toBe(9500);
   });
 
   it('lets rest win over a stale percentage on the same row', () => {
-    const rows: FixedExpense[] = [
-      bill('rent', 20000),
-      { id: 'f', name: 'f', amount: 0, type: 'saving', destinationKind: 'portfolio', amountPercent: 10, amountRest: true },
+    const rows: Saving[] = [
+      { id: 'f', name: 'f', amount: 0, mode: 'rest', percent: 10, destinationKind: 'portfolio' },
     ];
-    expect(resolveSavingsAmounts(rows, income, 65)[1].amount).toBe(19500);
+    expect(resolveSavingsAmounts(rows, base, 65)[0].amount).toBe(19500);
   });
 });
 
@@ -328,11 +298,10 @@ describe('kr ⇄ % round-trip', () => {
       for (const amount of [500, 1, 13_444, 6_270, Math.floor(base / 3)]) {
         if (amount > base) continue;
         const pct = shareOfBase(amount, base);
-        const rows: FixedExpense[] = [
-          { id: 'bill', name: 'bill', amount: 0, type: 'fixed' },
-          { id: 's', name: 's', amount: 0, type: 'saving', destinationKind: 'portfolio', amountPercent: pct },
+        const rows: Saving[] = [
+          { id: 's', name: 's', amount: 0, mode: 'percent', percent: pct, destinationKind: 'portfolio' },
         ];
-        expect(resolveSavingsAmounts(rows, base, 20)[1].amount).toBe(amount);
+        expect(resolveSavingsAmounts(rows, base, 20)[0].amount).toBe(amount);
       }
     }
   });

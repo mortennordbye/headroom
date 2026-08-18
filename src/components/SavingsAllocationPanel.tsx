@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, Plus, Trash2, Wand2 } from 'lucide-react';
-import { useFinance, type ExpenseDestinationKind, type FixedExpense } from '../context/FinanceContext';
+import { useFinance, type AllocationDestinationKind, type Saving } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
 import { SavingsModeToggle } from './SavingsModeToggle';
 import { resolveAllocation, isCreatableRow, destinationKey, type AllocationRow } from '../lib/savingsAllocation';
-import { savingsBase, isSavingsRow, isPercentSavings, isRestSavings, percentOfSavingsBase } from '../lib/savingsRate';
+import { savingsBase, isPercentSavings, isRestSavings, percentOfSavingsBase } from '../lib/savingsRate';
 import { currentMonthKey } from '../lib/date';
 
 // Turns the savings target (residual × savingsTargetPercent) into a per-destination
@@ -33,7 +33,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   const {
     t, assets, debts, housingMode, formatCurrency, plannedMonthlySaving,
     savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
-    fixedExpenses, viewFixedExpenses, setFixedExpenses, automationEnabled, effectiveIncome,
+    fixedExpenses, setFixedExpenses, savings, setSavings, viewSavings, viewFixedExpenses,
+    automationEnabled, effectiveIncome,
   } = useFinance();
   const sa = t.savingsAllocation;
   const [created, setCreated] = useState(0);
@@ -82,15 +83,20 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   // this much is already running" is answerable without adding the chips up.
   const committedByKey = useMemo(() => {
     const m = new Map<string, number>();
+    for (const sv of viewSavings) {
+      if (sv.paused) continue;
+      const k = destinationKey({ destinationKind: sv.destinationKind, savingsAccountId: sv.savingsAccountId });
+      m.set(k, (m.get(k) ?? 0) + sv.amount);
+    }
+    // A plan row may also point at the mortgage or a debt; those activate as
+    // fixed expenses, so they are committed there rather than in `savings`.
     for (const e of viewFixedExpenses) {
       if (!e.destinationKind || e.automationPaused) continue;
-      const k = destinationKey({
-        destinationKind: e.destinationKind, savingsAccountId: e.savingsAccountId, debtId: e.debtId,
-      });
+      const k = destinationKey({ destinationKind: e.destinationKind, debtId: e.debtId });
       m.set(k, (m.get(k) ?? 0) + e.amount);
     }
     return m;
-  }, [viewFixedExpenses]);
+  }, [viewSavings, viewFixedExpenses]);
   const committedTotal = [...committedByKey.values()].reduce((s, n) => s + n, 0);
 
   const creatable = plan.rows.filter(
@@ -101,15 +107,15 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   // half the picture — it would show what you intend and hide what is already
   // running, which is precisely the split that made saving need two entry points.
   const plannedKeys = new Set(savingsAllocations.map(destinationKey));
-  const liveOnly = viewFixedExpenses.filter(
-    e => isSavingsRow(e) && e.destinationKind && !plannedKeys.has(destinationKey({
-      destinationKind: e.destinationKind, savingsAccountId: e.savingsAccountId, debtId: e.debtId,
+  const liveOnly = viewSavings.filter(
+    sv => !plannedKeys.has(destinationKey({
+      destinationKind: sv.destinationKind, savingsAccountId: sv.savingsAccountId,
     })),
   );
   const isEmpty = savingsAllocations.length === 0 && liveOnly.length === 0;
 
-  const patchExpense = (id: string, patch: Partial<FixedExpense>) =>
-    setFixedExpenses(fixedExpenses.map(e => (e.id === id ? { ...e, ...patch } : e)));
+  const patchSaving = (id: string, patch: Partial<Saving>) =>
+    setSavings(savings.map(sv => (sv.id === id ? { ...sv, ...patch } : sv)));
 
   const labelFor = (row: AllocationRow) =>
     options.find(o => o.v === destinationKey(row))?.l ?? sa.targetMissing;
@@ -127,7 +133,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
 
   const setTarget = (id: string, value: string) => {
     const patch: Partial<AllocationRow> = {
-      destinationKind: value.split(':')[0] as ExpenseDestinationKind,
+      destinationKind: value.split(':')[0] as AllocationDestinationKind,
       savingsAccountId: undefined,
       debtId: undefined,
     };
@@ -145,30 +151,48 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   const base = savingsBase(effectiveIncome, viewFixedExpenses);
   const percentOfBase = (amount: number) => percentOfSavingsBase(amount, base);
 
+  // Activating a plan writes to whichever array the destination belongs to: a
+  // savings vehicle becomes a `Saving`, the mortgage or a debt becomes a
+  // `FixedExpense`. This is the only place both are written, and it is why the
+  // split can't be inferred from a `type` field any more — the destination
+  // decides, at the one moment it is chosen.
   const createExpenses = () => {
-    setFixedExpenses([
-      ...fixedExpenses,
-      ...creatable.map(row => ({
+    // Same convention as assigning a destination by hand: the first move happens
+    // NEXT month, never retroactively.
+    const stamp = currentMonthKey();
+    const newSavings: Saving[] = [];
+    const newExpenses = [];
+    for (const row of creatable) {
+      if (row.destinationKind === 'mortgage' || row.destinationKind === 'debt') {
+        newExpenses.push({
+          id: crypto.randomUUID(),
+          name: labelFor(row),
+          amount: row.amount,
+          type: 'fixed' as const,
+          destinationKind: row.destinationKind,
+          debtId: row.debtId,
+          lastPostedMonth: stamp,
+        });
+        continue;
+      }
+      newSavings.push({
         id: crypto.randomUUID(),
         name: labelFor(row),
         amount: row.amount,
-        amountPercent: row.mode === 'amount' || row.mode === 'rest' ? undefined : percentOfBase(row.amount),
-        // A 'rest' row activates as a rest row, so the live expense keeps
+        // A 'rest' row activates as a rest row, so the live saving keeps
         // absorbing what the others leave instead of freezing at today's split.
-        amountRest: row.mode === 'rest' ? true : undefined,
-        // 'saving', not 'fixed': these rows move money into a savings vehicle, and
-        // anything keyed on `type` alone (row colour, essentialMonthlyExpenses)
-        // otherwise reads them as bills. See migrateSavingsExpenseType, which
-        // repairs the rows earlier versions of this line wrote.
-        type: 'saving' as const,
+        mode: row.mode ?? 'percent',
+        // A percentage row is activated as a share of the BASE, not of the
+        // target, so later editing the target percent doesn't silently re-scale
+        // a live transfer.
+        percent: row.mode === 'percent' || row.mode === undefined ? percentOfBase(row.amount) : undefined,
         destinationKind: row.destinationKind,
         savingsAccountId: row.savingsAccountId,
-        debtId: row.debtId,
-        // Same convention as assigning a destination by hand: the first move
-        // happens NEXT month, never retroactively.
-        lastPostedMonth: currentMonthKey(),
-      })),
-    ]);
+        lastPostedMonth: stamp,
+      });
+    }
+    if (newSavings.length) setSavings([...savings, ...newSavings]);
+    if (newExpenses.length) setFixedExpenses([...fixedExpenses, ...newExpenses]);
     setCreated(creatable.length);
   };
 
@@ -203,48 +227,48 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
           {/* Already running. Editable in place so this view is the single place
               saving is set up; the destination is fixed because changing it would
               silently redirect a transfer that has already posted. */}
-          {liveOnly.map(e => (
-            <div key={e.id} className="flex items-center gap-2.5 flex-wrap">
+          {liveOnly.map(sv => (
+            <div key={sv.id} className="flex items-center gap-2.5 flex-wrap">
               <span
                 className="truncate max-w-[190px] px-3 py-2 rounded-[9px] border border-[var(--border)] text-[13px]"
                 style={{ background: 'var(--bg-raised)', color: 'var(--text-1)' }}
-                title={e.name}
+                title={sv.name}
               >
-                {e.name}
+                {sv.name}
               </span>
-              {isRestSavings(e) ? (
+              {isRestSavings(sv) ? (
                 <span className={restSlotCls} style={{ color: 'var(--text-3)' }} title={sa.modeRestHint}>
                   {sa.modeRestShort}
                 </span>
-              ) : isPercentSavings(e) ? (
+              ) : isPercentSavings(sv) ? (
                 <input
                   className={pctInputCls}
                   inputMode="decimal"
-                  value={e.amountPercent}
+                  value={sv.percent}
                   aria-label={sa.percentLabel}
-                  onChange={ev => patchExpense(e.id, { amountPercent: Number(ev.target.value) || 0 })}
+                  onChange={ev => patchSaving(sv.id, { percent: Number(ev.target.value) || 0 })}
                 />
               ) : (
                 <input
                   className={pctInputCls}
                   inputMode="decimal"
-                  value={e.amount}
+                  value={sv.amount}
                   aria-label={sa.amountLabel}
-                  onChange={ev => patchExpense(e.id, { amount: Number(ev.target.value) || 0 })}
+                  onChange={ev => patchSaving(sv.id, { amount: Number(ev.target.value) || 0 })}
                 />
               )}
               <SavingsModeToggle
-                mode={isRestSavings(e) ? 'rest' : isPercentSavings(e) ? 'percent' : 'amount'}
+                mode={sv.mode ?? 'amount'}
                 modes={['percent', 'amount', 'rest']}
                 labels={modeLabels}
-                // `e` is a resolved row, so `e.amount` is this month's kroner —
+                // `sv` is a resolved row, so `sv.amount` is this month's kroner —
                 // pin those on the way to 'kr'. The stored amount underneath a
                 // derived row is only the figure it was created with, and
                 // falling back to it would move the money on a unit change.
-                onChange={m => patchExpense(e.id, {
-                  amount: e.amount,
-                  amountPercent: m === 'percent' ? percentOfBase(e.amount) : undefined,
-                  amountRest: m === 'rest' ? true : undefined,
+                onChange={m => patchSaving(sv.id, {
+                  mode: m,
+                  amount: sv.amount,
+                  percent: m === 'percent' ? percentOfBase(sv.amount) : undefined,
                 })}
               />
               <span
@@ -255,12 +279,12 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                 {sa.activeShort}
               </span>
               <span className="ml-auto text-[13px] font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>
-                {formatCurrency(e.amount)}
+                {formatCurrency(sv.amount)}
               </span>
               <button
                 type="button"
-                onClick={() => setFixedExpenses(fixedExpenses.filter(x => x.id !== e.id))}
-                aria-label={`${sa.removeRow} — ${e.name}`}
+                onClick={() => setSavings(savings.filter(x => x.id !== sv.id))}
+                aria-label={`${sa.removeRow} — ${sv.name}`}
                 className="p-1.5 rounded-[7px] hover:bg-[var(--bg-raised)] transition-colors"
                 style={{ color: 'var(--text-3)' }}
               >

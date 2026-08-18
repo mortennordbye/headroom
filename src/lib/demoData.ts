@@ -119,6 +119,13 @@ export function getDemoData(): Partial<ExportPayload> {
     // 'Strøm' above still demonstrates the double-counting suggestion.
     { id: 'demo-fx-7', name: 'Mat', amount: 6500, type: 'variable', category: 'groceries' },
   ];
+  // Savings are their own record, not fixed expenses — one of each sizing mode,
+  // so the demo shows what "follows the income" and "takes the rest" look like
+  // in the list rather than only in the dialog.
+  const demoSavings: ExportPayload['savings'] = [
+    { id: 'demo-sv-1', name: 'Bufferkonto', amount: 2000, mode: 'amount', destinationKind: 'bufferAccount' },
+    { id: 'demo-sv-2', name: 'Aksjesparing', amount: 3000, mode: 'rest', destinationKind: 'portfolio' },
+  ];
   // Two fictional accounts, so the per-account badge, the account filter and the
   // custom-name ("merge") feature all have something to act on.
   const ACCT_DAILY = 'demo-acct-daily';
@@ -212,9 +219,10 @@ export function getDemoData(): Partial<ExportPayload> {
   // time machine and the net-worth chart. k=0 is the current month; older months
   // taper growable balances down and leave the mortgage and other debts slightly higher.
   const snapshotFor = (k: number): BalanceSnapshot => ({
-    v: 2,
+    v: 3,
     source: 'auto',
     fixedExpenses: demoFixedExpenses,
+    savings: demoSavings,
     assumptions: demoAssumptions,
     categoryBudgets: demoCategoryBudgets,
     housingMode: 'homeowner',
@@ -302,6 +310,8 @@ export function getDemoData(): Partial<ExportPayload> {
     billingConfig: DEFAULT_BILLING_CONFIG,
 
     fixedExpenses: demoFixedExpenses,
+
+    savings: demoSavings,
 
     debts: demoDebts,
 

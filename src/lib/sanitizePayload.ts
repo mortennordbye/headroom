@@ -72,7 +72,8 @@ const NUMBER_RECORDS = ['monthlyIncomes', 'netWorthHistory', 'categoryBudgets'] 
 // Numeric fields of the array-of-objects payload fields, as item schemas
 // (same number-marks-numeric convention as `objectSchemas`).
 const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
-  fixedExpenses: { amount: 0, amountPercent: 0 },
+  fixedExpenses: { amount: 0 },
+  savings: { amount: 0, percent: 0, bufferTargetAmount: 0 },
   dailyTransactions: { amount: 0 },
   // A percentage row carries its share here; an imported "50" as a string must
   // coerce, or the resolver reads it as absent and the row silently freezes.
@@ -157,16 +158,18 @@ export function sanitizePayload<T>(data: T, objectSchemas: NumericObjectSchemas)
               : item,
           );
         }
-        // v2 snapshot fields: the month's fixed-expense envelopes, forward
-        // assumptions and category budgets. Same 'zero' policy as the rest of the
-        // snapshot (no downstream default merge) so a hand-edited value can't NaN
-        // a historical envelope/projection.
-        if (Array.isArray(s.fixedExpenses)) {
-          s.fixedExpenses = (s.fixedExpenses as unknown[]).map((item) =>
-            item && typeof item === 'object' && !Array.isArray(item)
-              ? coerceBySchema(item, ARRAY_ITEM_SCHEMAS.fixedExpenses, 'zero')
-              : item,
-          );
+        // v2/v3 snapshot fields: the month's fixed-expense envelopes and its
+        // savings, forward assumptions and category budgets. Same 'zero' policy
+        // as the rest of the snapshot (no downstream default merge) so a
+        // hand-edited value can't NaN a historical envelope/projection.
+        for (const key of ['fixedExpenses', 'savings'] as const) {
+          if (Array.isArray(s[key])) {
+            s[key] = (s[key] as unknown[]).map((item) =>
+              item && typeof item === 'object' && !Array.isArray(item)
+                ? coerceBySchema(item, ARRAY_ITEM_SCHEMAS[key], 'zero')
+                : item,
+            );
+          }
         }
         if (s.assumptions && typeof s.assumptions === 'object' && !Array.isArray(s.assumptions)) {
           s.assumptions = coerceBySchema(

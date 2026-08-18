@@ -65,9 +65,13 @@ const fixedExpenses = [
   { id: 'fe-7', name: 'Internett',        amount: 599,    type: 'subscription' },
   { id: 'fe-8', name: 'Musikkstrømming',  amount: 169,    type: 'subscription' },
   { id: 'fe-9', name: 'TV-strømming',     amount: 159,    type: 'subscription' },
-  { id: 'fe-10', name: 'BSU sparing',     amount: 2_200,  type: 'fixed' },
-  { id: 'fe-11', name: 'Aksjesparing',    amount: 4_000,  type: 'fixed' },
   { id: 'fe-12', name: 'Bil leasing',     amount: 1_575,  type: 'fixed' },
+];
+
+// ── Savings (money retained, not spent — its own record, not a fixed expense) ──
+const savings = [
+  { id: 'sv-1', name: 'BSU sparing',   amount: 2_200, mode: 'amount', destinationKind: 'bsu' },
+  { id: 'sv-2', name: 'Aksjesparing',  amount: 4_000, mode: 'amount', destinationKind: 'portfolio' },
 ];
 
 // ── Daily transactions for the CURRENT month (up to today) ───────
@@ -251,6 +255,7 @@ const payload = {
   monthlyIncomes,
   netWorthHistory,
   fixedExpenses,
+  savings,
   dailyTransactions,
   recurringTemplates,
   assets,
@@ -299,6 +304,7 @@ db.prepare(
 console.log(`✓ Seeded ${DB_PATH}`);
 console.log(`  · ${months.length} months of income & net-worth history`);
 console.log(`  · ${fixedExpenses.length} fixed expenses`);
+console.log(`  · ${savings.length} savings`);
 console.log(`  · ${dailyTransactions.length} transactions in ${currentMonthKey}`);
 console.log(`  · current net equity: NOK ${netWorthHistory[currentMonthKey].toLocaleString('no-NO')}`);
 console.log(`  · ${jobs.length} jobs, ${salaries.length} salary changes, ${bonuses.length} bonuses, ${overtime.length} overtime, ${hoursSnapshots.length} hours snapshots`);
