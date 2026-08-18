@@ -22,7 +22,7 @@ export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
     'jobs', 'salaries', 'bonuses', 'overtime', 'hoursSnapshots',
   ],
   budget: [
-    'fixedExpenses', 'dailyTransactions', 'deletedBankIds', 'accountLabels',
+    'fixedExpenses', 'savings', 'dailyTransactions', 'deletedBankIds', 'accountLabels',
     'categoryRules', 'labelRules', 'transferRules', 'categoryBudgets', 'recurringTemplates',
   ],
   assetsDebt: [

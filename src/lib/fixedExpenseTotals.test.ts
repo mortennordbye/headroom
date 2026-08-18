@@ -55,15 +55,6 @@ describe('essentialMonthlyExpenses', () => {
     expect(essentialMonthlyExpenses([exp('a', 500)])).toBe(500);
   });
 
-  it('excludes savings: pausing the transfer is the first thing you do in an emergency', () => {
-    const total = essentialMonthlyExpenses([
-      exp('rent', 12000, 'fixed'),
-      exp('stocks', 13444, 'saving'),
-      exp('buffer', 500, 'saving'),
-    ]);
-    expect(total).toBe(12000);
-  });
-
   it('guards NaN amounts and returns 0 for no expenses', () => {
     expect(essentialMonthlyExpenses([exp('a', NaN, 'fixed')])).toBe(0);
     expect(essentialMonthlyExpenses([])).toBe(0);

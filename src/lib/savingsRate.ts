@@ -1,62 +1,34 @@
 // Trailing savings-rate health, derived from the same `monthlyCashflow` rows
 // that feed SavingsRateChart. Pure + unit-tested so the Budget page can flag a
 // slipping rate without re-deriving the money math in a component.
-import type { FixedExpense } from '../context/FinanceContext';
+import type { FixedExpense, Saving } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 
 /** Finite-and-non-negative guard against a hand-edited undefined/NaN amount. */
 const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
 
 /**
- * True for a destination where the whole expense amount stays the user's money:
- * a cash savings account, the emergency buffer, the investment portfolio, or BSU.
+ * What the savings list moves every month. It leaves free-to-spend like any
+ * fixed expense, but it is still the user's money, so the savings rate must not
+ * subtract it as if it were consumption — and the investing recommendation must
+ * count it as already set aside rather than asking for it again.
  *
- * `mortgage` / `debt` are deliberately excluded: only the principal portion of
- * those builds equity and a `FixedExpense` holds the gross payment, so counting
- * them whole would overstate the rate.
+ * Mortgage/debt paydown is deliberately not in here: only the principal portion
+ * of those builds equity and a `FixedExpense` holds the gross payment, so
+ * counting them whole would overstate the rate. They stay expenses.
  */
-export function isSavingsDestination(kind: FixedExpense['destinationKind']): boolean {
-  return kind === 'savingsAccount' || kind === 'bufferAccount'
-    || kind === 'portfolio' || kind === 'bsu';
-}
-
-/**
- * True for a row that is money retained rather than spent — either because it is
- * explicitly typed as saving, or because it moves a balance to a savings
- * vehicle. Both count: the type is the user's own classification, and the
- * destination is what actually moves the money. A row can legitimately have one
- * without the other (a saving typed but not yet pointed anywhere, or a legacy
- * row with a destination and no type).
- */
-export function isSavingsRow(e: Pick<FixedExpense, 'type' | 'destinationKind'>): boolean {
-  return e.type === 'saving' || isSavingsDestination(e.destinationKind);
-}
-
-/**
- * The part of the fixed-expense list that is money moved into savings rather
- * than spent. It leaves free-to-spend like any other fixed expense, but it is
- * still the user's money, so the savings rate must not subtract it as if it
- * were consumption — and the investing recommendation must count it as already
- * set aside rather than asking for it again.
- */
-export function savingsContributionTotal(fixedExpenses: FixedExpense[]): number {
-  return fixedExpenses.reduce(
-    (sum, e) => (isSavingsRow(e) ? sum + amount(e.amount) : sum),
-    0,
-  );
+export function savingsContributionTotal(savings: Saving[]): number {
+  return savings.reduce((sum, s) => sum + amount(s.amount), 0);
 }
 
 /**
  * Income minus CONSUMPTION — the pool a savings plan is a share of, and the same
- * quantity `calcRecommendations` calls `base`. Savings rows are excluded on
- * purpose: a saving is not a cost, and subtracting it would take a share of a
- * pool the saving had already been removed from.
+ * quantity `calcRecommendations` calls `base`. Only fixed expenses are
+ * subtracted: a saving is not a cost, and taking it off would make the plan a
+ * share of a pool it had already been removed from.
  */
 export function savingsBase(effectiveIncome: number, fixedExpenses: FixedExpense[]): number {
-  const consumption = fixedExpenses.reduce(
-    (sum, e) => (isSavingsRow(e) ? sum : sum + amount(e.amount)),
-    0,
-  );
+  const consumption = fixedExpenses.reduce((sum, e) => sum + amount(e.amount), 0);
   return Math.max(0, (Number.isFinite(effectiveIncome) ? effectiveIncome : 0) - consumption);
 }
 
@@ -87,40 +59,40 @@ export function savingsTargetAmount(base: number, savingsTargetPercent: number):
 }
 
 /**
- * Resolve derived savings rows into this month's kroner.
+ * Resolve derived savings into this month's kroner.
  *
- * A savings row may be sized in one of three ways instead of a frozen `amount`:
- * `amountPercent` is "this share of the month's savings base", and `amountRest`
- * is "whatever the other savings rows leave of the savings target". Both make a
- * transfer follow income: import a bigger payslip and the amount moved rises
- * with it, instead of the target rising while the transfer stays put.
+ * A saving may be sized in one of three ways instead of a frozen `amount`:
+ * 'percent' is "this share of the month's savings base", and 'rest' is
+ * "whatever the other savings leave of the savings target". Both make a transfer
+ * follow income: import a bigger payslip and the amount moved rises with it,
+ * instead of the target rising while the transfer stays put.
  *
- * Only savings rows are resolved. A bill must not shrink because a month was
- * lean — that is exactly the difference between a cost and a saving.
+ * `base` is `savingsBase(income, fixedExpenses)` — passed in rather than derived
+ * here, because a saving no longer lives in the expense list it is measured
+ * against.
  *
  * Returns the same array (and the same row objects) when there is nothing to
  * resolve, so callers memoized on identity don't churn.
  */
 export function resolveSavingsAmounts(
-  fixedExpenses: FixedExpense[],
-  effectiveIncome: number,
+  savings: Saving[],
+  base: number,
   savingsTargetPercent: number,
-): FixedExpense[] {
-  const hasPercent = fixedExpenses.some(e => isPercentSavings(e));
-  const restCount = fixedExpenses.reduce((n, e) => (isRestSavings(e) ? n + 1 : n), 0);
-  if (!hasPercent && restCount === 0) return fixedExpenses;
-  const base = savingsBase(effectiveIncome, fixedExpenses);
-  const resolved = fixedExpenses.map(e =>
-    isPercentSavings(e)
-      ? { ...e, amount: Math.round((base * (e.amountPercent as number)) / 100) }
-      : e,
+): Saving[] {
+  const hasPercent = savings.some(s => isPercentSavings(s));
+  const restCount = savings.reduce((n, s) => (isRestSavings(s) ? n + 1 : n), 0);
+  if (!hasPercent && restCount === 0) return savings;
+  const resolved = savings.map(s =>
+    isPercentSavings(s)
+      ? { ...s, amount: Math.round((Math.max(0, base) * (s.percent as number)) / 100) }
+      : s,
   );
   if (restCount === 0) return resolved;
-  // What the other savings rows already claim of the target — percentages
-  // resolved above, fixed rows at their stated kroner. Neither depends on a
-  // 'rest' row, so this can't feed back on itself.
+  // What the other savings already claim of the target — percentages resolved
+  // above, fixed rows at their stated kroner. Neither depends on a 'rest' row,
+  // so this can't feed back on itself.
   const claimed = resolved.reduce(
-    (sum, e) => (isSavingsRow(e) && !isRestSavings(e) ? sum + amount(e.amount) : sum),
+    (sum, s) => (isRestSavings(s) ? sum : sum + amount(s.amount)),
     0,
   );
   const pool = Math.max(0, savingsTargetAmount(base, savingsTargetPercent) - claimed);
@@ -129,21 +101,20 @@ export function resolveSavingsAmounts(
   // asking for "the rest" get half each. Same rule as resolveAllocation.
   const each = Math.floor(pool / restCount);
   let extra = pool - each * restCount;
-  return resolved.map(e => (isRestSavings(e) ? { ...e, amount: each + (extra-- > 0 ? 1 : 0) } : e));
+  return resolved.map(s => (isRestSavings(s) ? { ...s, amount: each + (extra-- > 0 ? 1 : 0) } : s));
 }
 
-/** A savings row driven by a share of the base rather than a fixed amount. */
-export function isPercentSavings(e: FixedExpense): boolean {
-  return isSavingsRow(e)
-    && !e.amountRest
-    && typeof e.amountPercent === 'number'
-    && Number.isFinite(e.amountPercent)
-    && e.amountPercent > 0;
+/** A saving driven by a share of the base rather than a fixed amount. */
+export function isPercentSavings(s: Saving): boolean {
+  return s.mode === 'percent'
+    && typeof s.percent === 'number'
+    && Number.isFinite(s.percent)
+    && s.percent > 0;
 }
 
-/** A savings row that takes whatever the other savings rows leave of the target. */
-export function isRestSavings(e: FixedExpense): boolean {
-  return isSavingsRow(e) && e.amountRest === true;
+/** A saving that takes whatever the others leave of the target. */
+export function isRestSavings(s: Saving): boolean {
+  return s.mode === 'rest';
 }
 
 /**

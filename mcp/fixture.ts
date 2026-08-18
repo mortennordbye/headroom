@@ -69,6 +69,9 @@ export function fullFixture(): ExportPayload {
       { id: 'f3', name: 'Insurance', amount: 1200, type: 'insurance' },
       { id: 'f4', name: 'Groceries envelope', amount: 6000, type: 'variable', category: 'groceries' },
     ],
+    savings: [
+      { id: 's1', name: 'Emergency fund', amount: 2000, mode: 'amount', destinationKind: 'bufferAccount' },
+    ],
     dailyTransactions: [
       { id: 't1', date: '2026-06-03', description: 'Grocery store', amount: 5000, category: 'groceries', kind: 'expense' },
       { id: 't2', date: '2026-06-10', description: 'Restaurant', amount: 2000, category: 'dining', kind: 'expense' },

@@ -11,7 +11,7 @@ const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max
 
 // Untyped legacy/imported rows count as 'fixed' — matching `expenseColor`'s
 // `type ?? 'fixed'` fallback on the Budget page.
-const TYPE_ORDER: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance', 'saving'];
+const TYPE_ORDER: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance'];
 
 export interface FixedExpenseTypeTotal {
   type: ExpenseType;
@@ -31,13 +31,14 @@ export function fixedExpenseTotalsByType(expenses: FixedExpense[]): FixedExpense
 
 /**
  * Monthly essential spend for the emergency-fund runway: every fixed-expense
- * line except `subscription` and `saving`. Subscriptions are discretionary
- * (Netflix, Spotify — the things you cancel in a real emergency); a saving is
- * not spend at all, and pausing the transfer is the FIRST thing you do in one,
- * so counting it makes the buffer look short of a bill that doesn't exist.
- * Untyped legacy rows count as 'fixed' (essential).
+ * line except `subscription`. Subscriptions are discretionary (Netflix, Spotify
+ * — the things you cancel in a real emergency). Savings need no exclusion here
+ * any more: they are not in this list at all, which is the point of them being
+ * their own record — pausing the transfer is the FIRST thing you do in an
+ * emergency, so counting one made the buffer look short of a bill that doesn't
+ * exist. Untyped legacy rows count as 'fixed' (essential).
  */
-const NON_ESSENTIAL: ReadonlySet<ExpenseType> = new Set<ExpenseType>(['subscription', 'saving']);
+const NON_ESSENTIAL: ReadonlySet<ExpenseType> = new Set<ExpenseType>(['subscription']);
 
 export function essentialMonthlyExpenses(expenses: FixedExpense[]): number {
   return expenses

@@ -31,9 +31,10 @@ import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
-import { useFinance, type TransactionTemplate, type ExpenseType, type DailyTransaction, type FixedExpense } from '../context/FinanceContext';
+import { useFinance, type TransactionTemplate, type ExpenseType, type DailyTransaction, type FixedExpense, type Saving } from '../context/FinanceContext';
 import EditModal, { type ModalField } from '../components/EditModal';
 import ExpenseDialog from '../components/ExpenseDialog';
+import SavingDialog from '../components/SavingDialog';
 import EditTransactionModal from '../components/EditTransactionModal';
 import { parseLocaleNumber } from '../lib/validators';
 import { categoryMeta, isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
@@ -41,7 +42,7 @@ import { suggestEnvelopeLinks, envelopeKeyForTx, type Envelope, type EnvelopeSta
 import { suggestTransferRules } from '../lib/transferSuggestions';
 import { RULES_ANCHOR } from '../components/CategoryRules';
 import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
-import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries, isSavingsRow, isPercentSavings, isRestSavings } from '../lib/savingsRate';
+import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries, isPercentSavings, isRestSavings } from '../lib/savingsRate';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
@@ -84,9 +85,11 @@ const EXPENSE_TYPE_COLOR: Record<ExpenseType, string> = {
   variable: CHART.forest,   // variable spend
   subscription: CHART.slate, // subscriptions
   insurance: CHART.rust,    // insurance
-  saving: CHART.brass,      // money retained, not spent
 };
 const expenseColor = (type?: ExpenseType) => EXPENSE_TYPE_COLOR[type ?? 'fixed'];
+// Money retained rather than spent. Not in the map above: a saving has no
+// expense type, and giving it one was how it kept being mistaken for a bill.
+const SAVING_COLOR = CHART.brass;
 
 // Envelope draw-down status → colour token (under = healthy, near = caution, over = alert).
 const ENVELOPE_STATUS_COLOR: Record<EnvelopeStatus, string> = {
@@ -153,7 +156,7 @@ interface ModalConfig {
 let lastAddDefaults: { category: string; kind: 'income' | 'expense' } = { category: '', kind: 'expense' };
 
 interface PendingDelete {
-  type: 'expense';
+  type: 'expense' | 'saving';
   id: string;
   name: string;
 }
@@ -182,6 +185,7 @@ const BudgetPage: React.FC = () => {
     savingsContributions,
     fixedExpenses,
     viewFixedExpenses,
+    savings, setSavings, viewSavings,
     fixedExpensesFromSnapshot,
     setFixedExpenses,
     debts,
@@ -283,27 +287,18 @@ const BudgetPage: React.FC = () => {
   // still shown; only the visual grouping changes. Untyped legacy rows fall into
   // 'fixed', matching `expenseColor` and `fixedExpenseTotalsByType`.
   //
-  // Rows whose destination is a savings vehicle are pulled OUT of this list and
-  // shown in their own "Sparing" section: moving money to funds or a savings
-  // account is not an expense, and burying it here made a large transfer read as
-  // a bill (and pushed "faste utgifter" to a share of income that looked alarming).
-  // Debt/mortgage paydown deliberately stays an expense — the gross payment is
-  // mostly interest and it does leave for good.
-  const savingRows = useMemo(
-    () => viewFixedExpenses.filter((e) => isSavingsRow(e)),
-    [viewFixedExpenses],
-  );
-  const spendRows = useMemo(
-    () => viewFixedExpenses.filter((e) => !isSavingsRow(e)),
-    [viewFixedExpenses],
-  );
+  // Savings live in their own array and their own "Sparing" card: moving money
+  // to funds or a savings account is not an expense, and burying it here made a
+  // large transfer read as a bill (and pushed "faste utgifter" to a share of
+  // income that looked alarming). Debt/mortgage paydown deliberately stays an
+  // expense — the gross payment is mostly interest and it does leave for good.
   const spendFixedTotal = useMemo(
-    () => spendRows.reduce((sum, e) => sum + e.amount, 0),
-    [spendRows],
+    () => viewFixedExpenses.reduce((sum, e) => sum + e.amount, 0),
+    [viewFixedExpenses],
   );
   const sortedSpendExpenses = useMemo(
-    () => [...spendRows].sort((a, b) => b.amount - a.amount),
-    [spendRows],
+    () => [...viewFixedExpenses].sort((a, b) => b.amount - a.amount),
+    [viewFixedExpenses],
   );
 
   // The savings target in kroner, resolved the same way calcRecommendations does
@@ -322,7 +317,7 @@ const BudgetPage: React.FC = () => {
   const spendGroups = useMemo(() => {
     const order: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance'];
     const byType = new Map<ExpenseType, FixedExpense[]>();
-    for (const e of spendRows) {
+    for (const e of viewFixedExpenses) {
       const type = e.type ?? 'fixed';
       const bucket = byType.get(type);
       if (bucket) bucket.push(e);
@@ -331,15 +326,7 @@ const BudgetPage: React.FC = () => {
     return order
       .map((type) => ({ type: type as ExpenseType, expenses: byType.get(type) ?? [] }))
       .filter((g) => g.expenses.length > 0);
-  }, [spendRows]);
-
-  // The savings table's single group. Kept as a group so it renders through the
-  // very same row renderer as the expenses table (editing, delete, destination
-  // label all behave identically) while living in its own card.
-  const savingGroup = useMemo(
-    () => ({ type: 'saving' as ExpenseType, expenses: savingRows }),
-    [savingRows],
-  );
+  }, [viewFixedExpenses]);
 
   // --- Validation helpers ---
   const parsePositiveNumber = (val: string): number | null => {
@@ -377,10 +364,6 @@ const BudgetPage: React.FC = () => {
   // money" destination, and advanced tracking/matching options.
   const [expenseDialog, setExpenseDialog] = useState<{ editing?: FixedExpense } | null>(null);
   const openExpenseDialog = (editing?: FixedExpense) => setExpenseDialog({ editing });
-  // Saving has ONE setup surface. The Sparing card's "+" and its "fordel
-  // sparemålet" link both open it: two doors onto the same thing was the reason
-  // a savings row could be created as a fixed expense in the first place.
-  const [allocationOpen, setAllocationOpen] = useState(false);
   const saveExpense = (payload: Omit<FixedExpense, 'id'>) => {
     setFixedExpenses(
       expenseDialog?.editing
@@ -390,21 +373,36 @@ const BudgetPage: React.FC = () => {
     setExpenseDialog(null);
   };
 
-  // Display label for a destination-bearing expense's target (or null if none).
-  const destinationLabelFor = (e: FixedExpense): string | null => {
-    if (e.destinationKind === 'savingsAccount') {
-      const acc = (assets.savingsAccounts ?? []).find(s => s.id === e.savingsAccountId);
+  // --- Savings ---
+  // Its own dialog (src/components/SavingDialog.tsx), because a saving is its own
+  // record: no expense type, no envelope tracking, and the destination is the
+  // whole point rather than an option. The allocation panel is a second view of
+  // the same list — the plan behind it — reached from the target block below.
+  const [savingDialog, setSavingDialog] = useState<{ editing?: Saving } | null>(null);
+  const openSavingDialog = (editing?: Saving) => setSavingDialog({ editing });
+  const [allocationOpen, setAllocationOpen] = useState(false);
+  const saveSaving = (payload: Omit<Saving, 'id'>) => {
+    setSavings(
+      savingDialog?.editing
+        ? savings.map(sv => (sv.id === savingDialog.editing!.id ? { ...sv, ...payload } : sv))
+        : [...savings, { id: crypto.randomUUID(), ...payload }],
+    );
+    setSavingDialog(null);
+  };
+
+  // Display label for a saving's destination.
+  const savingTargetLabel = (sv: Saving): string => {
+    if (sv.destinationKind === 'savingsAccount') {
+      const acc = (assets.savingsAccounts ?? []).find(a => a.id === sv.savingsAccountId);
       return acc ? `${t.expenseDestination.savings}: ${acc.name}` : t.expenseDestination.targetMissing;
     }
-    if (e.destinationKind === 'bufferAccount') {
-      return t.expenseDestination.buffer;
-    }
-    if (e.destinationKind === 'portfolio') {
-      return t.expenseDestination.portfolio;
-    }
-    if (e.destinationKind === 'bsu') {
-      return t.expenseDestination.bsu;
-    }
+    if (sv.destinationKind === 'bufferAccount') return t.expenseDestination.buffer;
+    if (sv.destinationKind === 'bsu') return t.expenseDestination.bsu;
+    return t.expenseDestination.portfolio;
+  };
+
+  // Display label for a paydown expense's target (or null if none).
+  const destinationLabelFor = (e: FixedExpense): string | null => {
     if (e.destinationKind === 'debt') {
       const d = debts.find(x => x.id === e.debtId);
       return d ? `${t.expenseDestination.debt}: ${d.name}` : t.expenseDestination.targetMissing;
@@ -419,9 +417,14 @@ const BudgetPage: React.FC = () => {
     setPendingDelete({ type: 'expense', id, name });
   };
 
+  const removeSaving = (id: string, name: string) => {
+    setPendingDelete({ type: 'saving', id, name });
+  };
+
   const confirmDelete = () => {
     if (!pendingDelete) return;
-    setFixedExpenses(fixedExpenses.filter(e => e.id !== pendingDelete.id));
+    if (pendingDelete.type === 'saving') setSavings(savings.filter(sv => sv.id !== pendingDelete.id));
+    else setFixedExpenses(fixedExpenses.filter(e => e.id !== pendingDelete.id));
     setPendingDelete(null);
   };
 
@@ -697,7 +700,7 @@ const BudgetPage: React.FC = () => {
   // closure rather than a child component so it keeps using the editing state,
   // envelope reconciliation and handlers above without threading ~15 props, and
   // can be rendered by BOTH the expenses table and the savings table below.
-  const renderGroup = (group: { type: ExpenseType; expenses: FixedExpense[] }, hideHeader = false) => (
+  const renderGroup = (group: { type: ExpenseType; expenses: FixedExpense[] }) => (
             // Each category is its own card: a coloured left edge + a tinted
             // header band make the grouping unmistakable, and the rows live
             // inside so a category reads as one bounded block.
@@ -706,7 +709,6 @@ const BudgetPage: React.FC = () => {
               className="mt-3 first:mt-0 rounded-[10px] border border-[var(--border)] overflow-hidden"
               style={{ borderLeft: `3px solid ${expenseColor(group.type)}` }}
             >
-              {!hideHeader && (
               <div
                 className="flex items-center gap-2 px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider"
                 style={{
@@ -715,9 +717,8 @@ const BudgetPage: React.FC = () => {
                 }}
               >
                 <span className="w-[8px] h-[8px] rounded-[2px] shrink-0" style={{ background: expenseColor(group.type) }} />
-                {group.type === 'saving' ? t.budgetPage.savingsCardTitle : t.expenseType[group.type]}
+                {t.expenseType[group.type]}
               </div>
-              )}
               <div className="px-3.5">
               {group.expenses.map((expense) => {
             // Envelope reconciliation, shown only for a linked expense that has
@@ -785,22 +786,90 @@ const BudgetPage: React.FC = () => {
                   <span aria-hidden>→</span> {destinationLabelFor(expense)}
                 </div>
               )}
-              {/* A derived row's amount is recomputed monthly, so say so —
-                  otherwise next month's different figure looks like the app
-                  changed it. */}
-              {(isPercentSavings(expense) || isRestSavings(expense)) && (
-                <div className="mt-0.5 pl-[15px] text-[10px] uppercase tracking-wider" style={{ color: 'var(--brass)' }}>
-                  {isRestSavings(expense)
-                    ? t.budgetPage.savingsTakesRest
-                    : t.budgetPage.savingsFollowsIncome.replace('{percent}', String(expense.amountPercent))}
-                </div>
-              )}
               {showEnvelope && <EnvelopeBar envelope={envelope} formatCurrency={formatCurrency} labels={{ left: t.envelopeLeft, over: t.envelopeOver }} />}
             </div>
             );
               })}
               </div>
             </div>
+  );
+
+  // The savings list. Its own renderer rather than a reuse of `renderGroup`:
+  // a saving has no expense type to colour by, no envelope to reconcile, and its
+  // destination is not an optional extra but the thing it IS — so the target
+  // reads as the second line of the row rather than as a footnote about
+  // automation. Sharing the expense renderer is what made a transfer look like a
+  // bill with a label stuck on it.
+  const renderSavings = () => (
+    <div
+      className="rounded-[10px] border border-[var(--border)] overflow-hidden"
+      style={{ borderLeft: `3px solid ${SAVING_COLOR}` }}
+    >
+      <div className="px-3.5">
+        {viewSavings.map((sv) => (
+          <div key={sv.id} className="py-4 border-b border-[var(--border)] last:border-0">
+            <div className="flex items-center justify-between gap-3 group">
+              {expensesReadOnly ? (
+                <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] min-w-0">
+                  <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: SAVING_COLOR }} />
+                  <span className="truncate">{sv.name}</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`${t.edit} — ${sv.name}`}
+                  className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
+                  onClick={() => openSavingDialog(sv)}
+                >
+                  <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: SAVING_COLOR }} />
+                  <span className="truncate">{sv.name}</span>
+                </button>
+              )}
+              <div className="flex items-center gap-3 shrink-0">
+                {expensesReadOnly ? (
+                  <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">{formatCurrency(sv.amount)}</span>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={`${t.edit} — ${sv.name}`}
+                      className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
+                      onClick={() => openSavingDialog(sv)}
+                    >
+                      {formatCurrency(sv.amount)}
+                    </button>
+                    <button
+                      onClick={() => removeSaving(sv.id, sv.name)}
+                      aria-label={`${t.delete} — ${sv.name}`}
+                      className="text-[var(--text-2)] hover:text-[var(--negative)] sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="mt-1 pl-[15px] flex items-center gap-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+              <span aria-hidden>→</span> {savingTargetLabel(sv)}
+            </div>
+            {/* A derived amount is recomputed monthly, so say so — otherwise
+                next month's different figure looks like the app changed it. */}
+            {(isPercentSavings(sv) || isRestSavings(sv)) && (
+              <div className="mt-0.5 pl-[15px] text-[10px] uppercase tracking-wider" style={{ color: 'var(--brass)' }}>
+                {isRestSavings(sv)
+                  ? t.budgetPage.savingsTakesRest
+                  : t.budgetPage.savingsFollowsIncome.replace('{percent}', String(sv.percent))}
+              </div>
+            )}
+            {sv.paused && (
+              <div className="mt-0.5 pl-[15px] text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                {t.expenseDestination.pausedLabel}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 
   return (
@@ -1099,7 +1168,7 @@ const BudgetPage: React.FC = () => {
             <SectionLabel>{t.budgetPage.savingsCardTitle}</SectionLabel>
             {!expensesReadOnly && (
               <button
-                onClick={() => setAllocationOpen(true)}
+                onClick={() => openSavingDialog()}
                 aria-label={`${t.add} — ${t.budgetPage.savingsCardTitle}`}
                 className="text-[var(--accent)] hover:opacity-70 transition-opacity"
               >
@@ -1141,14 +1210,26 @@ const BudgetPage: React.FC = () => {
                 </span>
               </div>
             </div>
+            {/* The plan behind the list: how the target should be split across
+                destinations, and what of it is already running. A second view of
+                the same savings, so it belongs with the target rather than on
+                the "+" that adds a single one. */}
+            {!expensesReadOnly && (
+              <button
+                onClick={() => setAllocationOpen(true)}
+                className="text-[11.5px] font-medium text-[var(--accent)] hover:opacity-70 transition-opacity"
+              >
+                {t.savingsAllocation.title} →
+              </button>
+            )}
           </div>
 
           <div className="flex-1 flex flex-col">
-            {savingRows.length === 0 ? (
+            {viewSavings.length === 0 ? (
               <p className="text-[13px]" style={{ color: 'var(--text-3)' }}>{t.budgetPage.savingsCardEmpty}</p>
             ) : (
               <>
-                {renderGroup(savingGroup, true)}
+                {renderSavings()}
                 <div className="pt-5 mt-auto flex justify-between items-baseline">
                   <SectionLabel>{t.aggregate}</SectionLabel>
                   <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(savingsContributions)}</span>
@@ -1617,6 +1698,13 @@ const BudgetPage: React.FC = () => {
           expense={expenseDialog.editing}
           onSave={saveExpense}
           onClose={() => setExpenseDialog(null)}
+        />
+      )}
+      {savingDialog && (
+        <SavingDialog
+          saving={savingDialog.editing}
+          onSave={saveSaving}
+          onClose={() => setSavingDialog(null)}
         />
       )}
       {allocationOpen && (

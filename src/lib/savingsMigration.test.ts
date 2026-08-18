@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { migrateSavingsAccounts, migrateSnapshotSavings, migrateSavingsExpenseType } from './savingsMigration';
-import type { Assets, BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
+import { migrateSavingsAccounts, migrateSnapshotSavings, partitionSavings, mergeStoredSavings } from './savingsMigration';
+import type { Assets, BalanceSnapshot, FixedExpense, Saving } from '../context/FinanceContext';
 
 const base: Assets = {
   portfolio: 0, unrealizedGain: 0, taxRate: 30, bsu: 0, bsuAnnualContribution: 0, savings: 0, savingsAccounts: [],
@@ -55,48 +55,122 @@ describe('migrateSnapshotSavings', () => {
   });
 });
 
-describe('migrateSavingsExpenseType', () => {
-  const row = (over: Partial<FixedExpense>): FixedExpense =>
-    ({ id: 'x', name: 'x', amount: 100, ...over });
+describe('partitionSavings', () => {
+  // A stored row from before the split: it may carry any of the savings-only
+  // fields, which no longer exist on `FixedExpense`.
+  const row = (over: Record<string, unknown>): FixedExpense =>
+    ({ id: 'x', name: 'x', amount: 100, ...over }) as FixedExpense;
 
-  it('retypes a savings destination stored as a spending type', () => {
-    const out = migrateSavingsExpenseType([
+  it('files a savings destination stored as a spending type under savings', () => {
+    const { expenses, savings } = partitionSavings([
       row({ id: 'a', name: 'Aksjer og fond', amount: 13444, type: 'fixed', destinationKind: 'portfolio' }),
       row({ id: 'b', name: 'Ferie/Gaver', amount: 500, type: 'fixed', destinationKind: 'savingsAccount', savingsAccountId: 's1' }),
     ]);
-    expect(out.map(e => e.type)).toEqual(['saving', 'saving']);
-    // Everything else survives untouched.
-    expect(out[1]).toMatchObject({ id: 'b', name: 'Ferie/Gaver', amount: 500, savingsAccountId: 's1' });
+    expect(expenses).toEqual([]);
+    expect(savings.map(s => s.id)).toEqual(['a', 'b']);
+    expect(savings[1]).toMatchObject({
+      id: 'b', name: 'Ferie/Gaver', amount: 500, destinationKind: 'savingsAccount', savingsAccountId: 's1',
+    });
   });
 
   it('covers every savings destination, and no others', () => {
-    const kinds = ['savingsAccount', 'bufferAccount', 'portfolio', 'bsu'] as const;
-    for (const k of kinds) {
-      expect(migrateSavingsExpenseType([row({ type: 'fixed', destinationKind: k })])[0].type).toBe('saving');
+    for (const k of ['savingsAccount', 'bufferAccount', 'portfolio', 'bsu'] as const) {
+      expect(partitionSavings([row({ type: 'fixed', destinationKind: k })]).savings).toHaveLength(1);
     }
     // A paydown is not a saving: a FixedExpense holds the gross payment, most of
-    // which is interest, so retyping it would overstate the savings rate.
+    // which is interest, so filing it as retained would overstate the rate.
     for (const k of ['mortgage', 'debt'] as const) {
-      expect(migrateSavingsExpenseType([row({ type: 'fixed', destinationKind: k })])[0].type).toBe('fixed');
+      const out = partitionSavings([row({ type: 'fixed', destinationKind: k })]);
+      expect(out.savings).toEqual([]);
+      expect(out.expenses[0].destinationKind).toBe(k);
     }
   });
 
-  it('leaves an ordinary expense and an untyped legacy row alone', () => {
-    const plain = row({ id: 'p', type: 'subscription' });
-    const legacy = row({ id: 'l' });
-    const out = migrateSavingsExpenseType([plain, legacy]);
-    expect(out[0]).toBe(plain);
-    expect(out[1]).toBe(legacy);
+  it('keeps an ordinary expense and an untyped legacy row as expenses', () => {
+    const { expenses, savings } = partitionSavings([
+      row({ id: 'p', type: 'subscription' }),
+      row({ id: 'l' }),
+    ]);
+    expect(savings).toEqual([]);
+    expect(expenses.map(e => e.id)).toEqual(['p', 'l']);
+    expect(expenses[0].type).toBe('subscription');
+    expect(expenses[1].type).toBeUndefined();
   });
 
-  it('is idempotent and preserves identity when there is nothing to fix', () => {
-    const already = row({ type: 'saving', destinationKind: 'portfolio' });
-    const once = migrateSavingsExpenseType([already]);
-    expect(once[0]).toBe(already);
-    expect(migrateSavingsExpenseType(once)).toEqual(once);
+  it('files a row typed saving with no destination under the portfolio', () => {
+    const { savings } = partitionSavings([row({ type: 'saving' })]);
+    expect(savings[0].destinationKind).toBe('portfolio');
   });
 
-  it('retypes a row that has a savings destination but no type at all', () => {
-    expect(migrateSavingsExpenseType([row({ destinationKind: 'bsu' })])[0].type).toBe('saving');
+  it('translates the sizing fields onto mode/percent', () => {
+    const [pct] = partitionSavings([row({ destinationKind: 'portfolio', amountPercent: 12.5 })]).savings;
+    expect(pct).toMatchObject({ mode: 'percent', percent: 12.5 });
+    const [rest] = partitionSavings([row({ destinationKind: 'portfolio', amountRest: true })]).savings;
+    expect(rest).toMatchObject({ mode: 'rest' });
+    expect(rest.percent).toBeUndefined();
+    const [amt] = partitionSavings([row({ destinationKind: 'portfolio' })]).savings;
+    expect(amt).toMatchObject({ mode: 'amount' });
+    // 'rest' wins over a stray percentage, matching the old isPercentSavings guard.
+    const [both] = partitionSavings([row({ destinationKind: 'bsu', amountRest: true, amountPercent: 9 })]).savings;
+    expect(both.mode).toBe('rest');
+  });
+
+  it('carries the pause flag and the buffer-builder target across', () => {
+    const [sv] = partitionSavings([
+      row({ destinationKind: 'bufferAccount', automationPaused: true, bufferTargetAmount: 90000, lastPostedMonth: '2026-05' }),
+    ]).savings;
+    expect(sv).toMatchObject({ paused: true, bufferTargetAmount: 90000, lastPostedMonth: '2026-05' });
+  });
+
+  it('strips savings-only fields off a row that stays an expense', () => {
+    const [e] = partitionSavings([
+      row({ type: 'fixed', amountPercent: 20, savingsAccountId: 's1', bufferTargetAmount: 1000 }),
+    ]).expenses;
+    expect(e).not.toHaveProperty('amountPercent');
+    expect(e).not.toHaveProperty('savingsAccountId');
+    expect(e).not.toHaveProperty('bufferTargetAmount');
+  });
+
+  it('is idempotent — the expense half holds no savings left to extract', () => {
+    const input = [
+      row({ id: 'a', type: 'saving', destinationKind: 'portfolio' }),
+      row({ id: 'b', type: 'fixed' }),
+    ];
+    const once = partitionSavings(input);
+    const twice = partitionSavings(once.expenses);
+    expect(twice.savings).toEqual([]);
+    expect(twice.expenses).toEqual(once.expenses);
+  });
+
+  // The invariant the whole migration rests on: a row lands in exactly one array
+  // with its amount untouched, so every total built from expenses + savings is
+  // the same number it was before the split.
+  it('moves no money — the two halves sum to the input', () => {
+    const input = [
+      row({ id: 'a', amount: 16500, type: 'fixed' }),
+      row({ id: 'b', amount: 13444, type: 'fixed', destinationKind: 'portfolio' }),
+      row({ id: 'c', amount: 500, type: 'saving', destinationKind: 'savingsAccount', savingsAccountId: 's1' }),
+      row({ id: 'd', amount: 3200, type: 'fixed', destinationKind: 'mortgage' }),
+      row({ id: 'e', amount: 650, type: 'insurance' }),
+    ];
+    const { expenses, savings } = partitionSavings(input);
+    const sum = (rows: { amount: number }[]) => rows.reduce((n, r) => n + r.amount, 0);
+    expect(expenses.length + savings.length).toBe(input.length);
+    expect(sum(expenses) + sum(savings)).toBe(sum(input));
+    // And each id appears exactly once across the two.
+    expect([...expenses, ...savings].map(r => r.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+});
+
+describe('mergeStoredSavings', () => {
+  it('concatenates an already-split savings array with anything still inline', () => {
+    const stored: Saving[] = [{ id: 's1', name: 'Buffer', amount: 2000, destinationKind: 'bufferAccount' }];
+    const inline = [{ id: 'x', name: 'Fond', amount: 900, type: 'saving', destinationKind: 'portfolio' } as unknown as FixedExpense];
+    expect(mergeStoredSavings(stored, inline).map(s => s.id)).toEqual(['s1', 'x']);
+  });
+
+  it('handles either side being absent', () => {
+    expect(mergeStoredSavings(undefined, undefined)).toEqual([]);
+    expect(mergeStoredSavings([], [])).toEqual([]);
   });
 });

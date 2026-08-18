@@ -136,6 +136,7 @@ function fullPayload(): ExportPayload {
     netWorthHistory: { '2026-01': 1234567 },
     balanceSnapshots: { '2026-01': canonicalSnapshot },
     fixedExpenses: [{ id: 'fx-1', name: 'Huslån', amount: 16500, type: 'fixed' }],
+    savings: [{ id: 'sv-1', name: 'Bufferkonto', amount: 2000, mode: 'amount' as const, destinationKind: 'bufferAccount' as const }],
     dailyTransactions: canonicalTx,
     deletedBankIds: ['eb-old-1'],
     accountLabels: { 'ab12:u1': 'My Card' },
@@ -215,15 +216,15 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 61 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(61);
+  it('registers exactly the 62 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(62);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (37) or preserve (24)', () => {
+  it('partitions every field into reset (38) or preserve (24)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
-    expect(reset).toHaveLength(37);
+    expect(reset).toHaveLength(38);
     expect(preserve).toHaveLength(24);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([

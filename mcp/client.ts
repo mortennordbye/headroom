@@ -7,6 +7,7 @@
 // read-modify-write mutation flow.
 
 import type { ExportPayload } from '../src/context/FinanceContext';
+import { partitionSavings, mergeStoredSavings } from '../src/lib/savingsMigration';
 
 const BASE_URL = (process.env.HEADROOM_URL || 'http://localhost:8080').replace(/\/$/, '');
 const PASSWORD = process.env.HEADROOM_PASSWORD || '';
@@ -63,7 +64,7 @@ export async function getData(retryOnAuth = true): Promise<DataSnapshot> {
   const rev = Number(res.headers.get('x-data-rev') ?? 0);
   const blob = (await res.json()) as ExportPayload | null;
   if (!blob) throw new Error('no data yet — open the app and enter some data first');
-  return { blob, rev };
+  return { blob: normalizeSavings(blob), rev };
 }
 
 /** POST the whole blob back, echoing the rev for optimistic concurrency. */
@@ -158,4 +159,19 @@ export async function applyMutation(
     }
   }
   throw new RevConflictError(-1);
+}
+
+/**
+ * Apply the savings split to a raw blob, the same way the app's payload registry
+ * does on load. A blob the app has not re-saved since the split still holds its
+ * savings inline in `fixedExpenses`, and every derivation here would then read a
+ * transfer as a bill — the exact confusion the split removed. Idempotent, so a
+ * blob already in the new shape passes through unchanged.
+ */
+function normalizeSavings(blob: ExportPayload): ExportPayload {
+  return {
+    ...blob,
+    fixedExpenses: partitionSavings(blob.fixedExpenses ?? []).expenses,
+    savings: mergeStoredSavings(blob.savings, blob.fixedExpenses),
+  };
 }

@@ -19,7 +19,7 @@ const lbl = 'block text-[11px] font-semibold uppercase tracking-[0.08em] text-[v
 const input = 'w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[10px] px-3.5 py-3 text-[15px] font-mono tabular-nums text-[var(--text-1)] outline-none focus:border-[var(--forest)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--forest)_30%,transparent)] transition-colors';
 
 export default function BufferBuilderDialog({ recommendedMonthly, recommendedTarget, onClose }: Props) {
-  const { t, assets, fixedExpenses, setFixedExpenses, formatCurrency } = useFinance();
+  const { t, assets, savings, setSavings, formatCurrency } = useFinance();
   const currentBuffer = assets.bufferAccount;
 
   const [monthly, setMonthly] = useState(String(recommendedMonthly));
@@ -33,13 +33,13 @@ export default function BufferBuilderDialog({ recommendedMonthly, recommendedTar
     const tgt = parseLocaleNumber(target);
     if (!(amt > 0)) { setError(t.bufferBuilder.errorMonthly); return; }
     if (!(tgt > currentBuffer)) { setError(t.bufferBuilder.errorTarget); return; }
-    setFixedExpenses([
-      ...fixedExpenses,
+    setSavings([
+      ...savings,
       {
         id: crypto.randomUUID(),
         name: t.bufferBuilder.expenseName,
         amount: amt,
-        type: 'fixed',
+        mode: 'amount',
         destinationKind: 'bufferAccount',
         bufferTargetAmount: tgt,
         // Stamp to now so the first move happens next month (same as the dialog).

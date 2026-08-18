@@ -21,7 +21,7 @@ import { DEFAULT_BOLIG_ASSUMPTIONS } from './secondHome';
 import { DEFAULT_PROFILE } from './profile';
 import { DEFAULT_CAPACITY_OVERRIDES } from './capacityOverrides';
 import { dedupeBankTransactions } from './bankDedup';
-import { migrateSavingsAccounts, migrateSnapshotSavings, migrateSavingsExpenseType } from './savingsMigration';
+import { migrateSavingsAccounts, migrateSnapshotSavings, partitionSavings, mergeStoredSavings } from './savingsMigration';
 
 // Every persisted field. `currentMonth` is view state — added by the callers
 // that need it, never built here — so it is the one `ExportPayload` key excluded.
@@ -129,7 +129,18 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     },
     fixedExpenses: {
       group: 'reset', demo: 'personal', default: d.fixedExpenses,
-      read: (data) => (data.fixedExpenses ? migrateSavingsExpenseType(data.fixedExpenses) : ABSENT),
+      read: (data) => (data.fixedExpenses ? partitionSavings(data.fixedExpenses).expenses : ABSENT),
+    },
+    // Savings used to live inline in `fixedExpenses`, so a stored blob may hold
+    // them in either place — both reads run `partitionSavings` over the same
+    // input and take opposite halves, which is what makes the split a pure
+    // re-filing rather than a data change. ABSENT only when NEITHER key is
+    // present, so an import that carries just one of them still applies.
+    savings: {
+      group: 'reset', demo: 'personal', default: [],
+      read: (data) => (data.savings || data.fixedExpenses
+        ? mergeStoredSavings(data.savings, data.fixedExpenses)
+        : ABSENT),
     },
     dailyTransactions: {
       group: 'reset', demo: 'personal', default: [],

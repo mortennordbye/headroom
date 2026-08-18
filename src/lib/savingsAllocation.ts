@@ -9,7 +9,7 @@
 // into fixed expenses explicitly, and those post through the normal automation
 // runner (src/lib/automation.ts). That keeps one path to a balance change and
 // keeps the amounts inside the budget, where the savings-rate math can see them.
-import type { ExpenseDestinationKind } from '../context/FinanceContext';
+import type { AllocationDestinationKind } from '../context/FinanceContext';
 
 export interface SavingsAllocation {
   id: string;
@@ -26,7 +26,7 @@ export interface SavingsAllocation {
   mode?: 'percent' | 'amount' | 'rest';
   /** Fixed kroner per month. Set iff `mode` is 'amount'. */
   amount?: number;
-  destinationKind: ExpenseDestinationKind;
+  destinationKind: AllocationDestinationKind;
   savingsAccountId?: string;  // set iff destinationKind === 'savingsAccount'
   debtId?: string;            // set iff destinationKind === 'debt'
 }

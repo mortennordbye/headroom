@@ -82,9 +82,14 @@ export function netWorth(blob: ExportPayload): number {
   return totalEquity - totalNonMortgageDebt(blob);
 }
 
-/** Sum of all fixed-expense lines. Mirrors FinanceContext.tsx:1568. */
+/**
+ * Everything reserved before free-to-spend: the fixed expenses plus the savings
+ * transfers. Mirrors the app's `totalFixedExpenses` — savings do leave the
+ * account, so the budget reserves them, even though they are not spend.
+ */
 export function totalFixedExpenses(blob: ExportPayload): number {
-  return (blob.fixedExpenses ?? []).reduce((s, e) => s + e.amount, 0);
+  return (blob.fixedExpenses ?? []).reduce((s, e) => s + e.amount, 0)
+    + (blob.savings ?? []).reduce((s, sv) => s + sv.amount, 0);
 }
 
 // ---- tool payloads --------------------------------------------------------

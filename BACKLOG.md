@@ -721,3 +721,30 @@ version so only outdated ones re-run, or a one-time migration that clears auto l
 known-removed keywords. In the meantime these are fixable by hand in the ledger.
 **Where**: `src/context/FinanceContext.tsx` (the auto-categorize `useEffect`, ~line 1712),
 `src/lib/categorize.ts` (the `transfers` block's `vipps` note).
+
+## Savings as their own type — deferred UI work (shipped 2026-08)
+
+Shipped: savings are their own record (`Saving` in `src/context/FinanceContext.tsx`) in their own
+`savings` array, with their own dialog (`src/components/SavingDialog.tsx`) and their own row
+renderer on the Budget page. `ExpenseType` no longer has a `'saving'` member and
+`ExpenseDestinationKind` is down to `mortgage | debt`; the runtime `isSavingsRow` predicate is gone.
+Stored blobs and v1/v2 balance snapshots are split at load by `partitionSavings`
+(`src/lib/savingsMigration.ts`), amounts untouched.
+
+Remaining — the visual half, deliberately left out to keep the model change reviewable:
+
+- **Savings rows are still one flat list.** A "Sparekonto: Ferie/Gaver", a "Bufferkonto" and an
+  "Aksjer og fond" row render identically, though they are a goal pot, a safety net and an invested
+  position. Grouping or differentiating by `destinationKind` is the visual payoff of the split.
+  **What would unblock**: a design decision on how much per-vehicle treatment is worth the width.
+  **Where**: `renderSavings` in `src/pages/BudgetPage.tsx`.
+- **A row shows what moves, never where it stands.** "500 kr/mnd → 12 400 kr" would answer the
+  question the row raises; the destination balance is already in `assets`.
+  **Where**: `renderSavings` in `src/pages/BudgetPage.tsx`, `assets.savingsAccounts` / the scalars.
+- **The derived-mode caption wraps badly in the narrow column.** "60.8209 % AV SPAREGRUNNLAGET ·
+  FØLGER INNTEKTEN" takes two uppercase lines under an already-truncated name. Worth a rethink
+  alongside the card's `lg:col-span-3` width. **Where**: `src/pages/BudgetPage.tsx`.
+- **`SavingsAllocationPanel` is the one place that writes both arrays.** Activating a plan row
+  creates a `Saving` for a savings vehicle and a `FixedExpense` for mortgage/debt. That is correct
+  but it is the only remaining spot where the two shapes meet, so it is where a future change is
+  most likely to go wrong. **Where**: `createExpenses` in `src/components/SavingsAllocationPanel.tsx`.
