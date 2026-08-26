@@ -2,6 +2,8 @@ import type { Assets } from '../context/FinanceContext';
 
 export interface EquityBreakdown {
   taxOnGain: number;
+  /** How much of the shielding allowance the gain actually absorbed (display only). */
+  shieldingUsed: number;
   netInvestment: number;
   houseEquity: number;
   cryptoTaxOnGain: number;
@@ -31,6 +33,12 @@ export function sumSavings(a: Assets): number {
 // *benefit* (negative `taxOnGain`, raises net value) — realizing a loss is
 // deductible (e.g. an ASK/aksjekonto loss offsets share-income tax at the same
 // rate). Both are contingent-on-selling, so treating them symmetrically is fair.
+//
+// Skjermingsfradrag (the shielding allowance) makes the share side asymmetric:
+// accumulated, unused shielding is deducted from a gain before tax, but it can
+// never deepen a loss — unused shielding carries forward to later years instead
+// of turning into a deduction now. So it only ever bites into a positive gain,
+// and it is capped by that gain. Crypto has no shielding and is untouched.
 export interface EquityPoint {
   monthKey: string;
   breakdown: EquityBreakdown;
@@ -52,12 +60,17 @@ export function computeEquityBreakdown(a: Assets): EquityBreakdown {
   // Old balance snapshots are stored verbatim and may predate a field
   // (cryptoUnrealizedGain, bufferAccount, ...); guard each with ?? 0 so a
   // missing field can't turn the whole breakdown into NaN.
-  const taxOnGain = ((a.unrealizedGain ?? 0) * (a.taxRate ?? 0)) / 100;
+  const gain = a.unrealizedGain ?? 0;
+  // Floored at 0: a negative allowance is meaningless, and only an imported blob
+  // could carry one (the UI clamps the input to >= 0).
+  const shielding = Math.max(0, a.shieldingDeduction ?? 0);
+  const shieldingUsed = Math.min(shielding, Math.max(0, gain));
+  const taxOnGain = ((gain - shieldingUsed) * (a.taxRate ?? 0)) / 100;
   const netInvestment = (a.portfolio ?? 0) - taxOnGain;
   const houseEquity = (a.houseValue ?? 0) - (a.houseDebt ?? 0);
   const cryptoTaxOnGain = ((a.cryptoUnrealizedGain ?? 0) * (a.cryptoTaxRate ?? 0)) / 100;
   const netCrypto = (a.crypto ?? 0) - cryptoTaxOnGain;
   const savingsTotal = sumSavings(a);
   const totalEquity = netInvestment + netCrypto + (a.bsu ?? 0) + savingsTotal + (a.bufferAccount ?? 0) + houseEquity;
-  return { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, savingsTotal, totalEquity };
+  return { taxOnGain, shieldingUsed, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, savingsTotal, totalEquity };
 }

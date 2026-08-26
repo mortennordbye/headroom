@@ -5,6 +5,7 @@ import type { Assets } from '../context/FinanceContext';
 const assets = (over: Partial<Assets> = {}): Assets => ({
   portfolio: 0,
   unrealizedGain: 0,
+  shieldingDeduction: 0,
   taxRate: 37.84,
   bsu: 0,
   bsuAnnualContribution: 0,
@@ -31,6 +32,51 @@ describe('computeEquityBreakdown', () => {
     expect(b.taxOnGain).toBeCloseTo(-18_920, 0);      // negative → a shield, not a liability
     expect(b.netInvestment).toBeCloseTo(129_728, 0);  // portfolio + deductible loss value
     expect(b.netInvestment).toBeGreaterThan(110_808);
+  });
+
+  it('deducts the shielding allowance from a gain before tax', () => {
+    const b = computeEquityBreakdown(assets({
+      portfolio: 100_000, unrealizedGain: 20_000, shieldingDeduction: 5_000, taxRate: 37.84,
+    }));
+    expect(b.shieldingUsed).toBe(5_000);
+    expect(b.taxOnGain).toBeCloseTo(5676, 0);        // (20 000 − 5 000) * 37.84%
+    expect(b.netInvestment).toBeCloseTo(94_324, 0);
+  });
+
+  it('caps shielding at the gain — it can never turn a gain into a tax benefit', () => {
+    const b = computeEquityBreakdown(assets({
+      portfolio: 100_000, unrealizedGain: 8_000, shieldingDeduction: 30_000, taxRate: 37.84,
+    }));
+    expect(b.shieldingUsed).toBe(8_000);             // only 8 000 of the 30 000 is usable
+    expect(b.taxOnGain).toBe(0);
+    expect(b.netInvestment).toBe(100_000);
+  });
+
+  it('never lets shielding deepen an unrealized loss', () => {
+    // Unused shielding carries forward to later years; it does not become a
+    // deduction against a loss now, so the loss benefit is unchanged.
+    const b = computeEquityBreakdown(assets({
+      portfolio: 60_000, unrealizedGain: -10_000, shieldingDeduction: 12_000, taxRate: 37.84,
+    }));
+    expect(b.shieldingUsed).toBe(0);
+    expect(b.taxOnGain).toBeCloseTo(-3784, 0);
+    expect(b.netInvestment).toBeCloseTo(63_784, 0);
+  });
+
+  it('ignores a negative shielding allowance from an imported blob', () => {
+    const b = computeEquityBreakdown(assets({
+      portfolio: 100_000, unrealizedGain: 20_000, shieldingDeduction: -5_000, taxRate: 37.84,
+    }));
+    expect(b.shieldingUsed).toBe(0);
+    expect(b.taxOnGain).toBeCloseTo(7568, 0);        // as if no allowance at all
+  });
+
+  it('does not apply shielding to crypto', () => {
+    const b = computeEquityBreakdown(assets({
+      crypto: 50_000, cryptoUnrealizedGain: 10_000, cryptoTaxRate: 22, shieldingDeduction: 10_000,
+    }));
+    expect(b.cryptoTaxOnGain).toBeCloseTo(2_200, 0);
+    expect(b.netCrypto).toBeCloseTo(47_800, 0);
   });
 
   it('applies the same symmetry to crypto', () => {

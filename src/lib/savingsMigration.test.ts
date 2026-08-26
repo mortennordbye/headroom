@@ -3,7 +3,7 @@ import { migrateSavingsAccounts, migrateSnapshotSavings, partitionSavings, merge
 import type { Assets, BalanceSnapshot, FixedExpense, Saving } from '../context/FinanceContext';
 
 const base: Assets = {
-  portfolio: 0, unrealizedGain: 0, taxRate: 30, bsu: 0, bsuAnnualContribution: 0, savings: 0, savingsAccounts: [],
+  portfolio: 0, unrealizedGain: 0, shieldingDeduction: 0, taxRate: 30, bsu: 0, bsuAnnualContribution: 0, savings: 0, savingsAccounts: [],
   houseValue: 0, houseDebt: 0, crypto: 0, cryptoUnrealizedGain: 0, cryptoTaxRate: 22, bufferAccount: 0,
 };
 

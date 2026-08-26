@@ -53,6 +53,7 @@ import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty,
 import { ChartSkeleton } from '../components/ui/Skeleton';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
+import { FitText } from '../components/ui/FitText';
 
 const MoneyFlowSankey = lazy(() => import('../components/charts/MoneyFlowSankey'));
 
@@ -741,17 +742,17 @@ const SalaryPage: React.FC = () => {
               .replace('{amount}', formatCurrency(Math.round(Math.abs(restskatt.gap))))}
           </div>
           <div className="grid grid-cols-3 gap-3 text-[13px]">
-            <div>
+            <div className="min-w-0">
               <SectionLabel className="mb-1">{t.salaryPage.restskattWithheld}</SectionLabel>
-              <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.withheldToDate))}</div>
+              <FitText className="font-mono font-semibold text-[var(--text-1)]">{formatCurrency(Math.round(restskatt.withheldToDate))}</FitText>
             </div>
-            <div>
+            <div className="min-w-0">
               <SectionLabel className="mb-1">{t.salaryPage.restskattProjected}</SectionLabel>
-              <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.projectedAnnualWithholding))}</div>
+              <FitText className="font-mono font-semibold text-[var(--text-1)]">{formatCurrency(Math.round(restskatt.projectedAnnualWithholding))}</FitText>
             </div>
-            <div>
+            <div className="min-w-0">
               <SectionLabel className="mb-1">{t.salaryPage.restskattExpected}</SectionLabel>
-              <div className="font-mono font-semibold text-[var(--text-1)] [overflow-wrap:anywhere]">{formatCurrency(Math.round(restskatt.expectedAnnualTax))}</div>
+              <FitText className="font-mono font-semibold text-[var(--text-1)]">{formatCurrency(Math.round(restskatt.expectedAnnualTax))}</FitText>
             </div>
           </div>
           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.salaryPage.restskattNote}</p>
@@ -1254,7 +1255,7 @@ const SalaryPage: React.FC = () => {
                 <TrendingUp size={14} className="text-[var(--text-2)]" />
                 <SectionLabel>{t.salary.salaryAndJobs}</SectionLabel>
               </div>
-              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
                 <PaydayField />
                 <button
                   onClick={() => openJobModal()}
@@ -1311,9 +1312,9 @@ interface SummaryTileProps {
 const SummaryTile: React.FC<SummaryTileProps> = ({ label, value, sub, chip, color }) => (
   <Card padding="none" className="p-4 md:p-5 space-y-1.5">
     <SectionLabel>{label}</SectionLabel>
-    <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
+    <FitText className="text-[14px] md:text-[24px] leading-tight font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
       {value}
-    </div>
+    </FitText>
     {chip && <div>{chip}</div>}
     {sub && <div className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{sub}</div>}
   </Card>

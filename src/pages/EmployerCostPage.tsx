@@ -7,6 +7,7 @@ import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { SummaryTile } from '../components/ui/SummaryTile';
+import { FitText } from '../components/ui/FitText';
 import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
 import { provenanceOf } from '../lib/provenance';
@@ -228,10 +229,10 @@ const EmployerCostPage: React.FC = () => {
 function StatBlock({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="rounded-[8px] px-3 py-2.5" style={{ background: 'var(--surface-2)' }}>
-      <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>{label}</div>
-      <div className="text-[16px] md:text-[18px] leading-tight font-semibold font-mono tabular-nums mt-1 [overflow-wrap:anywhere]" style={{ color: color ?? 'var(--text-1)' }}>
+      <div className="text-[10px] font-medium uppercase tracking-[0.1em] [overflow-wrap:anywhere]" style={{ color: 'var(--text-3)' }}>{label}</div>
+      <FitText className="text-[16px] md:text-[18px] leading-tight font-semibold font-mono tabular-nums mt-1" style={{ color: color ?? 'var(--text-1)' }}>
         {value}
-      </div>
+      </FitText>
       {sub && <div className="text-[10px] font-mono mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</div>}
     </div>
   );

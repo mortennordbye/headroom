@@ -38,6 +38,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { key: 'personinntekt', no: true },
   { key: 'gjeldsgrad', no: true },
   { key: 'ask', no: true },
+  { key: 'skjermingsfradrag', no: true },
   { key: 'mellomfinansiering', no: true },
 ];
 

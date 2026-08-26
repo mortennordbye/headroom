@@ -12,6 +12,7 @@ import { Card } from '../components/ui/Card';
 import { ChartSkeleton } from '../components/ui/Skeleton';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { DeltaChip } from '../components/ui/DeltaChip';
+import { FitText } from '../components/ui/FitText';
 import { AccountBadge } from '../components/AccountBadge';
 import { txDisplayName } from '../lib/labelRules';
 import { EquityCompositionBar } from '../components/EquityCompositionBar';
@@ -397,15 +398,16 @@ const DashboardPage: React.FC = () => {
             )}
           </div>
 
-          <div
-            data-selectable
-            className="font-mono font-medium tracking-[-0.03em] leading-none mt-4"
-            style={{
-              fontSize: 'clamp(40px, 5.5vw, 60px)',
-              color: 'var(--text-1)',
-            }}
-          >
-            {formatCurrency(netWorth)}
+          <div data-selectable className="mt-4">
+            <FitText
+              className="font-mono font-medium tracking-[-0.03em] leading-none"
+              style={{
+                fontSize: 'clamp(40px, 5.5vw, 60px)',
+                color: 'var(--text-1)',
+              }}
+            >
+              {formatCurrency(netWorth)}
+            </FitText>
           </div>
           <div className="text-[13px] mt-2" style={{ color: 'var(--text-2)' }}>
             {t.dashboardPage.postTax}

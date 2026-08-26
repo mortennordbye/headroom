@@ -291,6 +291,12 @@ export interface PendingCatchup {
 export interface Assets {
   portfolio: number;
   unrealizedGain: number;
+  /**
+   * Accumulated, unused skjermingsfradrag on shares/funds in kr, as reported by
+   * Skatteetaten (aksjeoppgaven / the ASK statement). Deducted from a gain
+   * before latent tax; never deepens a loss. 0 = not tracked.
+   */
+  shieldingDeduction: number;
   taxRate: number;
   bsu: number;
   bsuAnnualContribution: number;       // planned BSU deposit this year (drives the 10% tax credit)
@@ -573,6 +579,7 @@ export const DEFAULT_TAX_RATES = {
 const DEFAULT_ASSETS: Assets = {
   portfolio: 0,
   unrealizedGain: 0,
+  shieldingDeduction: 0,
   taxRate: DEFAULT_TAX_RATES.stockTaxRate,
   bsu: 0,
   bsuAnnualContribution: 0,

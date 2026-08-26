@@ -8,12 +8,12 @@ interface SectionLabelProps extends HTMLAttributes<HTMLDivElement> {
 export function SectionLabel({ icon, children, className = '', ...rest }: SectionLabelProps) {
   return (
     <div
-      className={`flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${className}`}
+      className={`flex items-center gap-2 min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em] ${className}`}
       style={{ color: 'var(--text-3)' }}
       {...rest}
     >
       {icon && <span className="flex items-center [&_svg]:w-3 [&_svg]:h-3">{icon}</span>}
-      <span>{children}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
     </div>
   );
 }

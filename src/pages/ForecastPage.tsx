@@ -9,6 +9,7 @@ import ChartTooltip from '../components/ChartTooltip';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
+import { FitText } from '../components/ui/FitText';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcPensionIncomeTax, IPS_MAX_DEDUCTION, TAX_YEAR } from '../lib/norwegianTax';
 import { projectBeholdning, estimateBeholdning, annualFolketrygdPension } from '../lib/folketrygd';
@@ -564,7 +565,7 @@ const SliderInput: React.FC<SliderInputProps> = ({ label, value, onChange, min, 
 const FireStat: React.FC<{ label: string; value: string; sub?: string; color?: string }> = ({ label, value, sub, color }) => (
   <div className="rounded-[8px] p-4 border bg-[var(--bg-raised)] border-[var(--border)]">
     <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)] mb-1">{label}</div>
-    <div className="text-[18px] md:text-[20px] font-mono font-semibold leading-tight [overflow-wrap:anywhere]" style={{ color: color ?? 'var(--text-1)' }}>{value}</div>
+    <FitText className="text-[18px] md:text-[20px] font-mono font-semibold leading-tight" style={{ color: color ?? 'var(--text-1)' }}>{value}</FitText>
     {sub && <div className="text-[10px] font-mono mt-1" style={{ color: 'var(--text-3)' }}>{sub}</div>}
   </div>
 );
@@ -583,9 +584,9 @@ const SummaryTile: React.FC<SummaryTileProps> = ({ label, now, then, thenLabel, 
   return (
     <Card padding="none" className="p-4 md:p-5 space-y-1.5">
       <SectionLabel>{label}</SectionLabel>
-      <div className="text-[14px] md:text-[24px] leading-tight [overflow-wrap:anywhere] font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
+      <FitText className="text-[14px] md:text-[24px] leading-tight font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--text-1)' }}>
         {then}
-      </div>
+      </FitText>
       <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{thenLabel}</div>
       <div className="text-[11px] font-mono pt-1 border-t" style={{ color: 'var(--text-2)', borderColor: 'var(--border)' }}>
         {t.forecastPage.now} · {now}

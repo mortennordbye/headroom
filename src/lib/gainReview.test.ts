@@ -3,7 +3,7 @@ import { pendingGainReview, markGainReview, costBasis } from './gainReview';
 import type { Assets } from '../context/FinanceContext';
 
 const assets = (over: Partial<Assets> = {}): Assets => ({
-  portfolio: 0, unrealizedGain: 0, taxRate: 37.84, bsu: 0, bsuAnnualContribution: 0,
+  portfolio: 0, unrealizedGain: 0, shieldingDeduction: 0, taxRate: 37.84, bsu: 0, bsuAnnualContribution: 0,
   savings: 0, savingsAccounts: [], houseValue: 0, houseDebt: 0,
   crypto: 0, cryptoUnrealizedGain: 0, cryptoTaxRate: 22, bufferAccount: 0,
   ...over,

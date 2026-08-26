@@ -7,6 +7,7 @@ export { ProvenanceBadge } from './ProvenanceBadge';
 export { ModalShell } from './ModalShell';
 export { ProgressBar } from './ProgressBar';
 export { SummaryTile } from './SummaryTile';
+export { FitText } from './FitText';
 export { NumberRow } from './NumberRow';
 export { SliderRow } from './SliderRow';
 export { SegmentedControl } from './SegmentedControl';

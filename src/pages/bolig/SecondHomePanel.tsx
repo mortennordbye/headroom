@@ -11,6 +11,7 @@ import { estimatedPropertyValue } from '../../lib/propertyEstimate';
 import { StatCard } from '../../components/ui/StatCard';
 import { NumberRow } from '../../components/ui/NumberRow';
 import { DeltaChip } from '../../components/ui/DeltaChip';
+import { FitText } from '../../components/ui/FitText';
 import ChartTooltip from '../../components/ChartTooltip';
 import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 import {
@@ -662,7 +663,7 @@ function PortfolioStat({ label, value, sub, tone }: { label: string; value: stri
   return (
     <div className="min-w-0">
       <div className="text-[10px] uppercase tracking-[0.12em] font-semibold" style={{ color: 'var(--text-3)' }}>{label}</div>
-      <div className="text-[16px] font-mono font-medium mt-1 truncate" style={{ color }}>{value}</div>
+      <FitText className="text-[16px] font-mono font-medium mt-1" style={{ color }}>{value}</FitText>
       {sub && <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</div>}
     </div>
   );

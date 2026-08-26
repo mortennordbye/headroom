@@ -459,7 +459,7 @@ export default function SettingsPage() {
                   min="0.001"
                   value={usdRateInput}
                   onChange={e => setUsdRateInput(e.target.value)}
-                  className="flex-1 h-10 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
+                  className="flex-1 min-w-0 h-10 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
                   style={{
                     background: 'var(--surface-3)',
                     borderColor: 'var(--border)',
@@ -511,7 +511,7 @@ export default function SettingsPage() {
                   placeholder={t.settings.currencyRate}
                   value={customRateInput}
                   onChange={e => setCustomRateInput(e.target.value)}
-                  className="flex-1 h-10 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
+                  className="flex-1 min-w-0 h-10 px-3 rounded-[8px] text-[13px] font-mono outline-none border"
                   style={{
                     background: 'var(--surface-3)',
                     borderColor: 'var(--border)',
@@ -1278,7 +1278,7 @@ function RangeRow({
       <div className="flex items-baseline justify-between mb-2 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <label
-            className="text-[11px] font-semibold uppercase tracking-[0.12em]"
+            className="text-[11px] font-semibold uppercase tracking-[0.12em] min-w-0 [overflow-wrap:anywhere]"
             style={{ color: 'var(--text-3)' }}
           >
             {label}
