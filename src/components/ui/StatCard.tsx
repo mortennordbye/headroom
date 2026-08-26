@@ -1,4 +1,5 @@
 import { Edit2 } from 'lucide-react';
+import { FitText } from './FitText';
 
 interface StatCardProps {
   title: string;
@@ -36,12 +37,12 @@ export function StatCard({ title, value, sublabel, accent, editable, onEdit, edi
         {title}
       </span>
       <div className="flex items-baseline gap-2">
-        <span
-          className="text-[20px] sm:text-[24px] md:text-[28px] font-mono font-medium tracking-[-0.02em] leading-none tabular-nums truncate"
+        <FitText
+          className="flex-1 text-[20px] sm:text-[24px] md:text-[28px] font-mono font-medium tracking-[-0.02em] leading-none tabular-nums"
           style={{ color: 'var(--text-1)' }}
         >
           {value}
-        </span>
+        </FitText>
         {editable && (
           <button
             onClick={onEdit}

@@ -27,7 +27,7 @@ export function NumberRow({
     <div>
       <div className="flex items-baseline justify-between mb-2 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{label}</label>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.12em] min-w-0 [overflow-wrap:anywhere]" style={{ color: 'var(--text-3)' }}>{label}</label>
           {badge}
         </div>
         {suffix && <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{suffix}</span>}
