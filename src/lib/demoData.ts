@@ -34,6 +34,7 @@ export function getDemoData(): Partial<ExportPayload> {
   const demoAssets: Assets = {
     portfolio: 285000,
     unrealizedGain: 62000,
+    shieldingDeduction: 9400,
     taxRate: 37.84,
     bsu: 33000,
     bsuAnnualContribution: 27500,

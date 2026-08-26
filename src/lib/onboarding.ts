@@ -163,6 +163,7 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     fields: [
       { key: 'portfolio', writer: 'asset', labelKey: 'portfolio', kind: 'number' },
       { key: 'unrealizedGain', writer: 'asset', labelKey: 'unrealizedGain', kind: 'number', allowNegative: true },
+      { key: 'shieldingDeduction', writer: 'asset', labelKey: 'shieldingDeduction', kind: 'number', advanced: true },
       { key: 'taxRate', writer: 'asset', labelKey: 'taxRate', kind: 'percent', advanced: true },
     ],
   },

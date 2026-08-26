@@ -34,7 +34,7 @@ import type { SecondHomeScenario } from './secondHome';
 // ── Injection defaults for the registry. Recognizable (all-9s) so the reset
 // test can assert a 'reset' object field dropped to exactly this value. ──
 const defAssets: Assets = {
-  portfolio: 9, unrealizedGain: 9, taxRate: 9, bsu: 9, bsuAnnualContribution: 9, savings: 0, savingsAccounts: [],
+  portfolio: 9, unrealizedGain: 9, shieldingDeduction: 9, taxRate: 9, bsu: 9, bsuAnnualContribution: 9, savings: 0, savingsAccounts: [],
   houseValue: 9, houseDebt: 9, crypto: 9, cryptoUnrealizedGain: 9, cryptoTaxRate: 9, bufferAccount: 9,
 };
 const defLoan: LoanData = {
@@ -69,7 +69,7 @@ const KEYS = persistedKeys(registry);
 // snapshots, dailyTransactions, merged configs) are already in the exact shape
 // their read produces, so applyPayload→buildPayload is a pure identity. ──
 const canonicalAssets: Assets = {
-  portfolio: 111, unrealizedGain: 222, taxRate: 30, bsu: 333, bsuAnnualContribution: 0, savings: 0,
+  portfolio: 111, unrealizedGain: 222, shieldingDeduction: 123, taxRate: 30, bsu: 333, bsuAnnualContribution: 0, savings: 0,
   savingsAccounts: [{ id: 'sav-1', name: 'Sparekonto', balance: 444 }],
   houseValue: 555, houseDebt: 666, crypto: 777, cryptoUnrealizedGain: 888, cryptoTaxRate: 20, bufferAccount: 999,
 };

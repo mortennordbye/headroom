@@ -48,6 +48,7 @@ import { formatAxisInt } from '../lib/format';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
+import { FitText } from '../components/ui/FitText';
 
 interface ModalConfig {
   title: string;
@@ -119,7 +120,7 @@ const AssetPage: React.FC = () => {
     : mortgageTermYears;
   const totalDebt = debts.reduce((s, d) => s + Math.max(0, d.balance), 0);
   const studentDebt = sumDebtByType(debts, 'student');
-  const { taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity } = useMemo(
+  const { taxOnGain, shieldingUsed, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity } = useMemo(
     () => computeEquityBreakdown(assets),
     [assets],
   );
@@ -309,6 +310,13 @@ const AssetPage: React.FC = () => {
                 formatCurrency={formatCurrency}
               />
               <AssetRow
+                label={t.shieldingDeduction}
+                value={assets.shieldingDeduction}
+                onEdit={() => openAssetEdit(t.shieldingDeduction, assets.shieldingDeduction, 'shieldingDeduction')}
+                formatCurrency={formatCurrency}
+                icon={<Shield size={12} className="text-[var(--text-2)]" />}
+              />
+              <AssetRow
                 label={t.taxRate}
                 value={assets.taxRate}
                 suffix="%"
@@ -322,6 +330,7 @@ const AssetPage: React.FC = () => {
                 liabilityLabel={t.liabilityReserve}
                 benefitLabel={t.taxShieldReserve}
                 formatCurrency={formatCurrency}
+                note={shieldingUsed > 0 ? t.shieldingApplied.replace('{amount}', formatCurrency(shieldingUsed)) : undefined}
               />
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)]">
                 <span>{t.netLiquidity}</span>
@@ -522,7 +531,7 @@ const AssetPage: React.FC = () => {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-2)' }}>
                   {t.trueNetEquity}
                 </div>
-                <div
+                <FitText
                   className="font-mono font-medium tracking-[-0.03em] leading-none tabular-nums"
                   style={{
                     fontSize: 'clamp(36px, 5vw, 56px)',
@@ -530,7 +539,7 @@ const AssetPage: React.FC = () => {
                   }}
                 >
                   {formatCurrency(netWorth)}
-                </div>
+                </FitText>
               </div>
               <div className="space-y-3 text-[13px] border-t pt-5 md:pt-6" style={{ borderColor: 'var(--rule)' }}>
                 <div className="flex justify-between">
@@ -798,12 +807,12 @@ function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, ic
       className={`flex justify-between items-center group py-3.5 border-b border-[var(--border)] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
       onClick={onEdit}
     >
-      <span className={`text-[13px] font-medium flex items-center gap-1.5 ${onEdit ? 'text-[var(--text-1)]' : 'text-[var(--text-2)]'}`}>
+      <span className={`text-[13px] font-medium flex items-center gap-1.5 min-w-0 [overflow-wrap:anywhere] ${onEdit ? 'text-[var(--text-1)]' : 'text-[var(--text-2)]'}`}>
         {icon}
         {label}
         {badge}
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         {onEdit ? (
           <span className="inline-flex items-center gap-2 rounded-[6px] border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1.5 group-hover:border-[var(--brass-dim)] group-hover:bg-[var(--bg-elev)] transition-colors">
             <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${isNegative ? 'text-[var(--negative)]' : 'text-[var(--text-1)]'}`}>
@@ -891,20 +900,29 @@ function LatentTaxLine({
   liabilityLabel,
   benefitLabel,
   formatCurrency,
+  note,
 }: {
   amount: number;
   liabilityLabel: string;
   benefitLabel: string;
   formatCurrency: (v: number) => string;
+  /** Sub-line explaining an adjustment behind the figure (skjermingsfradrag). */
+  note?: string;
 }) {
   const benefit = amount < 0;
+  // Shielding can cancel the liability exactly; a signed zero ("−0,00 kr") reads
+  // as an error, so zero carries no sign and no red/green.
+  const zero = Math.round(amount * 100) === 0;
   return (
-    <div
-      className="flex justify-between py-3.5 text-[12px] font-medium border-t border-[var(--border)] mt-1"
-      style={{ color: benefit ? 'var(--positive)' : 'var(--negative)' }}
-    >
-      <span>{benefit ? benefitLabel : liabilityLabel}</span>
-      <span className="font-mono">{benefit ? '+' : '−'}{formatCurrency(Math.abs(amount))}</span>
+    <div className="py-3.5 border-t border-[var(--border)] mt-1">
+      <div
+        className="flex justify-between gap-3 text-[12px] font-medium"
+        style={{ color: zero ? 'var(--text-2)' : benefit ? 'var(--positive)' : 'var(--negative)' }}
+      >
+        <span className="min-w-0">{benefit ? benefitLabel : liabilityLabel}</span>
+        <span className="font-mono shrink-0">{zero ? '' : benefit ? '+' : '−'}{formatCurrency(Math.abs(amount))}</span>
+      </div>
+      {note && <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{note}</div>}
     </div>
   );
 }
