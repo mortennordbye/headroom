@@ -377,6 +377,8 @@ The volume is the only live copy, so keep a backup — three options:
 2. **In-app export (best, portable).** **Settings → Export** downloads your entire state as a single JSON file. This is the safest backup: it's independent of Docker, survives losing the volume, and can be imported on a fresh install or a different machine via **Settings → Import**. Because it holds your full accumulated transaction history, an occasional export is a complete backup.
 3. **Database snapshot (off-volume).** `make backup` copies the live SQLite file to the host `./backups/` (timestamped, gitignored).
 
+> **No backup carries the bank connection — on purpose.** `make backup` copies `/data/database.sqlite` and nothing else, and the JSON export holds your finance data alone. The Enable Banking link lives beside the database as its own files in the volume (`eb-config.json`, `eb-session.json`, `eb-pending.json`, `eb-key.pem`, `eb-master.key`), and it is left out of both because those files hold OAuth tokens and a private key — credentials that have no business sitting in a file you copy around or hand to another machine. They stay in the volume, so this only shows up when you restore onto a fresh one (see [Restore](#restore)).
+
 ### Restore
 
 Both paths open a **preview** first, where you pick which sections to restore (income & work, budget & spending, assets/debt/goals, settings) — the rest of your data is left untouched — and a safety copy of your current data is downloaded before anything is replaced.
@@ -385,6 +387,8 @@ Both paths open a **preview** first, where you pick which sections to restore (i
 - **From a SQLite snapshot (in-app):** **Settings → Import → "restore from a SQLite backup (.sqlite)"**, then pick a `make backup` file. The server reads the finance blob out of the uploaded database and hands it to the same import preview — no terminal needed.
 - **From a SQLite snapshot (manual):** `docker cp backups/<file>.sqlite headroom:/data/database.sqlite && make restart` (for the pre-built image, replace `make restart` with `docker restart headroom`).
 - **From an automatic snapshot:** list them with `docker exec headroom ls /data/backups`, copy one out with `docker cp headroom:/data/backups/<file>.sqlite ./backups/`, then use either SQLite-restore path above.
+
+> **Restoring onto a fresh volume? Link the bank again.** All your money data comes back, but the bank connection does not — its credential files were never in the backup (see [Backups](#backups)). Nothing announces this: the app looks complete and simply stops pulling new transactions. Go to **Settings → Bank sync**, re-enter the Enable Banking application ID, callback URL and key, and connect the bank again. Transactions already in the restored data are kept; the sync picks up from there.
 
 > Bank sync only reaches ~90 days back per fetch, but stored transactions are never dropped — they accumulate as you keep syncing. So your history keeps growing on your machine, and an export captures all of it. Sync regularly (don't leave gaps longer than ~90 days) and export now and then, and you have a durable, ever-growing record.
 

@@ -613,13 +613,6 @@ Remaining:
   at ~13 100 kr, just *under* plan. Two smaller siblings ("Avtalegiro" 599,
   "Overførsel" 500) are the same class. Nothing in the app can currently mark
   these as a transfer or a one-off without deleting them.
-- **`make backup` misses the bank connection state.** It copies only
-  `/data/database.sqlite`, but `server/bank.js` writes `eb-pending.json` and its
-  session/config files as plain JSON in `DATA_DIR`. They survive in the Docker volume,
-  so this only bites on a restore-from-backups, where the bank must be re-linked.
-  Excluding OAuth tokens from the plaintext JSON export is correct; this is most likely
-  a README fix rather than a code change. **Where**: `backup:` in `Makefile`,
-  `PENDING_PATH` / `CONFIG_PATH` in `server/bank.js`.
 
 ## Blocked major dependency upgrades (2026-08)
 
