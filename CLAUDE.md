@@ -206,3 +206,26 @@ src/
 - **Use current, supported versions** — pick libraries that are actively maintained and pull a recent, supported release. Avoid end-of-life or abandoned dependencies; an unmaintained library is a security and upgrade liability.
 - **No dead code** — if a button has no handler, implement or remove it.
 - **No premature abstractions** — only extract a helper when it's used in 2+ places.
+
+## Maintainer
+
+What an unattended maintainer run (a verksted stage) is told about this repo. It reads only this section, so keep it self-contained.
+
+**Verify:** `npm ci && npm ci --prefix server && npx tsc -b && npm run lint && npm test`. Must pass before any PR is opened; CI runs the same and is what gates a merge.
+
+**Audit:** `npm outdated`, `npm audit --omit=dev`, `npm outdated --prefix server`.
+
+**Tiers.** Every issue carries exactly one:
+
+- `tier:auto` (may merge without me once CI is green and the gate approves): dependency bumps dependabot does not cover (`server/`, `mcp/`, `desktop/`), lint or type fixes with no behaviour change, added tests, docs, CI and workflow tidying, dead code that `tsc` proves unused.
+- `tier:review` (opens a PR and waits for me): anything that changes a number a user sees, the shape of persisted data, a UI, an API response, or a default. When in doubt, `tier:review`.
+
+**No-go.** Never `tier:auto`, and never touched at all without an issue I filed myself:
+
+- The money maths in `src/lib/`: `norwegianTax.ts`, `folketrygd.ts`, `afp.ts`, `feriepenger.ts`, `employerCost.ts`, `pension.ts`, `pensionAccrual.ts`, `restskatt.ts`, `bsu.ts`, `salary.ts`.
+- `src/context/FinanceContext.tsx` where state is persisted, applied or imported (payload shape).
+- `server/index.js` (`POST /api/data` validation) and `server/auth.js`.
+
+**Never:** run the app or the server against the real data volume (use `DATA_DIR=$(mktemp -d)`); edit `CHANGELOG.md`, any `version` field, or the release-please PR; touch PRs from `dependabot[bot]` or branches named `release-please--*`.
+
+**Conventions:** conventional commit prefixes (`fix:`, `chore:`, `docs:`, `test:`, `ci:`) so release-please sorts them; the no-AI-attribution rule above applies to issues and PR bodies too.
