@@ -53,10 +53,11 @@ restart:
 # The only automatic safety net besides the manual JSON export in the UI.
 backup:
 	@mkdir -p backups
-	@docker cp headroom:/data/database.sqlite backups/headroom-$$(date +%Y%m%d-%H%M%S).sqlite
-	@echo ""
-	@echo "  Backed up to backups/headroom-$$(date +%Y%m%d-%H%M%S).sqlite"
-	@echo ""
+	@ts=$$(date +%Y%m%d-%H%M%S) && \
+	  docker cp headroom:/data/database.sqlite backups/headroom-$$ts.sqlite && \
+	  echo "" && \
+	  echo "  Backed up to backups/headroom-$$ts.sqlite" && \
+	  echo ""
 
 # Tail container logs
 logs:
