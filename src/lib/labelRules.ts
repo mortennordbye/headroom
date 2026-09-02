@@ -1,5 +1,5 @@
 // User-defined display names for transactions. A rule maps a merchant/text match
-// to a friendly label, so a cryptic bank line (e.g. "Til:90467295445") shows as
+// to a friendly label, so a cryptic bank line (e.g. "Til:98765432101") shows as
 // "Boliglån" everywhere — and every future matching transaction inherits it.
 // Purely a display layer: the original `description` is preserved for matching
 // and categorization. Pure + unit-tested.

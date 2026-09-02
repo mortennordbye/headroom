@@ -42,7 +42,7 @@ describe('categorize', () => {
     ['DUTY FREE 7108 AVGANG NOR', 'shopping'],
     ['Google Workspace_nordbye', 'subscriptions'],
     // Real-data coverage: outgoing "Til:" account/person payments → transfers.
-    ['Til:90467295445', 'transfers'],
+    ['Til:98765432101', 'transfers'],
     ['Til: Trustly Norway AS Betalt: 20.06.26', 'transfers'],
     ['108744502068652202 Til: MORROW BANK ASA', 'transfers'],
     // Spanish/travel merchants that used to fall into "Annet".
@@ -146,13 +146,13 @@ describe('categorize', () => {
 
 describe('categorizeWithRules', () => {
   const rules: CategoryRule[] = [
-    { id: '1', match: 'Til:90467295445', category: 'housing' }, // the user's loan
+    { id: '1', match: 'Til:98765432101', category: 'housing' }, // the user's loan
     { id: '2', match: 'JOJOE', category: 'dining' },
   ];
 
   it('applies a user rule over the built-in engine', () => {
-    // "Til:90467295445" is otherwise "other"; the rule forces housing.
-    expect(categorizeWithRules({ description: 'Til:90467295445' }, rules).category).toBe('housing');
+    // "Til:98765432101" is otherwise "other"; the rule forces housing.
+    expect(categorizeWithRules({ description: 'Til:98765432101' }, rules).category).toBe('housing');
   });
 
   it('matches case-insensitively as a substring (any JOJOE location)', () => {
