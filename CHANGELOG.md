@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.7.0](https://github.com/mortennordbye/headroom/compare/v3.6.0...v3.7.0) (2026-09-02)
+
+
+### Features
+
+* make a saving its own record, not a fixed expense ([#130](https://github.com/mortennordbye/headroom/issues/130)) ([cb6f036](https://github.com/mortennordbye/headroom/commit/cb6f036e9478be8e3e3411faf546daca885e5816))
+
+
+### Bug Fixes
+
+* print the backup path that was actually written ([#143](https://github.com/mortennordbye/headroom/issues/143)) ([58e6219](https://github.com/mortennordbye/headroom/commit/58e6219424d667afa6e09ae3772d40af8005742a))
+
 ## [3.6.0](https://github.com/mortennordbye/headroom/compare/v3.5.0...v3.6.0) (2026-08-13)
 
 
