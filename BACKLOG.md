@@ -418,7 +418,7 @@ resurrecting or double-counting real bank transactions.
   maintenance action that re-runs `categorize()` over transactions whose
   `categorySource` is auto (never user-edited), so historical rows filed under
   `transfers` by an older keyword table get re-filed to their correct category
-  (e.g. `Brekkelia Borettslag` → `housing`, which the current table already ranks
+  (e.g. `Storgata Borettslag` → `housing`, which the current table already ranks
   above `transfers`). **Why deferred**: the own-account transfer-rule feature
   (see `src/lib/transferRules.ts`) already fixes the spend/savings-rate distortion;
   the remaining issue is only cosmetic category labels, which the existing per-row

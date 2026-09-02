@@ -3,14 +3,14 @@ import { matchesTransferRule, excludedTransferIds, type TransferRule } from './t
 import type { DailyTransaction } from '../context/FinanceContext';
 
 const rules: TransferRule[] = [
-  { id: '1', match: 'Til:90467295445' },
+  { id: '1', match: 'Til:98765432101' },
   { id: '2', match: 'MORROW BANK' },
   { id: '3', match: '9046.13' },
 ];
 
 describe('matchesTransferRule', () => {
   it('matches a rule as a case-insensitive substring of merchant+description', () => {
-    expect(matchesTransferRule({ description: 'Til:90467295445' }, rules)).toBe(true);
+    expect(matchesTransferRule({ description: 'Til:98765432101' }, rules)).toBe(true);
     expect(matchesTransferRule({ description: 'til: morrow bank asa betalt' }, rules)).toBe(true);
     expect(matchesTransferRule({ description: 'Til: 9046.13.03489 Betalt: 10.07.26' }, rules)).toBe(true);
     expect(matchesTransferRule({ merchant: 'MORROW BANK ASA', description: '' }, rules)).toBe(true);

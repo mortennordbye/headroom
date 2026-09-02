@@ -350,11 +350,11 @@ describe('pattern (match) envelopes', () => {
   it('a pattern match wins over a category link and is excluded from the category envelope', () => {
     const r = reconcile(
       [
-        fe({ id: 'loan', name: 'Boliglån', amount: 18000, match: 'Til:90467295445' }),
+        fe({ id: 'loan', name: 'Boliglån', amount: 18000, match: 'Til:98765432101' }),
         fe({ id: 'housing', name: 'Felleskostnader', amount: 3000, category: 'housing' }),
       ],
       [
-        tx({ description: 'Til:90467295445', amount: 17000, category: 'housing' }),
+        tx({ description: 'Til:98765432101', amount: 17000, category: 'housing' }),
         tx({ description: 'OBOS felleskost', amount: 3000, category: 'housing' }),
       ],
       '2026-07',
