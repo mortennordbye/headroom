@@ -400,11 +400,20 @@ The app is a thin JSON API over the single-blob store (no per-field endpoints). 
 |---------------|---------|
 | `GET /healthz` | Liveness probe (touches the DB). |
 | `GET /api/version` | Running `version` + build `sha`. |
+| `GET /api/config` | Server-side switches the client needs before it decides how to boot (currently just `demoMode`). |
 | `GET /api/data` | The whole finance blob; `X-Data-Rev` header carries the revision. |
 | `POST /api/data` | Overwrite the blob (shape-validated, last-write-wins with an optimistic-concurrency `X-Data-Rev` check → `409` on a stale write). |
 | `POST /api/restore` | Restore helper: upload a `make backup` SQLite file (raw body, `application/octet-stream`); the server opens it **read-only**, extracts the `headroom` JSON blob and returns `{ data }`. **It never writes** — the client applies it through the normal import preview/confirm. Rejects a non-SQLite / non-Headroom file with `400`. |
+| `GET /api/history` | Recent revisions (metadata only), newest first — backs the Settings restore-points card. |
+| `POST /api/history/:rev/restore` | Re-commit a past revision as the new current state (itself recorded in history, so a restore is reversible). |
+| `GET /api/auth/status` | Whether the optional password is enabled, its source, and whether the current session is authenticated. |
+| `POST /api/auth/login` | Verify a password and set the session cookie. |
+| `POST /api/auth/logout` | Clear the session cookie. |
+| `POST /api/auth/config` | Enable/disable the optional password (or change it). Refused once it's env-forced. |
 | `GET /api/inflation?from=YYYY-MM&to=YYYY-MM` | SSB CPI series (cached; `stale` flag when served from cache). Add **`&force=1`** to bypass the once-per-hour upstream-fetch cooldown for a user-initiated refresh. |
 | `GET /api/wage-stats` | Curated national median-wage series. |
+| `GET /api/kvmpris?postnr=####&type=…` | Average m²-price + sale count for the kommune a postnummer belongs to, by dwelling type (SSB) — backs the Loan page's estimated property value. Same cache/cooldown/serve-stale shape as inflation. |
+| `GET /api/policyrate` | Norges Bank key policy rate series — backs the Loan page's compare-rate card. Same cache/cooldown/serve-stale shape as inflation. |
 | `GET/POST/DELETE /api/bank/*` | Enable Banking transaction sync (`status`, `aspsps`, `link`, `callback`, `sync`, `config`, `key`, `connection/:id`) — see `scripts/enable-banking/`. |
 
 ## Tech stack
