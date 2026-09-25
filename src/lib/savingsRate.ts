@@ -16,9 +16,12 @@ const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max
  * Mortgage/debt paydown is deliberately not in here: only the principal portion
  * of those builds equity and a `FixedExpense` holds the gross payment, so
  * counting them whole would overstate the rate. They stay expenses.
+ *
+ * A paused saving moves nothing, so it is left out: pausing is how a month with
+ * no room to save frees the money for spending.
  */
 export function savingsContributionTotal(savings: Saving[]): number {
-  return savings.reduce((sum, s) => sum + amount(s.amount), 0);
+  return savings.reduce((sum, s) => (s.paused ? sum : sum + amount(s.amount)), 0);
 }
 
 /**
@@ -79,6 +82,10 @@ export function resolveSavingsAmounts(
   base: number,
   savingsTargetPercent: number,
 ): Saving[] {
+  return resolveAgainstTarget(savings, base, savingsTargetAmount(base, savingsTargetPercent));
+}
+
+function resolveAgainstTarget(savings: Saving[], base: number, target: number): Saving[] {
   const hasPercent = savings.some(s => isPercentSavings(s));
   const restCount = savings.reduce((n, s) => (isRestSavings(s) ? n + 1 : n), 0);
   if (!hasPercent && restCount === 0) return savings;
@@ -90,18 +97,57 @@ export function resolveSavingsAmounts(
   if (restCount === 0) return resolved;
   // What the other savings already claim of the target — percentages resolved
   // above, fixed rows at their stated kroner. Neither depends on a 'rest' row,
-  // so this can't feed back on itself.
+  // so this can't feed back on itself. A paused row moves nothing, so it claims
+  // nothing either.
   const claimed = resolved.reduce(
-    (sum, s) => (isRestSavings(s) ? sum : sum + amount(s.amount)),
+    (sum, s) => (isRestSavings(s) || s.paused ? sum : sum + amount(s.amount)),
     0,
   );
-  const pool = Math.max(0, savingsTargetAmount(base, savingsTargetPercent) - claimed);
+  const pool = Math.max(0, target - claimed);
   // Split evenly between the rest rows, the odd kroner to the first, so they sum
   // to exactly the pool. More than one is unusual but well-defined — two rows
   // asking for "the rest" get half each. Same rule as resolveAllocation.
   const each = Math.floor(pool / restCount);
   let extra = pool - each * restCount;
   return resolved.map(s => (isRestSavings(s) ? { ...s, amount: each + (extra-- > 0 ? 1 : 0) } : s));
+}
+
+/**
+ * Resolve the savings for one month, honouring that month's adjustment (the
+ * kroner the user chose to save this month instead of the plan) when there is
+ * one. Without an adjustment this is `resolveSavingsAmounts`.
+ *
+ * With one, the adjustment is the month's target: a 'rest' row takes what the
+ * others leave of it, and when the other transfers alone are more than it they
+ * are cut down to fit (see `capSavingsToTotal`). So a month set to 0 kr moves
+ * nothing, and the plan itself is untouched for every other month.
+ */
+export function resolveSavingsForMonth(
+  savings: Saving[],
+  base: number,
+  savingsTargetPercent: number,
+  monthSaving: number | undefined,
+): Saving[] {
+  if (monthSaving === undefined) return resolveSavingsAmounts(savings, base, savingsTargetPercent);
+  const target = amount(Math.round(monthSaving));
+  return capSavingsToTotal(resolveAgainstTarget(savings, base, target), target);
+}
+
+/**
+ * Scale the active (unpaused) savings down so they sum to exactly `cap`, each
+ * by the same share, to the whole krone. Rows already within the cap come back
+ * unchanged (same array). Used for a month adjusted below its fixed transfers,
+ * and on its own for a recorded month, whose snapshot is never re-resolved.
+ */
+export function capSavingsToTotal(savings: Saving[], cap: number): Saving[] {
+  const limit = amount(cap);
+  const total = savingsContributionTotal(savings);
+  if (total <= limit) return savings;
+  const scaled = savings.map(s => (s.paused ? s : { ...s, amount: Math.floor((amount(s.amount) * limit) / total) }));
+  // Hand the kroner lost to flooring to the first rows that move anything, so
+  // the month adds up to the cap exactly.
+  let extra = limit - savingsContributionTotal(scaled);
+  return scaled.map((s, i) => (!s.paused && amount(savings[i].amount) > 0 && extra-- > 0 ? { ...s, amount: s.amount + 1 } : s));
 }
 
 /** A saving driven by a share of the base rather than a fixed amount. */

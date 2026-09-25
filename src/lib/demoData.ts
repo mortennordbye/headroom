@@ -270,6 +270,7 @@ export function getDemoData(): Partial<ExportPayload> {
     // the older ones stay on the app's tax-estimated figure. Both states are
     // worth seeing. Base is 744 000 / 12 = 62 000, plus 2 000/mo on-call and any
     // overtime paid that month (matching the overtime rows above).
+    savingsMonthOverrides: {},
     monthlyIncomes: {
       [monthsAgo(0)]: 43840,
       [monthsAgo(1)]: 48500,

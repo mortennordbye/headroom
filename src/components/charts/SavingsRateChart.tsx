@@ -22,7 +22,7 @@ export default function SavingsRateChart() {
   const {
     t, lang, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
     region, grossAnnualIncome, employerCostConfig,
-    savingsTargetPercent, savingsContributions,
+    savingsTargetPercent, savingsContributions, planSavingsContributions,
   } = useFinance();
   const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -43,10 +43,12 @@ export default function SavingsRateChart() {
   }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   // The target is a share of residual; the line is a share of income. Restate it
-  // so the reference line and the plotted rate are the same quantity.
+  // so the reference line and the plotted rate are the same quantity. It is the
+  // plan's line, so a month adjusted to save less doesn't move it.
   const targetRate = useMemo(
-    () => targetRateOfIncome(effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetPercent),
-    [effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetPercent],
+    () => targetRateOfIncome(effectiveIncome, totalFixedExpenses - savingsContributions + planSavingsContributions,
+      planSavingsContributions, savingsTargetPercent),
+    [effectiveIncome, totalFixedExpenses, savingsContributions, planSavingsContributions, savingsTargetPercent],
   );
 
   return (

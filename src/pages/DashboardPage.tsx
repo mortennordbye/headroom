@@ -62,6 +62,9 @@ const DashboardPage: React.FC = () => {
     currentMonthSpending,
     recommendedSpending,
     plannedMonthlySaving,
+    planMonthlySaving,
+    monthSavingsTargetPercent,
+    savingsMonthOverrides,
     savingsContributions,
     fixedExpenses,
     monthlyBudget,
@@ -192,7 +195,7 @@ const DashboardPage: React.FC = () => {
     return prev > 0 ? ((curr - prev) / prev) * 100 : null;
   }, [netWorthSeries]);
 
-  const annualSavings = Math.max(0, plannedMonthlySaving * 12);
+  const annualSavings = Math.max(0, planMonthlySaving * 12);
   const cashStart = sumSavings(assets) + assets.bsu + assets.bufferAccount;
   const projectionRates = { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate };
   const projectionStart = { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity };
@@ -240,11 +243,12 @@ const DashboardPage: React.FC = () => {
     const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions);
     const investFrom = (monthlyIncome: number) =>
       Math.max(0, monthlyIncome - spendFixed) * (savingsTargetPercent / 100);
+    // A month the user adjusted shows what it actually set aside.
     const months: { key: string; label: string; value: number; projected?: boolean }[] =
       incomeSeries.map(({ month, value }) => ({
         key: month,
         label: fmtDate(parse(month, 'yyyy-MM', new Date()), 'MMM', { locale: dateLocale }),
-        value: Math.round(investFrom(value)),
+        value: Math.round(savingsMonthOverrides[month] ?? investFrom(value)),
       }));
     // 2 projected months ahead
     const last = incomeSeries[incomeSeries.length - 1];
@@ -253,11 +257,12 @@ const DashboardPage: React.FC = () => {
       for (let i = 1; i <= 2; i++) {
         const d = parse(last.month, 'yyyy-MM', new Date());
         d.setMonth(d.getMonth() + i);
-        months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM', { locale: dateLocale }), value: Math.round(baseVal * PROJECTED_INCOME_GROWTH ** i), projected: true });
+        const adjusted = savingsMonthOverrides[fmtDate(d, 'yyyy-MM')];
+        months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM', { locale: dateLocale }), value: Math.round(adjusted ?? baseVal * PROJECTED_INCOME_GROWTH ** i), projected: true });
       }
     }
     return months;
-  }, [incomeSeries, savingsTargetPercent, totalFixedExpenses, savingsContributions, dateLocale]);
+  }, [incomeSeries, savingsTargetPercent, savingsMonthOverrides, totalFixedExpenses, savingsContributions, dateLocale]);
 
   // ─── Insight 2: top categories MoM (shared categoryMoM math; localize at render) ───
   const categoryDeltas = useMemo(() => {
@@ -688,7 +693,7 @@ const DashboardPage: React.FC = () => {
                 {formatCurrency(plannedMonthlySaving)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                {format(currentMonth, 'MMM', { locale: dateLocale })} · {Math.round(savingsTargetPercent)}% {t.dashboardPage.savingsRate}
+                {format(currentMonth, 'MMM', { locale: dateLocale })} · {Math.round(monthSavingsTargetPercent)}% {t.dashboardPage.savingsRate}
               </div>
             </div>
           </div>

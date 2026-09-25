@@ -143,6 +143,9 @@ export default function SavingDialog({ saving, onSave, onClose }: Props) {
       ...dest,
       paused: paused || undefined,
       lastPostedMonth: sameDest && !resumed ? saving?.lastPostedMonth : currentMonthKey(),
+      // A restamp moved nothing to the new stamp's month, so there is nothing
+      // for a later month adjustment to correct.
+      postedAmount: sameDest && !resumed ? saving?.postedAmount : undefined,
       bufferTargetAmount: saving?.bufferTargetAmount,
     });
   };

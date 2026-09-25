@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { savingsRateStatus, savingsContributionTotal, targetRateOfIncome, planSavingsRateSeries, savingsBase, resolveSavingsAmounts, percentOfSavingsBase } from './savingsRate';
+import { savingsRateStatus, savingsContributionTotal, resolveSavingsForMonth, capSavingsToTotal, targetRateOfIncome, planSavingsRateSeries, savingsBase, resolveSavingsAmounts, percentOfSavingsBase } from './savingsRate';
 import type { MonthlyCashflowRow } from './monthlyCashflow';
 import type { FixedExpense, Saving } from '../context/FinanceContext';
 
@@ -76,6 +76,55 @@ describe('savingsContributionTotal', () => {
   it('ignores a NaN/undefined amount instead of poisoning the total', () => {
     const bad = { ...sav(0, 'savingsAccount'), amount: undefined as unknown as number };
     expect(savingsContributionTotal([bad, sav(5000, 'savingsAccount')])).toBe(5000);
+  });
+
+  it('leaves a paused saving out, so pausing frees the money for spending', () => {
+    expect(savingsContributionTotal([{ ...sav(5000), paused: true }, sav(2000, 'bsu')])).toBe(2000);
+  });
+});
+
+describe('resolveSavingsForMonth / capSavingsToTotal', () => {
+  const kr = (id: string, amount: number, dest: Saving['destinationKind'] = 'bufferAccount'): Saving =>
+    ({ id, name: id, amount, destinationKind: dest });
+  const rest = (id: string): Saving => ({ id, name: id, amount: 0, mode: 'rest', destinationKind: 'portfolio' });
+  // base 30 000, plan 65 % → 19 500.
+  const base = 30000;
+
+  it('is the plan when the month is not adjusted', () => {
+    const rows = [kr('buffer', 500), rest('fund')];
+    expect(resolveSavingsForMonth(rows, base, 65, undefined)).toEqual(resolveSavingsAmounts(rows, base, 65));
+  });
+
+  it('lets a rest row give way first', () => {
+    const out = resolveSavingsForMonth([kr('buffer', 500), rest('fund')], base, 65, 5000);
+    expect(out.map(s => s.amount)).toEqual([500, 4500]);
+  });
+
+  it('moves nothing in a month set to 0', () => {
+    const out = resolveSavingsForMonth([kr('buffer', 2000), rest('fund')], base, 65, 0);
+    expect(savingsContributionTotal(out)).toBe(0);
+  });
+
+  it('cuts fixed transfers by the same share when the month is below them', () => {
+    const out = resolveSavingsForMonth([kr('a', 3000), kr('b', 1000), rest('fund')], base, 65, 2000);
+    expect(out.map(s => s.amount)).toEqual([1500, 500, 0]);
+  });
+
+  it('adds up to the adjusted amount to the krone', () => {
+    const out = capSavingsToTotal([kr('a', 1), kr('b', 1), kr('c', 1)], 1);
+    expect(savingsContributionTotal(out)).toBe(1);
+  });
+
+  it('leaves a paused row alone and returns the same array when within the cap', () => {
+    const rows = [{ ...kr('a', 4000), paused: true }, kr('b', 1000)];
+    expect(capSavingsToTotal(rows, 2000)).toBe(rows);
+    expect(capSavingsToTotal(rows, 500).map(s => s.amount)).toEqual([4000, 500]);
+  });
+
+  it('does not change the plan for other months', () => {
+    const rows = [kr('buffer', 500), rest('fund')];
+    resolveSavingsForMonth(rows, base, 65, 0);
+    expect(resolveSavingsAmounts(rows, base, 65)[1].amount).toBe(19000);
   });
 });
 
@@ -277,6 +326,11 @@ describe('resolveSavingsAmounts — rest rows', () => {
     // 19 500 − 501 = 18 999 → 9 500 / 9 499, summing exactly.
     expect(out[1].amount + out[2].amount).toBe(18999);
     expect(out[1].amount).toBe(9500);
+  });
+
+  it('does not let a paused sibling claim part of the target', () => {
+    const rows = [{ ...krSaving('buffer', 500), paused: true }, restSaving('fund')];
+    expect(resolveSavingsAmounts(rows, base, 65)[1].amount).toBe(19500);
   });
 
   it('lets rest win over a stale percentage on the same row', () => {

@@ -741,3 +741,13 @@ Remaining — the visual half, deliberately left out to keep the model change re
   creates a `Saving` for a savings vehicle and a `FixedExpense` for mortgage/debt. That is correct
   but it is the only remaining spot where the two shapes meet, so it is where a future change is
   most likely to go wrong. **Where**: `createExpenses` in `src/components/SavingsAllocationPanel.tsx`.
+
+## MCP server ignores one-month saving adjustments
+
+**What:** the Budget page can now set one month's saving (`savingsMonthOverrides`, kroner per
+`'yyyy-MM'`) without changing the plan. The MCP server's budget summary still reports only the plan
+(`savingsTargetPercent`), so an assistant reading it doesn't see that a month was adjusted.
+**Why deferred:** kept the change to the app; the MCP read path has its own derive layer and tests.
+**Unblock:** include the viewed month's adjustment in the budget summary and document it in the tool
+description. **Where:** `mcp/derive.ts` (budget summary, ~line 168), adjustment semantics in
+`src/lib/savingsRate.ts` (`resolveSavingsForMonth`).

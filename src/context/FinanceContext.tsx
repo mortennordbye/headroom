@@ -9,7 +9,7 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculations';
-import { savingsContributionTotal, savingsBase, resolveSavingsAmounts } from '../lib/savingsRate';
+import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, capSavingsToTotal } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { markGainReview } from '../lib/gainReview';
@@ -163,15 +163,20 @@ export interface Saving {
   destinationKind: SavingDestinationKind;
   savingsAccountId?: string;   // set iff destinationKind === 'savingsAccount'
   /**
-   * Pause the transfer without losing its setup: the saving keeps its budget
-   * line, but stops moving the balance. Resuming restamps `lastPostedMonth` to
-   * the current month, so the paused months are never back-posted.
+   * Pause the transfer without losing its setup: the saving stops moving the
+   * balance and drops out of the budget totals (see savingsContributionTotal).
+   * Resuming restamps `lastPostedMonth` to the current month, so the paused
+   * months are never back-posted.
    */
   paused?: boolean;
   /** 'yyyy-MM' last month the automation posted; absent = never. Double-apply
    *  guard. Set to the current month on creation, so the first move happens the
    *  NEXT month. */
   lastPostedMonth?: string;
+  /** Kroner the automation moved for `lastPostedMonth`; absent when that stamp
+   *  came from creating or resuming the saving (nothing moved). Lets a month
+   *  adjusted after it was posted correct the balance by the difference. */
+  postedAmount?: number;
   /** Only for a `bufferAccount` saving created from the emergency-fund
    *  recommendation: the buffer balance at which this contribution has done its
    *  job and self-removes. Presence marks a "buffer builder"; once
@@ -798,6 +803,11 @@ interface FinanceDataContextType {
   monthlyIncomes: Record<string, number>;
   setMonthlyIncomeForMonth: (monthKey: string, amount: number) => void;
   clearMonthlyIncomeForMonth: (monthKey: string) => void;
+  /** 'yyyy-MM' → kroner saved that month instead of the plan (a month with no
+   *  room to save). Only that month changes; the plan stays for the rest. */
+  savingsMonthOverrides: Record<string, number>;
+  /** Set (or with null, clear) one month's saving. */
+  setSavingsMonthOverride: (monthKey: string, amount: number | null) => void;
   payslips: Record<string, MonthlyPayslip>;
   setPayslip: (monthKey: string, data: MonthlyPayslip) => void;
   removePayslip: (monthKey: string) => void;
@@ -971,9 +981,19 @@ interface FinanceDerivedContextType {
   /** Only the UNALLOCATED remainder of the savings target — 0 once it is fully
    *  automated. For "how much is saved each month", use `plannedMonthlySaving`. */
   recommendedInvestment: number;
-  /** Automated contributions + the unallocated remainder: the month's whole
-   *  saving, and the figure any projection should annualise. */
+  /** Automated contributions + the unallocated remainder: the selected month's
+   *  whole saving, including a one-month adjustment. */
   plannedMonthlySaving: number;
+  /** The same figure from the plan alone, ignoring a one-month adjustment: what
+   *  any projection should annualise, so one skipped month doesn't flatten the
+   *  future. Equals `plannedMonthlySaving` when the month isn't adjusted. */
+  planMonthlySaving: number;
+  /** The plan's transfers for the selected month, ignoring a one-month
+   *  adjustment. Equals `savingsContributions` when the month isn't adjusted. */
+  planSavingsContributions: number;
+  /** The selected month's savings target as a percent of the savings base:
+   *  `savingsTargetPercent`, or the month's adjustment restated as a percent. */
+  monthSavingsTargetPercent: number;
   suggestedInvestment: number;
   conservativeMode: boolean;
   conservativeReason: ConservativeReason;
@@ -1114,6 +1134,7 @@ export interface ExportPayload {
   assumptionsNudgeDismissed?: boolean;
   incomeReminderDismissedMonth?: string;
   conservativeNudgeDismissedMonth?: string;
+  savingsMonthOverrides?: Record<string, number>;
   payday?: number;
   /** Free-text context the user (or an AI assistant) keeps about their plans and
    *  long-term goals — e.g. "want to start my own company in ~3 years". Purely
@@ -1195,6 +1216,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const [income, setIncome] = useState<number>(55000);
   const [monthlyIncomes, setMonthlyIncomes] = useState<Record<string, number>>({});
+  const [savingsMonthOverrides, setSavingsMonthOverrides] = useState<Record<string, number>>({});
   const [payslips, setPayslips] = useState<Record<string, MonthlyPayslip>>({});
   const [netWorthHistory, setNetWorthHistory] = useState<Record<string, number>>({});
   const [balanceSnapshots, setBalanceSnapshots] = useState<Record<string, BalanceSnapshot>>({});
@@ -1340,7 +1362,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals, savingsAllocations,
     region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, savingsMonthOverrides, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
     projectionIncludeGrowth,
@@ -1350,7 +1372,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
     goals, savingsAllocations, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
-    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, payday, aiContext, profile,
+    assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, savingsMonthOverrides, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
     projectionIncludeGrowth]);
@@ -1393,7 +1415,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       billingConfig: setBillingConfig, hiddenNavItems: setHiddenNavItems,
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
       incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
-      conservativeNudgeDismissedMonth: setConservativeNudgeDismissedMonth, payday: setPayday,
+      conservativeNudgeDismissedMonth: setConservativeNudgeDismissedMonth,
+      savingsMonthOverrides: setSavingsMonthOverrides, payday: setPayday,
       aiContext: setAiContext, profile: setProfile,
       capacityOverrides: setCapacityOverrides, employerSalaryOverride: setEmployerSalaryOverride,
       dismissedLinkSuggestions: setDismissedLinkSuggestions,
@@ -1924,10 +1947,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
   // Memoized because the snapshot branch's `?? []` fallback is a fresh array on
   // every render, which would invalidate every memo keyed on this.
-  const viewSavings = useMemo(
+  const planViewSavings = useMemo(
     () => (fixedExpensesFromSnapshot ? (balanceSnapshots[monthKey].savings ?? []) : liveSavings),
     [fixedExpensesFromSnapshot, balanceSnapshots, monthKey, liveSavings],
   );
+  // The selected month's own saving, when the user adjusted it. A recorded month
+  // is only capped (its snapshot is never re-resolved); a live one is resolved
+  // against the adjustment so a 'rest' row gives way first.
+  const monthSaving = savingsMonthOverrides[monthKey];
+  const viewSavings = useMemo(() => {
+    if (monthSaving === undefined) return planViewSavings;
+    return fixedExpensesFromSnapshot
+      ? capSavingsToTotal(planViewSavings, monthSaving)
+      : resolveSavingsForMonth(savings, savingsPool, savingsTargetPercent, monthSaving);
+  }, [monthSaving, planViewSavings, fixedExpensesFromSnapshot, savings, savingsPool, savingsTargetPercent]);
 
   // What moves into savings rather than being spent. Budgeting treats it like a
   // fixed expense (it does leave free-to-spend), but the savings rate must add it
@@ -1969,12 +2002,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return Math.sqrt(variance) / mean;
   }, [incomeSeries]);
 
+  // An adjusted month's kroner restated as the percent calcRecommendations takes,
+  // against the same pool (income − consumption) it divides by.
+  const monthSavingsTargetPercent = monthSaving === undefined
+    ? savingsTargetPercent
+    : savingsPool > 0 ? Math.min(100, (monthSaving / savingsPool) * 100) : 0;
+
   const { recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason } = useMemo(() =>
     // savingsContributions is passed so the target is a share of CONSUMPTION,
     // not of everything: automating a transfer must not shrink the base the next
     // target is computed from. See calcRecommendations.
-    calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent, savingsContributions),
-  [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, savingsTargetPercent, savingsContributions]);
+    calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, monthSavingsTargetPercent, savingsContributions),
+  [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, monthSavingsTargetPercent, savingsContributions]);
 
   // The whole month's saving: what already moves automatically PLUS whatever is
   // still unallocated. `recommendedInvestment` alone is only the remainder, so
@@ -1982,6 +2021,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // case — a fully automated target — and understated net worth by the entire
   // contribution. Anything asking "how much do they save a month?" wants this.
   const plannedMonthlySaving = savingsContributions + Math.max(0, recommendedInvestment);
+
+  const planSavingsContributions = useMemo(() => savingsContributionTotal(planViewSavings), [planViewSavings]);
+  const planMonthlySaving = useMemo(() => {
+    if (monthSaving === undefined) return plannedMonthlySaving;
+    const planContributions = planSavingsContributions;
+    const consumption = totalFixedExpenses - savingsContributions;
+    const plan = calcRecommendations(effectiveIncome, averageIncome, consumption + planContributions,
+      incomeVolatility, savingsTargetPercent, planContributions);
+    return planContributions + Math.max(0, plan.recommendedInvestment);
+  }, [monthSaving, plannedMonthlySaving, planSavingsContributions, totalFixedExpenses, savingsContributions,
+      effectiveIncome, averageIncome, incomeVolatility, savingsTargetPercent]);
 
   const setMonthlyIncomeForMonth = useCallback((key: string, amount: number) => {
     setMonthlyIncomes(prev => ({ ...prev, [key]: amount }));
@@ -2441,12 +2491,23 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
       savingsTargetPercent,
     );
+    // Adjusted months move their own amount, resolved against that month's income.
+    const adjusted = Object.entries(savingsMonthOverrides).map(([m, kr]) => [m, resolveSavingsForMonth(
+      savings,
+      savingsBase(monthlyIncomes[m] ?? derivedNetMonthlyFor(m), fixedExpenses),
+      savingsTargetPercent,
+      kr,
+    )] as const);
     const savingRules: AutomationRule[] = postingSavings
-      .filter(sv => !sv.paused)
-      .map(sv => ({
+      .map((sv, i) => ({ sv, amountByMonth: adjusted.length
+        ? Object.fromEntries(adjusted.map(([m, rows]) => [m, rows[i].amount]))
+        : undefined }))
+      .filter(({ sv }) => !sv.paused)
+      .map(({ sv, amountByMonth }) => ({
         id: sv.id,
         name: sv.name,
         amount: sv.amount,
+        amountByMonth,
         targetKind: sv.destinationKind,
         savingsAccountId: sv.savingsAccountId,
         // A saving is stamped with lastPostedMonth on creation, so this fallback
@@ -2482,7 +2543,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [savings, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t]);
+  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
@@ -2544,10 +2605,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // carry their own stamp; the two synthesized pension rules stamp onto the
   // pension slice. Ids are uuids, so blind-patching both arrays by id is safe —
   // a rule belongs to exactly one of them.
-  const stampPosted = useCallback((ids: Set<string>, month: string) => {
+  const stampPosted = useCallback((ids: Set<string>, month: string, posted: ResolvedPosting[] = []) => {
     const rowIds = new Set([...ids].filter(id => !isPensionRuleId(id)));
+    // What each saving moved for `month`, so an adjustment made later in the
+    // month can correct the balance by the difference.
+    const moved = new Map(posted.map(p => [p.rule.id, p.rule.amountByMonth?.[month] ?? p.rule.amount]));
     if (rowIds.size) {
-      setSavings(prev => prev.map(sv => (rowIds.has(sv.id) ? { ...sv, lastPostedMonth: month } : sv)));
+      setSavings(prev => prev.map(sv => (rowIds.has(sv.id)
+        ? { ...sv, lastPostedMonth: month, postedAmount: moved.get(sv.id) }
+        : sv)));
       setFixedExpenses(prev => prev.map(e => (rowIds.has(e.id) ? { ...e, lastPostedMonth: month } : e)));
     }
     const otp = ids.has(PENSION_OTP_RULE_ID);
@@ -2600,7 +2666,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // same shape as the balance-snapshot effect above.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     applyPostingBalances(immediate);
-    stampPosted(new Set(immediate.map(p => p.rule.id)), currentMonth);
+    stampPosted(new Set(immediate.map(p => p.rule.id)), currentMonth, immediate);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automationRules, automationState, automationEnabled]);
 
@@ -2609,7 +2675,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const [posting] = computeAutomationPostings(
       automationRules.filter(r => r.id === expenseId), automationState, currentMonth);
     if (posting) applyPostingBalances([posting]);
-    stampPosted(new Set([expenseId]), currentMonth);
+    stampPosted(new Set([expenseId]), currentMonth, posting ? [posting] : []);
     setPendingCatchups(prev => prev.filter(p => p.expenseId !== expenseId));
   }, [automationRules, automationState, applyPostingBalances, stampPosted]);
 
@@ -2619,9 +2685,58 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const [posting] = computeAutomationPostings(
       automationRules.filter(r => r.id === expenseId), automationState, currentMonth, 1);
     if (posting) applyPostingBalances([posting]);
-    stampPosted(new Set([expenseId]), currentMonth);
+    stampPosted(new Set([expenseId]), currentMonth, posting ? [posting] : []);
     setPendingCatchups(prev => prev.filter(p => p.expenseId !== expenseId));
   }, [automationRules, automationState, applyPostingBalances, stampPosted]);
+
+  // Adjust (or with null, reset) one month's saving. When the current month's
+  // transfers were already posted, the balances are corrected by the difference
+  // between what moved and what the month now asks for, so money that was not
+  // saved never shows up in a savings balance — and resetting puts it back.
+  // What the setter last wrote, per month, until the state catches up. Two
+  // commits in one tick (Enter, then the input's blur) both see the old state,
+  // and the balance correction is not idempotent, so the second must no-op.
+  const pendingMonthOverrides = useRef<Record<string, number | undefined>>({});
+  useEffect(() => { pendingMonthOverrides.current = {}; }, [savingsMonthOverrides]);
+  const setSavingsMonthOverride = useCallback((month: string, value: number | null) => {
+    const next = value === null || !Number.isFinite(value) ? undefined : Math.max(0, Math.round(value));
+    const pending = pendingMonthOverrides.current;
+    const current = month in pending ? pending[month] : savingsMonthOverrides[month];
+    if (current === next) return;
+    pending[month] = next;
+    setSavingsMonthOverrides(prev => {
+      if (prev[month] === next) return prev;
+      const out = { ...prev };
+      if (next === undefined) delete out[month];
+      else out[month] = next;
+      return out;
+    });
+    const nowKey = currentMonthKey();
+    if (month !== nowKey) return;
+    const target = resolveSavingsForMonth(
+      savings,
+      savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
+      savingsTargetPercent,
+      next,
+    );
+    const corrections: AutomationRule[] = [];
+    const nowMoved: Record<string, number> = {};
+    savings.forEach((sv, i) => {
+      if (sv.paused || sv.lastPostedMonth !== nowKey || sv.postedAmount === undefined) return;
+      nowMoved[sv.id] = target[i].amount;
+      const delta = target[i].amount - sv.postedAmount;
+      if (delta === 0) return;
+      corrections.push({
+        id: sv.id, name: sv.name, amount: delta,
+        targetKind: sv.destinationKind, savingsAccountId: sv.savingsAccountId,
+        startMonth: nowKey, lastPostedMonth: addMonthsKey(nowKey, -1),
+      });
+    });
+    if (corrections.length) applyPostingBalances(computeAutomationPostings(corrections, automationState, nowKey));
+    if (Object.keys(nowMoved).length) {
+      setSavings(prev => prev.map(sv => (sv.id in nowMoved ? { ...sv, postedAmount: nowMoved[sv.id] } : sv)));
+    }
+  }, [savingsMonthOverrides, savings, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savingsTargetPercent, automationState, applyPostingBalances]);
 
   // One write for both figures and the marker, so answering the prompt can't
   // land as three separate saves (or leave the marker set if one of them fails).
@@ -2993,6 +3108,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const dataValue = useMemo<FinanceDataContextType>(() => ({
     income, setIncome,
     monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
+    savingsMonthOverrides, setSavingsMonthOverride,
     payslips, setPayslip, removePayslip,
     netWorthHistory, balanceSnapshots, liveBalanceSnapshot,
     automationRules, automationState,
@@ -3030,6 +3146,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     restoreAssetTaxDefaults, restorePensionAssumptionDefaults, restoreEmployerCostDefaults,
   }), [
     income, monthlyIncomes, setMonthlyIncomeForMonth, clearMonthlyIncomeForMonth,
+    savingsMonthOverrides, setSavingsMonthOverride,
     payslips, setPayslip, removePayslip, netWorthHistory, savings,
     balanceSnapshots, liveBalanceSnapshot, automationRules, automationState,
     setManualSnapshot, deleteManualSnapshot, clearHistory,
@@ -3064,7 +3181,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
-    recommendedSpending, recommendedInvestment, plannedMonthlySaving, suggestedInvestment, conservativeMode, conservativeReason,
+    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
+    suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
@@ -3073,7 +3191,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
-    recommendedSpending, recommendedInvestment, plannedMonthlySaving, suggestedInvestment, conservativeMode, conservativeReason,
+    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
+    suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
