@@ -121,6 +121,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     // ── Group A: default-on-absent (load) / leave-on-absent (import) ──
     income: { group: 'reset', demo: 'personal', read: whenDefined('income'), default: 55000 },
     monthlyIncomes: { group: 'reset', demo: 'personal', read: whenDefined('monthlyIncomes'), default: {} },
+    savingsMonthOverrides: { group: 'reset', demo: 'personal', read: whenDefined('savingsMonthOverrides'), default: {} },
     payslips: { group: 'reset', demo: 'personal', read: whenDefined('payslips'), default: {} },
     netWorthHistory: { group: 'reset', demo: 'personal', read: whenDefined('netWorthHistory'), default: {} },
     balanceSnapshots: {

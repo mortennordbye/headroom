@@ -27,7 +27,7 @@ const ForecastPage: React.FC = () => {
   const {
     t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
     formatCurrency, region, customTaxRatePct, pension,
-    plannedMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest,
+    planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest,
     assets, houseGrowthRate, netInvestment, netCrypto, totalDebt,
     forecastAssumptions: fa, setForecastAssumptions,
   } = useFinance();
@@ -120,9 +120,9 @@ const ForecastPage: React.FC = () => {
   const savingsSeed = useMemo(() => {
     const net = calcTaxByRegion(currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
     if (net <= 0) return 25;
-    const pct = (plannedMonthlySaving * 12 / net) * 100;
+    const pct = (planMonthlySaving * 12 / net) * 100;
     return Number.isFinite(pct) && pct > 0 ? Math.min(90, Math.round(pct)) : 25;
-  }, [currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, plannedMonthlySaving]);
+  }, [currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, planMonthlySaving]);
 
   // Assumptions are persisted per scenario (null-until-dragged, so each slider
   // keeps following its live-data seed until the user sets it). Scenario B seeds

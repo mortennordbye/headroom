@@ -204,6 +204,8 @@ const BudgetPage: React.FC = () => {
     setAccountFilter,
     internalTransferIds,
     savingsTargetPercent,
+    monthSavingsTargetPercent,
+    planSavingsContributions,
     payday,
     labelRules,
     region,
@@ -226,9 +228,11 @@ const BudgetPage: React.FC = () => {
 
   // The savings target restated as a share of income, matching the rate the
   // banner and SavingsRateChart plot (the stored percent is a share of residual).
+  // The plan's, like the chart's line, so an adjusted month doesn't move it.
   const savingsTargetRate = useMemo(
-    () => targetRateOfIncome(effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetPercent),
-    [effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetPercent],
+    () => targetRateOfIncome(effectiveIncome, totalFixedExpenses - savingsContributions + planSavingsContributions,
+      planSavingsContributions, savingsTargetPercent),
+    [effectiveIncome, totalFixedExpenses, savingsContributions, planSavingsContributions, savingsTargetPercent],
   );
 
   // Trailing savings-rate health — flag when the last few months' rate has slipped
@@ -304,10 +308,11 @@ const BudgetPage: React.FC = () => {
   // The savings target in kroner, resolved the same way calcRecommendations does
   // it: a share of income minus CONSUMPTION (never of everything, or automating a
   // transfer would shrink the target it is measured against). Shown beside the
-  // savings list, which is the one place it belongs.
+  // savings list, which is the one place it belongs. This month's target, so a
+  // month adjusted to save less isn't shown as falling short of the plan.
   const savingsTargetAmount = useMemo(
-    () => Math.max(0, Math.round((effectiveIncome - spendFixedTotal) * (savingsTargetPercent / 100))),
-    [effectiveIncome, spendFixedTotal, savingsTargetPercent],
+    () => Math.max(0, Math.round((effectiveIncome - spendFixedTotal) * (monthSavingsTargetPercent / 100))),
+    [effectiveIncome, spendFixedTotal, monthSavingsTargetPercent],
   );
   const savingsProgressPct = savingsTargetAmount > 0
     ? (savingsContributions / savingsTargetAmount) * 100
@@ -1188,7 +1193,7 @@ const BudgetPage: React.FC = () => {
               <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
                 {t.budgetPage.savingsTargetLabel}
               </span>
-              <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{savingsTargetPercent} %</span>
+              <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>{Math.round(monthSavingsTargetPercent)} %</span>
             </div>
             <div className="font-mono text-[19px] font-medium tabular-nums" style={{ color: 'var(--text-1)' }}>
               {formatCurrency(savingsTargetAmount)}

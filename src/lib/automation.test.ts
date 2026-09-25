@@ -58,6 +58,31 @@ describe('computeAutomationPostings — savings', () => {
   });
 });
 
+describe('computeAutomationPostings — adjusted months', () => {
+  it('moves an adjusted month at its own amount', () => {
+    const [p] = computeAutomationPostings(
+      [rule({ lastPostedMonth: '2026-06', amountByMonth: { '2026-07': 0 } })], state(), '2026-07');
+    expect(p.newBalance).toBe(1000);    // nothing saved in July
+  });
+
+  it('catches up each month at its own amount', () => {
+    const [p] = computeAutomationPostings(
+      [rule({ lastPostedMonth: '2026-04', amountByMonth: { '2026-06': 100 } })], state(), '2026-07');
+    expect(p.newBalance).toBe(2100);    // 1000 + 500 (May) + 100 (Jun) + 500 (Jul)
+  });
+
+  it('applies the most recent month when capped', () => {
+    const [p] = computeAutomationPostings(
+      [rule({ lastPostedMonth: '2026-04', amountByMonth: { '2026-05': 0, '2026-07': 200 } })], state(), '2026-07', 1);
+    expect(p.newBalance).toBe(1200);
+  });
+
+  it('takes a negative amount back out (the correction for an already-posted month)', () => {
+    const [p] = computeAutomationPostings([rule({ lastPostedMonth: '2026-06', amount: -500 })], state(), '2026-07');
+    expect(p.newBalance).toBe(500);
+  });
+});
+
 describe('computeAutomationPostings — buffer account', () => {
   const buf = (over: Partial<AutomationRule> = {}) =>
     rule({ targetKind: 'bufferAccount', savingsAccountId: undefined, ...over });

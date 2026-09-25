@@ -42,6 +42,9 @@ export interface AutomationRule {
   id: string;                 // the fixed expense's id, or 'pension:otp' / 'pension:ips'
   name: string;
   amount: number;             // positive monthly kr (the expense amount)
+  /** 'yyyy-MM' → kr for months that move a different amount (a saving whose
+   *  month was adjusted). Balance-growing targets only; paydown ignores it. */
+  amountByMonth?: Record<string, number>;
   targetKind: AutomationTargetKind;
   savingsAccountId?: string;  // set iff targetKind === 'savingsAccount'
   debtId?: string;            // set iff targetKind === 'debt'
@@ -118,20 +121,25 @@ export function computeAutomationPostings(
   const out: ResolvedPosting[] = [];
   for (const rule of rules) {
     const fromMonth = rule.lastPostedMonth ? addMonthsKey(rule.lastPostedMonth, 1) : rule.startMonth;
-    const due = monthsBetween(fromMonth, currentMonth).length;
+    const dueMonths = monthsBetween(fromMonth, currentMonth);
+    const due = dueMonths.length;
     if (due <= 0) continue;
     const monthsDue = capMonths != null ? Math.min(due, capMonths) : due;
+    // What a balance-growing target gains over the months applied — the most
+    // recent ones when capped — each at its own month's amount.
+    const added = dueMonths.slice(due - monthsDue)
+      .reduce((sum, m) => sum + (rule.amountByMonth?.[m] ?? rule.amount), 0);
 
     let newBalance: number;
     let infeasible = false;
     if (rule.targetKind === 'savingsAccount') {
       if (!rule.savingsAccountId || !(rule.savingsAccountId in savings)) continue;
-      newBalance = Math.round(savings[rule.savingsAccountId] + rule.amount * monthsDue);
+      newBalance = Math.round(savings[rule.savingsAccountId] + added);
       savings[rule.savingsAccountId] = newBalance;
     } else if (isScalarTarget(rule.targetKind)) {
       // A single named scalar (emergency fund, portfolio, BSU, OTP, IPS) — grows
       // like a savings account, no id needed.
-      newBalance = Math.round(scalars[rule.targetKind] + rule.amount * monthsDue);
+      newBalance = Math.round(scalars[rule.targetKind] + added);
       scalars[rule.targetKind] = newBalance;
     } else if (rule.targetKind === 'mortgage') {
       if (state.housingMode === 'first_buyer') continue; // no mortgage exists in this mode

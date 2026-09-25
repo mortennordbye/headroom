@@ -67,13 +67,13 @@ const TOP_LEVEL_NUMERIC = [
   'customTaxRatePct', 'payday',
 ] as const;
 
-const NUMBER_RECORDS = ['monthlyIncomes', 'netWorthHistory', 'categoryBudgets'] as const;
+const NUMBER_RECORDS = ['monthlyIncomes', 'netWorthHistory', 'categoryBudgets', 'savingsMonthOverrides'] as const;
 
 // Numeric fields of the array-of-objects payload fields, as item schemas
 // (same number-marks-numeric convention as `objectSchemas`).
 const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
   fixedExpenses: { amount: 0 },
-  savings: { amount: 0, percent: 0, bufferTargetAmount: 0 },
+  savings: { amount: 0, percent: 0, bufferTargetAmount: 0, postedAmount: 0 },
   dailyTransactions: { amount: 0 },
   // A percentage row carries its share here; an imported "50" as a string must
   // coerce, or the resolver reads it as absent and the row silently freezes.

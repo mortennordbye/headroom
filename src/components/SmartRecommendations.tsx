@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { AlertTriangle, TrendingUp, Edit2, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
-import { savingsTargetPercentFor } from '../lib/calculations';
+import { currentMonthKey } from '../lib/date';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 
@@ -25,9 +25,11 @@ interface EditablePillProps {
   hint?: string;
   /** Muted second line under the value (e.g. "1 494 kr ufordelt"). */
   note?: string;
+  /** A recorded month: shown, not edited. */
+  readOnly?: boolean;
 }
 
-function EditablePill({ label, value, roleColor, formatCurrency, onCommit, hint, note }: EditablePillProps) {
+function EditablePill({ label, value, roleColor, formatCurrency, onCommit, hint, note, readOnly }: EditablePillProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -51,12 +53,12 @@ function EditablePill({ label, value, roleColor, formatCurrency, onCommit, hint,
 
   return (
     <div
-      className={`flex flex-col justify-center gap-1.5 rounded-[6px] border p-3 md:p-4 cursor-pointer ${bg}`}
-      onClick={() => { if (!editing) startEditing(); }}
+      className={`flex flex-col justify-center gap-1.5 rounded-[6px] border p-3 md:p-4 ${readOnly ? '' : 'cursor-pointer'} ${bg}`}
+      onClick={() => { if (!editing && !readOnly) startEditing(); }}
     >
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)]">{label}</span>
-        <Edit2 size={11} className="opacity-40 hover:opacity-100 transition-opacity text-[var(--text-2)]" />
+        {!readOnly && <Edit2 size={11} className="opacity-40 hover:opacity-100 transition-opacity text-[var(--text-2)]" />}
       </div>
       {editing ? (
         <input
@@ -103,6 +105,9 @@ export default function SmartRecommendations() {
     monthlyIncomes,
     savingsTargetPercent,
     setSavingsTargetPercent,
+    savingsMonthOverrides,
+    setSavingsMonthOverride,
+    planMonthlySaving,
     formatCurrency,
     formatCurrencyShort,
     effectiveIncome,
@@ -146,12 +151,17 @@ export default function SmartRecommendations() {
   const base = effectiveIncome - spendFixed;
   const plannedSaving = savingsContributions + Math.max(0, recommendedInvestment);
 
-  // A pill can only move the part of the split that is still a plan: saving
-  // already committed as a fixed expense can't be undone from here, so the
-  // spend pill can't claim it and the saving pill can't drop below it.
+  // The pills adjust THIS month only (life happens: a month with no room to
+  // save). The plan — the Sparemål badge — is untouched, so the forecast and
+  // every other month keep it, and next month is back to normal on its own.
+  // Any amount from 0 to the whole pool: transfers that don't fit are cut for
+  // this month (see resolveSavingsForMonth). A recorded month is read-only.
+  const monthKey = format(currentMonth, 'yyyy-MM');
+  const isPastMonth = monthKey < currentMonthKey();
+  const monthAdjusted = savingsMonthOverrides[monthKey] !== undefined;
   const commitPool = (saving: number) => {
     if (base <= 0) return;
-    setSavingsTargetPercent(savingsTargetPercentFor(saving, base, savingsContributions));
+    setSavingsMonthOverride(monthKey, Math.min(Math.max(0, saving), base));
   };
 
   const handleSpendingEdit = (newSpending: number) => commitPool(base - Math.max(0, newSpending));
@@ -258,6 +268,7 @@ export default function SmartRecommendations() {
               roleColor={ROLE_SPEND}
               formatCurrency={formatCurrency}
               onCommit={handleSpendingEdit}
+              readOnly={isPastMonth}
             />
             <EditablePill
               label={t.budgetPage.savingSlice}
@@ -266,11 +277,29 @@ export default function SmartRecommendations() {
               formatCurrency={formatCurrency}
               onCommit={handleSavingEdit}
               note={unfundedNote}
+              readOnly={isPastMonth}
               hint={conservativeMode && suggestedInvestment > recommendedInvestment
                 ? `${t.common.recommended}: ${formatCurrency(savingsContributions + suggestedInvestment)}`
                 : undefined}
             />
           </div>
+          {monthAdjusted && (
+            <p className="mt-2 text-[11px] text-[var(--text-2)]">
+              {t.budgetPage.savingAdjusted.replace('{amount}', formatCurrency(planMonthlySaving))}
+              {!isPastMonth && (
+                <>
+                  {' · '}
+                  <button
+                    type="button"
+                    onClick={() => setSavingsMonthOverride(monthKey, null)}
+                    className="underline underline-offset-2 hover:text-[var(--text-1)]"
+                  >
+                    {t.budgetPage.savingAdjustedReset}
+                  </button>
+                </>
+              )}
+            </p>
+          )}
         </div>
 
         {/* Right: allocation strip + legend (replaces the donut) */}
