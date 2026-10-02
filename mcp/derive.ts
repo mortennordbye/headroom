@@ -166,6 +166,9 @@ export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey())
     seasonal,
   );
   const savingsTarget = blob.savingsTargetPercent ?? 20;
+  // A one-month adjustment is that month's total saving in kroner, replacing the
+  // plan for that month only (see resolveSavingsForMonth).
+  const monthSaving = blob.savingsMonthOverrides?.[monthKey];
   return {
     monthKey,
     monthlyNetIncome: fallbackIncome,
@@ -173,6 +176,7 @@ export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey())
     essentialMonthlyExpenses: Math.round(essentialMonthlyExpenses(blob.fixedExpenses ?? [])),
     fixedByType: fixedExpenseTotalsByType(blob.fixedExpenses ?? []),
     savingsTargetPercent: savingsTarget,
+    savingsThisMonth: monthSaving === undefined ? null : Math.round(monthSaving),
     savingsRate: savingsRateStatus(rows, savingsTarget),
     cashflowLast12: rows,
   };
