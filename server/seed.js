@@ -156,7 +156,6 @@ const loan = {
   nedbetalingstid: 25,
   termingebyr: 50,
   etableringsgebyr: 0,
-  skattefradragssats: 22,
   arslonn: 660_000,
   egenkapital: 500_000,
   eksisterendeGjeld: 0,
@@ -171,7 +170,6 @@ const homeowner = {
   rente: 5.65,
   nedbetalingstid: 22,
   termingebyr: 50,
-  skattefradragssats: 22,
 };
 
 const transition = {
