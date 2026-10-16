@@ -16,6 +16,8 @@ Fictional numbers, nothing to sign up for. Click through everything — your
 changes stay in your own browser and are never saved. See
 [Public demo mode](#public-demo-mode) for how it is locked down.
 
+Why I built it and how it runs on Kubernetes: [the write-up on blog.nordbye.it](https://blog.nordbye.it/blog/headroom/).
+
 A self-hosted personal finance tracker. Track monthly budgets, manage assets and investments, model housing loans, and get smart spending recommendations. All data is stored server-side in a SQLite database via Docker — zero browser storage. Norwegian is natively supported.
 
 | Dashboard | Budget |
