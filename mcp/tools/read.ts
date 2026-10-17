@@ -34,7 +34,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Budget summary',
       description:
-        'Monthly income vs fixed/variable expenses, per-type fixed totals, last-12-month cashflow, and savings-rate status vs target.',
+        'Monthly income vs fixed/variable expenses, per-type fixed totals, last-12-month cashflow, and savings-rate status vs target. savingsThisMonth is the current month\'s adjusted total saving in kroner when the month was set to save something other than the plan (it replaces savingsTargetPercent for that month only); null when the month follows the plan.',
       inputSchema: {},
       annotations: { title: 'Budget summary', ...readOnly },
     },

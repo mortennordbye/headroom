@@ -88,6 +88,16 @@ describe('derive (pure, no server)', () => {
     expect(b.cashflowLast12).toHaveLength(12);
   });
 
+  it('budget: reports a one-month saving adjustment in kroner, null when the month follows the plan', () => {
+    const adjusted: ExportPayload = { ...blob, savingsMonthOverrides: { [MONTH]: 3000 } };
+    const b = derive.budgetSummary(adjusted, MONTH);
+    expect(b.savingsThisMonth).toBe(3000);
+    expect(b.savingsTargetPercent).toBe(25);
+    const other = derive.budgetSummary(adjusted, '2026-05');
+    expect(other.savingsThisMonth).toBeNull();
+    expect(derive.budgetSummary(blob, MONTH).savingsThisMonth).toBeNull();
+  });
+
   it('spending: category totals match spendByCategory for the month', () => {
     const s = derive.spendingAnalysis(blob, MONTH);
     expect(s.byCategory).toEqual(spendByCategory(blob.dailyTransactions, MONTH));
