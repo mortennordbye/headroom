@@ -566,11 +566,10 @@ Remaining:
   rate. Needs the amortization split `src/lib/automation.ts` already computes,
   threaded into the rate. **Where**: `savingsContributionTotal` in
   `src/lib/savingsRate.ts` (the destinationKind filter), `src/lib/automation.ts`.
-- **`yearReview` and `mcp/derive` don't pass `fixedExpenses`,** so they keep the old
-  double-counting behaviour and disagree with the Budget page. The reconciliation arg
-  is optional precisely so these could be migrated separately; they need a
-  fixed-expense list plumbed to the call site. **Where**: `src/lib/yearReview.ts:69`,
-  `mcp/derive.ts:155` and `:333`.
+- **`mcp/derive` doesn't pass `fixedExpenses`,** so it keeps the old
+  double-counting behaviour and disagrees with the Budget page. The reconciliation arg
+  is optional precisely so callers could be migrated separately; it needs a
+  fixed-expense list plumbed to the call site. **Where**: `mcp/derive.ts:155` and `:333`.
 - **The overlapping-jobs warning only checks the current month.** A job change
   entered with a stale end date in a *past* or future month still double-counts
   gross there (and so in the 12-month income series, volatility, and every chart

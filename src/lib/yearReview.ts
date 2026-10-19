@@ -2,7 +2,7 @@
 // spending categories, net-worth change) for one calendar year by composing the
 // existing pure aggregators — no new financial formulas of its own. Pure and
 // unit-tested; the page (`YearReviewPage`) only renders what this returns.
-import type { BalanceSnapshot, DailyTransaction } from '../context/FinanceContext';
+import type { BalanceSnapshot, DailyTransaction, FixedExpense } from '../context/FinanceContext';
 import { monthlyCashflow, isSpend, type MonthlyCashflowRow } from './monthlyCashflow';
 import { netWorthFromSnapshot } from './netWorth';
 import { monthsBetween, yearOf } from './date';
@@ -37,6 +37,11 @@ export interface YearReviewInput {
   /** Per-month net income (real overrides merged with derived salary). */
   incomeByMonth: Record<string, number>;
   totalFixedExpenses: number;
+  /**
+   * The fixed-expense rows `totalFixedExpenses` was summed from. When supplied, a
+   * budgeted bill whose payment was also imported is charged once, not twice.
+   */
+  fixedExpenses?: FixedExpense[];
   payslips: Record<string, { tax?: number }>;
   snapshots: Record<string, BalanceSnapshot>;
   netWorthHistory: Record<string, number>;
@@ -61,12 +66,12 @@ function netWorthAt(
 
 export function yearReview(year: number, input: YearReviewInput): YearReview {
   const {
-    transactions, incomeByMonth, totalFixedExpenses, payslips,
+    transactions, incomeByMonth, totalFixedExpenses, fixedExpenses, payslips,
     snapshots, netWorthHistory, currentNetWorth, nowMonthKey, topN = 6,
   } = input;
 
   const months = monthsBetween(`${year}-01`, `${year}-12`).filter((m) => m <= nowMonthKey);
-  const monthly = monthlyCashflow(months, transactions, incomeByMonth, 0, totalFixedExpenses);
+  const monthly = monthlyCashflow(months, transactions, incomeByMonth, 0, totalFixedExpenses, undefined, fixedExpenses);
 
   const totalIncome = monthly.reduce((s, r) => s + r.income, 0);
   const totalVariable = monthly.reduce((s, r) => s + r.variable, 0);
