@@ -1,5 +1,6 @@
 import type { ParsedPayslip } from './types';
 import { parseVismaPayslip } from './parseVismaPayslip';
+import { parseTripletexPayslip } from './parseTripletexPayslip';
 
 export type { ParsedPayslip } from './types';
 export { parsePayslipAmount } from './parsePayslipAmount';
@@ -24,6 +25,7 @@ export interface PayslipProvider {
  */
 export const PROVIDERS: PayslipProvider[] = [
   { id: 'visma', name: 'Visma', parse: parseVismaPayslip },
+  { id: 'tripletex', name: 'Tripletex', parse: parseTripletexPayslip },
 ];
 
 /**
