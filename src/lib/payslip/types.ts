@@ -11,7 +11,7 @@
  * parsed). Never NaN — callers can treat null as "not present".
  */
 export interface ParsedPayslip {
-  provider: 'visma';
+  provider: 'visma' | 'tripletex';
   /** Payroll period, 'YYYY-MM' (Visma: "Lønnskjøring"). */
   period: string | null;
   /** Payment date, 'YYYY-MM-DD' (Visma: "Utbetalingsdato"). */
