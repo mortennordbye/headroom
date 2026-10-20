@@ -20,8 +20,8 @@ describe('accountMonthlyTotals', () => {
 
   it('keeps two accounts with the same holder name as separate rows (scope to specific account)', () => {
     const rows = accountMonthlyTotals([
-      tx({ account: 'hb:1', accountName: 'Morten Victor Nordbye', date: '2026-06-02', amount: 100 }),
-      tx({ account: 'hb:2', accountName: 'Morten Victor Nordbye', date: '2026-06-03', amount: 200 }),
+      tx({ account: 'hb:1', accountName: 'Ola Nordmann', date: '2026-06-02', amount: 100 }),
+      tx({ account: 'hb:2', accountName: 'Ola Nordmann', date: '2026-06-03', amount: 200 }),
     ], {}, months);
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.key).sort()).toEqual(['hb:1', 'hb:2']);

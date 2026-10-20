@@ -8,12 +8,12 @@ import { parsePayslip } from './index';
 // grouped top-to-bottom / left-to-right. The PDF itself is never stored — this
 // fixture is the parser's contract.
 const VISMA_LINES: string[] = [
-  'Orange Business Digital Norway',
+  'Eksempel Digital Norway',
   'Lønnsslipp',
   'AS',
-  'Org.nr. 982211743',
+  'Org.nr. 999999999',
   'Lønnskjøring 2026-06',
-  'Lørenfaret 1E, 0585 OSLO',
+  'Kongens gate 1, 0153 OSLO',
   'Månedslønn',
   'Utbetalingsdato 19.06.2026',
   'Fødselsdato 01.01.1990',
@@ -40,7 +40,7 @@ const VISMA_LINES: string[] = [
   'Andre trekk Bankkonto Beløp',
   '0,00',
   'Netto til utbetaling Bankkonto Beløp',
-  'Morten Victor Nordbye 12345678903 67 003,39',
+  'Ola Nordmann 12345678903 67 003,39',
   '67 003,39',
   'Beskrivelse Totalt for Akkumulert totalt Beskrivelse Totalt for Akkumulert totalt',
   'perioden perioden',
@@ -126,7 +126,7 @@ describe('parseVismaPayslip', () => {
   });
 
   it('reconstructs the employer name across the wrapped header', () => {
-    expect(p.employer).toBe('Orange Business Digital Norway AS');
+    expect(p.employer).toBe('Eksempel Digital Norway AS');
   });
 
   it('extracts the annual salary — the value v1 imports', () => {

@@ -27,9 +27,9 @@ describe('AccountBadge', () => {
   });
 
   it('prefers the user-chosen friendly name over the bank-provided name', () => {
-    const html = renderToStaticMarkup(<AccountBadge tx={{ ...base, account: 'k1', accountName: 'Morten Victor Nordbye', bank: 'Bank Norwegian' }} />);
+    const html = renderToStaticMarkup(<AccountBadge tx={{ ...base, account: 'k1', accountName: 'Ola Nordmann', bank: 'Bank Norwegian' }} />);
     expect(html).toContain('My Card');
-    expect(html).not.toContain('Morten Victor Nordbye');
+    expect(html).not.toContain('Ola Nordmann');
   });
 
   it('maps different accounts to color tokens deterministically', () => {
