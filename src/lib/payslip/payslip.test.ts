@@ -199,7 +199,21 @@ describe('parseTripletexPayslip', () => {
     expect(p.annualSalary).toBeNull();
     expect(p.positionPct).toBeNull();
     expect(p.jobStartMonth).toBeNull();
-    expect(p.holidayPayThisYear).toBeNull();
+  });
+
+  it("derives the period's holiday pay from the year's accrual rate", () => {
+    // 23 100 / 192 500 = 12 %, applied to the period's 67 500.
+    expect(p.holidayPayThisYear).toBe(8100);
+  });
+
+  it("ignores holiday pay carried over from an earlier year", () => {
+    const lines = [...TRIPLETEX_LINES, 'Feriepenger til gode - opptjent i 2025 90 000,00'];
+    expect(parseTripletexPayslip(lines)!.holidayPayThisYear).toBe(8100);
+  });
+
+  it('leaves holiday pay empty without a year-to-date holiday base', () => {
+    const lines = TRIPLETEX_LINES.filter(l => !l.startsWith('Grunnlag feriepenger'));
+    expect(parseTripletexPayslip(lines)!.holidayPayThisYear).toBeNull();
   });
 
   it('reads the tax base when the description does not wrap', () => {

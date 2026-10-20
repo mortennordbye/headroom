@@ -72,6 +72,20 @@ export function parseTripletexPayslip(lines: string[]): ParsedPayslip | null {
   const pct = /Grunnlag prosenttrekk \((\d+(?:,\d+)?)%\)/.exec(text);
 
   const taxWithheld = amount(tax?.[1]);
+  const gross = amount(base?.[1]);
+
+  // Holiday pay is only printed year-to-date, so derive this period's accrual
+  // from the year's rate (accrued ÷ holiday base) applied to the period's pay.
+  // The accrual line names its year; earlier years' balances are skipped.
+  const ytd = ytdStart === -1 ? [] : lines.slice(ytdStart);
+  const ytdAmount = (re: RegExp) => amount(ytd.map(l => re.exec(l)).find(Boolean)?.[1]);
+  const holidayBase = ytdAmount(new RegExp(String.raw`^Grunnlag feriepenger (${AMOUNT})$`));
+  const holidayAccrued = h
+    ? ytdAmount(new RegExp(String.raw`^Feriepenger til gode - opptjent i ${h[2]} (${AMOUNT})$`))
+    : null;
+  const holidayPay = gross != null && holidayBase && holidayAccrued != null
+    ? Math.round((gross * holidayAccrued / holidayBase) * 100) / 100
+    : null;
 
   return {
     provider: 'tripletex',
@@ -84,11 +98,10 @@ export function parseTripletexPayslip(lines: string[]): ParsedPayslip | null {
     taxPercent: pct ? parseFloat(pct[1].replace(',', '.')) : null,
     positionPct: null,
     // The slip has no gross line; the tax base is the period's taxable pay.
-    gross: amount(base?.[1]),
+    gross,
     // What's paid to the account, including any expense reimbursements.
     net: amount(h?.[6]),
     taxWithheld: taxWithheld == null ? null : Math.abs(taxWithheld),
-    // Only a year-to-date holiday-pay figure is printed, not the period's.
-    holidayPayThisYear: null,
+    holidayPayThisYear: holidayPay,
   };
 }
