@@ -14,7 +14,7 @@ const YearReviewPage: React.FC = () => {
   const {
     t, lang, formatCurrency,
     nonTransferTransactions, monthlyIncomes, derivedNetMonthlyFor,
-    totalFixedExpenses, payslips, balanceSnapshots, netWorthHistory, netWorth,
+    totalFixedExpenses, viewFixedExpenses, payslips, balanceSnapshots, netWorthHistory, netWorth,
   } = useFinance();
   const ty = t.yearReview;
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -38,10 +38,11 @@ const YearReviewPage: React.FC = () => {
     }
     return yearReview(year, {
       transactions: nonTransferTransactions, incomeByMonth, totalFixedExpenses,
+      fixedExpenses: viewFixedExpenses,
       payslips, snapshots: balanceSnapshots, netWorthHistory,
       currentNetWorth: netWorth, nowMonthKey,
     });
-  }, [year, nonTransferTransactions, monthlyIncomes, derivedNetMonthlyFor, totalFixedExpenses, payslips, balanceSnapshots, netWorthHistory, netWorth, nowMonthKey]);
+  }, [year, nonTransferTransactions, monthlyIncomes, derivedNetMonthlyFor, totalFixedExpenses, viewFixedExpenses, payslips, balanceSnapshots, netWorthHistory, netWorth, nowMonthKey]);
 
   const hasData = review.months.length > 0 && (review.totalIncome > 0 || review.totalSpending > 0);
   const monthLabel = (m: string) => format(new Date(`${m}-01T00:00:00`), 'MMM', { locale: dateLocale });
