@@ -87,6 +87,7 @@ export interface BillingRateConfig {
   billableHoursOverride: number | null; // if set, used directly instead of work*util
   targetMarginPct: number;              // profit as % of revenue (clamped 0..95)
   hoursPerDay: number;                  // for the day-rate (e.g. 7.5)
+  billedHourly: number | null;          // what the client is actually billed for you, if known
 }
 
 export interface BillingRateBreakdown {
@@ -138,6 +139,46 @@ export function calcBillingRate(
   };
 }
 
+export interface BilledRateBreakdown {
+  annualRevenue: number;   // billedHourly * billableHours
+  employerProfit: number;  // revenue - totalEmployerCost (negative = loss)
+  marginPct: number;       // profit as % of revenue
+  profitPerHour: number;   // billedHourly - breakEven
+  fairGross: number;       // gross salary at which the employer keeps exactly targetMargin
+}
+
+/**
+ * The reverse question: given what the client is billed for you, what does the
+ * employer keep, and what salary would leave them exactly the target margin?
+ *
+ * Total cost is linear in gross: gross * k + overheadAnnual, with
+ * k = (1 + ferie + otp) * (1 + aga) + overheadPct. So the fair salary solves
+ * gross * k + overheadAnnual = revenue * (1 - margin).
+ */
+export function calcBilledRate(
+  billedHourly: number,
+  billableHoursPerYear: number,
+  totalEmployerCost: number,
+  employerPensionPct: number,
+  costConfig: EmployerCostConfig,
+  targetMarginPct: number,
+): BilledRateBreakdown {
+  const hours = Math.max(0, billableHoursPerYear);
+  const rate = Math.max(0, billedHourly);
+  const annualRevenue = rate * hours;
+  const employerProfit = annualRevenue - totalEmployerCost;
+  const marginPct = annualRevenue > 0 ? (employerProfit / annualRevenue) * 100 : 0;
+  const profitPerHour = hours > 0 ? employerProfit / hours : 0;
+
+  const margin = Math.min(0.95, Math.max(0, targetMarginPct / 100));
+  const pct = (v: number) => Math.max(0, v) / 100;
+  const k = (1 + pct(costConfig.feriepengesatsPct) + pct(employerPensionPct)) * (1 + pct(costConfig.payrollTaxPct))
+    + pct(costConfig.overheadPct);
+  const fairGross = Math.max(0, (annualRevenue * (1 - margin) - Math.max(0, costConfig.overheadAnnual)) / k);
+
+  return { annualRevenue, employerProfit, marginPct, profitPerHour, fairGross };
+}
+
 export const DEFAULT_EMPLOYER_COST_CONFIG: EmployerCostConfig = {
   feriepengesatsPct: FERIEPENGER_DEFAULT_PCT,
   payrollTaxPct: AGA_DEFAULT_PCT,
@@ -151,4 +192,5 @@ export const DEFAULT_BILLING_CONFIG: BillingRateConfig = {
   billableHoursOverride: null,
   targetMarginPct: 30,
   hoursPerDay: 7.5,
+  billedHourly: null,
 };

@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { Receipt, Layers, HandCoins } from 'lucide-react';
+import { Receipt, Layers, HandCoins, Scale } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
-import { calcEmployerCost, calcBillingRate, DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from '../lib/employerCost';
+import { calcEmployerCost, calcBillingRate, calcBilledRate, DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from '../lib/employerCost';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
@@ -45,6 +45,13 @@ const EmployerCostPage: React.FC = () => {
     () => calcBillingRate(cost.totalEmployerCost, billingConfig),
     [cost.totalEmployerCost, billingConfig],
   );
+  const billed = useMemo(
+    () => billingConfig.billedHourly != null
+      ? calcBilledRate(billingConfig.billedHourly, billing.billableHoursPerYear, cost.totalEmployerCost, pension.otpEmployerPct, employerCostConfig, billingConfig.targetMarginPct)
+      : null,
+    [billingConfig.billedHourly, billingConfig.targetMarginPct, billing.billableHoursPerYear, cost.totalEmployerCost, pension.otpEmployerPct, employerCostConfig],
+  );
+  const fairDelta = billed ? billed.fairGross - cost.gross : 0;
 
   const feriepengerLabel = isNo ? ec.feriepenger : ec.benefitsLeave;
   const pensionLabel = isNo ? ec.employerPension : ec.employerPensionGeneric;
@@ -219,6 +226,61 @@ const EmployerCostPage: React.FC = () => {
         </div>
 
         <p className="mt-5 text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.caveat}</p>
+      </Card>
+
+      {/* Reverse: from the billed rate to employer profit and a fair salary */}
+      <Card padding="lg">
+        <div className="flex items-center justify-between gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2">
+            <Scale size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
+            <SectionLabel>{ec.billedTitle}</SectionLabel>
+          </div>
+          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.billedSubtitle}</span>
+        </div>
+
+        <div className="mt-5 max-w-xs">
+          <div className="flex items-baseline justify-between mb-2">
+            <label htmlFor="billed-hourly" className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{ec.billedHourly}</label>
+            <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>kr/t</span>
+          </div>
+          <input
+            id="billed-hourly"
+            type="number"
+            value={billingConfig.billedHourly ?? ''}
+            placeholder={Math.round(billing.targetHourly).toString()}
+            onChange={(e) => {
+              const raw = e.target.value.trim();
+              if (raw === '') { updateBillingConfig('billedHourly', null); return; }
+              const n = parseLocaleNumber(raw);
+              updateBillingConfig('billedHourly', Number.isFinite(n) && n >= 0 ? n : null);
+            }}
+            className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
+            style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+          />
+        </div>
+
+        {billed ? (
+          <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <StatBlock label={ec.annualRevenue} value={formatCurrency(billed.annualRevenue)} />
+            <StatBlock
+              label={ec.employerProfit}
+              value={formatCurrency(billed.employerProfit)}
+              sub={`${formatCurrency(billed.profitPerHour)} ${ec.perHour}`}
+              color={billed.employerProfit < 0 ? 'var(--negative)' : 'var(--warning)'}
+            />
+            <StatBlock label={ec.employerMargin} value={`${billed.marginPct.toFixed(1)}%`} />
+            <StatBlock
+              label={ec.fairSalary}
+              value={formatCurrency(billed.fairGross)}
+              sub={`${ec.fairSalarySub.replace('{margin}', String(billingConfig.targetMarginPct))} · ${fairDelta >= 0 ? '+' : '−'}${formatCurrency(Math.abs(fairDelta))} ${ec.vsYourSalary}`}
+              color="var(--positive)"
+            />
+          </div>
+        ) : (
+          <p className="mt-4 text-[12px]" style={{ color: 'var(--text-3)' }}>{ec.billedEmptyHint}</p>
+        )}
+
+        <p className="mt-5 text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.fairSalaryHint}</p>
       </Card>
     </div>
   );

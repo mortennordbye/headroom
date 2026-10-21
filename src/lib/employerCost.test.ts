@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calcEmployerCost,
   calcBillingRate,
+  calcBilledRate,
   DEFAULT_EMPLOYER_COST_CONFIG,
   DEFAULT_BILLING_CONFIG,
 } from './employerCost';
@@ -66,5 +67,45 @@ describe('calcBillingRate', () => {
     const r = calcBillingRate(COST, { ...DEFAULT_BILLING_CONFIG, workHoursPerYear: 0 });
     expect(r.billableHoursPerYear).toBe(0);
     expect(r.targetHourly).toBe(0);
+  });
+});
+
+describe('calcBilledRate', () => {
+  const cost = calcEmployerCost(1_000_000, 5, DEFAULT_EMPLOYER_COST_CONFIG); // 1 424 970
+
+  it('shows what the employer keeps at the billed rate', () => {
+    // 1 200 kr/t × 1560 h = 1 872 000 revenue; profit = 1 872 000 − 1 424 970.
+    const r = calcBilledRate(1200, 1560, cost.totalEmployerCost, 5, DEFAULT_EMPLOYER_COST_CONFIG, 30);
+    expect(r.annualRevenue).toBe(1_872_000);
+    expect(r.employerProfit).toBeCloseTo(447_030, 5);
+    expect(r.marginPct).toBeCloseTo((447_030 / 1_872_000) * 100, 6);
+    expect(r.profitPerHour).toBeCloseTo(447_030 / 1560, 6);
+  });
+
+  it('finds the salary at which the employer keeps exactly the target margin', () => {
+    const r = calcBilledRate(1200, 1560, cost.totalEmployerCost, 5, DEFAULT_EMPLOYER_COST_CONFIG, 30);
+    // Round-trip: the fair salary's full cost must equal revenue × (1 − 30%).
+    const back = calcEmployerCost(r.fairGross, 5, DEFAULT_EMPLOYER_COST_CONFIG);
+    expect(back.totalEmployerCost).toBeCloseTo(1_872_000 * 0.7, 4);
+  });
+
+  it('round-trips with percentage overhead too', () => {
+    const cfg = { ...DEFAULT_EMPLOYER_COST_CONFIG, overheadPct: 5 };
+    const r = calcBilledRate(1500, 1500, 0, 2, cfg, 20);
+    expect(calcEmployerCost(r.fairGross, 2, cfg).totalEmployerCost).toBeCloseTo(1500 * 1500 * 0.8, 4);
+  });
+
+  it('reports a loss and a zero fair salary when the rate cannot cover overhead', () => {
+    const r = calcBilledRate(50, 1560, cost.totalEmployerCost, 5, DEFAULT_EMPLOYER_COST_CONFIG, 30);
+    expect(r.employerProfit).toBeLessThan(0);
+    expect(r.fairGross).toBe(0);
+  });
+
+  it('stays finite with no billable hours', () => {
+    const r = calcBilledRate(1200, 0, cost.totalEmployerCost, 5, DEFAULT_EMPLOYER_COST_CONFIG, 30);
+    expect(r.annualRevenue).toBe(0);
+    expect(r.marginPct).toBe(0);
+    expect(r.profitPerHour).toBe(0);
+    expect(r.fairGross).toBe(0);
   });
 });
