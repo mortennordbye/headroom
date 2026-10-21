@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.7.0](https://github.com/mortennordbye/headroom/compare/v3.6.0...v3.7.0) (2026-10-21)
+
+
+### Features
+
+* **employer-cost:** estimate employer profit and fair salary from the billed rate ([#198](https://github.com/mortennordbye/headroom/issues/198)) ([6e2907f](https://github.com/mortennordbye/headroom/commit/6e2907f01b8196286735a01d6667ab7d00a7b3e3))
+* **employer-cost:** one calculator for salary, rate and margin ([#199](https://github.com/mortennordbye/headroom/issues/199)) ([72b7054](https://github.com/mortennordbye/headroom/commit/72b7054162aa0cd40ce59825585396682d091544))
+* let one month save less than the plan ([#167](https://github.com/mortennordbye/headroom/issues/167)) ([79a9856](https://github.com/mortennordbye/headroom/commit/79a985619816bf59647accbfab370798c2bacf31))
+* make a saving its own record, not a fixed expense ([#130](https://github.com/mortennordbye/headroom/issues/130)) ([cb6f036](https://github.com/mortennordbye/headroom/commit/cb6f036e9478be8e3e3411faf546daca885e5816))
+* **payslip:** derive Tripletex holiday pay for the period ([#195](https://github.com/mortennordbye/headroom/issues/195)) ([002fb8a](https://github.com/mortennordbye/headroom/commit/002fb8a70f319fe88e57c9bb3e92c7800ea6bbac))
+* **payslip:** import Tripletex payslips ([#193](https://github.com/mortennordbye/headroom/issues/193)) ([9f579b5](https://github.com/mortennordbye/headroom/commit/9f579b504a98e1f7beb17965573d391569f58437))
+
+
+### Bug Fixes
+
+* print the backup path that was actually written ([#143](https://github.com/mortennordbye/headroom/issues/143)) ([58e6219](https://github.com/mortennordbye/headroom/commit/58e6219424d667afa6e09ae3772d40af8005742a))
+
 ## [3.6.0](https://github.com/mortennordbye/headroom/compare/v3.5.0...v3.6.0) (2026-08-13)
 
 
