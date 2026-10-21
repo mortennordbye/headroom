@@ -934,7 +934,7 @@ interface FinanceDataContextType {
   employerCostConfig: EmployerCostConfig;
   updateEmployerCostConfig: (key: keyof EmployerCostConfig, value: number) => void;
   billingConfig: BillingRateConfig;
-  updateBillingConfig: (key: keyof BillingRateConfig, value: number | null) => void;
+  updateBillingConfig: <K extends keyof BillingRateConfig>(key: K, value: BillingRateConfig[K]) => void;
   inflation: InflationPoint[];
   inflationStale: boolean;
   /** Force a fresh SSB inflation fetch, bypassing the server's attempt cooldown. */
@@ -2359,7 +2359,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setEmployerCostConfig(prev => ({ ...prev, [key]: value }));
   }, []);
 
-  const updateBillingConfig = useCallback((key: keyof BillingRateConfig, value: number | null) => {
+  const updateBillingConfig = useCallback(<K extends keyof BillingRateConfig>(key: K, value: BillingRateConfig[K]) => {
     setBillingConfig(prev => ({ ...prev, [key]: value }));
   }, []);
 
