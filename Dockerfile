@@ -4,7 +4,7 @@
 # stages share one base so a build pulls a single image and Dependabot has a
 # single digest to keep fresh. Dependabot is pinned off Docker major bumps
 # (.github/dependabot.yml) so this can't drift onto a non-LTS release.
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS base
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS base
 
 # Stage 1: build frontend
 FROM base AS frontend-build
