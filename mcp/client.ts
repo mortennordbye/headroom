@@ -6,7 +6,7 @@
 // (server/index.js). Reading via the same channel keeps `rev` consistent for the
 // read-modify-write mutation flow.
 
-import type { ExportPayload } from '../src/context/FinanceContext';
+import type { ExportPayload, InflationPoint } from '../src/context/FinanceContext';
 import { partitionSavings, mergeStoredSavings } from '../src/lib/savingsMigration';
 
 const BASE_URL = (process.env.HEADROOM_URL || 'http://localhost:8080').replace(/\/$/, '');
@@ -93,6 +93,24 @@ async function putData(blob: ExportPayload, rev: number, label: string, retryOnA
   if (!res.ok) throw new Error(`POST /api/data failed (${res.status})`);
   const body = (await res.json()) as { rev: number };
   return body.rev;
+}
+
+/**
+ * The SSB CPI series for the last two years (enough for a 12-month change), as
+ * the app loads it. Best-effort: an unreachable or failing endpoint gives [], and
+ * callers fall back to the default inflation rate like the app does.
+ */
+export async function getInflation(): Promise<InflationPoint[]> {
+  const now = new Date();
+  const to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const from = `${now.getFullYear() - 2}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  try {
+    const res = await fetch(`${BASE_URL}/api/inflation?from=${from}&to=${to}`, { headers: authHeaders() });
+    if (!res.ok) return [];
+    return ((await res.json()) as { points?: InflationPoint[] }).points ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export interface HistoryEntry {

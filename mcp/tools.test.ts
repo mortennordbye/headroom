@@ -260,6 +260,15 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(p.otpAnnualContribution).toBe(36000); // 720000 * 5% default employer share
   });
 
+  it('pension: today\'s kroner discounts OTP/IPS, and equals the mixed figure at 0% inflation', () => {
+    const real = derive.pensionSummary(blob, MONTH, 3);
+    const flat = derive.pensionSummary(blob, MONTH, 0);
+    if (!real.configured || !flat.configured) throw new Error('expected a configured pension');
+    expect(real.inTodaysKroner.netMonthly).toBeLessThan(real.netPensionMonthly);
+    expect(real.inTodaysKroner.replacementRatePct).toBeLessThan(real.replacementRatePct);
+    expect(flat.inTodaysKroner.grossAnnual).toBe(flat.retirementIncomeAnnual.gross);
+  });
+
   it('pension: projects to retirement and taxes the payout as pension income', () => {
     const p = derive.pensionSummary(blob, MONTH);
     if (!p.configured) throw new Error('expected a configured pension');

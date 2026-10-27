@@ -19,6 +19,7 @@ import { SliderRow } from '../components/ui/SliderRow';
 import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
 import { projectPensionWealth } from '../lib/pension';
+import { latestInflationPct, inTodaysKroner } from '../lib/inflation';
 import { currentMonthKey } from '../lib/date';
 import { formatAxisInt } from '../lib/format';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
@@ -67,7 +68,7 @@ const AutoPostToggle: React.FC<{
 };
 
 const PensionPage: React.FC = () => {
-  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile } = useFinance();
+  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang } = useFinance();
   const pa = t.pensionAutomation;
   const reduced = useReducedMotion();
 
@@ -156,6 +157,18 @@ const PensionPage: React.FC = () => {
   const currentNetAnnual = calcTaxByRegion(pensionableIncome, region, customTaxRatePct, ipsAnnualContribution, 0).netAnnual;
   const replacementPct = currentNetAnnual > 0 ? (netPensionAnnual / currentNetAnnual) * 100 : 0;
 
+  // The same income in today's kroner. Folketrygd and AFP are already estimated
+  // at today's G; the OTP/IPS payouts are future kroner, so they're discounted by
+  // the current CPI rate (as the Forecast page uses) over the years to retirement.
+  const inflationPct = latestInflationPct(inflation);
+  const grossTodayAnnual = folketrygd.annual + afpAnnual
+    + inTodaysKroner(otpAnnualPayout + ipsAnnualPayout, yearsToRetire, inflationPct);
+  const netTodayAnnual = (region === 'no'
+    ? calcPensionIncomeTax(grossTodayAnnual, TAX_YEAR)
+    : calcTaxByRegion(grossTodayAnnual, region, customTaxRatePct)).netAnnual;
+  const replacementTodayPct = currentNetAnnual > 0 ? (netTodayAnnual / currentNetAnnual) * 100 : 0;
+  const todaysKronerSub = t.pensionPage.inTodaysKroner.replace('{amount}', () => formatCurrency(netTodayAnnual / 12));
+
   return (
     <>
     <div
@@ -198,7 +211,7 @@ const PensionPage: React.FC = () => {
         <SummaryTile
           label={t.pensionPage.estMonthlyPension}
           value={hasBirthYear ? formatCurrency(netPensionMonthly) : '—'}
-          sub={hasBirthYear ? t.pensionPage.netInclState : ''}
+          sub={hasBirthYear ? `${t.pensionPage.netInclState} · ${todaysKronerSub}` : ''}
           color={hasBirthYear ? 'var(--positive)' : undefined}
         />
       </div>
@@ -271,10 +284,14 @@ const PensionPage: React.FC = () => {
               </div>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <SummaryTile label={t.pensionPage.netPerMonthLabel} value={formatCurrency(netPensionMonthly)} color="var(--positive)" />
-              <SummaryTile label={t.pensionPage.replacementRatio} value={`${Math.round(replacementPct)} %`} />
+              <SummaryTile label={t.pensionPage.netPerMonthLabel} value={formatCurrency(netPensionMonthly)} sub={todaysKronerSub} color="var(--positive)" />
+              <SummaryTile
+                label={t.pensionPage.replacementRatio}
+                value={`${Math.round(replacementPct)} %`}
+                sub={t.pensionPage.replacementToday.replace('{pct}', () => String(Math.round(replacementTodayPct)))}
+              />
             </div>
-            <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>{t.pensionPage.folketrygdNote}</p>
+            <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>{t.pensionPage.folketrygdNote.replace('{inflation}', () => inflationPct.toLocaleString(lang === 'nb' ? 'nb-NO' : 'en-US'))}</p>
           </>
         ) : (
           <div className="h-[120px] grid place-items-center text-[13px]" style={{ color: 'var(--text-3)' }}>{t.setBirthYearHint}</div>
