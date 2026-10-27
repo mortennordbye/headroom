@@ -769,3 +769,16 @@ test and is separate from that work.
 **Unblock:** fix the fixture and the two `skattefradragssats` reads, then add `mcp/tsconfig.json` to
 the CI type-check step (or as a reference in the root `tsconfig.json`).
 **Where:** `mcp/tsconfig.json`, `mcp/fixture.ts`, `mcp/derive.ts`, `.github/workflows/`.
+
+## Revision-history prune scans every snapshot on each save
+
+**What:** the byte-cap prune in `recordHistory` sums `LENGTH(content)` over every `finance_history`
+row on every save, which reads each snapshot. Measured at the 200 MB cap: about 70-120 ms of blocked
+event loop per save. `GET /api/history` does the same scan. At today's ~110 KB blob the table stays
+far below the cap, so the cost is small.
+**Why deferred:** found in the post-merge audit of the revision system; not a correctness issue and
+not reachable at current data size.
+**Unblock:** add a `bytes` column filled at insert time (backfill once on startup) and sum that in
+the prune and list queries.
+**Where:** `server/index.js` (`historyPruneBytesStmt`, `historyListStmt`, `recordHistory`).
+
