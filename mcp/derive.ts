@@ -10,6 +10,7 @@ import type {
   Assets,
   Goal,
   DailyTransaction,
+  Pension,
 } from '../src/context/FinanceContext';
 import { computeEquityBreakdown, sumSavings } from '../src/lib/equity';
 import { ageFromBirthDate } from '../src/lib/date';
@@ -34,6 +35,7 @@ import { prepayVsInvest } from '../src/lib/prepayVsInvest';
 import { computeHistoryInsights } from '../src/lib/historyInsights';
 import { goalPace } from '../src/lib/goalPace';
 import { activeJobBreakdown } from '../src/lib/salary';
+import { isSpend } from '../src/lib/spend';
 import { excludedTransferIds } from '../src/lib/transferRules';
 import { yearReview, availableReportYears } from '../src/lib/yearReview';
 import { currentMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
@@ -123,11 +125,14 @@ function bsuCredit(blob: ExportPayload): number {
 }
 
 /** Income tax on a gross annual, with every deduction the app applies. */
+/** The flat rate for region 'generic'. Mirrors DEFAULT_TAX_RATES.customTaxRatePct. */
+const customTaxRate = (blob: ExportPayload): number => blob.customTaxRatePct ?? 30;
+
 export function taxFor(blob: ExportPayload, grossAnnual: number, withBsuCredit = true) {
   return calcTaxByRegion(
     grossAnnual,
     blob.region ?? 'no',
-    blob.customTaxRatePct ?? 0,
+    customTaxRate(blob),
     blob.pension?.ipsAnnualContribution ?? 0,
     annualMortgageInterest(blob),
     withBsuCredit ? bsuCredit(blob) : 0,
@@ -278,7 +283,7 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
     })),
     netWorth: Math.round(netWorth(blob)),
     grossAnnualIncome: Math.round(gross),
-    monthlyNetIncome: blob.income ?? 0,
+    monthlyNetIncome: Math.round(effectiveIncome(blob, monthKey)),
     equityBreakdown: breakdown,
     debt: {
       nonMortgage: Math.round(nonMortgageDebt),
@@ -290,17 +295,32 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
   };
 }
 
+/** Feriepenger/half-trekk shaping of un-overridden months (Norway only). Mirrors CashflowChart/BudgetPage. */
+function seasonalConfig(blob: ExportPayload, monthKey: string) {
+  return (blob.region ?? 'no') === 'no'
+    ? {
+        grossAnnual: grossAnnualIncome(blob, monthKey),
+        feriepengesatsPct: blob.employerCostConfig?.feriepengesatsPct ?? 12,
+      }
+    : null;
+}
+
+/**
+ * Trailing savings-rate health, plan-based like BudgetPage's banner: income and
+ * planned fixed expenses only, measured against the target restated as a share
+ * of income (the stored percent is a share of what's left after expenses).
+ */
+function savingsRateHealth(blob: ExportPayload, monthKey: string, v: ReturnType<typeof savingsView>) {
+  const months = lastNMonthKeys(monthAnchor(monthKey), 12);
+  const targetRateOfIncomePct = targetRateOfIncome(v.income, v.fixedTotal + v.planContributions, v.planContributions, v.target);
+  const rows = planSavingsRateSeries(months, blob.monthlyIncomes ?? {}, Math.round(v.income), v.fixedTotal, seasonalConfig(blob, monthKey));
+  return { targetRateOfIncomePct, status: savingsRateStatus(rows, targetRateOfIncomePct) };
+}
+
 export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey()) {
   const v = savingsView(blob, monthKey);
   const months = lastNMonthKeys(monthAnchor(monthKey), 12);
-  const region = blob.region ?? 'no';
-  const seasonal =
-    region === 'no'
-      ? {
-          grossAnnual: grossAnnualIncome(blob, monthKey),
-          feriepengesatsPct: blob.employerCostConfig?.feriepengesatsPct ?? 12,
-        }
-      : null;
+  const seasonal = seasonalConfig(blob, monthKey);
   const income = Math.round(v.income);
   // Literal cashflow, as CashflowChart: transfers netted out, budgeted bills
   // reconciled against their imported payments.
@@ -313,10 +333,7 @@ export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey())
     seasonal,
     blob.fixedExpenses ?? [],
   );
-  // Savings-rate health is plan-based against the target restated as a share of
-  // income, as BudgetPage's banner does.
-  const targetRate = targetRateOfIncome(v.income, v.fixedTotal + v.planContributions, v.planContributions, v.target);
-  const planRows = planSavingsRateSeries(months, blob.monthlyIncomes ?? {}, income, v.fixedTotal, seasonal);
+  const health = savingsRateHealth(blob, monthKey, v);
   return {
     monthKey,
     monthlyNetIncome: income,
@@ -328,7 +345,10 @@ export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey())
     // one-month saving the user set for this month (null = follows the plan).
     monthlySavings: Math.round(v.contributions),
     monthAdjustment: v.monthSaving ?? null,
-    savingsRate: savingsRateStatus(planRows, targetRate),
+    // `savingsRate.trailingRate` is a share of income: compare it with
+    // `savingsRateTargetOfIncomePct`, not with `savingsTargetPercent`.
+    savingsRateTargetOfIncomePct: Math.round(health.targetRateOfIncomePct * 10) / 10,
+    savingsRate: health.status,
     cashflowLast12: rows,
   };
 }
@@ -361,9 +381,8 @@ export function spendingAnalysis(blob: ExportPayload, monthKey = currentMonthKey
  * Consolidated annual review for a calendar year: income, tax paid, savings rate,
  * top spending categories, and net-worth change. Mirrors YearReviewPage — nets
  * out transfers and caps at the current month. `year` defaults to the most recent
- * year with data. Monthly net income approximates the app: the per-month override
- * when present, else the flat `income` (the page's salary-derived fallback, which
- * needs the React tax pipeline, isn't reproduced here).
+ * year with data. Monthly net income is the per-month override when present, else
+ * the salary-derived net for that month, as the page does.
  */
 export function yearReviewSummary(
   blob: ExportPayload,
@@ -381,7 +400,7 @@ export function yearReviewSummary(
 
   const incomeByMonth: Record<string, number> = {};
   for (const m of monthsBetween(`${targetYear}-01`, `${targetYear}-12`)) {
-    incomeByMonth[m] = blob.monthlyIncomes?.[m] ?? blob.income ?? 0;
+    incomeByMonth[m] = blob.monthlyIncomes?.[m] ?? netMonthlyFor(blob, m);
   }
 
   const review = yearReview(targetYear, {
@@ -447,7 +466,7 @@ export function savingsAndGoals(blob: ExportPayload, monthKey = currentMonthKey(
   const fixedTotal = totalFixedExpenses(blob, monthKey);
   const essential = essentialMonthlyExpenses(blob.fixedExpenses ?? []);
   // Two app call-sites use different denominators; expose both (see derivation report).
-  const efDashboard = calcEmergencyFundStatus(buffer, fixedTotal); // DashboardPage.tsx:131
+  const efDashboard = calcEmergencyFundStatus(buffer, fixedTotal);
   const efRunway = calcEmergencyFundStatus(buffer, essential); // EmergencyFundGauge.tsx:22
 
   // Real monthly pace for net-worth-linked goals, from recorded history.
@@ -489,14 +508,13 @@ export function savingsAndGoals(blob: ExportPayload, monthKey = currentMonthKey(
 
 export function recommendations(blob: ExportPayload, monthKey = currentMonthKey()) {
   const { view: v, plan, planMonthlySaving } = budgetPlan(blob, monthKey);
-  const months = lastNMonthKeys(monthAnchor(monthKey), 12);
-  const targetRate = targetRateOfIncome(v.income, v.fixedTotal + v.planContributions, v.planContributions, v.target);
-  const planRows = planSavingsRateSeries(months, blob.monthlyIncomes ?? {}, Math.round(v.income), v.fixedTotal);
+  const health = savingsRateHealth(blob, monthKey, v);
   return {
     monthKey,
     budgetPlan: plan,
     plannedMonthlySaving: Math.round(planMonthlySaving),
-    savingsRate: savingsRateStatus(planRows, targetRate),
+    savingsRateTargetOfIncomePct: Math.round(health.targetRateOfIncomePct * 10) / 10,
+    savingsRate: health.status,
     history: computeHistoryInsights(
       blob.balanceSnapshots ?? {},
       blob.netWorthHistory ?? {},
@@ -543,8 +561,10 @@ export function whatIfExtraDebtPayment(
 export function salaryAndTax(blob: ExportPayload, monthKey = currentMonthKey()) {
   const region = blob.region ?? 'no';
   const jobs = activeJobBreakdown(blob.salaries ?? [], blob.jobs ?? [], monthKey);
-  const gross = grossAnnualIncome(blob, monthKey);
-  const tax = taxFor(blob, gross);
+  // Salary-system gross only: the `income * 12` fallback is annualised NET pay,
+  // so taxing it would invent a breakdown. Without salaries there is none.
+  const gross = activeGrossAnnual(blob, monthKey);
+  const tax = gross > 0 ? taxFor(blob, gross) : null;
   const ips = blob.pension?.ipsAnnualContribution ?? 0;
   const payslips = blob.payslips ?? {};
   const year = yearOf(monthKey);
@@ -564,9 +584,14 @@ export function salaryAndTax(blob: ExportPayload, monthKey = currentMonthKey()) 
     overlappingJobs: jobs.length > 1,
     grossAnnual: Math.round(gross),
     tax,
-    marginalTaxRatePct: region === 'no' && gross > 0
-      ? calcMarginalTaxRate(gross, ips, TAX_YEAR, annualMortgageInterest(blob))
-      : blob.customTaxRatePct ?? null,
+    // Rate on the next krone of combined gross, after the mortgage-interest
+    // deduction. SalaryPage shows it for the latest salary without that deduction,
+    // so the two differ with concurrent jobs or a large interest deduction.
+    marginalTaxRatePct: gross <= 0
+      ? null
+      : region === 'no'
+        ? calcMarginalTaxRate(gross, ips, TAX_YEAR, annualMortgageInterest(blob))
+        : customTaxRate(blob),
     annualMortgageInterestDeduction: Math.round(annualMortgageInterest(blob)),
     netMonthlyDerived: netMonthlyFor(blob, monthKey),
     netMonthlyEffective: Math.round(effectiveIncome(blob, monthKey)),
@@ -581,12 +606,24 @@ export function salaryAndTax(blob: ExportPayload, monthKey = currentMonthKey()) 
   };
 }
 
+/**
+ * Copy of FinanceContext DEFAULT_PENSION (that module pulls in React). The app
+ * merges a stored pension over it on load, so a partial object never reaches the
+ * math; this does the same.
+ */
+const DEFAULT_PENSION: Pension = {
+  otpBalance: 0, otpEmployerPct: 5, otpEmployeePct: 0, otpGrowthRate: 5,
+  ipsBalance: 0, ipsAnnualContribution: 0, ipsGrowthRate: 7,
+  birthYear: 0, retirementAge: 67, folketrygdBeholdning: 0, folketrygdSingle: true,
+  pensionPayoutYears: 10, afpEligible: false, otpAutoPost: false, ipsAutoPost: false,
+};
+
 /** Pension projection and retirement income. Mirrors PensionPage. */
 export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()) {
-  const p = blob.pension;
-  if (!p) return { configured: false as const };
+  if (!blob.pension) return { configured: false as const };
+  const p: Pension = { ...DEFAULT_PENSION, ...blob.pension };
   const region = blob.region ?? 'no';
-  const customRate = blob.customTaxRatePct ?? 0;
+  const customRate = customTaxRate(blob);
   const currentYear = yearOf(monthKey);
   const hasBirthYear = p.birthYear > 1900;
   const yearsToRetire = hasBirthYear ? Math.max(0, p.retirementAge - (currentYear - p.birthYear)) : 0;
@@ -718,7 +755,7 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       mortgageRatePct: m.ratePct,
       annualMortgagePayment: calcMonthlyPayment(m.balance, m.ratePct, m.termYears) * 12,
       region: blob.region ?? 'no',
-      customTaxRatePct: blob.customTaxRatePct ?? 0,
+      customTaxRatePct: customTaxRate(blob),
       ipsAnnualContribution: blob.pension?.ipsAnnualContribution ?? 0,
       startYear: yearOf(monthKey),
       startHomeValue: blob.assets.houseValue,
@@ -745,6 +782,9 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
   return {
     monthKey,
     housingMode,
+    // 'current' = the homeowner's real mortgage; 'planned' = the loan being planned
+    // for a purchase (first-buyer / transitioning), not a debt that exists yet.
+    loanKind: housingMode === 'homeowner' ? 'current' : 'planned',
     balance: Math.round(m.balance),
     ratePct: m.ratePct,
     termYears: m.termYears,
@@ -762,8 +802,11 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
       ? { ratePct: blob.homeowner.notifiedRate, from: blob.homeowner.notifiedRateFrom ?? null }
       : null,
     timeline: housingMode === 'homeowner' ? loanTimeline(blob.homeowner?.startDate, m.termYears, monthKey) : null,
-    loanToValuePct: houseValue > 0 ? Math.round((m.balance / houseValue) * 1000) / 10 : null,
-    residence: residenceMetrics(currentResidence(blob.residences ?? []), houseValue, monthKey),
+    // Only an owned home has a value to measure against (BoligPage shows these to homeowners only).
+    loanToValuePct: housingMode === 'homeowner' && houseValue > 0 ? Math.round((m.balance / houseValue) * 1000) / 10 : null,
+    residence: housingMode === 'homeowner'
+      ? residenceMetrics(currentResidence(blob.residences ?? []), houseValue, monthKey)
+      : null,
     paydownVsPlan: paydownVsPlan(blob.balanceSnapshots ?? {}),
     totalInterestRemaining: Math.round(schedule.reduce((s, y) => s + y.interestPaid, 0)),
     amortizationByYear: schedule,
@@ -887,8 +930,8 @@ export function queryTransactions(blob: ExportPayload, q: TransactionQuery) {
     // Compare at the bound's own precision, so 'YYYY-MM' and 'YYYY-MM-DD' both work inclusively.
     if (q.from && tx.date.slice(0, q.from.length) < q.from) return false;
     if (q.to && tx.date.slice(0, q.to.length) > q.to) return false;
-    if (q.category && (tx.category ?? 'other') !== q.category) return false;
-    if (q.kind && (tx.kind ?? 'expense') !== q.kind) return false;
+    if (q.category && (tx.category || 'other') !== q.category) return false;
+    if (q.kind && (isSpend(tx) ? 'expense' : 'income') !== q.kind) return false;
     if (q.minAmount != null && tx.amount < q.minAmount) return false;
     if (q.maxAmount != null && tx.amount > q.maxAmount) return false;
     if (text && !`${tx.description} ${tx.merchant ?? ''}`.toLowerCase().includes(text)) return false;
@@ -899,11 +942,11 @@ export function queryTransactions(blob: ExportPayload, q: TransactionQuery) {
   let expenses = 0;
   let income = 0;
   for (const tx of matches) {
-    if ((tx.kind ?? 'expense') === 'income') {
+    if (!isSpend(tx)) {
       income += tx.amount;
     } else {
       expenses += tx.amount;
-      const c = tx.category ?? 'other';
+      const c = tx.category || 'other';
       byCategory[c] = (byCategory[c] ?? 0) + tx.amount;
     }
   }

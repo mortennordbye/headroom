@@ -6,9 +6,11 @@ import { z } from 'zod';
 import { getData, listHistory, getHistoryRevision } from '../client';
 import { jsonResult, errorResult } from '../util';
 import * as derive from '../derive';
+import { CATEGORY_KEYS } from '../../src/lib/categories';
 
 const readOnly = { readOnlyHint: true, openWorldHint: false } as const;
-const yearMonth = z.string().regex(/^\d{4}-\d{2}$/);
+const yearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+const monthOrDay = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$/);
 
 export function registerReadTools(server: McpServer) {
   server.registerTool(
@@ -35,7 +37,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Budget summary',
       description:
-        'Monthly net income vs fixed/variable expenses, per-type fixed totals, this month\'s savings transfers (and any one-month adjustment), last-12-month cashflow, and savings-rate status vs target.',
+        'Monthly net income vs fixed/variable expenses, per-type fixed totals, this month\'s savings transfers (and any one-month adjustment), last-12-month cashflow, and plan-based savings-rate health. savingsRate.trailingRate is a share of income: compare it with savingsRateTargetOfIncomePct, not savingsTargetPercent (which is a share of what is left after expenses).',
       inputSchema: {},
       annotations: { title: 'Budget summary', ...readOnly },
     },
@@ -121,7 +123,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Recommendations',
       description:
-        'Budget plan (recommended spend vs invest, conservative-mode flag), savings-rate status, and history-based insights (mortgage/debt ahead-of-plan, equity change).',
+        'Budget plan (recommended spend vs invest, conservative-mode flag), plannedMonthlySaving (automated transfers plus the unallocated target), savings-rate health vs savingsRateTargetOfIncomePct, and history-based insights (mortgage/debt ahead-of-plan, equity change).',
       inputSchema: {},
       annotations: { title: 'Recommendations', ...readOnly },
     },
@@ -247,10 +249,10 @@ export function registerReadTools(server: McpServer) {
         'Year-by-year projection of gross, net, savings, net worth (nominal and real), mortgage and wealth tax, plus recorded net-worth history. Each lever defaults to the user\'s saved forecast assumption, else the app\'s data-driven seed; pass a lever to run a what-if.',
       inputSchema: {
         years: z.number().int().min(1).max(60).optional(),
-        raisePct: z.number().optional().describe('Annual salary growth %.'),
+        raisePct: z.number().min(-20).max(30).optional().describe('Annual salary growth %.'),
         savingsPct: z.number().min(0).max(100).optional().describe('Share of net income saved, %.'),
-        returnPct: z.number().optional().describe('Annual investment return %.'),
-        inflationPct: z.number().optional().describe('Annual inflation %; defaults to 3 (live CPI is not available here).'),
+        returnPct: z.number().min(-20).max(30).optional().describe('Annual investment return %.'),
+        inflationPct: z.number().min(-5).max(20).optional().describe('Annual inflation %; defaults to 3 (live CPI is not available here).'),
       },
       annotations: { title: 'Net-worth forecast', ...readOnly },
     },
@@ -269,7 +271,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Mortgage',
       description:
-        'The active mortgage: balance, rate, term, monthly payment, payoff timeline, loan-to-value, purchase-vs-value metrics, actual paydown vs plan, remaining interest and the yearly amortization schedule.',
+        'The mortgage the housing mode follows: loanKind "current" is a homeowner\'s real mortgage, "planned" is the loan being planned for a purchase (first-buyer / transitioning). Balance, rate, term, monthly payment, remaining interest and yearly amortization; for homeowners also payoff timeline, loan-to-value and purchase-vs-value metrics. Includes actual paydown vs plan from recorded snapshots.',
       inputSchema: {},
       annotations: { title: 'Mortgage', ...readOnly },
     },
@@ -326,7 +328,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Assets & debts',
       description:
-        'Every balance with its id: assets (incl. savings accounts), equity breakdown, debts, mortgage/loan settings, savings transfers, fixed expenses, the wealth-tax estimate and the last 12 snapshots\' net worth. Use the ids with the write tools.',
+        'Every balance with its id: assets (incl. savings accounts), equity breakdown, debts, mortgage/loan settings, savings transfers, fixed expenses, the wealth-tax estimate and the last 12 snapshots\' net worth. Use the debt, savings-account and fixed-expense ids with the matching write tools.',
       inputSchema: {},
       annotations: { title: 'Assets & debts', ...readOnly },
     },
@@ -345,11 +347,11 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Query transactions',
       description:
-        'Search transactions, newest first. All filters are optional and combine. Totals and per-category sums cover every match, not just the returned rows. Own-account transfers are excluded unless excludeTransfers=false.',
+        'Search transactions, newest first. All filters are optional and combine. Amounts are positive; direction is `kind` (rows categorised income count as income). Totals and per-category sums cover every match, not just the returned rows. Own-account transfers are excluded unless excludeTransfers=false.',
       inputSchema: {
-        from: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/).optional().describe("Inclusive start, 'YYYY-MM' or 'YYYY-MM-DD'."),
-        to: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/).optional().describe("Inclusive end, 'YYYY-MM' or 'YYYY-MM-DD'."),
-        category: z.string().optional().describe('Category key, e.g. groceries, dining.'),
+        from: monthOrDay.optional().describe("Inclusive start, 'YYYY-MM' or 'YYYY-MM-DD'."),
+        to: monthOrDay.optional().describe("Inclusive end, 'YYYY-MM' or 'YYYY-MM-DD'."),
+        category: z.enum(CATEGORY_KEYS as [string, ...string[]]).optional(),
         text: z.string().optional().describe('Case-insensitive match on description or merchant.'),
         minAmount: z.number().optional(),
         maxAmount: z.number().optional(),

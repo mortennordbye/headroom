@@ -6,8 +6,8 @@ import { essentialMonthlyExpenses } from '../src/lib/fixedExpenseTotals';
 import { calcDebtToIncome } from '../src/lib/calculations';
 import { spendByCategory } from '../src/lib/categoryStats';
 import { excludedTransferIds } from '../src/lib/transferRules';
-import { calcAmortizationSchedule, calcBorrowingCapacity } from '../src/lib/calculations';
-import { calcPensionIncomeTax, TAX_YEAR } from '../src/lib/norwegianTax';
+import { calcAmortizationSchedule } from '../src/lib/calculations';
+import { calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../src/lib/norwegianTax';
 import { fullFixture } from './fixture';
 
 const MONTH = '2026-06';
@@ -199,13 +199,27 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     });
   }
 
-  it('salary & tax: net monthly is the after-tax gross / 12 when not overridden', () => {
+  it('salary & tax: the mortgage-interest deduction lowers the tax on the salary', () => {
     const s = derive.salaryAndTax(blob, '2026-07');
     expect(s.grossAnnual).toBe(720000);
     expect(s.activeJobs).toHaveLength(1);
-    expect(s.netMonthlyDerived).toBe(Math.round(s.tax.netAnnual / 12));
+    // Year-one interest on the homeowner loan, deducted from alminnelig inntekt.
+    const interest = calcAmortizationSchedule(2500000, 5.5, 25)[0].interestPaid;
+    expect(s.annualMortgageInterestDeduction).toBe(Math.round(interest));
+    const noDeduction = calcTaxByRegion(720000, 'no', 37.84, 15000, 0, 0);
+    expect(noDeduction.totalTax - s.tax!.totalTax).toBeCloseTo(interest * 0.22, 0);
     expect(s.netMonthlyOverridden).toBe(false);
     expect(s.payslip).toBeNull();
+  });
+
+  it('salary & tax: no salary entries means no invented tax breakdown', () => {
+    const b = fullFixture();
+    b.salaries = [];
+    const s = derive.salaryAndTax(b, '2026-07');
+    expect(s.grossAnnual).toBe(0);
+    expect(s.tax).toBeNull();
+    expect(s.marginalTaxRatePct).toBeNull();
+    expect(s.netMonthlyDerived).toBe(60000); // the static income
   });
 
   it('salary & tax: an override wins as effective income and the payslip is surfaced', () => {
@@ -237,6 +251,15 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(adjusted.totalFixedExpenses).toBe(21850);
   });
 
+  it('pension: a partial stored pension is merged over the defaults, as the app does', () => {
+    const b = fullFixture();
+    b.pension = { otpBalance: 100000 } as ExportPayload['pension'];
+    const p = derive.pensionSummary(b, MONTH);
+    assertFinite(p);
+    if (!p.configured) throw new Error('expected a configured pension');
+    expect(p.otpAnnualContribution).toBe(36000); // 720000 * 5% default employer share
+  });
+
   it('pension: projects to retirement and taxes the payout as pension income', () => {
     const p = derive.pensionSummary(blob, MONTH);
     if (!p.configured) throw new Error('expected a configured pension');
@@ -257,12 +280,25 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(g.projection[g.projection.length - 1].yearIndex).toBe(5);
   });
 
-  it('mortgage: the homeowner loan amortizes over its term', () => {
+  it('mortgage: the homeowner loan amortizes to zero over its term', () => {
     const m = derive.mortgage(blob, MONTH);
+    expect(m.loanKind).toBe('current');
     expect(m.balance).toBe(2500000);
-    expect(m.amortizationByYear).toEqual(calcAmortizationSchedule(2500000, 5.5, 25));
+    expect(m.amortizationByYear).toHaveLength(25);
+    expect(m.amortizationByYear[24].balance).toBeCloseTo(0, 0);
+    const principal = m.amortizationByYear.reduce((s, y) => s + y.principalPaid, 0);
+    expect(principal).toBeCloseTo(2500000, 0);
     expect(m.loanToValuePct).toBe(62.5);
     expect(m.timeline).not.toBeNull();
+  });
+
+  it('mortgage: outside homeowner mode the loan is a plan, with no LTV or residence metrics', () => {
+    const b = fullFixture();
+    b.housingMode = 'transitioning';
+    const m = derive.mortgage(b, MONTH);
+    expect(m.loanKind).toBe('planned');
+    expect(m.loanToValuePct).toBeNull();
+    expect(m.residence).toBeNull();
   });
 
   it('housing: manual capacity overrides replace the live inputs', () => {
@@ -271,15 +307,18 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const h = derive.housing(b, MONTH);
     expect(h.borrowingCapacity.inputs).toMatchObject({ grossAnnualIncome: 900000, equity: 1000000 });
     expect(h.borrowingCapacity.inputs.overridden).toEqual({ income: true, debt: false, equity: true });
-    const { existingDebt, ratePct, termYears } = h.borrowingCapacity.inputs;
-    expect(h.borrowingCapacity.result).toEqual(calcBorrowingCapacity(900000, 1000000, existingDebt, ratePct, termYears));
+    // Live debt: student loan 200000 + the credit card counted at its balance (no frame set).
+    expect(h.borrowingCapacity.inputs.existingDebt).toBe(240000);
+    // 5x income minus existing debt caps the loan.
+    expect(h.borrowingCapacity.result.maxDebt).toBe(900000 * 5 - 240000);
     expect(h.secondHome.portfolio.committedCount).toBe(1);
   });
 
-  it('employer cost: solving for rate uses the salary and returns the target hourly', () => {
+  it('employer cost: solving for rate hits the target margin', () => {
     const e = derive.employerCost(blob, MONTH);
     expect(e.grossAnnual).toBe(720000);
-    expect(e.hourlyRate).toBe(Math.round(e.billing.targetHourly));
+    expect(e.billableHoursPerYear).toBe(1560); // 1950 * 80%
+    expect(e.billed.marginPct).toBeCloseTo(20, 0);
   });
 
   it('query transactions: filters combine and totals cover all matches', () => {
@@ -293,5 +332,44 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(june.expensesByCategory).toEqual({ groceries: 5000, dining: 2000 });
     expect(derive.queryTransactions(blob, { text: 'grocery', minAmount: 4800 }).count).toBe(1);
     expect(derive.queryTransactions(blob, { to: '2026-06-03' }).count).toBe(2);
+  });
+
+  it('query transactions: a legacy row categorised income counts as income, as the app does', () => {
+    const b = fullFixture();
+    b.dailyTransactions = [...b.dailyTransactions, { id: 'i1', date: '2026-06-25', description: 'Salary', amount: 50000, category: 'income' }];
+    const q = derive.queryTransactions(b, {});
+    expect(q.totalIncome).toBe(50000);
+    expect(q.totalExpenses).toBe(11500);
+    expect(q.expensesByCategory.income).toBeUndefined();
+    expect(derive.queryTransactions(b, { kind: 'income' }).count).toBe(1);
+  });
+
+  it('year review: months without an override use the salary-derived net, not the static income', () => {
+    const b = fullFixture();
+    b.monthlyIncomes = {};
+    const r = derive.yearReviewSummary(b, 2026, MONTH);
+    const net = derive.netMonthlyFor(b, '2026-01');
+    expect(net).not.toBe(60000);
+    expect(r.totalIncome).toBe(net * 6);
+  });
+
+  it('recommendations and budget summary agree on savings-rate health', () => {
+    const b = fullFixture();
+    b.monthlyIncomes = {};
+    const budget = derive.budgetSummary(b, MONTH);
+    const recs = derive.recommendations(b, MONTH);
+    expect(recs.savingsRate).toEqual(budget.savingsRate);
+    expect(recs.savingsRateTargetOfIncomePct).toBe(budget.savingsRateTargetOfIncomePct);
+  });
+
+  it('region generic taxes at the default 30% flat rate when none is stored', () => {
+    const b = fullFixture();
+    b.region = 'generic';
+    delete b.customTaxRatePct;
+    const s = derive.salaryAndTax(b, '2026-07');
+    // Flat 30% on gross less the IPS contribution and the year-one mortgage interest.
+    const interest = calcAmortizationSchedule(2500000, 5.5, 25)[0].interestPaid;
+    expect(s.tax!.totalTax).toBeCloseTo((720000 - 15000 - interest) * 0.3, 0);
+    expect(s.marginalTaxRatePct).toBe(30);
   });
 });
