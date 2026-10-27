@@ -103,15 +103,37 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 
 **Write (guarded; each does a rev-checked read-modify-write and returns a before/after diff):**
 
-`set_category_budget`, `add_goal`, `update_goal`, `add_fixed_expense`,
-`update_fixed_expense`, `update_assumptions`, `set_ai_context`, `restore_revision`.
+| Area | Tools |
+| --- | --- |
+| Budget | `set_category_budget`, `add_fixed_expense`, `update_fixed_expense`, `delete_fixed_expense` |
+| Goals | `add_goal`, `update_goal`, `delete_goal` |
+| Transactions | `add_transaction`, `update_transaction`, `delete_transaction` |
+| Rules | `add_rule`, `delete_rule` (`type`: `category` / `label` / `transfer`) |
+| Balances | `update_asset`, `upsert_savings_account`, `delete_savings_account`, `upsert_debt`, `delete_debt`, `update_loan` |
+| Income | `set_monthly_income`, `add_salary`, `add_bonus` |
+| Settings | `update_assumptions`, `set_ai_context`, `set_profile` |
+| Undo | `restore_revision` |
+
+Notes on a few of them:
+
+- `delete_transaction` on a bank-imported row (`eb-` id) also adds the id to
+  `deletedBankIds`, as the app does, so the server's bank reconcile does not bring
+  the row back.
+- `update_asset` mirrors `houseValue`/`houseDebt` into the `homeowner` and
+  `transition` slices, as the app does, so the same home never shows two numbers.
+- `set_monthly_income` removes a month's override with `clear: true`; `amount: 0`
+  is stored as a real zero-income month.
+- `upsert_savings_account` / `upsert_debt` create when called without `id` and
+  update only the provided fields when called with one.
+- `add_rule` replaces an existing rule of the same type with the same match text.
+- `add_salary` requires an existing `jobId`; `add_bonus` checks it when given.
 
 `get_overview` includes a `notes` field — the user's free-text plans/goals context
 (editable in Settings → "Context for the AI assistant"); `set_ai_context` writes it.
 
 Write tools are annotated `destructiveHint`/`idempotentHint` so clients can prompt
-for confirmation. They change exactly one blob slice and leave everything else
-byte-identical.
+for confirmation. They change exactly one blob slice (the two mirroring cases
+above aside) and leave everything else byte-identical.
 
 ## Revision history / undo
 

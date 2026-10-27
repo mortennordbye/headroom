@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ExportPayload } from '../src/context/FinanceContext';
 import { fullFixture, topLevelKeys } from './fixture';
-import { setCategoryBudget } from './mutations';
+import { setCategoryBudget, deleteTransaction } from './mutations';
 
 const PORT = 3987;
 const BASE = `http://localhost:${PORT}`;
@@ -208,5 +208,31 @@ describe('revision history (in-volume undo net)', () => {
 
   it('restoring a non-existent revision fails cleanly', async () => {
     await expect(client.restoreRevision(999999)).rejects.toThrow(/no stored revision/);
+  });
+});
+
+describe('deleting a bank-imported transaction', () => {
+  it('stays deleted through the server reconcile, also on later writes', async () => {
+    const id = 'eb-abc12345-1';
+    await client.applyMutation((b) => {
+      b.dailyTransactions = [
+        ...b.dailyTransactions,
+        { id, date: '2026-06-11', description: 'Card purchase', amount: 300, kind: 'expense' },
+      ];
+      return b;
+    });
+    expect((await getBlob()).dailyTransactions.some((t) => t.id === id)).toBe(true);
+
+    await client.applyMutation((b) => {
+      deleteTransaction(b, { id });
+      return b;
+    });
+    await client.applyMutation((b) => {
+      setCategoryBudget(b, { category: 'health', amount: 500 });
+      return b;
+    });
+    const after = await getBlob();
+    expect(after.dailyTransactions.some((t) => t.id === id)).toBe(false);
+    expect(after.deletedBankIds).toContain(id);
   });
 });
