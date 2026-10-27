@@ -20,7 +20,8 @@ import { projectForecast, type EffectiveScenario, type ForecastScenario, type Fo
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
-import { currentMonthKey, addMonthsKey } from '../lib/date';
+import { currentMonthKey } from '../lib/date';
+import { latestInflationPct } from '../lib/inflation';
 import { formatAxisInt } from '../lib/format';
 
 const ForecastPage: React.FC = () => {
@@ -107,15 +108,7 @@ const ForecastPage: React.FC = () => {
     return Number.isFinite(cagr) && cagr > 0 ? Math.round(cagr * 10) / 10 : 4.5;
   }, [salaries]);
 
-  const inflationSeed = useMemo(() => {
-    if (inflation.length === 0) return 3;
-    let latest = inflation[0];
-    for (const p of inflation) if (p.month > latest.month) latest = p;
-    const prior = inflation.find(p => p.month === addMonthsKey(latest.month, -12));
-    if (!prior || prior.cpiIndex <= 0) return 3;
-    const pct = (latest.cpiIndex / prior.cpiIndex - 1) * 100;
-    return Number.isFinite(pct) && pct > 0 ? Math.round(pct * 10) / 10 : 3;
-  }, [inflation]);
+  const inflationSeed = useMemo(() => latestInflationPct(inflation), [inflation]);
 
   const savingsSeed = useMemo(() => {
     const net = calcTaxByRegion(currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;

@@ -3,7 +3,8 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getData, listHistory, getHistoryRevision } from '../client';
+import { getData, listHistory, getHistoryRevision, getInflation } from '../client';
+import { latestInflationPct, DEFAULT_INFLATION_PCT } from '../../src/lib/inflation';
 import { jsonResult, errorResult } from '../util';
 import * as derive from '../derive';
 import { CATEGORY_KEYS } from '../../src/lib/categories';
@@ -227,14 +228,16 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Pension',
       description:
-        'OTP/IPS balances and contributions, year-by-year projection to retirement, and estimated retirement income (folketrygd, AFP, OTP, IPS) gross and after tax, with the replacement rate vs today\'s net salary.',
+        'OTP/IPS balances and contributions, year-by-year projection to retirement, and estimated retirement income (folketrygd, AFP, OTP, IPS) gross and after tax, with the replacement rate vs today\'s net salary. The top-level income mixes today\'s kroner (folketrygd, AFP) with retirement-year kroner (OTP/IPS), as the Pension page does; inTodaysKroner discounts OTP/IPS by the current CPI rate and is the fair comparison with today\'s salary.',
       inputSchema: {},
       annotations: { title: 'Pension', ...readOnly },
     },
     async () => {
       try {
         const { blob } = await getData();
-        return jsonResult(derive.pensionSummary(blob));
+        // Same CPI rate the app uses; it only loads CPI for Norway, else the default.
+        const inflationPct = (blob.region ?? 'no') === 'no' ? latestInflationPct(await getInflation()) : DEFAULT_INFLATION_PCT;
+        return jsonResult(derive.pensionSummary(blob, undefined, inflationPct));
       } catch (e) {
         return errorResult(String((e as Error).message));
       }

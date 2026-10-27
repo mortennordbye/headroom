@@ -49,6 +49,7 @@ import {
 } from '../src/lib/norwegianTax';
 import { restskattEstimate } from '../src/lib/restskatt';
 import { projectPensionWealth } from '../src/lib/pension';
+import { inTodaysKroner, DEFAULT_INFLATION_PCT } from '../src/lib/inflation';
 import { estimateBeholdning, projectBeholdning, annualFolketrygdPension } from '../src/lib/folketrygd';
 import { estimateAfpGrunnlag, annualAfp } from '../src/lib/afp';
 import { projectForecast } from '../src/lib/forecastProjection';
@@ -618,8 +619,12 @@ const DEFAULT_PENSION: Pension = {
   pensionPayoutYears: 10, afpEligible: false, otpAutoPost: false, ipsAutoPost: false,
 };
 
-/** Pension projection and retirement income. Mirrors PensionPage. */
-export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()) {
+/**
+ * Pension projection and retirement income. Mirrors PensionPage, including the
+ * today's-kroner view: OTP/IPS payouts discounted by `inflationPct` (the app's
+ * current CPI rate) over the years to retirement; folketrygd/AFP are already at today's G.
+ */
+export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey(), inflationPct = DEFAULT_INFLATION_PCT) {
   if (!blob.pension) return { configured: false as const };
   const p: Pension = { ...DEFAULT_PENSION, ...blob.pension };
   const region = blob.region ?? 'no';
@@ -668,6 +673,11 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
     ? calcPensionIncomeTax(grossPensionAnnual, TAX_YEAR)
     : calcTaxByRegion(grossPensionAnnual, region, customRate);
   const currentNetAnnual = calcTaxByRegion(pensionableIncome, region, customRate, ipsAnnualContribution, 0).netAnnual;
+  const grossTodayAnnual = folketrygd.annual + afpAnnualAmount
+    + inTodaysKroner(otpAnnualPayout + ipsAnnualPayout, yearsToRetire, inflationPct);
+  const netTodayAnnual = (region === 'no'
+    ? calcPensionIncomeTax(grossTodayAnnual, TAX_YEAR)
+    : calcTaxByRegion(grossTodayAnnual, region, customRate)).netAnnual;
   return {
     configured: true as const,
     settings: p,
@@ -688,8 +698,16 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
       gross: Math.round(grossPensionAnnual),
       net: Math.round(pensionTax.netAnnual),
     },
+    // Folketrygd/AFP in today's kroner, OTP/IPS in kroner of the retirement year.
     netPensionMonthly: Math.round(pensionTax.netAnnual / 12),
     replacementRatePct: currentNetAnnual > 0 ? Math.round((pensionTax.netAnnual / currentNetAnnual) * 1000) / 10 : 0,
+    // Everything in today's kroner: the fair comparison with today's salary.
+    inTodaysKroner: {
+      inflationPct,
+      grossAnnual: Math.round(grossTodayAnnual),
+      netMonthly: Math.round(netTodayAnnual / 12),
+      replacementRatePct: currentNetAnnual > 0 ? Math.round((netTodayAnnual / currentNetAnnual) * 1000) / 10 : 0,
+    },
   };
 }
 
