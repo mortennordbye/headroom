@@ -15,6 +15,7 @@ const { startBankSyncSchedule } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
 const { isDemoMode, makeDemoGate } = require('./demo');
 const { isWindowComplete } = require('./cpiWindow');
+const { diffBlobs, mergeChanges, revertChange } = require('./revert');
 const pkg = require('./package.json');
 
 // Public read-only demo instance (see server/demo.js). Off unless DEMO_MODE is
@@ -130,7 +131,8 @@ db.exec(`
   -- Rolling per-write history of the finance blob, kept IN the volume (separate
   -- from the blob itself, like auth/caches). A fine-grained undo/restore net on
   -- top of the coarse nightly .sqlite backups: every committed revision is
-  -- snapshotted here and pruned to the newest DATA_HISTORY_LIMIT.
+  -- snapshotted here, with who wrote it and what it changed, and pruned to the
+  -- retention window (DATA_HISTORY_DAYS).
   CREATE TABLE IF NOT EXISTS finance_history (
     rev INTEGER PRIMARY KEY,
     ts TEXT NOT NULL,
@@ -150,6 +152,14 @@ if (db.pragma('user_version', { simple: true }) < 1) {
 // it if missing (SQLite has no ADD COLUMN IF NOT EXISTS). Every write bumps rev;
 // a POST carrying a stale rev is rejected (409) instead of clobbering a newer
 // write from another tab/device or the bank-sync cron.
+// Who made each revision and what it changed (see appendHistory). Older rows
+// have NULLs: they can still be restored, just not undone on their own.
+{
+  const cols = db.prepare('PRAGMA table_info(finance_history)').all().map((c) => c.name);
+  if (!cols.includes('source')) db.exec('ALTER TABLE finance_history ADD COLUMN source TEXT');
+  if (!cols.includes('label')) db.exec('ALTER TABLE finance_history ADD COLUMN label TEXT');
+  if (!cols.includes('change')) db.exec('ALTER TABLE finance_history ADD COLUMN change TEXT');
+}
 if (!db.prepare('PRAGMA table_info(finance_data)').all().some((c) => c.name === 'rev')) {
   db.exec('ALTER TABLE finance_data ADD COLUMN rev INTEGER NOT NULL DEFAULT 0');
 }
@@ -297,38 +307,86 @@ const writeStmt = db.prepare(
   'INSERT INTO finance_data (id, content, rev) VALUES (@id, @content, @rev) ' +
   'ON CONFLICT(id) DO UPDATE SET content = @content, rev = @rev'
 );
-// How many recent revisions of the finance blob to retain in finance_history.
-const DATA_HISTORY_LIMIT = 20;
+// Revision retention: everything from the last DATA_HISTORY_DAYS, never fewer
+// than the newest DATA_HISTORY_MIN, never more than DATA_HISTORY_MAX (a storage
+// ceiling, about 110 MB at a typical 110 KB blob).
+const DATA_HISTORY_DAYS = 90;
+const DATA_HISTORY_MIN = 20;
+const DATA_HISTORY_MAX = 1000;
+// Back-to-back UI autosaves (one every keystroke burst) fold into one revision
+// while the newest revision is a UI save younger than this, so an editing
+// session is one restore point and can't push other changes out of history.
+const UI_COALESCE_MS = 10 * 60 * 1000;
+// Who may label their own writes via X-Headroom-Source. bank-sync, restore and
+// undo are set by the server itself.
+const CLIENT_SOURCES = new Set(['ui', 'mcp', 'import']);
+
 const historyInsertStmt = db.prepare(
-  'INSERT OR REPLACE INTO finance_history (rev, ts, content) VALUES (?, ?, ?)'
+  'INSERT OR REPLACE INTO finance_history (rev, ts, content, source, label, change) VALUES (?, ?, ?, ?, ?, ?)'
 );
-// Prune all but the newest N revisions.
-const historyPruneStmt = db.prepare(
+const historyNewestStmt = db.prepare(
+  'SELECT rev, ts, source, change FROM finance_history ORDER BY rev DESC LIMIT 1'
+);
+const historyDeleteStmt = db.prepare('DELETE FROM finance_history WHERE rev = ?');
+// Drop revisions past the retention window (keeping the newest MIN), then cap at MAX.
+const historyPruneAgeStmt = db.prepare(
+  'DELETE FROM finance_history WHERE ts < ? AND rev NOT IN (SELECT rev FROM finance_history ORDER BY rev DESC LIMIT ?)'
+);
+const historyPruneCountStmt = db.prepare(
   'DELETE FROM finance_history WHERE rev NOT IN (SELECT rev FROM finance_history ORDER BY rev DESC LIMIT ?)'
 );
 const historyListStmt = db.prepare(
-  'SELECT rev, ts, LENGTH(content) AS bytes FROM finance_history ORDER BY rev DESC'
+  'SELECT rev, ts, LENGTH(content) AS bytes, source, label, change FROM finance_history ORDER BY rev DESC'
 );
-const historyGetStmt = db.prepare('SELECT rev, ts, content FROM finance_history WHERE rev = ?');
+const historyGetStmt = db.prepare('SELECT rev, ts, content, source, label, change FROM finance_history WHERE rev = ?');
 
-// Snapshot a committed revision of the finance blob into the rolling history and
-// prune to the retention limit. Best-effort: a history failure must never fail
-// the actual save, so it's guarded.
-function appendHistory(rev, content) {
+/** Parse a stored `change` column ({ keys, before }); null for legacy rows. */
+function parseChange(raw) {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+/** Sanitize a client-supplied revision label: printable, trimmed, bounded. */
+function cleanLabel(raw) {
+  if (typeof raw !== 'string') return null;
+  const s = raw.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200);
+  return s || null;
+}
+
+// Snapshot a committed revision of the finance blob into the rolling history,
+// with who wrote it and what it changed versus the previous content, then prune.
+// Best-effort: a history failure must never fail the actual save, so it's guarded.
+function appendHistory(rev, content, prevContent, meta) {
   try {
-    historyInsertStmt.run(rev, new Date().toISOString(), content);
-    historyPruneStmt.run(DATA_HISTORY_LIMIT);
+    let prev = null;
+    try { prev = prevContent ? JSON.parse(prevContent) : null; } catch { /* corrupt prior: diff against empty */ }
+    let change = diffBlobs(prev, JSON.parse(content));
+    const now = new Date();
+    const newest = historyNewestStmt.get();
+    if (
+      meta.source === 'ui' && newest && newest.source === 'ui'
+      && now.getTime() - Date.parse(newest.ts) < UI_COALESCE_MS
+    ) {
+      const older = parseChange(newest.change);
+      if (older) change = mergeChanges(older, change);
+      historyDeleteStmt.run(newest.rev);
+    }
+    historyInsertStmt.run(rev, now.toISOString(), content, meta.source, meta.label ?? null, JSON.stringify(change));
+    historyPruneAgeStmt.run(new Date(now.getTime() - DATA_HISTORY_DAYS * 86400000).toISOString(), DATA_HISTORY_MIN);
+    historyPruneCountStmt.run(DATA_HISTORY_MAX);
   } catch (err) {
     console.warn('[history] failed to record revision', rev, err.message);
   }
 }
 
 // Persist `content` for `id`, bumping rev from `prevRev`. Returns the new rev.
-// Writes to the primary 'headroom' blob are snapshotted into finance_history.
-function writeBlob(id, content, prevRev) {
+// Writes to the primary 'headroom' blob are snapshotted into finance_history,
+// attributed to `meta.source` (ui | mcp | import | bank-sync | restore | undo).
+function writeBlob(id, content, prevRev, meta = { source: 'ui' }) {
+  const prior = id === 'headroom' ? getStmt.get(id) : null;
   const rev = (prevRev ?? 0) + 1;
   writeStmt.run({ id, content, rev });
-  if (id === 'headroom') appendHistory(rev, content);
+  if (id === 'headroom') appendHistory(rev, content, prior ? prior.content : null, meta);
   return rev;
 }
 
@@ -564,15 +622,22 @@ app.post('/api/data', (req, res) => {
   if (content.length > SIZE_WARN_BYTES) {
     console.warn(`[data] payload is ${(content.length / 1024 / 1024).toFixed(1)} MB — approaching the body limit`);
   }
-  const rev = writeBlob('headroom', content, stored ? stored.rev : 0);
+  const source = CLIENT_SOURCES.has(req.get('X-Headroom-Source')) ? req.get('X-Headroom-Source') : 'ui';
+  const rev = writeBlob('headroom', content, stored ? stored.rev : 0, { source, label: cleanLabel(req.get('X-Headroom-Label')) });
   res.set('X-Data-Rev', String(rev));
   res.json({ ok: true, rev });
 });
 
 // Rolling revision history (in-volume undo net). Protected like the rest of /api.
 // GET /api/history            → recent revisions, newest first (metadata only).
+// Each revision says who made it (`source`, `label`) and which top-level keys
+// it changed (`keys`; null on revisions recorded before change tracking).
 app.get('/api/history', (_req, res) => {
-  res.json({ revisions: historyListStmt.all(), limit: DATA_HISTORY_LIMIT });
+  const revisions = historyListStmt.all().map(({ change, ...r }) => ({
+    ...r,
+    keys: parseChange(change)?.keys ?? null,
+  }));
+  res.json({ revisions, retentionDays: DATA_HISTORY_DAYS, minKept: DATA_HISTORY_MIN, maxKept: DATA_HISTORY_MAX });
 });
 
 // GET /api/history/:rev       → the full finance blob as it was at that revision.
@@ -585,7 +650,8 @@ app.get('/api/history/:rev', (req, res) => {
   } catch {
     return res.status(500).json({ error: 'stored revision is corrupt' });
   }
-  res.json({ rev: row.rev, ts: row.ts, content });
+  const change = parseChange(row.change);
+  res.json({ rev: row.rev, ts: row.ts, source: row.source, label: row.label, keys: change?.keys ?? null, content });
 });
 
 // POST /api/history/:rev/restore → re-commit a past revision as the new current
@@ -605,9 +671,41 @@ app.post('/api/history/:rev/restore', (req, res) => {
     return res.status(422).json({ error: 'revision is not a valid finance payload' });
   }
   const stored = getStmt.get('headroom');
-  const rev = writeBlob('headroom', row.content, stored ? stored.rev : 0);
+  const rev = writeBlob('headroom', row.content, stored ? stored.rev : 0, { source: 'restore', label: `#${row.rev}` });
   res.set('X-Data-Rev', String(rev));
   res.json({ ok: true, rev, restoredFrom: row.rev });
+});
+
+// POST /api/history/:rev/undo → revert only what that revision changed, keeping
+// everything saved after it. A three-way merge (server/revert.js): each touched
+// value goes back only if it still equals what that revision wrote; otherwise
+// 409 with the conflicting paths and nothing is written. Recorded as a new
+// revision, so the undo itself can be undone.
+app.post('/api/history/:rev/undo', (req, res) => {
+  const row = historyGetStmt.get(Number(req.params.rev));
+  if (!row) return res.status(404).json({ error: 'no such revision' });
+  const change = parseChange(row.change);
+  if (!change) {
+    return res.status(422).json({ error: 'revision predates change tracking; restore it instead' });
+  }
+  const current = readBlob();
+  if (!current) return res.status(409).json({ error: 'no current data to undo against' });
+  let after;
+  try {
+    after = JSON.parse(row.content);
+  } catch {
+    return res.status(500).json({ error: 'stored revision is corrupt' });
+  }
+  const result = revertChange(current.content, after, change);
+  if (result.conflicts) {
+    return res.status(409).json({ error: 'changed again since that revision', conflicts: result.conflicts });
+  }
+  if (!isValidFinancePayload(result.blob)) {
+    return res.status(422).json({ error: 'undo would leave an invalid finance payload' });
+  }
+  const rev = writeBlob('headroom', JSON.stringify(result.blob), current.rev, { source: 'undo', label: `#${row.rev}` });
+  res.set('X-Data-Rev', String(rev));
+  res.json({ ok: true, rev, undid: row.rev, keys: change.keys });
 });
 
 // In-app restore from a SQLite backup file (what `make backup` copies out), so
@@ -960,7 +1058,7 @@ async function runBankSync() {
     // Bump rev so *other* open tabs see the change and refetch the freshly-synced
     // rows. The caller returns the new rev so the tab that triggered the sync can
     // adopt it and not treat its own sync as a conflicting external change.
-    const rev = writeBlob('headroom', JSON.stringify(blob), stored.rev);
+    const rev = writeBlob('headroom', JSON.stringify(blob), stored.rev, { source: 'bank-sync', label: null });
     const added = blob.dailyTransactions.length - before;
     const total = blob.dailyTransactions.length;
     // The rows genuinely new this sync (id not in the prior ledger), so the

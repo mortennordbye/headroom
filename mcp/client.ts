@@ -68,15 +68,23 @@ export async function getData(retryOnAuth = true): Promise<DataSnapshot> {
 }
 
 /** POST the whole blob back, echoing the rev for optimistic concurrency. */
-async function putData(blob: ExportPayload, rev: number, retryOnAuth = true): Promise<number> {
+async function putData(blob: ExportPayload, rev: number, label: string, retryOnAuth = true): Promise<number> {
   const res = await fetch(`${BASE_URL}/api/data`, {
     method: 'POST',
-    headers: authHeaders({ 'content-type': 'application/json', 'x-data-rev': String(rev) }),
+    // Attribute the revision to the MCP server, so history shows which saves
+    // were the assistant's and each one can be undone on its own.
+    headers: authHeaders({
+      'content-type': 'application/json',
+      'x-data-rev': String(rev),
+      'x-headroom-source': 'mcp',
+      // Header values must be latin-1; keep the label plain ASCII.
+      'x-headroom-label': label.replace(/[^\x20-\x7e]/g, '?').slice(0, 200),
+    }),
     body: JSON.stringify(blob),
   });
   if (res.status === 401 && retryOnAuth) {
     await login();
-    return putData(blob, rev, false);
+    return putData(blob, rev, label, false);
   }
   if (res.status === 409) {
     const body = (await res.json().catch(() => ({}))) as { currentRev?: number };
@@ -91,19 +99,29 @@ export interface HistoryEntry {
   rev: number;
   ts: string;
   bytes: number;
+  /** Who wrote it: ui | mcp | import | bank-sync | restore | undo (null on old revisions). */
+  source: string | null;
+  label: string | null;
+  /** Top-level keys the revision changed (null on revisions before change tracking). */
+  keys: string[] | null;
 }
 
-/** List recent stored revisions (newest first) with timestamps and sizes. */
-export async function listHistory(
-  retryOnAuth = true,
-): Promise<{ revisions: HistoryEntry[]; limit: number }> {
+interface HistoryList {
+  revisions: HistoryEntry[];
+  retentionDays: number;
+  minKept: number;
+  maxKept: number;
+}
+
+/** List stored revisions (newest first) with who made them and what they changed. */
+export async function listHistory(retryOnAuth = true): Promise<HistoryList> {
   const res = await fetch(`${BASE_URL}/api/history`, { headers: authHeaders() });
   if (res.status === 401 && retryOnAuth) {
     await login();
     return listHistory(false);
   }
   if (!res.ok) throw new Error(`GET /api/history failed (${res.status})`);
-  return (await res.json()) as { revisions: HistoryEntry[]; limit: number };
+  return (await res.json()) as HistoryList;
 }
 
 /** Fetch the full finance blob as it was at a past revision. */
@@ -140,18 +158,47 @@ export async function restoreRevision(
 }
 
 /**
+ * Undo just what one revision changed, keeping everything saved after it. The
+ * server refuses (conflict) if a touched value was changed again since.
+ */
+export async function undoRevision(
+  rev: number,
+  retryOnAuth = true,
+): Promise<{ rev: number; undid: number; keys: string[] }> {
+  const res = await fetch(`${BASE_URL}/api/history/${rev}/undo`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (res.status === 401 && retryOnAuth) {
+    await login();
+    return undoRevision(rev, false);
+  }
+  const body = (await res.json().catch(() => ({}))) as { error?: string; conflicts?: string[] };
+  if (res.status === 409 && body.conflicts) {
+    throw new Error(
+      `cannot undo revision ${rev}: changed again since (${body.conflicts.join(', ')}). ` +
+        'Undo the later revisions first, or use restore_revision.',
+    );
+  }
+  if (!res.ok) throw new Error(body.error ?? `undo of revision ${rev} failed (${res.status})`);
+  return body as unknown as { rev: number; undid: number; keys: string[] };
+}
+
+/**
  * Read-modify-write one slice of the blob. `mutate` receives a deep-cloned blob,
  * changes only what it needs, and returns it. On a rev conflict we re-read and
- * apply once more, then give up loudly — never a silent clobber.
+ * apply once more, then give up loudly — never a silent clobber. `label` is read
+ * after `mutate`, so it can describe what the mutation changed.
  */
 export async function applyMutation(
   mutate: (blob: ExportPayload) => ExportPayload,
+  label: () => string = () => 'mcp write',
 ): Promise<{ rev: number }> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const { blob, rev } = await getData();
     const next = mutate(structuredClone(blob));
     try {
-      const newRev = await putData(next, rev);
+      const newRev = await putData(next, rev, label());
       return { rev: newRev };
     } catch (err) {
       if (err instanceof RevConflictError && attempt === 0) continue; // re-read and retry once
