@@ -752,3 +752,18 @@ Remaining — the visual half, deliberately left out to keep the model change re
 **Unblock:** include the viewed month's adjustment in the budget summary and document it in the tool
 description. **Where:** `mcp/derive.ts` (budget summary, ~line 168), adjustment semantics in
 `src/lib/savingsRate.ts` (`resolveSavingsForMonth`).
+
+## MCP generic `set_field` / `describe_field` tools
+
+**What:** a `describe_field(key)` read tool and a `set_field(key, value)` write tool covering every
+`PersistedKey`, validating `value` with that key's payload-registry `read()` guard.
+**Why deferred:** `makePayloadRegistry` needs the default `assets`/`loan`/`pension`/`homeowner`/
+`transition`/`fixedExpenses` objects, and those are module-private constants in
+`src/context/FinanceContext.tsx`, which pulls in React. The MCP server must not import it. Also,
+about 20 keys read with `whenDefined`/`whenTruthy`, which accept any non-undefined value
+(`income: "abc"` passes), so the registry guard alone cannot reject a wrong type for those keys.
+**Unblock:** move the six default constants into `src/lib` (FinanceContext re-imports them), and
+decide how to type-check the weakly guarded keys (per-key zod schemas, or a check against the
+registry `default`). **Where:** `src/lib/payloadRegistry.ts`, `src/context/FinanceContext.tsx`
+(`DEFAULT_ASSETS` ~line 584 through `DEFAULT_PENSION`, `PAYLOAD_REGISTRY` ~line 659),
+`mcp/tools/write.ts`.
