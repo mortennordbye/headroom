@@ -90,12 +90,20 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 | Tool | What it returns |
 | --- | --- |
 | `get_overview` | Net worth, gross income, equity breakdown, debt-to-income, mortgage status |
-| `get_budget_summary` | Income vs fixed/variable, per-type fixed totals, 12-month cashflow, savings-rate status |
+| `get_budget_summary` | Net income vs fixed/variable, per-type fixed totals, this month's savings transfers (and any one-month adjustment), 12-month cashflow, savings-rate status |
 | `get_spending_analysis` | Spend by category (own-account transfers netted out), month-over-month, budget-vs-actual, top insight, untracked recurring |
 | `get_debt_analysis` | Avalanche/snowball payoff, baseline vs extra payment (months + interest saved) |
 | `get_savings_and_goals` | Emergency-fund adequacy (two measures), buffer recommendation, per-goal progress |
 | `get_recommendations` | Budget plan, savings-rate status, history-based insights |
 | `get_year_review` | Annual review for a calendar year: income, tax paid, savings rate, top categories, net-worth change (`year` optional) |
+| `get_salary_and_tax` | Active jobs, gross, full tax breakdown with deductions, marginal rate, derived vs effective net monthly, payslip, restskatt estimate, salary/bonus/overtime history (`month` optional) |
+| `get_pension` | OTP/IPS projection to retirement, retirement income (folketrygd, AFP, OTP, IPS) gross and net, replacement rate |
+| `get_forecast` | Year-by-year net-worth projection from the saved forecast assumptions; any lever can be overridden for a what-if |
+| `get_mortgage` | Active mortgage: payment, payoff timeline, LTV, paydown vs plan, yearly amortization |
+| `get_housing` | Borrowing capacity (with manual overrides), planned purchase, second-home scenarios and portfolio |
+| `get_employer_cost` | Employer cost, break-even/target/billed hourly rate, margin, fair salary |
+| `get_assets_and_debts` | Every balance with its id, equity breakdown, wealth-tax estimate, recent snapshots |
+| `query_transactions` | Filter by date, category, text, amount, kind; totals and per-category sums over all matches |
 | `what_if` | `prepay_vs_invest` or `extra_debt_payment` scenarios |
 | `list_history` | Recent saved revisions (newest first) with timestamps and sizes |
 | `get_history_revision` | The full dataset as it was at a past revision |
