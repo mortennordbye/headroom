@@ -290,7 +290,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Housing & borrowing capacity',
       description:
-        'Borrowing capacity (5x income and 15% equity rules, stress test) from live data with the user\'s manual overrides, the planned purchase, and second-home / rental scenarios with their portfolio aggregate.',
+        'Borrowing capacity for a purchase, as the Bolig page\'s calculator computes it (5x income and 15% equity rules, stress test, the planned loan\'s rate and term), from live data with the user\'s manual overrides. Existing debt here is non-mortgage debt only: it sizes a purchase that replaces the current home. For room to borrow on top of the current mortgage, use get_overview debt.debtToIncome.borrowingHeadroom. Also the planned purchase and second-home / rental scenarios with their portfolio aggregate.',
       inputSchema: {},
       annotations: { title: 'Housing & borrowing capacity', ...readOnly },
     },

@@ -147,6 +147,16 @@ const cases: {
     },
   },
   {
+    name: 'set_profile (birth date also sets the pension birth year, as the app does)',
+    touched: ['profile', 'pension'],
+    mutate: (b) => setProfile(b, { birthDate: '1985-03-02' }),
+    assertChange: (b) => {
+      expect(b.profile?.birthDate).toBe('1985-03-02');
+      expect(b.pension?.birthYear).toBe(1985);
+      expect(b.pension?.otpBalance).toBe(fullFixture().pension?.otpBalance); // rest of pension untouched
+    },
+  },
+  {
     name: 'update_fixed_expense (category)',
     touched: ['fixedExpenses'],
     mutate: (b) => updateFixedExpense(b, { id: 'f2', category: 'subscriptions' }),
