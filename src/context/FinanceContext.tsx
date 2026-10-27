@@ -1324,6 +1324,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Optimistic-concurrency revision last seen from the server; echoed on every
   // save so a stale write is rejected instead of clobbering a newer one.
   const revRef = useRef(0);
+  // Source the next save is attributed to in the revision history. An import or
+  // reset is tagged so it never folds into the editing session before it, which
+  // keeps the state just before it as its own restore point.
+  const saveSourceRef = useRef<'ui' | 'import'>('ui');
   // Stable-stringified content the server is known to hold (set on load, on
   // adopting a newer version, and after each successful save). doSave skips the
   // POST when the built payload matches it, so merely opening the app doesn't
@@ -1697,7 +1701,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch('/api/data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Data-Rev': String(revRef.current) },
+        headers: { 'Content-Type': 'application/json', 'X-Data-Rev': String(revRef.current), 'X-Headroom-Source': saveSourceRef.current },
         body: JSON.stringify(payload),
         signal: ctrl.signal,
       });
@@ -1724,6 +1728,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       revRef.current = Number(res.headers.get('X-Data-Rev') ?? revRef.current + 1);
+      saveSourceRef.current = 'ui';
       lastSyncedRef.current = stable;
       saveDirty.current = false;
       saveRetries.current = 0;
@@ -2853,7 +2858,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Import / demo-restore: overlay the present fields, leaving absent ones as the
   // current value (resetMissing=false). Shares the single apply path with load.
-  const importAll = useCallback((data: Partial<ExportPayload>) => applyPayload(data, false), [applyPayload]);
+  const importAll = useCallback((data: Partial<ExportPayload>) => {
+    saveSourceRef.current = 'import';
+    applyPayload(data, false);
+  }, [applyPayload]);
 
   // --- Demo mode: swap real data for a fictional dataset, then restore it ---
   // The real data is held in `demoSnapshot` (memory) and the auto-save effect is
@@ -2903,6 +2911,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [applyPayload]);
 
   const resetAll = useCallback(() => {
+    saveSourceRef.current = 'import';
     setIncome(0);
     setMonthlyIncomes({});
     setPayslips({});

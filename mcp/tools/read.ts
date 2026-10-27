@@ -376,7 +376,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'List saved revisions',
       description:
-        'Recent saved revisions of the whole dataset (newest first) with timestamps and sizes. Use a rev with get_history_revision or restore_revision.',
+        'Saved revisions of the whole dataset (newest first, kept 90 days): timestamp, size, who made it (source: ui, mcp, import, bank-sync, restore, undo), a label, and the top-level keys it changed. Use a rev with get_history_revision, undo_change (revert one change) or restore_revision (roll everything back).',
       inputSchema: {},
       annotations: { title: 'List saved revisions', ...readOnly },
     },

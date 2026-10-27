@@ -1,24 +1,41 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
-import { History, RotateCcw } from 'lucide-react';
+import { History, RotateCcw, Undo2 } from 'lucide-react';
 import { useFinanceSettings } from '../context/FinanceContext';
 import { formatBytes } from '../lib/format';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
 
+type RevisionSource = 'ui' | 'mcp' | 'import' | 'bank-sync' | 'restore' | 'undo';
+
 interface Revision {
   rev: number;
   ts: string;
   bytes: number;
+  /** Who made it; null on revisions saved before attribution existed. */
+  source: RevisionSource | null;
+  label: string | null;
+  /** Top-level keys it changed; null on old revisions. */
+  keys: string[] | null;
+  /** Whether it can be undone on its own (the state before it is still kept). */
+  undoable: boolean;
 }
+
+type Action = 'restore' | 'undo';
+
+/** First few changed keys, then a count, so a first save touching everything stays one line. */
+const summarizeKeys = (keys: string[]) =>
+  keys.length <= 3 ? keys.join(', ') : `${keys.slice(0, 3).join(', ')} +${keys.length - 3}`;
 
 /**
  * Revision-history / restore-points card for Settings. Reads the server's rolling
  * per-write backups (GET /api/history) and lets the user roll back to any of them
  * (POST /api/history/:rev/restore). A restore is itself recorded as a new revision,
- * so it can be undone. After a successful restore we full-reload — matching how
+ * so it can be undone. A revision that records what it changed can also be undone
+ * on its own (POST /api/history/:rev/undo), keeping everything saved after it.
+ * After a successful restore or undo we full-reload — matching how
  * login/logout re-run the initial data-load path — rather than surgically patching
  * state, so the client can never re-diverge from the restored blob.
  */
@@ -27,9 +44,13 @@ export function RestorePointsCard() {
   const rp = t.settings.restorePoints;
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [confirmingRev, setConfirmingRev] = useState<number | null>(null);
-  const [restoringRev, setRestoringRev] = useState<number | null>(null);
-  const [restoreFailed, setRestoreFailed] = useState(false);
+  const [confirming, setConfirming] = useState<{ rev: number; action: Action } | null>(null);
+  const [busyRev, setBusyRev] = useState<number | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  // Bumped after a failed undo/restore, so a list that went stale (a revision
+  // folded or pruned since it was loaded) is fetched again.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,22 +67,28 @@ export function RestorePointsCard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   const locale = lang === 'nb' ? nb : enUS;
   const fmtTime = (ts: string) => format(new Date(ts), 'd MMM yyyy HH:mm', { locale });
 
-  const doRestore = async (rev: number) => {
-    setRestoringRev(rev);
-    setRestoreFailed(false);
+  const run = async (rev: number, action: Action) => {
+    setBusyRev(rev);
+    setFailure(null);
     try {
-      const res = await fetch(`/api/history/${rev}/restore`, { method: 'POST' });
-      if (!res.ok) throw new Error(String(res.status));
-      window.location.reload(); // re-run the initial data-load with the restored blob
-    } catch {
-      setRestoreFailed(true);
-      setRestoringRev(null);
-      setConfirmingRev(null);
+      // The custom header is required by the server (it blocks cross-site POSTs).
+      const res = await fetch(`/api/history/${rev}/${action}`, { method: 'POST', headers: { 'X-Headroom-Source': 'ui' } });
+      if (res.status === 409 && action === 'undo') {
+        const body = (await res.json().catch(() => ({}))) as { conflicts?: string[] };
+        throw new Error(rp.undoConflict.replace('{fields}', () => (body.conflicts ?? []).join(', ')));
+      }
+      if (!res.ok) throw new Error(action === 'undo' ? rp.undoError : rp.restoreError);
+      window.location.reload(); // re-run the initial data-load with the new blob
+    } catch (e) {
+      setFailure((e as Error).message);
+      setBusyRev(null);
+      setConfirming(null);
+      setReloadKey((k) => k + 1);
     }
   };
 
@@ -92,7 +119,8 @@ export function RestorePointsCard() {
         <div className="mt-4 flex flex-col gap-2">
           {revisions.map((r, i) => {
             const isCurrent = i === 0;
-            const confirming = confirmingRev === r.rev;
+            const action = confirming?.rev === r.rev ? confirming.action : null;
+            const canUndo = r.undoable;
             return (
               <div
                 key={r.rev}
@@ -108,6 +136,14 @@ export function RestorePointsCard() {
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-medium flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
                     <span className="truncate">{fmtTime(r.ts)}</span>
+                    {r.source && (
+                      <span
+                        className="text-[11px] px-1.5 py-0.5 rounded shrink-0"
+                        style={{ background: 'var(--surface-4)', color: 'var(--text-2)' }}
+                      >
+                        {rp.sources[r.source] ?? r.source}
+                      </span>
+                    )}
                     {isCurrent && (
                       <span
                         className="text-[11px] px-1.5 py-0.5 rounded shrink-0"
@@ -117,45 +153,73 @@ export function RestorePointsCard() {
                       </span>
                     )}
                   </div>
-                  <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                  <div className="text-[11px] truncate" style={{ color: 'var(--text-3)' }}>
                     #{r.rev} · {formatBytes(r.bytes)}
+                    {/* Restore/undo rows are labelled with the revision they acted on; the
+                        others with what they changed (an MCP label is its changed fields). */}
+                    {r.source === 'undo' && r.label
+                      ? <> · {rp.undoOf.replace('{rev}', () => r.label!)}</>
+                      : r.source === 'restore' && r.label
+                        ? <> · {rp.restoreOf.replace('{rev}', () => r.label!)}</>
+                        : r.keys && r.keys.length > 0 && (
+                          <> · {rp.changed.replace('{keys}', () => r.label ?? summarizeKeys(r.keys!))}</>
+                        )}
                   </div>
                 </div>
 
-                {!isCurrent && !confirming && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="shrink-0"
-                    leadingIcon={<RotateCcw />}
-                    disabled={restoringRev !== null}
-                    onClick={() => {
-                      setConfirmingRev(r.rev);
-                      setRestoreFailed(false);
-                    }}
-                  >
-                    {rp.restore}
-                  </Button>
+                {!action && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {canUndo && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        leadingIcon={<Undo2 />}
+                        disabled={busyRev !== null}
+                        onClick={() => {
+                          setConfirming({ rev: r.rev, action: 'undo' });
+                          setFailure(null);
+                        }}
+                      >
+                        {rp.undo}
+                      </Button>
+                    )}
+                    {!isCurrent && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        leadingIcon={<RotateCcw />}
+                        disabled={busyRev !== null}
+                        onClick={() => {
+                          setConfirming({ rev: r.rev, action: 'restore' });
+                          setFailure(null);
+                        }}
+                      >
+                        {rp.restore}
+                      </Button>
+                    )}
+                  </div>
                 )}
 
-                {confirming && (
+                {action && (
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[12px] hidden sm:block" style={{ color: 'var(--text-2)' }}>
-                      {rp.confirmQuestion}
+                      {action === 'undo' ? rp.undoConfirmQuestion : rp.confirmQuestion}
                     </span>
                     <Button
                       variant="primary"
                       size="sm"
-                      disabled={restoringRev === r.rev}
-                      onClick={() => doRestore(r.rev)}
+                      disabled={busyRev === r.rev}
+                      onClick={() => run(r.rev, action)}
                     >
-                      {restoringRev === r.rev ? rp.restoring : rp.confirmYes}
+                      {busyRev === r.rev
+                        ? (action === 'undo' ? rp.undoing : rp.restoring)
+                        : (action === 'undo' ? rp.undo : rp.confirmYes)}
                     </Button>
                     <Button
                       variant="secondary"
                       size="sm"
-                      disabled={restoringRev === r.rev}
-                      onClick={() => setConfirmingRev(null)}
+                      disabled={busyRev === r.rev}
+                      onClick={() => setConfirming(null)}
                     >
                       {rp.cancel}
                     </Button>
@@ -167,14 +231,14 @@ export function RestorePointsCard() {
         </div>
       )}
 
-      {confirmingRev !== null && (
+      {confirming && (
         <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
-          {rp.confirmNote}
+          {confirming.action === 'undo' ? rp.undoConfirmNote : rp.confirmNote}
         </p>
       )}
-      {restoreFailed && (
+      {failure && (
         <p className="mt-2 text-[12px]" style={{ color: 'var(--negative)' }}>
-          {rp.restoreError}
+          {failure}
         </p>
       )}
       <p className="mt-3 text-[11px]" style={{ color: 'var(--text-3)' }}>

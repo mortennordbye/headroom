@@ -7,7 +7,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ExportPayload } from '../../src/context/FinanceContext';
-import { applyMutation, RevConflictError, restoreRevision } from '../client';
+import { applyMutation, RevConflictError, restoreRevision, undoRevision } from '../client';
 import { jsonResult, errorResult, type FieldChange } from '../util';
 import {
   CATEGORY_KEYS,
@@ -64,11 +64,14 @@ const kr = z.number().min(0);
 async function run(build: (blob: ExportPayload) => FieldChange[]) {
   try {
     let changes: FieldChange[] = [];
-    const { rev } = await applyMutation((blob) => {
-      changes = build(blob);
-      return blob;
-    });
-    return jsonResult({ ok: true, rev, changed: changes });
+    const { rev } = await applyMutation(
+      (blob) => {
+        changes = build(blob);
+        return blob;
+      },
+      () => changes.map((c) => c.field).join(', '),
+    );
+    return jsonResult({ ok: true, rev, changed: changes, undo: `undo_change with rev ${rev}` });
   } catch (e) {
     if (e instanceof RevConflictError) {
       return errorResult('the data changed on the server during the write; nothing was saved, try again');
@@ -473,13 +476,32 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Restore a past revision',
       description:
-        'Roll the whole dataset back to a past revision (rev from list_history). The restore is itself saved as a new revision, so it can be undone.',
+        'Roll the WHOLE dataset back to a past revision (rev from list_history), discarding everything saved after it. Prefer undo_change to revert one change. The restore is itself saved as a new revision, so it can be undone.',
       inputSchema: { rev: z.number().int().describe('Revision number to restore, from list_history.') },
       annotations: { title: 'Restore a past revision', ...readWrite, destructiveHint: true, idempotentHint: false },
     },
     async ({ rev }) => {
       try {
         const out = await restoreRevision(rev);
+        return jsonResult({ ok: true, ...out });
+      } catch (e) {
+        return errorResult(String((e as Error).message));
+      }
+    },
+  );
+
+  server.registerTool(
+    'undo_change',
+    {
+      title: 'Undo one change',
+      description:
+        'Revert only what one revision changed (rev from a write result or list_history), keeping everything saved after it, including the user\'s own edits and bank syncs. Refuses with the conflicting fields if any of them changed again since; then undo the later revisions first, or use restore_revision. The undo is itself a revision and can be undone.',
+      inputSchema: { rev: z.number().int().describe('Revision to undo.') },
+      annotations: { title: 'Undo one change', ...readWrite, destructiveHint: true, idempotentHint: false },
+    },
+    async ({ rev }) => {
+      try {
+        const out = await undoRevision(rev);
         return jsonResult({ ok: true, ...out });
       } catch (e) {
         return errorResult(String((e as Error).message));

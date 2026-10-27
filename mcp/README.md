@@ -146,14 +146,38 @@ above aside) and leave everything else byte-identical.
 ## Revision history / undo
 
 Every write is snapshotted server-side into a `finance_history` table in the data
-volume (the newest 20 revisions, pruned automatically) — separate from the data
-blob, so it can't be clobbered by a save and never leaks into exports. This is a
-fine-grained undo net on top of the coarse nightly `.sqlite` backups.
+volume, separate from the data blob, so it can't be clobbered by a save and never
+leaks into exports. It is a fine-grained undo net on top of the coarse nightly
+`.sqlite` backups.
 
-The AI can `list_history` to see recent changes, `get_history_revision` to inspect
-what a past state looked like, and `restore_revision` to roll back — and because a
-restore is itself recorded as a new revision, it can be undone too. Same endpoints
-back the `/api/history*` routes if you want to build UI on them.
+- **Who and what.** Each revision records its `source` (`ui`, `mcp`, `import`,
+  `bank-sync`, `restore`, `undo`), a `label`, the top-level keys it changed, and the
+  revision it was saved on top of (its "before"). MCP writes send
+  `X-Headroom-Source: mcp` and label the revision with the fields they touched. The
+  app tags an import or a reset as `import`. Clients can only claim `ui`, `mcp` or
+  `import`.
+- **Retention.** 90 days, never fewer than the newest 20, and at most 200 MB of
+  snapshots in total. Back-to-back UI autosaves fold into one revision (gaps under
+  10 minutes, sessions up to 30), so an editing session can't push other changes
+  out. MCP writes and imports are never folded. A bank sync that brought nothing
+  new writes nothing.
+- **Undo one change.** `undo_change(rev)` reverts only what that revision changed
+  and keeps everything saved after it. It is a three-way merge: each touched value
+  goes back only if it still equals what the revision wrote. Arrays of `{ id }`
+  rows and plain objects merge per row and per field, so undoing one transaction
+  edit survives a later bank sync. Sets of ids (like `deletedBankIds`) merge per
+  element. If something was changed again since, it refuses with the conflicting
+  fields and writes nothing. `list_history` marks each revision `undoable` while
+  the revision before it is still kept.
+- **Restore everything.** `restore_revision(rev)` rolls the whole dataset back,
+  discarding later saves. Revisions recorded before change tracking can only be
+  restored.
+
+Undos and restores are themselves revisions, so both can be undone. The same
+endpoints (`/api/history`, `/api/history/:rev`, `/api/history/:rev/restore`,
+`/api/history/:rev/undo`) back the Restore points card in Settings. The two POST
+routes require an `X-Headroom-Source` header, so a cross-site form can't trigger
+them when auth is off.
 
 ## Tests
 
