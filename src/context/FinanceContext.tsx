@@ -1692,6 +1692,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (stable === lastSyncedRef.current) {
       saveDirty.current = false;
       saveRetries.current = 0;
+      saveSourceRef.current = 'ui'; // nothing to attribute: don't tag the next edit
       return;
     }
     // Supersede any in-flight save so it can't complete after this one.
@@ -2881,16 +2882,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (demoMode) return;
     demoSnapshot.current = { ...buildPayloadRef.current(), currentMonth: format(currentMonthRef.current, 'yyyy-MM') };
     setDemoMode(true);
-    importAll(getDemoData());
-  }, [demoMode, importAll]);
+    // applyPayload, not importAll: swapping demo data in and out is not a user
+    // import, so it must not tag the next real save as one.
+    applyPayload(getDemoData(), false);
+  }, [demoMode, applyPayload]);
 
   const disableDemoMode = useCallback(() => {
     if (!demoMode) return;
     const snapshot = demoSnapshot.current;
     setDemoMode(false);
-    if (snapshot) importAll(snapshot);
+    if (snapshot) applyPayload(snapshot, false);
     demoSnapshot.current = null;
-  }, [demoMode, importAll]);
+  }, [demoMode, applyPayload]);
 
   const toggleDemoMode = useCallback(() => {
     // On a public demo there is nothing to toggle back to: no snapshot was taken
