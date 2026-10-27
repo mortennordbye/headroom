@@ -64,13 +64,16 @@ const kr = z.number().min(0);
 async function run(build: (blob: ExportPayload) => FieldChange[]) {
   try {
     let changes: FieldChange[] = [];
-    const { rev } = await applyMutation(
+    const { rev, unchanged } = await applyMutation(
       (blob) => {
         changes = build(blob);
         return blob;
       },
-      () => changes.map((c) => c.field).join(', '),
+      // The changed fields without row ids (debts[<uuid>].balance → debts.balance):
+      // the history label is for people scanning the list, and ids are noise there.
+      () => [...new Set(changes.map((c) => c.field.replace(/\[[^\]]*\]/g, '')))].join(', '),
     );
+    if (unchanged) return jsonResult({ ok: true, rev, unchanged: true, note: 'already set; nothing was saved' });
     return jsonResult({ ok: true, rev, changed: changes, undo: `undo_change with rev ${rev}` });
   } catch (e) {
     if (e instanceof RevConflictError) {
