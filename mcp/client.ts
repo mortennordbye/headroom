@@ -213,10 +213,13 @@ export async function undoRevision(
 export async function applyMutation(
   mutate: (blob: ExportPayload) => ExportPayload,
   label: () => string = () => 'mcp write',
-): Promise<{ rev: number }> {
+): Promise<{ rev: number; unchanged?: boolean }> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const { blob, rev } = await getData();
     const next = mutate(structuredClone(blob));
+    // Nothing changed (e.g. the value was already set): skip the save, so a
+    // repeated write doesn't add an empty revision to the history.
+    if (JSON.stringify(next) === JSON.stringify(blob)) return { rev, unchanged: true };
     try {
       const newRev = await putData(next, rev, label());
       return { rev: newRev };

@@ -191,6 +191,18 @@ describe('revision history (in-volume undo net)', () => {
     expect(out.rev).toBeGreaterThan(good);
   });
 
+  it('skips the save when a write changes nothing', async () => {
+    const set = (b: ExportPayload) => {
+      setCategoryBudget(b, { category: 'shopping', amount: 111 });
+      return b;
+    };
+    await client.applyMutation(set);
+    const rev = await currentRev();
+    const again = await client.applyMutation(set);
+    expect(again).toEqual({ rev, unchanged: true });
+    expect(await currentRev()).toBe(rev);
+  });
+
   it('attributes MCP writes and labels them with the fields they changed', async () => {
     const { rev } = await client.applyMutation(
       (b) => {
