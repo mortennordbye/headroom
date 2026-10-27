@@ -29,18 +29,15 @@ import type {
   BonusType,
 } from '../src/context/FinanceContext';
 import { diff, type FieldChange } from './util';
+import { birthYearFrom } from '../src/lib/profile';
 
-export type CategoryKey =
-  | 'groceries' | 'dining' | 'transport' | 'health' | 'entertainment' | 'shopping'
-  | 'utilities' | 'subscriptions' | 'housing' | 'transfers' | 'income' | 'other';
+// The app's own category list, so every category the UI offers is writable here.
+export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
+import type { CategoryKey } from '../src/lib/categories';
 
 export type GoalSource = Goal['source'];
 export type ExpenseType = NonNullable<FixedExpense['type']>;
 
-export const CATEGORY_KEYS: readonly CategoryKey[] = [
-  'groceries', 'dining', 'transport', 'health', 'entertainment', 'shopping',
-  'utilities', 'subscriptions', 'housing', 'transfers', 'income', 'other',
-];
 export const GOAL_SOURCES: readonly GoalSource[] = [
   'manual', 'bsu', 'savings', 'savingsAccount', 'totalEquity', 'portfolio', 'bufferAccount',
 ];
@@ -156,7 +153,12 @@ export function setAiContext(blob: ExportPayload, args: { text: string }): Field
   return [diff('aiContext', before, args.text)];
 }
 
-/** Update the user profile. Only provided fields change; touches only `blob.profile`. */
+/**
+ * Update the user profile. Only provided fields change. A birth date also writes
+ * its year through to `pension.birthYear`, as the app's updateProfile does (the
+ * profile is the single source for it), so pension and BSU math see the age.
+ * That second key is a documented exception to the one-key contract.
+ */
 export function setProfile(
   blob: ExportPayload,
   fields: { name?: string; birthDate?: string },
@@ -168,6 +170,11 @@ export function setProfile(
   if (fields.birthDate !== undefined) { changes.push(diff('profile.birthDate', before.birthDate, fields.birthDate)); after.birthDate = fields.birthDate; }
   if (changes.length === 0) throw new Error('no profile fields provided');
   blob.profile = after;
+  const year = fields.birthDate !== undefined ? birthYearFrom(fields.birthDate) : 0;
+  if (year && blob.pension && blob.pension.birthYear !== year) {
+    changes.push(diff('pension.birthYear', blob.pension.birthYear, year));
+    blob.pension = { ...blob.pension, birthYear: year };
+  }
   return changes;
 }
 
