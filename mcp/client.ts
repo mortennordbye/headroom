@@ -104,13 +104,15 @@ export interface HistoryEntry {
   label: string | null;
   /** Top-level keys the revision changed (null on revisions before change tracking). */
   keys: string[] | null;
+  /** Whether undo_change can revert it on its own (the state before it is still kept). */
+  undoable: boolean;
 }
 
 interface HistoryList {
   revisions: HistoryEntry[];
   retentionDays: number;
   minKept: number;
-  maxKept: number;
+  maxBytes: number;
 }
 
 /** List stored revisions (newest first) with who made them and what they changed. */
@@ -146,7 +148,7 @@ export async function restoreRevision(
 ): Promise<{ rev: number; restoredFrom: number }> {
   const res = await fetch(`${BASE_URL}/api/history/${rev}/restore`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: authHeaders({ 'x-headroom-source': 'mcp' }),
   });
   if (res.status === 401 && retryOnAuth) {
     await login();
@@ -167,7 +169,7 @@ export async function undoRevision(
 ): Promise<{ rev: number; undid: number; keys: string[] }> {
   const res = await fetch(`${BASE_URL}/api/history/${rev}/undo`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: authHeaders({ 'x-headroom-source': 'mcp' }),
   });
   if (res.status === 401 && retryOnAuth) {
     await login();

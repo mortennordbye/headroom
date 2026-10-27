@@ -17,8 +17,10 @@ interface Revision {
   /** Who made it; null on revisions saved before attribution existed. */
   source: RevisionSource | null;
   label: string | null;
-  /** Top-level keys it changed; null on old revisions (those can't be undone alone). */
+  /** Top-level keys it changed; null on old revisions. */
   keys: string[] | null;
+  /** Whether it can be undone on its own (the state before it is still kept). */
+  undoable: boolean;
 }
 
 type Action = 'restore' | 'undo';
@@ -46,6 +48,10 @@ export function RestorePointsCard() {
   const [busyRev, setBusyRev] = useState<number | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
+  // Bumped after a failed undo/restore, so a list that went stale (a revision
+  // folded or pruned since it was loaded) is fetched again.
+  const [reloadKey, setReloadKey] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     fetch('/api/history')
@@ -61,7 +67,7 @@ export function RestorePointsCard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   const locale = lang === 'nb' ? nb : enUS;
   const fmtTime = (ts: string) => format(new Date(ts), 'd MMM yyyy HH:mm', { locale });
@@ -70,10 +76,11 @@ export function RestorePointsCard() {
     setBusyRev(rev);
     setFailure(null);
     try {
-      const res = await fetch(`/api/history/${rev}/${action}`, { method: 'POST' });
+      // The custom header is required by the server (it blocks cross-site POSTs).
+      const res = await fetch(`/api/history/${rev}/${action}`, { method: 'POST', headers: { 'X-Headroom-Source': 'ui' } });
       if (res.status === 409 && action === 'undo') {
         const body = (await res.json().catch(() => ({}))) as { conflicts?: string[] };
-        throw new Error(rp.undoConflict.replace('{fields}', (body.conflicts ?? []).join(', ')));
+        throw new Error(rp.undoConflict.replace('{fields}', () => (body.conflicts ?? []).join(', ')));
       }
       if (!res.ok) throw new Error(action === 'undo' ? rp.undoError : rp.restoreError);
       window.location.reload(); // re-run the initial data-load with the new blob
@@ -81,6 +88,7 @@ export function RestorePointsCard() {
       setFailure((e as Error).message);
       setBusyRev(null);
       setConfirming(null);
+      setReloadKey((k) => k + 1);
     }
   };
 
@@ -112,7 +120,7 @@ export function RestorePointsCard() {
           {revisions.map((r, i) => {
             const isCurrent = i === 0;
             const action = confirming?.rev === r.rev ? confirming.action : null;
-            const canUndo = !!r.keys && r.keys.length > 0;
+            const canUndo = r.undoable;
             return (
               <div
                 key={r.rev}
@@ -133,7 +141,7 @@ export function RestorePointsCard() {
                         className="text-[11px] px-1.5 py-0.5 rounded shrink-0"
                         style={{ background: 'var(--surface-4)', color: 'var(--text-2)' }}
                       >
-                        {rp.sources[r.source]}
+                        {rp.sources[r.source] ?? r.source}
                       </span>
                     )}
                     {isCurrent && (
@@ -150,10 +158,12 @@ export function RestorePointsCard() {
                     {/* Restore/undo rows are labelled with the revision they acted on; the
                         others with what they changed (an MCP label is its changed fields). */}
                     {r.source === 'undo' && r.label
-                      ? <> · {rp.undoOf.replace('{rev}', r.label)}</>
+                      ? <> · {rp.undoOf.replace('{rev}', () => r.label!)}</>
                       : r.source === 'restore' && r.label
-                        ? <> · {rp.restoreOf.replace('{rev}', r.label)}</>
-                        : canUndo && <> · {rp.changed.replace('{keys}', r.label ?? summarizeKeys(r.keys!))}</>}
+                        ? <> · {rp.restoreOf.replace('{rev}', () => r.label!)}</>
+                        : r.keys && r.keys.length > 0 && (
+                          <> · {rp.changed.replace('{keys}', () => r.label ?? summarizeKeys(r.keys!))}</>
+                        )}
                   </div>
                 </div>
 

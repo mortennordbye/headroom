@@ -229,6 +229,49 @@ describe('revision history (in-volume undo net)', () => {
     expect(revisions[3].keys).toContain('aiContext');
   });
 
+  it('never folds an import into the editing session before it', async () => {
+    const post = async (b: ExportPayload, source?: string) =>
+      fetch(`${BASE}/api/data`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-data-rev': String(await currentRev()),
+          ...(source ? { 'x-headroom-source': source } : {}),
+        },
+        body: JSON.stringify(b),
+      });
+    const edited = await getBlob();
+    edited.aiContext = 'edited before import';
+    await post(edited);
+    const before = (await client.listHistory()).revisions;
+    await post({ ...edited, aiContext: 'imported' }, 'import');
+    const after = (await client.listHistory()).revisions;
+    expect(after.length).toBe(before.length + 1);
+    expect(after[0].source).toBe('import');
+    // The pre-import state is still its own restore point.
+    expect((await client.getHistoryRevision(after[1].rev)).content.aiContext).toBe('edited before import');
+    // And a client can't claim a server-only source.
+    await post({ ...edited, aiContext: 'spoof' }, 'bank-sync');
+    expect((await client.listHistory()).revisions[0].source).toBe('ui');
+  });
+
+  it('rejects history POSTs without the app header (no cross-site form posts)', async () => {
+    const rev = await currentRev();
+    expect((await fetch(`${BASE}/api/history/${rev}/undo`, { method: 'POST' })).status).toBe(403);
+    expect((await fetch(`${BASE}/api/history/${rev}/restore`, { method: 'POST' })).status).toBe(403);
+  });
+
+  it('marks a revision undoable only while the state before it is kept', async () => {
+    const { revisions } = await client.listHistory();
+    // The oldest kept revision's predecessor is gone, so it can only be restored.
+    expect(revisions[revisions.length - 1].undoable).toBe(false);
+    const { rev } = await client.applyMutation((b) => {
+      setCategoryBudget(b, { category: 'health', amount: 77 });
+      return b;
+    });
+    expect((await client.listHistory()).revisions[0]).toMatchObject({ rev, undoable: true });
+  });
+
   it('undoes one change and keeps a later, unrelated edit', async () => {
     const { rev: budgetRev } = await client.applyMutation((b) => {
       setCategoryBudget(b, { category: 'transport', amount: 4242 });

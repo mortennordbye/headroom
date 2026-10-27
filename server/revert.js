@@ -1,15 +1,16 @@
 // Per-change revision history: what one save changed, and reverting just that.
 //
-// A revision records the top-level keys it changed and their values before the
-// save. Undoing it is a three-way merge against the current blob: a touched value
-// goes back to `before` only if it still equals what that save wrote (`after`).
-// If anything changed it since, the undo refuses rather than overwrite the newer
-// edit. Arrays of `{ id }` rows and plain objects are merged per row / per field,
-// so undoing one transaction edit survives a later bank sync adding other rows.
-// Pure: no DB, no Express — tested in revert.test.js.
+// A revision records the top-level keys it changed. Its "before" is the blob of
+// the revision it was saved on top of. Undoing it is a three-way merge against
+// the current blob: a touched value goes back to `before` only if it still
+// equals what that save wrote (`after`). If anything changed it since, the undo
+// refuses rather than overwrite the newer edit. Arrays of uniquely-id'd rows,
+// arrays of plain values (sets like deletedBankIds) and plain objects are merged
+// per row / element / field, so undoing one transaction edit survives a later
+// bank sync adding other rows. Pure: no DB, no Express — tested in revert.test.js.
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const isScalar = (v) => v === null || ['string', 'number', 'boolean'].includes(typeof v);
 
 /** Structural equality, independent of object key order. */
 function deepEqual(a, b) {
@@ -20,43 +21,24 @@ function deepEqual(a, b) {
   if (isObj(a) && isObj(b)) {
     const ka = Object.keys(a).filter((k) => a[k] !== undefined);
     const kb = Object.keys(b).filter((k) => b[k] !== undefined);
-    return ka.length === kb.length && ka.every((k) => has(b, k) && deepEqual(a[k], b[k]));
+    return ka.length === kb.length && ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEqual(a[k], b[k]));
   }
   return false;
 }
 
-/**
- * The top-level keys that differ between two blobs, with each key's value before
- * the change. A key absent before is listed in `keys` but has no `before` entry.
- */
-function diffBlobs(prev, next) {
+/** The top-level keys that differ between two blobs (a missing blob counts as empty). */
+function changedKeys(prev, next) {
   const p = isObj(prev) ? prev : {};
   const n = isObj(next) ? next : {};
-  const keys = [];
-  const before = {};
-  for (const k of new Set([...Object.keys(p), ...Object.keys(n)])) {
-    if (deepEqual(p[k], n[k])) continue;
-    keys.push(k);
-    if (p[k] !== undefined) before[k] = p[k];
-  }
-  return { keys, before };
+  return [...new Set([...Object.keys(p), ...Object.keys(n)])].filter((k) => !deepEqual(p[k], n[k]));
 }
 
-/**
- * Fold a newer change into an older one (coalescing back-to-back saves): the keys
- * are the union, and each key's `before` is the earliest one seen.
- */
-function mergeChanges(older, newer) {
-  const keys = [...new Set([...older.keys, ...newer.keys])];
-  const before = {};
-  for (const k of keys) {
-    const src = older.keys.includes(k) ? older.before : newer.before;
-    if (has(src, k)) before[k] = src[k];
-  }
-  return { keys, before };
-}
+/** Rows that can be merged by id: objects whose string ids are unique within the array. */
+const isIdRows = (v) =>
+  Array.isArray(v) && v.every((r) => isObj(r) && typeof r.id === 'string') && new Set(v.map((r) => r.id)).size === v.length;
 
-const isIdRows = (v) => Array.isArray(v) && v.every((r) => isObj(r) && typeof r.id === 'string');
+/** Arrays of distinct scalars, merged as sets. */
+const isScalarSet = (v) => Array.isArray(v) && v.every(isScalar) && new Set(v).size === v.length;
 
 /**
  * Three-way revert of one value. Returns { value, absent, conflicts } where
@@ -64,43 +46,53 @@ const isIdRows = (v) => Array.isArray(v) && v.every((r) => isObj(r) && typeof r.
  */
 function revertValue(path, current, after, before) {
   if (deepEqual(current, after)) return { value: before, absent: before === undefined, conflicts: [] };
+  // The value is gone now but the save left one: something deleted it since.
+  // Rebuilding it from a partial merge would resurrect half an object.
+  if (current === undefined) return { conflicts: [path] };
 
-  const cur = current ?? (Array.isArray(after) || Array.isArray(before) ? [] : undefined);
-  const aft = after ?? (Array.isArray(cur) ? [] : undefined);
-  const bef = before ?? (Array.isArray(cur) ? [] : undefined);
+  const empty = Array.isArray(current) ? [] : {};
+  const aft = after ?? empty;
+  const bef = before ?? empty;
 
-  if (isIdRows(cur) && isIdRows(aft) && isIdRows(bef)) {
+  if (isIdRows(current) && isIdRows(aft) && isIdRows(bef)) {
     const byId = (rows) => new Map(rows.map((r) => [r.id, r]));
-    const curM = byId(cur);
+    const curM = byId(current);
     const aftM = byId(aft);
     const befM = byId(bef);
     const touched = [...new Set([...aftM.keys(), ...befM.keys()])].filter((id) => !deepEqual(aftM.get(id), befM.get(id)));
     const conflicts = touched.filter((id) => !deepEqual(curM.get(id), aftM.get(id))).map((id) => `${path}[${id}]`);
     if (conflicts.length) return { conflicts };
     const touchedSet = new Set(touched);
-    const value = cur.flatMap((r) => (touchedSet.has(r.id) ? (befM.has(r.id) ? [befM.get(r.id)] : []) : [r]));
+    const value = current.flatMap((r) => (touchedSet.has(r.id) ? (befM.has(r.id) ? [befM.get(r.id)] : []) : [r]));
     // Rows the save deleted come back at their old position (clamped).
     for (const id of touched) {
       if (befM.has(id) && !curM.has(id)) {
-        const at = Math.min(bef.findIndex((r) => r.id === id), value.length);
-        value.splice(at, 0, befM.get(id));
+        value.splice(Math.min(bef.findIndex((r) => r.id === id), value.length), 0, befM.get(id));
       }
     }
     return { value, absent: false, conflicts: [] };
   }
 
-  if ((isObj(cur) || cur === undefined) && (isObj(aft) || aft === undefined) && (isObj(bef) || bef === undefined)
-    && (isObj(cur) || isObj(aft) || isObj(bef))) {
-    const c = cur ?? {};
-    const a = aft ?? {};
-    const b = bef ?? {};
-    const touched = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => !deepEqual(a[k], b[k]));
-    const conflicts = touched.filter((k) => !deepEqual(c[k], a[k])).map((k) => `${path}.${k}`);
+  if (isScalarSet(current) && isScalarSet(aft) && isScalarSet(bef)) {
+    const aftS = new Set(aft);
+    const befS = new Set(bef);
+    const curS = new Set(current);
+    const added = aft.filter((x) => !befS.has(x));
+    const removed = bef.filter((x) => !aftS.has(x));
+    const conflicts = [...added.filter((x) => !curS.has(x)), ...removed.filter((x) => curS.has(x))].map((x) => `${path}[${x}]`);
     if (conflicts.length) return { conflicts };
-    const value = { ...c };
+    const addedS = new Set(added);
+    return { value: [...current.filter((x) => !addedS.has(x)), ...removed], absent: false, conflicts: [] };
+  }
+
+  if (isObj(current) && isObj(aft) && isObj(bef)) {
+    const touched = [...new Set([...Object.keys(aft), ...Object.keys(bef)])].filter((k) => !deepEqual(aft[k], bef[k]));
+    const conflicts = touched.filter((k) => !deepEqual(current[k], aft[k])).map((k) => `${path}.${k}`);
+    if (conflicts.length) return { conflicts };
+    const value = { ...current };
     for (const k of touched) {
-      if (b[k] === undefined) delete value[k];
-      else value[k] = b[k];
+      if (bef[k] === undefined) delete value[k];
+      else value[k] = bef[k];
     }
     return { value, absent: false, conflicts: [] };
   }
@@ -110,15 +102,15 @@ function revertValue(path, current, after, before) {
 
 /**
  * Revert one revision's change on the current blob. `afterBlob` is the blob as
- * that revision saved it; `change` is its { keys, before }. Returns
- * { blob } on success or { conflicts } (paths changed since) without touching
- * anything.
+ * that revision saved it, `beforeBlob` the blob it was saved on top of, `keys`
+ * the top-level keys it changed. Returns { blob } on success or { conflicts }
+ * (paths changed since) without touching anything.
  */
-function revertChange(currentBlob, afterBlob, change) {
+function revertChange(currentBlob, afterBlob, beforeBlob, keys) {
   const out = { ...currentBlob };
   const conflicts = [];
-  for (const k of change.keys) {
-    const r = revertValue(k, currentBlob[k], afterBlob[k], has(change.before, k) ? change.before[k] : undefined);
+  for (const k of keys) {
+    const r = revertValue(k, currentBlob[k], afterBlob[k], beforeBlob[k]);
     if (r.conflicts.length) {
       conflicts.push(...r.conflicts);
       continue;
@@ -129,4 +121,4 @@ function revertChange(currentBlob, afterBlob, change) {
   return conflicts.length ? { conflicts } : { blob: out };
 }
 
-module.exports = { deepEqual, diffBlobs, mergeChanges, revertChange };
+module.exports = { deepEqual, changedKeys, revertChange };
