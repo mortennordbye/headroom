@@ -567,11 +567,10 @@ Remaining:
   rate. Needs the amortization split `src/lib/automation.ts` already computes,
   threaded into the rate. **Where**: `savingsContributionTotal` in
   `src/lib/savingsRate.ts` (the destinationKind filter), `src/lib/automation.ts`.
-- **`yearReview` and `mcp/derive` don't pass `fixedExpenses`,** so they keep the old
-  double-counting behaviour and disagree with the Budget page. The reconciliation arg
-  is optional precisely so these could be migrated separately; they need a
-  fixed-expense list plumbed to the call site. **Where**: `src/lib/yearReview.ts:69`,
-  `mcp/derive.ts:155` and `:333`.
+- **`yearReview` doesn't pass `fixedExpenses`,** so it keeps the old
+  double-counting behaviour and disagrees with the Budget page. The reconciliation arg
+  is optional precisely so it could be migrated separately; it needs a
+  fixed-expense list plumbed to the call site. **Where**: `src/lib/yearReview.ts:69`.
 - **The overlapping-jobs warning only checks the current month.** A job change
   entered with a stale end date in a *past* or future month still double-counts
   gross there (and so in the 12-month income series, volatility, and every chart
@@ -743,16 +742,6 @@ Remaining — the visual half, deliberately left out to keep the model change re
   but it is the only remaining spot where the two shapes meet, so it is where a future change is
   most likely to go wrong. **Where**: `createExpenses` in `src/components/SavingsAllocationPanel.tsx`.
 
-## MCP server ignores one-month saving adjustments
-
-**What:** the Budget page can now set one month's saving (`savingsMonthOverrides`, kroner per
-`'yyyy-MM'`) without changing the plan. The MCP server's budget summary still reports only the plan
-(`savingsTargetPercent`), so an assistant reading it doesn't see that a month was adjusted.
-**Why deferred:** kept the change to the app; the MCP read path has its own derive layer and tests.
-**Unblock:** include the viewed month's adjustment in the budget summary and document it in the tool
-description. **Where:** `mcp/derive.ts` (budget summary, ~line 168), adjustment semantics in
-`src/lib/savingsRate.ts` (`resolveSavingsForMonth`).
-
 ## MCP generic `set_field` / `describe_field` tools
 
 **What:** a `describe_field(key)` read tool and a `set_field(key, value)` write tool covering every
@@ -767,3 +756,16 @@ decide how to type-check the weakly guarded keys (per-key zod schemas, or a chec
 registry `default`). **Where:** `src/lib/payloadRegistry.ts`, `src/context/FinanceContext.tsx`
 (`DEFAULT_ASSETS` ~line 584 through `DEFAULT_PENSION`, `PAYLOAD_REGISTRY` ~line 659),
 `mcp/tools/write.ts`.
+
+## MCP server is not type-checked in CI
+
+**What:** `npx tsc -b` only covers `tsconfig.app.json` and `tsconfig.node.json`, so `mcp/` is never
+type-checked. `npx tsc -p mcp/tsconfig.json --noEmit` reports errors on main: `mcp/fixture.ts` is
+missing required `Assets`/`Pension` fields and sets `skattefradragssats`, which no longer exists on
+`LoanData`/`HomeownerData`. `mcp/derive.ts` reads `homeowner.skattefradragssats` in `overview` and
+`whatIfPrepayVsInvest`, so those two always fall back to 22.
+**Why deferred:** found while adding the MCP read tools; fixing the fixture types touches every MCP
+test and is separate from that work.
+**Unblock:** fix the fixture and the two `skattefradragssats` reads, then add `mcp/tsconfig.json` to
+the CI type-check step (or as a reference in the root `tsconfig.json`).
+**Where:** `mcp/tsconfig.json`, `mcp/fixture.ts`, `mcp/derive.ts`, `.github/workflows/`.
