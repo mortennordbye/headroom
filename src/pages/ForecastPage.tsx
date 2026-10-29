@@ -20,6 +20,7 @@ import { projectForecast, type EffectiveScenario, type ForecastScenario, type Fo
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
+import { myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
 import { latestInflationPct } from '../lib/inflation';
 import { formatAxisInt } from '../lib/format';
@@ -150,7 +151,10 @@ const ForecastPage: React.FC = () => {
   // transitioning use the `loan` planning inputs. Otherwise a homeowner's tile
   // would forecast a hypothetical first-buyer loan instead of their actual one.
   const isHomeowner = housingMode === 'homeowner';
-  const startingMortgage = (isHomeowner ? homeowner.currentMortgageBalance : loan.laanebelop) ?? 0;
+  // A personal forecast: the user's share of a joint mortgage and home. The
+  // planned loan (other modes) stays full until co-buyers are modelled.
+  const shares = ownershipShares(assets);
+  const startingMortgage = (isHomeowner ? homeowner.currentMortgageBalance * shares.debt : loan.laanebelop) ?? 0;
   const mortgageRatePct = (isHomeowner ? homeowner.rente : loan.rente) ?? 5;
   const mortgageTermYears = (isHomeowner ? paymentTermMonths(homeowner) / 12 : loan.nedbetalingstid) ?? 25;
   // Annual mortgage payment = 12 × the shared monthly annuity, so the forecast
@@ -167,12 +171,13 @@ const ForecastPage: React.FC = () => {
     ipsAnnualContribution: pension.ipsAnnualContribution,
     startYear: new Date().getFullYear(),
     // Composition — used only to estimate the yearly wealth-tax drag.
-    startHomeValue: assets.houseValue,
+    startHomeValue: myHouseValue(assets),
+    homeOwnShare: shares.own,
     houseGrowthPct: houseGrowthRate,
     startShares: netInvestment,
     startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
     nonMortgageDebt: totalDebt,
-  }), [currentGross, totalEquity, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution, assets, houseGrowthRate, netInvestment, netCrypto, totalDebt]);
+  }), [currentGross, totalEquity, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, totalDebt]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),

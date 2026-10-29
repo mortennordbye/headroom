@@ -13,6 +13,7 @@ import type {
   Pension,
 } from '../src/context/FinanceContext';
 import { computeEquityBreakdown, sumSavings } from '../src/lib/equity';
+import { activeCoOwners, myHouseDebt, myHouseValue, myPrimaryHomeWealthValue, ownershipShares } from '../src/lib/ownership';
 import { ageFromBirthDate } from '../src/lib/date';
 import {
   calcDebtToIncome,
@@ -115,7 +116,9 @@ export function annualMortgageInterest(blob: ExportPayload): number {
   const rate = homeowner ? blob.homeowner?.rente : blob.loan?.rente;
   const term = homeowner ? paymentTermMonths(blob.homeowner) / 12 : blob.loan?.nedbetalingstid;
   if (!(balance! > 0) || !(rate! > 0) || !(term! > 0)) return 0;
-  return calcAmortizationSchedule(balance!, rate!, term!)[0]?.interestPaid ?? 0;
+  const interest = calcAmortizationSchedule(balance!, rate!, term!)[0]?.interestPaid ?? 0;
+  // Rentefradrag follows the user's share of a joint loan (homeowner only).
+  return homeowner ? interest * ownershipShares(blob.assets).debt : interest;
 }
 
 /** BSU tax credit for the year. Mirrors the credit inside FinanceContext `derivedNetMonthlyFor`. */
@@ -252,10 +255,14 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
   const nonMortgageDebt = totalNonMortgageDebt(blob);
   const breakdown = computeEquityBreakdown(blob.assets);
   // DTI includes the mortgage and counts revolving lines at their full credit
-  // frame (capacityDebt), mirroring DashboardPage.tsx.
-  const dti = calcDebtToIncome(blob.assets.houseDebt + lendingDebtTotal(blob.debts ?? []), gross);
+  // frame (capacityDebt), mirroring DashboardPage.tsx: the headline uses the
+  // user's share of a joint mortgage, `dtiFullLoan` the whole loan (the bank's view).
+  const shares = ownershipShares(blob.assets, monthKey);
+  const myDebt = myHouseDebt(blob.assets, monthKey);
+  const dti = calcDebtToIncome(myDebt + lendingDebtTotal(blob.debts ?? []), gross);
+  const dtiFullLoan = calcDebtToIncome(blob.assets.houseDebt + lendingDebtTotal(blob.debts ?? []), gross);
   const hasMortgage = blob.assets.houseDebt > 0;
-  const mortgage = hasMortgage
+  const mortgageStatus = hasMortgage
     ? calcHomeownerMortgageStatus(
         blob.homeowner?.currentMortgageBalance ?? blob.assets.houseDebt,
         blob.homeowner?.originalLoanAmount ?? blob.assets.houseDebt,
@@ -263,6 +270,9 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
         blob.homeowner ? paymentTermMonths(blob.homeowner) / 12 : blob.loan?.nedbetalingstid ?? 0,
         RENTEFRADRAG_RATE_PCT,
       )
+    : null;
+  const mortgage = mortgageStatus
+    ? { ...mortgageStatus, annualTaxDeduction: mortgageStatus.annualTaxDeduction * shares.debt }
     : null;
   const currentJob = (blob.jobs ?? []).find((j) => !j.endDate);
   return {
@@ -290,9 +300,12 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
     equityBreakdown: breakdown,
     debt: {
       nonMortgage: Math.round(nonMortgageDebt),
-      mortgage: Math.round(blob.assets.houseDebt),
+      // The user's share of the mortgage; mortgageFullLoan is the whole joint loan.
+      mortgage: Math.round(myDebt),
+      mortgageFullLoan: Math.round(blob.assets.houseDebt),
       studentLoan: Math.round(sumDebtByType(blob.debts ?? [], 'student')),
       debtToIncome: dti,
+      debtToIncomeFullLoan: dtiFullLoan,
     },
     mortgage,
   };
@@ -774,18 +787,22 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
   };
   const m = activeMortgage(blob, monthKey);
   const eq = computeEquityBreakdown(blob.assets);
+  // Mirrors ForecastPage: the user's share of a joint mortgage (homeowner) and home.
+  const shares = ownershipShares(blob.assets);
+  const startingMortgage = (blob.housingMode ?? 'first_buyer') === 'homeowner' ? m.balance * shares.debt : m.balance;
   const rows = projectForecast(
     {
       currentGross,
       totalEquity: eq.totalEquity,
-      startingMortgage: m.balance,
+      startingMortgage,
       mortgageRatePct: m.ratePct,
-      annualMortgagePayment: calcMonthlyPayment(m.balance, m.ratePct, m.termYears) * 12,
+      annualMortgagePayment: calcMonthlyPayment(startingMortgage, m.ratePct, m.termYears) * 12,
       region: blob.region ?? 'no',
       customTaxRatePct: customTaxRate(blob),
       ipsAnnualContribution: blob.pension?.ipsAnnualContribution ?? 0,
       startYear: yearOf(monthKey),
-      startHomeValue: blob.assets.houseValue,
+      startHomeValue: myHouseValue(blob.assets),
+      homeOwnShare: shares.own,
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,
       startOtherAssets: eq.netCrypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
@@ -808,6 +825,17 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
   const schedule = m.balance > 0 && m.termYears > 0 ? calcAmortizationSchedule(m.balance, m.ratePct, m.termYears) : [];
   const houseValue = blob.assets.houseValue;
   const monthlyFee = housingMode === 'homeowner' ? blob.homeowner?.termingebyr ?? 0 : blob.loan?.termingebyr ?? 0;
+  const monthlyPayment = calcMonthlyPayment(m.balance, m.ratePct, m.termYears) + monthlyFee;
+  const shares = ownershipShares(blob.assets, monthKey);
+  const status = housingMode === 'homeowner' && blob.homeowner
+    ? calcHomeownerMortgageStatus(
+        blob.homeowner.currentMortgageBalance,
+        blob.homeowner.originalLoanAmount,
+        blob.homeowner.rente,
+        paymentTermMonths(blob.homeowner) / 12,
+        RENTEFRADRAG_RATE_PCT,
+      )
+    : null;
   return {
     monthKey,
     housingMode,
@@ -821,16 +849,18 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
     remainingMonths: m.remainingMonths,
     remainingTerm: { years: remaining.years, months: remaining.months },
     payoffMonth: housingMode === 'homeowner' ? timeline?.payoffDate ?? null : null,
-    monthlyPayment: Math.round(calcMonthlyPayment(m.balance, m.ratePct, m.termYears) + monthlyFee),
-    status: housingMode === 'homeowner' && blob.homeowner
-      ? calcHomeownerMortgageStatus(
-          blob.homeowner.currentMortgageBalance,
-          blob.homeowner.originalLoanAmount,
-          blob.homeowner.rente,
-          paymentTermMonths(blob.homeowner) / 12,
-          RENTEFRADRAG_RATE_PCT,
-        )
-      : null,
+    // Balance, payment and LTV are the whole property's (the bank's view). The
+    // ownership block is the user's share; rentefradrag follows the loan share.
+    monthlyPayment: Math.round(monthlyPayment),
+    ownership: {
+      ownershipPct: Math.round(shares.own * 1000) / 10,
+      debtSharePct: Math.round(shares.debt * 1000) / 10,
+      coOwners: activeCoOwners(blob.assets.coOwners, monthKey),
+      myHouseValue: Math.round(myHouseValue(blob.assets, monthKey)),
+      myHouseDebt: Math.round(myHouseDebt(blob.assets, monthKey)),
+      myMonthlyPayment: housingMode === 'homeowner' ? Math.round(monthlyPayment * shares.debt) : null,
+    },
+    status: status ? { ...status, annualTaxDeduction: status.annualTaxDeduction * shares.debt } : null,
     notifiedRate: blob.homeowner?.notifiedRate != null
       ? { ratePct: blob.homeowner.notifiedRate, from: blob.homeowner.notifiedRateFrom ?? null }
       : null,
@@ -933,10 +963,10 @@ export function assetsAndDebts(blob: ExportPayload) {
     // Formuesskatt estimate as AssetPage shows it (Norway only).
     wealthTax: (blob.region ?? 'no') === 'no'
       ? calcWealthTax({
-          primaryHomeValue: blob.assets.houseValue,
+          primaryHomeValue: myPrimaryHomeWealthValue(blob.assets),
           shares: blob.assets.portfolio,
           otherAssets: blob.assets.crypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
-          debt: blob.assets.houseDebt + nonMortgageDebt,
+          debt: myHouseDebt(blob.assets) + nonMortgageDebt,
         })
       : null,
     recentSnapshots: snapshots.map((m) => ({ month: m, netWorth: netWorthFromSnapshot(blob.balanceSnapshots![m]) })),

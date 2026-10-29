@@ -72,6 +72,7 @@ const canonicalAssets: Assets = {
   portfolio: 111, unrealizedGain: 222, shieldingDeduction: 123, taxRate: 30, bsu: 333, bsuAnnualContribution: 0, savings: 0,
   savingsAccounts: [{ id: 'sav-1', name: 'Sparekonto', balance: 444 }],
   houseValue: 555, houseDebt: 666, crypto: 777, cryptoUnrealizedGain: 888, cryptoTaxRate: 20, bufferAccount: 999,
+  coOwners: [{ id: 'coo-1', name: 'Medeier 1', ownershipPct: 50, debtSharePct: 40, since: '2024-03', until: '2026-01' }],
 };
 const canonicalLoan: LoanData = {
   arslonn: 700000, eksisterendeGjeld: 1, egenkapital: 400000, laanebelop: 2500000, rente: 4.5, nedbetalingstid: 20,

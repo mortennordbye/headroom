@@ -315,6 +315,37 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(later.status?.annualTaxDeduction).toBe(now.status?.annualTaxDeduction);
   });
 
+  it('mortgage: a 50 % co-owner halves my share, not the loan or its LTV', () => {
+    const b = fullFixture();
+    const solo = derive.mortgage(b, MONTH);
+    b.assets.coOwners = [{ id: 'coo-1', name: 'Samboer', ownershipPct: 50, since: '2026-01' }];
+    const m = derive.mortgage(b, MONTH);
+    expect(m.balance).toBe(solo.balance);
+    expect(m.monthlyPayment).toBe(solo.monthlyPayment);
+    expect(m.loanToValuePct).toBe(solo.loanToValuePct);
+    expect(m.ownership).toMatchObject({ ownershipPct: 50, debtSharePct: 50 });
+    expect(m.ownership.myHouseDebt).toBe(Math.round(b.assets.houseDebt / 2));
+    expect(m.ownership.myHouseValue).toBe(Math.round(b.assets.houseValue / 2));
+    expect(m.ownership.myMonthlyPayment).toBe(Math.round((solo.monthlyPayment) / 2));
+    expect(m.status!.annualTaxDeduction).toBeCloseTo(solo.status!.annualTaxDeduction / 2, 6);
+    // Before `since` the user owned it alone.
+    expect(derive.mortgage(b, '2025-12').ownership.ownershipPct).toBe(100);
+
+    const o = derive.overview(b, MONTH);
+    expect(o.debt.mortgage).toBe(Math.round(b.assets.houseDebt / 2));
+    expect(o.debt.mortgageFullLoan).toBe(b.assets.houseDebt);
+    expect(o.debt.debtToIncome.ratio).toBeLessThan(o.debt.debtToIncomeFullLoan.ratio);
+  });
+
+  it('no co-owners: every number matches the solo figures', () => {
+    const b = fullFixture();
+    const before = { o: derive.overview(b, MONTH), f: derive.forecast(b, {}, MONTH), a: derive.assetsAndDebts(b) };
+    b.assets.coOwners = [];
+    expect(derive.overview(b, MONTH)).toEqual(before.o);
+    expect(derive.forecast(b, {}, MONTH)).toEqual(before.f);
+    expect(derive.assetsAndDebts(b).wealthTax).toEqual(before.a.wealthTax);
+  });
+
   it('mortgage: outside homeowner mode the loan is a plan, with no LTV or residence metrics', () => {
     const b = fullFixture();
     b.housingMode = 'transitioning';

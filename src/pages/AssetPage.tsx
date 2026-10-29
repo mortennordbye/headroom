@@ -38,6 +38,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors'
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { SavingsAllocationPanel } from '../components/SavingsAllocationPanel';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
+import { activeCoOwners, myHouseDebt, myHouseValue, myPrimaryHomeWealthValue, ownershipShares } from '../lib/ownership';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
 import { calcWealthTax, TAX_YEAR } from '../lib/norwegianTax';
@@ -129,20 +130,25 @@ const AssetPage: React.FC = () => {
   );
   // True net worth also nets out non-mortgage debts (studielån, forbrukslån, …).
   const netWorth = totalEquity - totalDebt;
+  // The user's share of a co-owned home (full amounts with no co-owners).
+  const shares = ownershipShares(assets);
+  const hasCoOwners = activeCoOwners(assets.coOwners).length > 0;
+  const myValue = myHouseValue(assets);
+  const myDebt = myHouseDebt(assets);
   // Norwegian wealth tax (formuesskatt): primary home at 25%/70%, shares at 80%,
   // deposits/crypto/BSU/buffer at full value, minus all debt. Norway region only.
   const wealthTax = useMemo(
     () => calcWealthTax({
-      primaryHomeValue: assets.houseValue,
+      primaryHomeValue: myPrimaryHomeWealthValue(assets),
       shares: assets.portfolio,
       otherAssets: assets.crypto + assets.bsu + sumSavings(assets) + assets.bufferAccount,
-      debt: assets.houseDebt + totalDebt,
+      debt: myDebt + totalDebt,
     }),
-    [assets, totalDebt],
+    [assets, myDebt, totalDebt],
   );
   // Summary "liabilities" figure: mortgage + other debt + net latent tax. Latent
   // tax can be negative (an unrealized-loss tax shield), so this can flip sign.
-  const liabilitiesTotal = assets.houseDebt + taxOnGain + cryptoTaxOnGain + totalDebt;
+  const liabilitiesTotal = myDebt + taxOnGain + cryptoTaxOnGain + totalDebt;
 
     const [modal, setModal] = useState<ModalConfig | null>(null);
     const openModal = (config: ModalConfig) => setModal(config);
@@ -227,14 +233,16 @@ const AssetPage: React.FC = () => {
   const bsuOwnsHome = housingMode !== 'first_buyer';
   const bsuCredit = calcBsuTaxCredit(assets.bsuAnnualContribution, { age: bsuAge, ownsHome: bsuOwnsHome });
   const bsuHasContribution = assets.bsuAnnualContribution > 0;
+  // Projected on the user's share: amortization is linear in the principal, so
+  // scaling the inputs is exact.
   const houseByYear = useMemo(
-    () => calcHouseEquityByYear(assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm, 15),
-    [assets.houseValue, assets.houseDebt, projHouseGrowth, projMortgageRate, projMortgageTerm]
+    () => calcHouseEquityByYear(myValue, myDebt, projHouseGrowth, projMortgageRate, projMortgageTerm, 15),
+    [myValue, myDebt, projHouseGrowth, projMortgageRate, projMortgageTerm]
   );
   const debtByYear = useMemo(() => calcDebtBalanceByYear(debts, 15, currentMonthKey()), [debts]);
   const mortgageBalances = useMemo(
-    () => calcMortgageBalanceByYear(assets.houseDebt, projMortgageRate, projMortgageTerm, 15),
-    [assets.houseDebt, projMortgageRate, projMortgageTerm],
+    () => calcMortgageBalanceByYear(myDebt, projMortgageRate, projMortgageTerm, 15),
+    [myDebt, projMortgageRate, projMortgageTerm],
   );
   const projectionData = useMemo(
     () => calcNetWorthProjectionByBucket(
@@ -244,9 +252,9 @@ const AssetPage: React.FC = () => {
       15,
       houseByYear,
       debtByYear,
-      { mortgageByYear: mortgageBalances, region },
+      { mortgageByYear: mortgageBalances, region, ownShare: shares.own },
     ),
-    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, projGrowthReturn, cryptoGrowthRate, cashGrowthRate, projHouseGrowth, houseByYear, debtByYear, mortgageBalances, region]
+    [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, projGrowthReturn, cryptoGrowthRate, cashGrowthRate, projHouseGrowth, houseByYear, debtByYear, mortgageBalances, region, shares.own]
   );
 
   const editRate = (label: string, current: number, onCommit: (v: number) => void) => {
@@ -354,6 +362,7 @@ const AssetPage: React.FC = () => {
                 value={assets.houseValue}
                 onEdit={() => openAssetEdit(t.houseValue, assets.houseValue, 'houseValue')}
                 formatCurrency={formatCurrency}
+                badge={hasCoOwners ? <ShareNote label={t.ownership.yourShare} value={formatCurrency(Math.round(myValue))} /> : undefined}
               />
               <AssetRow
                 label={t.houseDebt}
@@ -361,6 +370,7 @@ const AssetPage: React.FC = () => {
                 onEdit={() => openAssetEdit(t.houseDebt, assets.houseDebt, 'houseDebt')}
                 formatCurrency={formatCurrency}
                 isNegative
+                badge={hasCoOwners ? <ShareNote label={t.ownership.yourShare} value={formatCurrency(Math.round(myDebt))} /> : undefined}
               />
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)] border-t border-[var(--border)] mt-1">
                 <span>{t.propertyEquity}</span>
@@ -548,7 +558,7 @@ const AssetPage: React.FC = () => {
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-2)' }}>{t.grossAssets}</span>
                   <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                    {formatCurrency(assets.portfolio + assets.crypto + assets.houseValue + assets.bsu + sumSavings(assets) + assets.bufferAccount)}
+                    {formatCurrency(assets.portfolio + assets.crypto + myValue + assets.bsu + sumSavings(assets) + assets.bufferAccount)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -792,6 +802,10 @@ const AssetPage: React.FC = () => {
     </>
   );
 };
+
+function ShareNote({ label, value }: { label: string; value: string }) {
+  return <span className="text-[11px] font-normal text-[var(--text-3)] whitespace-nowrap">· {label} {value}</span>;
+}
 
 interface AssetRowProps {
   label: string;

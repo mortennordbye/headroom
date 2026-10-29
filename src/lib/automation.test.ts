@@ -195,6 +195,41 @@ describe('computeAutomationPostings — amortization-aware paydown', () => {
   });
 });
 
+describe('computeAutomationPostings — co-owned mortgage scope', () => {
+  const m = (over: Partial<AutomationRule> = {}) =>
+    rule({ id: 'm1', targetKind: 'mortgage', savingsAccountId: undefined, amount: 5000, lastPostedMonth: '2026-06', ...over });
+  // 1 000 000 at 5 %: one month's interest is 4 166.67.
+
+  it("'whole' (and absent) pays the amount as-is, whatever the share", () => {
+    const s = state({ mortgageDebtShare: 0.5 });
+    const [whole] = computeAutomationPostings([m({ mortgagePaymentScope: 'whole' })], s, '2026-07');
+    const [absent] = computeAutomationPostings([m()], s, '2026-07');
+    expect(whole.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 5000));
+    expect(absent.newBalance).toBe(whole.newBalance);
+  });
+
+  it("'myShare' grosses the amount up by the debt share", () => {
+    const [p] = computeAutomationPostings([m({ mortgagePaymentScope: 'myShare' })], state({ mortgageDebtShare: 0.5 }), '2026-07');
+    expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 10_000));
+  });
+
+  it("'myShare' with no co-owners (share absent) pays the amount as-is", () => {
+    const [p] = computeAutomationPostings([m({ mortgagePaymentScope: 'myShare' })], state(), '2026-07');
+    expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 5000));
+  });
+
+  it("skips a 'myShare' rule when the user carries none of the loan", () => {
+    expect(computeAutomationPostings([m({ mortgagePaymentScope: 'myShare' })], state({ mortgageDebtShare: 0 }), '2026-07'))
+      .toHaveLength(0);
+  });
+
+  it('never grosses up a savings rule aimed at the mortgage (an extra payment)', () => {
+    // Saving rules carry no scope, so the debt share doesn't touch them.
+    const [p] = computeAutomationPostings([m({ id: 'sv1' })], state({ mortgageDebtShare: 0.25 }), '2026-07');
+    expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 5000));
+  });
+});
+
 describe('computeAutomationPostings — mixed batch', () => {
   it('resolves several rules in one call', () => {
     const savings = rule({ id: 's1', lastPostedMonth: '2026-06' });

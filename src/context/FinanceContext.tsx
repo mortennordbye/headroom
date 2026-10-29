@@ -12,6 +12,7 @@ import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculatio
 import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, capSavingsToTotal } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
+import { ownershipShares, rewriteSnapshotCoOwners, snapshotCoOwners } from '../lib/ownership';
 import { markGainReview } from '../lib/gainReview';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
@@ -103,6 +104,9 @@ export interface FixedExpense {
    */
   destinationKind?: ExpenseDestinationKind;
   debtId?: string;             // set iff destinationKind === 'debt'
+  /** Mortgage destination with co-owners: whether `amount` is the whole joint
+   *  instalment or the user's share of it. Absent = 'whole'. */
+  mortgagePaymentScope?: 'whole' | 'myShare';
   /**
    * Pause this expense's automation without losing its destination config: the
    * expense keeps its budget line, but stops moving the balance. Resuming
@@ -294,6 +298,19 @@ export interface PendingCatchup {
   infeasible: boolean;
 }
 
+export interface CoOwner {
+  id: string;
+  name: string;
+  /** 0-100 of the property. */
+  ownershipPct: number;
+  /** 0-100 of the joint loan, as in the tax return. Absent = follows ownershipPct. */
+  debtSharePct?: number;
+  /** 'YYYY-MM' first month as co-owner. Absent = always. */
+  since?: string;
+  /** 'YYYY-MM' last month as co-owner (sold their share / moved out). */
+  until?: string;
+}
+
 export interface Assets {
   portfolio: number;
   unrealizedGain: number;
@@ -315,6 +332,10 @@ export interface Assets {
   savingsAccounts?: SavingsAccount[];
   houseValue: number;
   houseDebt: number;
+  /** Other owners of the current home. houseValue/houseDebt stay the full
+   *  property and loan; the user's share is derived (src/lib/ownership.ts).
+   *  Absent or [] = the user owns 100 % and carries 100 % of the loan. */
+  coOwners?: CoOwner[];
   crypto: number;
   cryptoUnrealizedGain: number;
   cryptoTaxRate: number;
@@ -602,6 +623,7 @@ const DEFAULT_ASSETS: Assets = {
   savingsAccounts: [],
   houseValue: 0,
   houseDebt: 0,
+  coOwners: [],
   crypto: 0,
   cryptoUnrealizedGain: 0,
   cryptoTaxRate: DEFAULT_TAX_RATES.cryptoTaxRate,
@@ -875,6 +897,9 @@ interface FinanceDataContextType {
   addSavingsAccount: (name: string, balance: number) => void;
   updateSavingsAccount: (id: string, patch: Partial<Omit<SavingsAccount, 'id'>>) => void;
   removeSavingsAccount: (id: string) => void;
+  /** Replace the co-owner list (validate with validateCoOwners first) and
+   *  rewrite every stored snapshot's share to match. */
+  setCoOwners: (list: CoOwner[]) => void;
   loan: LoanData;
   updateLoan: (key: keyof LoanData, value: number | string) => void;
   pension: Pension;
@@ -1887,8 +1912,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const rate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
     const term = housingMode === 'homeowner' ? paymentTermMonths(homeowner) / 12 : loan.nedbetalingstid;
     if (!(balance > 0) || !(rate > 0) || !(term > 0)) return 0;
-    return calcAmortizationSchedule(balance, rate, term)[0]?.interestPaid ?? 0;
-  }, [housingMode, homeowner, loan.laanebelop, loan.rente, loan.nedbetalingstid]);
+    const interest = calcAmortizationSchedule(balance, rate, term)[0]?.interestPaid ?? 0;
+    // Rentefradrag follows the user's share of a joint loan. The planned loan
+    // (non-homeowner modes) stays full until co-buyers are modelled.
+    return housingMode === 'homeowner' ? interest * ownershipShares({ coOwners: assets.coOwners }).debt : interest;
+  }, [housingMode, homeowner, loan.laanebelop, loan.rente, loan.nedbetalingstid, assets.coOwners]);
 
   // Net monthly income derived from the salary system for an arbitrary month
   // (falls back to the legacy static `income` when no salaries exist).
@@ -2278,7 +2306,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // forward (see `useBalanceHistory`). One memo so the two can never disagree
   // about which fields make up "the balance state".
   const liveBalanceSnapshot = useMemo<BalanceSnapshot>(() => ({
-    assets, loan, pension, homeowner, transition, housingMode, debts,
+    // Snapshot rows carry no since/until: they are the co-owners in force that month.
+    assets: { ...assets, coOwners: snapshotCoOwners(assets.coOwners, currentMonthKey()) },
+    loan, pension, homeowner, transition, housingMode, debts,
     v: 3,
     fixedExpenses,
     savings,
@@ -2337,6 +2367,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [savingsCrud]);
   const updateSavingsAccount = savingsCrud.update;
   const removeSavingsAccount = savingsCrud.remove;
+
+  // Co-owners are edited as a whole list (the shares must validate together).
+  // Each change rewrites the stored snapshots from each row's since/until, so
+  // history shows the share in force that month rather than a step today.
+  const setCoOwners = useCallback((list: CoOwner[]) => {
+    setAssets(prev => ({ ...prev, coOwners: list }));
+    setBalanceSnapshots(prev => rewriteSnapshotCoOwners(prev, list));
+  }, []);
 
   const updateLoan = useCallback((key: keyof LoanData, value: number | string) => {
     setLoan(prev => ({ ...prev, [key]: value }));
@@ -2544,6 +2582,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         amount: e.amount,
         targetKind: e.destinationKind!,
         debtId: e.debtId,
+        mortgagePaymentScope: e.mortgagePaymentScope,
         startMonth: addMonthsKey(nowKey, 1),
         lastPostedMonth: e.lastPostedMonth,
       }));
@@ -2579,9 +2618,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     },
     mortgage: assets.houseDebt,
     mortgageRate: housingMode === 'homeowner' ? homeowner.rente : loan.rente,
+    mortgageDebtShare: ownershipShares({ coOwners: assets.coOwners }).debt,
     debts: Object.fromEntries(debts.map(d => [d.id, { balance: d.balance, rate: d.rate }])),
     housingMode,
-  }), [assets.savingsAccounts, assets.bufferAccount, assets.portfolio, assets.bsu, assets.houseDebt,
+  }), [assets.savingsAccounts, assets.bufferAccount, assets.portfolio, assets.bsu, assets.houseDebt, assets.coOwners,
       pension.otpBalance, pension.ipsBalance, housingMode, homeowner.rente, loan.rente, debts]);
 
   // Apply a resolved posting's absolute new balance to the right slice. Debt
@@ -3150,7 +3190,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget,
     recurringTemplates, setRecurringTemplates,
-    assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
+    assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount, setCoOwners,
     loan, updateLoan, pension, updatePension,
     housingMode, setHousingMode: changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,
@@ -3183,7 +3223,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     transferRules, addTransferRule, removeTransferRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget, recurringTemplates,
-    assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount,
+    assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount, setCoOwners,
     loan, updateLoan, pension, updatePension, housingMode,
     changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,

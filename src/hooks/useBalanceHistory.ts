@@ -5,6 +5,7 @@ import {
   resolveMonthView, buildManualSnapshot, snapshotBalances, type MonthMode,
 } from '../lib/snapshots';
 import { projectSnapshotBalances, type ProjectionRates } from '../lib/projectBalances';
+import { snapshotCoOwners } from '../lib/ownership';
 
 export interface BalanceHistory {
   /** The month being shown ('yyyy-MM'). For a past month the freely-picked header
@@ -37,7 +38,7 @@ export interface BalanceHistory {
  */
 export function useBalanceHistory(): BalanceHistory {
   const {
-    balanceSnapshots, liveBalanceSnapshot, automationRules, automationState,
+    balanceSnapshots, liveBalanceSnapshot, automationRules, automationState, assets,
   } = useFinance();
   const {
     currentMonth, projectionIncludeGrowth,
@@ -71,8 +72,9 @@ export function useBalanceHistory(): BalanceHistory {
     return buildManualSnapshot(
       liveBalanceSnapshot,
       projectSnapshotBalances(base, automationRules, automationState, activeKey, nowKey, rates),
+      snapshotCoOwners(assets.coOwners, activeKey),
     );
-  }, [mode, liveBalanceSnapshot, automationRules, automationState, activeKey, nowKey, rates,
+  }, [mode, liveBalanceSnapshot, automationRules, automationState, activeKey, nowKey, rates, assets.coOwners,
       savingsTargetPercent, growthReturnRate, houseGrowthRate]);
 
   return {

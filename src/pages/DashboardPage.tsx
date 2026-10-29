@@ -36,6 +36,7 @@ import { CHART } from '../lib/chartColors';
 import { netWorthSeriesFrom } from '../lib/netWorth';
 import { lastNMonthKeys, currentMonthKey } from '../lib/date';
 import { sumSavings } from '../lib/equity';
+import { activeCoOwners, myHouseDebt, myHouseValue, ownershipShares } from '../lib/ownership';
 import { sumDiscretionarySpent } from '../lib/spentTotals';
 import { formatSignedPct } from '../lib/format';
 import { incomeDiffPct } from '../lib/income';
@@ -157,7 +158,12 @@ const DashboardPage: React.FC = () => {
   const recommendedBufferTarget = bufferGoal?.target ?? Math.round(assets.bufferAccount + emergencyFund.shortfallToMin);
   // Gjeldsgrad counts the full granted credit frame (capacityDebt), not the drawn
   // balance — a card's limit reduces borrowing headroom even when it's paid off.
-  const debtToIncome = calcDebtToIncome(assets.houseDebt + capacityDebt, grossAnnualIncome);
+  // Headline uses the user's share of a joint mortgage; the bank's view (whole
+  // loan, joint liability) is shown beside it when there are co-owners.
+  const myDebt = myHouseDebt(assets);
+  const hasCoOwners = activeCoOwners(assets.coOwners).length > 0;
+  const debtToIncome = calcDebtToIncome(myDebt + capacityDebt, grossAnnualIncome);
+  const debtToIncomeFullLoan = calcDebtToIncome(assets.houseDebt + capacityDebt, grossAnnualIncome);
 
   // ─── How many market assumptions are still on their default value ───
   // Surfaced as a nudge so the user knows their projections rest on untuned defaults.
@@ -199,7 +205,9 @@ const DashboardPage: React.FC = () => {
   const cashStart = sumSavings(assets) + assets.bsu + assets.bufferAccount;
   const projectionRates = { stocks: growthReturnRate, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: houseGrowthRate };
   const projectionStart = { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity };
-  const houseByYear = calcHouseEquityByYear(assets.houseValue, assets.houseDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15);
+  const myValue = myHouseValue(assets);
+  const ownShare = ownershipShares(assets).own;
+  const houseByYear = calcHouseEquityByYear(myValue, myDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15);
 
   // ─── Assets ───
   const assetRows = useMemo(() => [
@@ -285,10 +293,10 @@ const DashboardPage: React.FC = () => {
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
     const debtByYear = calcDebtBalanceByYear(debts, 15, currentMonthKey());
-    const mortgageByYear = calcMortgageBalanceByYear(assets.houseDebt, mortgageRate, mortgageTermYears, 15);
-    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear, debtByYear, { mortgageByYear, region });
+    const mortgageByYear = calcMortgageBalanceByYear(myDebt, mortgageRate, mortgageTermYears, 15);
+    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear, debtByYear, { mortgageByYear, region, ownShare });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, assets.houseValue, assets.houseDebt, mortgageRate, mortgageTermYears, debts, region]);
+  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, myDebt, ownShare, mortgageRate, mortgageTermYears, debts, region]);
 
   const projectionEndYear = projection15y[projection15y.length - 1]?.year;
   const projectionEndValue = projection15y[projection15y.length - 1]?.total ?? 0;
@@ -888,8 +896,13 @@ const DashboardPage: React.FC = () => {
                     {debtToIncome.ratio.toFixed(1)}× / {debtToIncome.cap}×
                   </div>
                   <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                    {formatCurrency(assets.houseDebt + capacityDebt)} {t.dashboardPage.debtWord} · {t.dashboardPage.gross} {formatCurrency(grossAnnualIncome)}
+                    {formatCurrency(myDebt + capacityDebt)} {t.dashboardPage.debtWord} · {t.dashboardPage.gross} {formatCurrency(grossAnnualIncome)}
                   </div>
+                  {hasCoOwners && (
+                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                      {t.ownership.bankSees.replace('{x}', debtToIncomeFullLoan.ratio.toFixed(1))}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -917,9 +930,10 @@ const DashboardPage: React.FC = () => {
                 className="mt-4"
               />
               <div className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
-                {debtToIncome.status === 'high'
+                {/* Room left under the 5× rule is the bank's view: the whole joint loan. */}
+                {debtToIncomeFullLoan.status === 'high'
                   ? t.dashboardPage.aboveCapText
-                  : `${formatCurrency(debtToIncome.borrowingHeadroom)} ${t.dashboardPage.headroomPrefix} ${debtToIncome.cap}${t.dashboardPage.capSuffix}`}
+                  : `${formatCurrency(debtToIncomeFullLoan.borrowingHeadroom)} ${t.dashboardPage.headroomPrefix} ${debtToIncomeFullLoan.cap}${t.dashboardPage.capSuffix}`}
               </div>
             </>
           )}

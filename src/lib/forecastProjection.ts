@@ -3,6 +3,7 @@
 // unit-testable. Pure. Compounds salary (raise), net (tax), net worth (return +
 // savings contribution) and mortgage paydown one year at a time.
 import { calcTaxByRegion, calcWealthTax, type Region } from './norwegianTax';
+import { primaryHomeWealthValueOfShare } from './ownership';
 
 /** One saved forecast scenario. Each assumption is null until the user drags its
  *  slider, so the page can keep seeding it from live data until then. */
@@ -62,6 +63,10 @@ export interface ForecastInputs {
    * can be applied. Wealth tax is skipped entirely outside the Norwegian region.
    */
   startHomeValue: number;
+  /** The user's ownership share (0..1) when `startHomeValue` / `startingMortgage`
+   *  are their share of a co-owned home, so the wealth-tax threshold applies to
+   *  the whole home. Default 1. */
+  homeOwnShare?: number;
   houseGrowthPct: number;
   startShares: number;
   startOtherAssets: number;
@@ -91,7 +96,7 @@ export interface ForecastRow {
 export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): ForecastRow[] {
   const { currentGross, totalEquity, startingMortgage, mortgageRatePct, annualMortgagePayment,
     region, customTaxRatePct, ipsAnnualContribution, startYear,
-    startHomeValue, houseGrowthPct, startShares, startOtherAssets, nonMortgageDebt } = inputs;
+    startHomeValue, houseGrowthPct, startShares, startOtherAssets, nonMortgageDebt, homeOwnShare = 1 } = inputs;
   const mortgageRate = mortgageRatePct / 100;
   const financialBase = Math.max(0, startShares + startOtherAssets);
   const sharesRatio = financialBase > 0 ? Math.max(0, startShares) / financialBase : 0;
@@ -138,7 +143,7 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
       const homeEquity = Math.max(0, homeValue - mortgage);
       const grossFinancial = Math.max(0, netWorth - homeEquity + nonMortgageDebt);
       wealthTaxDue = calcWealthTax({
-        primaryHomeValue: homeValue,
+        primaryHomeValue: primaryHomeWealthValueOfShare(homeValue, homeOwnShare),
         shares: grossFinancial * sharesRatio,
         otherAssets: grossFinancial * (1 - sharesRatio),
         debt: mortgage + nonMortgageDebt,
