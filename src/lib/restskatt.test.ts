@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { restskattEstimate } from './restskatt';
+import { restskattEstimate, restskattStatus } from './restskatt';
 import type { MonthlyPayslip } from '../context/FinanceContext';
 
 const slip = (gross: number, tax: number): MonthlyPayslip => ({
@@ -53,5 +53,15 @@ describe('restskattEstimate', () => {
     const payslips = { '2026-01': slip(50000, 179000 / 12), '2026-02': slip(50000, 179000 / 12) };
     const r = restskattEstimate(payslips, 2026, flatTax(0.3))!;
     expect(r.status).toBe('onTrack');
+  });
+});
+
+describe('restskattStatus', () => {
+  it('ignores gaps under the larger of 2 000 kr and 3% of expected tax', () => {
+    expect(restskattStatus(1999, 10000)).toBe('onTrack');
+    expect(restskattStatus(2001, 10000)).toBe('restskatt');
+    expect(restskattStatus(-2001, 10000)).toBe('refund');
+    expect(restskattStatus(5000, 200000)).toBe('onTrack');
+    expect(restskattStatus(6001, 200000)).toBe('restskatt');
   });
 });

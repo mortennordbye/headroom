@@ -26,6 +26,16 @@ export interface RestskattEstimate {
 }
 
 /**
+ * Classify a tax − withholding gap, ignoring anything under the materiality
+ * threshold (max of a flat floor and a percent of expected tax) so small
+ * timing noise doesn't cry wolf.
+ */
+export function restskattStatus(gap: number, expectedAnnualTax: number, materialityPct = 3): RestskattEstimate['status'] {
+  const threshold = Math.max(2000, (expectedAnnualTax * materialityPct) / 100);
+  return gap > threshold ? 'restskatt' : gap < -threshold ? 'refund' : 'onTrack';
+}
+
+/**
  * `taxForGross` computes the expected annual tax for a gross figure (the caller
  * wires in region + deductions, e.g. `calcTaxByRegion(...).totalTax`). A gap is
  * only flagged past a materiality threshold (max of a flat floor and a percent
@@ -57,9 +67,7 @@ export function restskattEstimate(
   const expectedAnnualTax = Math.max(0, taxForGross(projectedAnnualGross));
   const gap = expectedAnnualTax - projectedAnnualWithholding;
 
-  const threshold = Math.max(2000, (expectedAnnualTax * materialityPct) / 100);
-  const status: RestskattEstimate['status'] =
-    gap > threshold ? 'restskatt' : gap < -threshold ? 'refund' : 'onTrack';
+  const status = restskattStatus(gap, expectedAnnualTax, materialityPct);
 
   return {
     year,

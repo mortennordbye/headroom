@@ -212,6 +212,22 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(s.payslip).toBeNull();
   });
 
+  it('salary & tax: the restskatt estimate counts the BSU credit in expected tax', () => {
+    const withBsu = (contribution: number) => {
+      const b = fullFixture();
+      b.housingMode = 'first_buyer';
+      b.pension = { ...b.pension, birthYear: new Date().getFullYear() - 25 } as ExportPayload['pension'];
+      b.assets = { ...b.assets, bsuAnnualContribution: contribution };
+      b.payslips = {
+        '2026-01': { gross: 60000, tax: 18000, net: 42000, base: 60000 },
+        '2026-02': { gross: 60000, tax: 18000, net: 42000, base: 60000 },
+      };
+      return derive.salaryAndTax(b, '2026-07').restskatt!;
+    };
+    // 10% of a 27 500 kr contribution comes off the year's tax.
+    expect(withBsu(0).expectedAnnualTax - withBsu(27500).expectedAnnualTax).toBeCloseTo(2750, 0);
+  });
+
   it('salary & tax: no salary entries means no invented tax breakdown', () => {
     const b = fullFixture();
     b.salaries = [];

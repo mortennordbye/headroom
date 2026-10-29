@@ -16,6 +16,7 @@ import { ownershipShares, rewriteSnapshotCoOwners, snapshotCoOwners } from '../l
 import { markGainReview } from '../lib/gainReview';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
+import { cardNetForMonth, type TaxCard } from '../lib/forskuddstrekk';
 import { calcBsuTaxCredit } from '../lib/bsu';
 import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
@@ -744,6 +745,9 @@ interface FinanceSettingsContextType {
   setRegion: (r: Region) => void;
   customTaxRatePct: number;
   setCustomTaxRatePct: (v: number) => void;
+  /** The user's skattekort (tax table or percentage), or null when not entered. */
+  taxCard: TaxCard | null;
+  setTaxCard: (c: TaxCard | null) => void;
   /** Free-text notes about the user's plans / long-term goals (AI context). */
   aiContext: string;
   setAiContext: (v: string) => void;
@@ -1045,6 +1049,8 @@ interface FinanceDerivedContextType {
   mortgageRate: number;
   mortgageTermYears: number;
   annualMortgageInterest: number;
+  /** The year's BSU tax credit (10%, under-34, non-homeowner); 0 when not eligible. */
+  bsuTaxCredit: number;
   totalResidual: number;
   /** Everything that leaves free-to-spend every month: the fixed expenses PLUS
    *  the savings transfers. Savings are not consumption, but they do leave the
@@ -1168,6 +1174,7 @@ export interface ExportPayload {
   savingsAllocations?: SavingsAllocation[];
   region?: Region;
   customTaxRatePct?: number;
+  taxCard?: TaxCard | null;
   employerCostConfig?: EmployerCostConfig;
   billingConfig?: BillingRateConfig;
   hiddenNavItems?: string[];
@@ -1315,6 +1322,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [wageStatsStale, setWageStatsStale] = useState<boolean>(false);
   const [region, setRegion] = useState<Region>('no');
   const [customTaxRatePct, setCustomTaxRatePct] = useState<number>(DEFAULT_TAX_RATES.customTaxRatePct);
+  const [taxCard, setTaxCard] = useState<TaxCard | null>(null);
   const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
@@ -1406,7 +1414,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals, savingsAllocations,
-    region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    region, customTaxRatePct, taxCard, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, savingsMonthOverrides, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
@@ -1416,7 +1424,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
-    goals, savingsAllocations, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    goals, savingsAllocations, region, customTaxRatePct, taxCard, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, savingsMonthOverrides, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
@@ -1456,7 +1464,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       customCurrencyRate: setCustomCurrencyRate, jobs: setJobs, salaries: setSalaries, bonuses: setBonuses,
       overtime: setOvertime, hoursSnapshots: setHoursSnapshots, goals: setGoals,
       savingsAllocations: setSavingsAllocations, region: setRegion,
-      customTaxRatePct: setCustomTaxRatePct, employerCostConfig: setEmployerCostConfig,
+      customTaxRatePct: setCustomTaxRatePct, taxCard: setTaxCard, employerCostConfig: setEmployerCostConfig,
       billingConfig: setBillingConfig, hiddenNavItems: setHiddenNavItems,
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
       incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
@@ -1930,15 +1938,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Net monthly income derived from the salary system for an arbitrary month
   // (falls back to the legacy static `income` when no salaries exist).
+  // BSU tax credit (10%, under-34, non-homeowner) reduces the year's tax.
+  const bsuTaxCredit = useMemo(() => calcBsuTaxCredit(assets.bsuAnnualContribution, {
+    age: pension.birthYear > 1900 ? new Date().getFullYear() - pension.birthYear : -1,
+    ownsHome: housingMode !== 'first_buyer',
+  }), [assets.bsuAnnualContribution, pension.birthYear, housingMode]);
+
   const derivedNetMonthlyFor = useCallback((mKey: string): number => {
     if (salaries.length === 0) return income;
     const totalAnnual = calcActiveGrossAnnual(salaries, jobs, mKey);
     if (totalAnnual === 0) return income;
-    // BSU tax credit (10%, under-34, non-homeowner) reduces the year's tax.
-    const bsuCredit = calcBsuTaxCredit(assets.bsuAnnualContribution, {
-      age: pension.birthYear > 1900 ? new Date().getFullYear() - pension.birthYear : -1,
-      ownsHome: housingMode !== 'first_buyer',
-    });
+    const bsuCredit = bsuTaxCredit;
     const baseNetAnnual = calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     // Bonus/overtime entries opted into the budget: fold this month's opted-in
     // gross into the annual gross (so it's taxed at the marginal rate) and deliver
@@ -1946,10 +1956,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const extraGross =
       bonuses.reduce((s, b) => (b.includeInBudget && b.date.startsWith(mKey) ? s + b.amount : s), 0) +
       overtime.reduce((s, o) => (o.includeInBudget && o.date.startsWith(mKey) ? s + o.amount : s), 0);
+    // With a skattekort for this month's year, the budget uses the card's
+    // withholding instead of the modelled annual tax (still a flat figure).
+    const onCard = cardNetForMonth(taxCard, region, mKey, totalAnnual, extraGross, pension.ipsAnnualContribution);
+    if (onCard != null) return onCard;
     if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
     const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));
-  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, assets.bsuAnnualContribution, pension.birthYear, housingMode]);
+  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, bsuTaxCredit, taxCard]);
 
   const derivedMonthlyIncome = useMemo(
     () => derivedNetMonthlyFor(monthKey),
@@ -3155,7 +3169,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     growthReturnRate, setGrowthReturnRate, forecastAssumptions, setForecastAssumptions,
     houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
-    region, setRegion, customTaxRatePct, setCustomTaxRatePct,
+    region, setRegion, customTaxRatePct, setCustomTaxRatePct, taxCard, setTaxCard,
     aiContext, setAiContext,
     profile, updateProfile,
     capacityOverrides, setCapacityOverride,
@@ -3179,7 +3193,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     currentMonth, projectionIncludeGrowth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
-    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, aiContext, profile, updateProfile,
+    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, taxCard, aiContext, profile, updateProfile,
     capacityOverrides, setCapacityOverride, employerSalaryOverride, setEmployerSalaryOverride,
     dismissedLinkSuggestions, dismissLinkSuggestion, dismissedRecurringSuggestions, dismissRecurringSuggestion,
     transferHintDismissed, dismissTransferHint, hiddenNavItems, toggleNavItem,
@@ -3274,7 +3288,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
@@ -3284,7 +3298,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
