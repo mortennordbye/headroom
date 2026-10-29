@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { coerceNumber, sanitizePayload } from './sanitizePayload';
 import { parseLocaleNumber } from './validators';
+import { effectiveRemainingMonths, paymentTermMonths } from './loanTerm';
 
 const SCHEMAS = {
   assets: { portfolio: 0, taxRate: 0, houseValue: 0 },
@@ -207,5 +208,22 @@ describe('sanitizePayload', () => {
 
   it('passes through null / non-object input (first-run guard is the caller\'s job)', () => {
     expect(sanitizePayload(null as unknown as Record<string, unknown>, SCHEMAS)).toBeNull();
+  });
+});
+
+describe('sanitizePayload: mortgage term stamps', () => {
+  const schemas = { homeowner: { currentMortgageBalance: 0, nedbetalingstid: 0 } };
+  it('keeps both asOf months on an imported homeowner slice', () => {
+    const out = sanitizePayload({
+      homeowner: { currentMortgageBalance: 3000000, nedbetalingstid: 24.25, nedbetalingstidAsOf: '2026-05', currentMortgageBalanceAsOf: '2026-04' },
+    } as Record<string, unknown>, schemas) as { homeowner: Record<string, unknown> };
+    expect(out.homeowner).toMatchObject({ nedbetalingstidAsOf: '2026-05', currentMortgageBalanceAsOf: '2026-04' });
+  });
+  it('a numeric asOf from a bad import does not crash the term readers', () => {
+    const out = sanitizePayload({
+      homeowner: { currentMortgageBalance: 3000000, nedbetalingstid: 25, nedbetalingstidAsOf: 202605, currentMortgageBalanceAsOf: 202604 },
+    } as Record<string, unknown>, schemas) as { homeowner: Record<string, unknown> };
+    expect(effectiveRemainingMonths(out.homeowner, '2030-01')).toBe(300);
+    expect(paymentTermMonths(out.homeowner)).toBe(300);
   });
 });

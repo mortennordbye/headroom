@@ -88,6 +88,12 @@ describe('residenceMetrics', () => {
 });
 
 describe('loanTimeline', () => {
+  it('handles a years+months term against an explicit month', () => {
+    const t = loanTimeline(undefined, 147 / 12, '2026-11');
+    expect(t.monthsRemaining).toBe(147);
+    expect(t.payoffDate).toBe('2039-02');
+  });
+
   it('derives payoff from now + remaining term, and elapsed from the start date', () => {
     // Originated 2020-01, 25 years left as of 2025-01 → payoff 2050-01.
     const t = loanTimeline('2020-01', 25, '2025-01');

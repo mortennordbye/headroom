@@ -99,7 +99,7 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 | `get_salary_and_tax` | Active jobs, gross, full tax breakdown with deductions, marginal rate, derived vs effective net monthly, payslip, restskatt estimate, salary/bonus/overtime history (`month` optional) |
 | `get_pension` | OTP/IPS projection to retirement, retirement income (folketrygd, AFP, OTP, IPS) gross and net, replacement rate |
 | `get_forecast` | Year-by-year net-worth projection from the saved forecast assumptions; any lever can be overridden for a what-if |
-| `get_mortgage` | Active mortgage: payment, payoff timeline, LTV, paydown vs plan, yearly amortization |
+| `get_mortgage` | Active mortgage: payment, remaining term (years + months), payoff month and timeline, LTV, paydown vs plan, yearly amortization |
 | `get_housing` | Borrowing capacity (with manual overrides), planned purchase, second-home scenarios and portfolio |
 | `get_employer_cost` | Employer cost, break-even/target/billed hourly rate, margin, fair salary |
 | `get_assets_and_debts` | Every balance with its id, equity breakdown, wealth-tax estimate, recent snapshots |
@@ -117,7 +117,7 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 | Goals | `add_goal`, `update_goal`, `delete_goal` |
 | Transactions | `add_transaction`, `update_transaction`, `delete_transaction` |
 | Rules | `add_rule`, `delete_rule` (`type`: `category` / `label` / `transfer`) |
-| Balances | `update_asset`, `upsert_savings_account`, `delete_savings_account`, `upsert_debt`, `delete_debt`, `update_loan` |
+| Balances | `update_asset`, `upsert_savings_account`, `delete_savings_account`, `upsert_debt`, `delete_debt`, `update_current_mortgage`, `update_loan` |
 | Income | `set_monthly_income`, `add_salary`, `add_bonus` |
 | Settings | `update_assumptions`, `set_ai_context`, `set_profile` |
 | Undo | `restore_revision` |
@@ -129,6 +129,10 @@ Notes on a few of them:
   the row back.
 - `update_asset` mirrors `houseValue`/`houseDebt` into the `homeowner` and
   `transition` slices, as the app does, so the same home never shows two numbers.
+- `update_current_mortgage` edits the mortgage the user has (rate, fee, start
+  month, balance, remaining term as `termYears` + `termMonths`). The term counts
+  down from the month it was set; `balance` mirrors like `update_asset houseDebt`.
+  `update_loan` is the planned purchase loan in first-buyer / buy-and-sell modes.
 - `set_monthly_income` removes a month's override with `clear: true`; `amount: 0`
   is stored as a real zero-income month.
 - `upsert_savings_account` / `upsert_debt` create when called without `id` and
@@ -140,7 +144,7 @@ Notes on a few of them:
 (editable in Settings → "Context for the AI assistant"); `set_ai_context` writes it.
 
 Write tools are annotated `destructiveHint`/`idempotentHint` so clients can prompt
-for confirmation. They change exactly one blob slice (the two mirroring cases
+for confirmation. They change exactly one blob slice (the mirroring cases
 above aside) and leave everything else byte-identical.
 
 ## Revision history / undo

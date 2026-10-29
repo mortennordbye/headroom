@@ -57,6 +57,8 @@ export function getDemoData(): Partial<ExportPayload> {
     termingebyr: 50,
     accountLabel: 'Boliglån ung',
     startDate: monthsAgo(48),
+    nedbetalingstidAsOf: monthsAgo(0),
+    currentMortgageBalanceAsOf: monthsAgo(0),
   };
   const demoTransition = {
     currentHouseValue: 4200000,
@@ -229,7 +231,14 @@ export function getDemoData(): Partial<ExportPayload> {
     housingMode: 'homeowner',
     loan: demoLoan,
     transition: demoTransition,
-    homeowner: { ...demoHomeowner, currentMortgageBalance: demoHomeowner.currentMortgageBalance + 8000 * k },
+    // Each month records the term left then, so the time machine counts down to today's.
+    homeowner: {
+      ...demoHomeowner,
+      currentMortgageBalance: demoHomeowner.currentMortgageBalance + 8000 * k,
+      nedbetalingstid: demoHomeowner.nedbetalingstid + k / 12,
+      nedbetalingstidAsOf: monthsAgo(k),
+      currentMortgageBalanceAsOf: monthsAgo(k),
+    },
     assets: {
       ...demoAssets,
       portfolio: Math.round(demoAssets.portfolio * (1 - 0.012 * k)),

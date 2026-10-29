@@ -1,5 +1,6 @@
 import type { BalanceSnapshot } from '../context/FinanceContext';
 import { calcMonthlyPayment } from './calculations';
+import { paymentTermMonths } from './loanTerm';
 
 // Mortgage plan-vs-actual (HISTORY_PLAN §6.3). The plan curve is anchored at the
 // earliest recorded mortgage balance using that month's rate/term; the actual
@@ -55,8 +56,12 @@ function mortgageBalance(snap: BalanceSnapshot): number {
 function mortgageRate(snap: BalanceSnapshot): number {
   return finite(snap.housingMode === 'homeowner' ? snap.homeowner?.rente : snap.loan?.rente);
 }
+/** Term in years the anchor balance is priced over; the homeowner term is read
+ *  as of the balance's month (loanTerm.ts), the planned loan term raw. */
 function mortgageTerm(snap: BalanceSnapshot): number {
-  return finite(snap.housingMode === 'homeowner' ? snap.homeowner?.nedbetalingstid : snap.loan?.nedbetalingstid);
+  return snap.housingMode === 'homeowner'
+    ? paymentTermMonths(snap.homeowner) / 12
+    : finite(snap.loan?.nedbetalingstid);
 }
 
 /** Plan balance after `k` monthly payments of `payment` at `monthlyRate`. */

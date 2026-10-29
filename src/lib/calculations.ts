@@ -2,7 +2,8 @@ import { calcWealthTax, type Region } from './norwegianTax';
 
 export function calcMonthlyPayment(principal: number, annualRate: number, years: number): number {
   const monthlyRate = annualRate / 100 / 12;
-  const n = years * 12;
+  // Rounded so a years+months term (24.25) prices exactly 291 payments.
+  const n = Math.round(years * 12);
   if (n <= 0) return 0; // guard: a 0/negative term has no payment schedule (avoids Infinity/NaN)
   if (monthlyRate === 0) return principal / n;
   const payment = principal * monthlyRate / (1 - Math.pow(1 + monthlyRate, -n));
@@ -72,11 +73,14 @@ export function calcAmortizationSchedule(
   const monthlyPayment = calcMonthlyPayment(principal, annualRate, years);
   const schedule: AmortizationYear[] = [];
   let balance = principal;
+  // Loop the term in months so a fractional-year term (12.25) runs all 147
+  // payments; the last year row is then a partial year.
+  const n = Math.round(years * 12);
 
-  for (let y = 1; y <= years; y++) {
+  for (let y = 1; (y - 1) * 12 < n; y++) {
     let yearPrincipal = 0;
     let yearInterest = 0;
-    for (let m = 0; m < 12; m++) {
+    for (let m = 0; m < 12 && (y - 1) * 12 + m < n; m++) {
       if (balance < 0.01) break;
       const interest = balance * monthlyRate;
       const principalPaid = Math.min(monthlyPayment - interest, balance);

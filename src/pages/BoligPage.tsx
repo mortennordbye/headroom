@@ -54,6 +54,9 @@ import type { CapacityOverrides } from '../lib/capacityOverrides';
 import { RENTEFRADRAG_RATE_PCT } from '../lib/norwegianTax';
 import { extraPaymentSavings, formatMonths } from '../lib/debt';
 import { loanTimeline, currentResidence, residenceMetrics } from '../lib/property';
+import {
+  effectiveRemainingMonths, paymentTermMonths, splitTermMonths, yearsFromParts, formatTerm, isValidTermParts,
+} from '../lib/loanTerm';
 import { PropertyCard, ResidenceTimeline } from '../components/ResidenceHistory';
 import { PropertyValueEstimate } from '../components/PropertyValueEstimate';
 import { StatCard } from '../components/ui/StatCard';
@@ -68,6 +71,7 @@ interface ModalConfig {
   title: string;
   fields: ModalField[];
   onSave: (values: Record<string, string>) => void;
+  error?: string;
 }
 
 const LtvChart = lazy(() => import('../components/charts/LtvChart'));
@@ -167,6 +171,29 @@ const BoligPage: React.FC = () => {
     });
   };
 
+  // Two-field editor (years + months), pre-filled with the remaining term as of
+  // today so saving unchanged keeps the same payoff month.
+  const editHomeownerTerm = () => {
+    const current = splitTermMonths(remainingMonths);
+    openModal({
+      title: t.yearsRemaining,
+      fields: [
+        { key: 'years', label: lp.termYearsField, type: 'number', value: String(current.years) },
+        { key: 'months', label: lp.termMonthsField, type: 'number', value: String(current.months) },
+      ],
+      onSave: (vals) => {
+        const years = parseLocaleNumber(vals.years || '0');
+        const months = parseLocaleNumber(vals.months || '0');
+        if (!isValidTermParts(years, months)) {
+          setModal(prev => (prev ? { ...prev, error: lp.termInvalid } : prev));
+          return;
+        }
+        updateHomeowner('nedbetalingstid', yearsFromParts(years, months));
+        closeModal();
+      },
+    });
+  };
+
   const editHomeownerText = (label: string, key: keyof HomeownerData, current: string, placeholder?: string) => {
     openModal({
       title: label,
@@ -255,21 +282,24 @@ const BoligPage: React.FC = () => {
     return { monthlyPaymentBase, monthlyPaymentWithFee, totalInterest, totalCost, yearOneInterest, taxDeduction, capacity, totalpris };
   }, [loan, effArslonn, effEgenkapital, effGjeld, amortizationSchedule]);
 
-  // Homeowner calculations
+  // Homeowner calculations. Money uses the term as of the balance's month;
+  // the remaining-term row, payoff date and progress count down (loanTerm.ts).
+  const paymentTermYears = paymentTermMonths(homeowner) / 12;
+  const remainingMonths = effectiveRemainingMonths(homeowner, hist.activeKey);
   const homeownerStatus = useMemo(
     () => calcHomeownerMortgageStatus(
       homeowner.currentMortgageBalance,
       homeowner.originalLoanAmount,
       homeowner.rente,
-      homeowner.nedbetalingstid,
+      paymentTermYears,
       RENTEFRADRAG_RATE_PCT,
     ),
-    [homeowner]
+    [homeowner, paymentTermYears]
   );
 
   const homeownerAmortization = useMemo(
-    () => calcAmortizationSchedule(homeowner.currentMortgageBalance, homeowner.rente, homeowner.nedbetalingstid),
-    [homeowner.currentMortgageBalance, homeowner.rente, homeowner.nedbetalingstid]
+    () => calcAmortizationSchedule(homeowner.currentMortgageBalance, homeowner.rente, paymentTermYears),
+    [homeowner.currentMortgageBalance, homeowner.rente, paymentTermYears]
   );
   const homeownerChartData = homeownerAmortization.filter((_, i) => i % Math.ceil(homeownerAmortization.length / 15) === 0 || i === homeownerAmortization.length - 1);
 
@@ -305,7 +335,10 @@ const BoligPage: React.FC = () => {
     key ? format(parse(key.slice(0, 7), 'yyyy-MM', new Date()), 'MMM yyyy', { locale: lang === 'nb' ? nb : enUS }) : '';
 
   // Payoff date + term elapsed/remaining, derived from the loan's start month.
-  const loanTL = loanTimeline(homeowner.startDate, homeowner.nedbetalingstid);
+  const loanTL = loanTimeline(homeowner.startDate, remainingMonths / 12, hist.activeKey);
+  const termValue = remainingMonths > 0
+    ? formatTerm(remainingMonths, { years: lp.yearsSuffix, months: lp.monthsSuffix })
+    : homeowner.nedbetalingstid > 0 ? lp.termExpired : lp.termNotSet;
 
   // Homeowner KPI tiles: equity, value, debt, LTV + purchase-vs-value metrics.
   const propMetrics = residenceMetrics(currentResidence(residences), assets.houseValue);
@@ -573,8 +606,8 @@ const BoligPage: React.FC = () => {
                     value={fmtPct(homeowner.notifiedRate)} />
                 )}
                 <LoanRow label={t.yearsRemaining}
-                  value={`${homeowner.nedbetalingstid} ${lp.yearsSuffix}`}
-                  onEdit={() => editHomeowner(t.yearsRemaining, 'nedbetalingstid', homeowner.nedbetalingstid)} />
+                  value={termValue}
+                  onEdit={editHomeownerTerm} />
                 <LoanRow label={lp.loanStartDate}
                   value={homeowner.startDate ? fmtMonthKey(homeowner.startDate) : '–'}
                   onEdit={() => editHomeownerMonth(lp.loanStartDate, 'startDate', homeowner.startDate ?? '')} />
@@ -585,12 +618,12 @@ const BoligPage: React.FC = () => {
                   value={fmtNum(homeowner.termingebyr)}
                   onEdit={() => editHomeowner(lp.termFee, 'termingebyr', homeowner.termingebyr)} />
                 <LoanRow label={t.monthlyPaymentCalc}
-                  value={fmtNum(homeownerStatus.monthlyPaymentCalc + homeowner.termingebyr)}
+                  value={paymentTermYears > 0 ? fmtNum(homeownerStatus.monthlyPaymentCalc + homeowner.termingebyr) : '–'}
                   highlight />
                 <LoanRow label={lp.ofWhichInterest}
-                  value={fmtNum(homeownerStatus.monthlyInterest)} />
+                  value={paymentTermYears > 0 ? fmtNum(homeownerStatus.monthlyInterest) : '–'} />
                 <LoanRow label={lp.ofWhichPrincipal}
-                  value={fmtNum(homeownerStatus.monthlyPrincipal)} />
+                  value={paymentTermYears > 0 ? fmtNum(homeownerStatus.monthlyPrincipal) : '–'} />
               </div>
               {loanTL.elapsedPct != null && (
                 <div className="pt-1">

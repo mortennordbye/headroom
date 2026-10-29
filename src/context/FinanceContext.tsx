@@ -32,6 +32,7 @@ import { excludedTransferIds, type TransferRule } from '../lib/transferRules';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
+import { effectiveRemainingMonths, paymentTermMonths, stampLegacyTerm } from '../lib/loanTerm';
 import {
   computeAutomationPostings,
   type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
@@ -376,8 +377,14 @@ export interface HomeownerData {
   currentMortgageBalance: number;
   originalLoanAmount: number;
   rente: number;
+  /** Remaining term in years as of `nedbetalingstidAsOf`; a multiple of 1/12
+   *  when months were entered. Read through src/lib/loanTerm.ts, never raw. */
   nedbetalingstid: number;
   termingebyr: number;
+  /** Month 'YYYY-MM' the term was entered; the remaining term counts down from it. */
+  nedbetalingstidAsOf?: string;
+  /** Month 'YYYY-MM' the balance was last written; prices the payment. */
+  currentMortgageBalanceAsOf?: string;
   /** Bank account name for the loan, e.g. "Boliglån ung" (free text). */
   accountLabel?: string;
   /** Loan origination month 'YYYY-MM' — anchors payoff date and elapsed/remaining. */
@@ -1428,6 +1435,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       transferHintDismissed: setTransferHintDismissed, automationEnabled: setAutomationEnabled,
       projectionIncludeGrowth: setProjectionIncludeGrowth,
     };
+    // A term saved before the countdown existed counts down from now. Load path only, so registry reads stay clock-free; stored
+    // snapshots are left alone (a missing stamp there means "as recorded").
+    if (resetMissing && data.homeowner) data.homeowner = stampLegacyTerm(data.homeowner, currentMonthKey());
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
 
@@ -1875,10 +1885,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const annualMortgageInterest = useMemo(() => {
     const balance = housingMode === 'homeowner' ? homeowner.currentMortgageBalance : loan.laanebelop;
     const rate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
-    const term = housingMode === 'homeowner' ? homeowner.nedbetalingstid : loan.nedbetalingstid;
+    const term = housingMode === 'homeowner' ? paymentTermMonths(homeowner) / 12 : loan.nedbetalingstid;
     if (!(balance > 0) || !(rate > 0) || !(term > 0)) return 0;
     return calcAmortizationSchedule(balance, rate, term)[0]?.interestPaid ?? 0;
-  }, [housingMode, homeowner.currentMortgageBalance, homeowner.rente, homeowner.nedbetalingstid, loan.laanebelop, loan.rente, loan.nedbetalingstid]);
+  }, [housingMode, homeowner, loan.laanebelop, loan.rente, loan.nedbetalingstid]);
 
   // Net monthly income derived from the salary system for an arbitrary month
   // (falls back to the legacy static `income` when no salaries exist).
@@ -2244,7 +2254,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // selected by the active housing mode (first-buyer & transitioning use the `loan`
   // inputs; homeowner uses the `homeowner` inputs).
   const mortgageRate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
-  const mortgageTermYears = housingMode === 'homeowner' ? homeowner.nedbetalingstid : loan.nedbetalingstid;
+  // Display/projection term: the homeowner term counts down from its entry month.
+  const mortgageTermYears = housingMode === 'homeowner' ? effectiveRemainingMonths(homeowner) / 12 : loan.nedbetalingstid;
 
   // Snapshot current month's net worth (equity − non-mortgage debt, matching the
   // Dashboard headline) whenever it changes (only for the current real month)
@@ -2304,7 +2315,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const updateAsset = useCallback((key: keyof Assets, value: number) => {
     setAssets(prev => ({ ...prev, [key]: value }));
     if (key === 'houseDebt') {
-      setHomeowner(prev => ({ ...prev, currentMortgageBalance: value }));
+      setHomeowner(prev => ({ ...prev, currentMortgageBalance: value, currentMortgageBalanceAsOf: currentMonthKey() }));
       setTransition(prev => ({ ...prev, currentMortgageBalance: value }));
     }
     if (key === 'houseValue') {
@@ -2384,7 +2395,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateHomeowner = useCallback((key: keyof HomeownerData, value: number | string) => {
-    setHomeowner(prev => ({ ...prev, [key]: value }));
+    // The term and the balance carry the month they were written (see loanTerm.ts).
+    const stamp = key === 'nedbetalingstid' ? { nedbetalingstidAsOf: currentMonthKey() }
+      : key === 'currentMortgageBalance' ? { currentMortgageBalanceAsOf: currentMonthKey() }
+        : {};
+    setHomeowner(prev => ({ ...prev, [key]: value, ...stamp }));
     // Mirror the mortgage balance across the slices that hold the same real debt.
     // Only the numeric mortgage-balance key mirrors; text fields (accountLabel,
     // startDate) never hit this branch.
@@ -2400,7 +2415,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // mirror its value and mortgage so all three stay in lockstep.
     if (key === 'currentMortgageBalance') {
       setAssets(prev => ({ ...prev, houseDebt: value }));
-      setHomeowner(prev => ({ ...prev, currentMortgageBalance: value }));
+      setHomeowner(prev => ({ ...prev, currentMortgageBalance: value, currentMortgageBalanceAsOf: currentMonthKey() }));
     }
     if (key === 'currentHouseValue') {
       setAssets(prev => ({ ...prev, houseValue: value }));

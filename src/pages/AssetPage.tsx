@@ -45,6 +45,7 @@ import { currentMonthKey } from '../lib/date';
 import { bsuStatus, calcBsuTaxCredit } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
 import { formatAxisInt } from '../lib/format';
+import { effectiveRemainingMonths } from '../lib/loanTerm';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
@@ -116,7 +117,9 @@ const AssetPage: React.FC = () => {
     ? (hist.snapshot.housingMode === 'homeowner' ? hist.snapshot.homeowner?.rente : hist.snapshot.loan?.rente) ?? mortgageRate
     : mortgageRate;
   const projMortgageTerm = hist.snapshot
-    ? (hist.snapshot.housingMode === 'homeowner' ? hist.snapshot.homeowner?.nedbetalingstid : hist.snapshot.loan?.nedbetalingstid) ?? mortgageTermYears
+    ? (hist.snapshot.housingMode === 'homeowner'
+      ? (hist.snapshot.homeowner ? effectiveRemainingMonths(hist.snapshot.homeowner, hist.activeKey) / 12 : undefined)
+      : hist.snapshot.loan?.nedbetalingstid) ?? mortgageTermYears
     : mortgageTermYears;
   const totalDebt = debts.reduce((s, d) => s + Math.max(0, d.balance), 0);
   const studentDebt = sumDebtByType(debts, 'student');

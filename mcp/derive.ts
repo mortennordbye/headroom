@@ -39,6 +39,7 @@ import { isSpend } from '../src/lib/spend';
 import { excludedTransferIds } from '../src/lib/transferRules';
 import { yearReview, availableReportYears } from '../src/lib/yearReview';
 import { currentMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
+import { effectiveRemainingMonths, paymentTermMonths, splitTermMonths, termMonthsFromYears } from '../src/lib/loanTerm';
 import {
   calcTaxByRegion,
   calcMarginalTaxRate,
@@ -112,7 +113,7 @@ export function annualMortgageInterest(blob: ExportPayload): number {
   const homeowner = (blob.housingMode ?? 'first_buyer') === 'homeowner';
   const balance = homeowner ? blob.homeowner?.currentMortgageBalance : blob.loan?.laanebelop;
   const rate = homeowner ? blob.homeowner?.rente : blob.loan?.rente;
-  const term = homeowner ? blob.homeowner?.nedbetalingstid : blob.loan?.nedbetalingstid;
+  const term = homeowner ? paymentTermMonths(blob.homeowner) / 12 : blob.loan?.nedbetalingstid;
   if (!(balance! > 0) || !(rate! > 0) || !(term! > 0)) return 0;
   return calcAmortizationSchedule(balance!, rate!, term!)[0]?.interestPaid ?? 0;
 }
@@ -259,7 +260,7 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
         blob.homeowner?.currentMortgageBalance ?? blob.assets.houseDebt,
         blob.homeowner?.originalLoanAmount ?? blob.assets.houseDebt,
         blob.homeowner?.rente ?? blob.loan?.rente ?? 0,
-        blob.homeowner?.nedbetalingstid ?? blob.loan?.nedbetalingstid ?? 0,
+        blob.homeowner ? paymentTermMonths(blob.homeowner) / 12 : blob.loan?.nedbetalingstid ?? 0,
         RENTEFRADRAG_RATE_PCT,
       )
     : null;
@@ -711,13 +712,21 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
   };
 }
 
-/** The mortgage the active housing mode follows. Mirrors ForecastPage. */
-function activeMortgage(blob: ExportPayload) {
+/**
+ * The mortgage the active housing mode follows. Mirrors ForecastPage. `termYears`
+ * prices the payment (homeowner: the term as of the balance's month);
+ * `remainingMonths` is the term left at `monthKey` (loanTerm.ts).
+ */
+function activeMortgage(blob: ExportPayload, monthKey: string) {
   const homeowner = (blob.housingMode ?? 'first_buyer') === 'homeowner';
+  const h = blob.homeowner;
+  const loanTerm = blob.loan?.nedbetalingstid ?? 25;
+  const hasTerm = h?.nedbetalingstid != null;
   return {
-    balance: (homeowner ? blob.homeowner?.currentMortgageBalance : blob.loan?.laanebelop) ?? 0,
-    ratePct: (homeowner ? blob.homeowner?.rente : blob.loan?.rente) ?? 5,
-    termYears: (homeowner ? blob.homeowner?.nedbetalingstid : blob.loan?.nedbetalingstid) ?? 25,
+    balance: (homeowner ? h?.currentMortgageBalance : blob.loan?.laanebelop) ?? 0,
+    ratePct: (homeowner ? h?.rente : blob.loan?.rente) ?? 5,
+    termYears: homeowner ? (hasTerm ? paymentTermMonths(h) / 12 : 25) : loanTerm,
+    remainingMonths: homeowner ? (hasTerm ? effectiveRemainingMonths(h, monthKey) : 300) : termMonthsFromYears(loanTerm),
   };
 }
 
@@ -763,7 +772,7 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
     years: overrides.years ?? a?.years ?? 15,
     extraMonthly: a?.extraMonthly ?? 5000,
   };
-  const m = activeMortgage(blob);
+  const m = activeMortgage(blob, monthKey);
   const eq = computeEquityBreakdown(blob.assets);
   const rows = projectForecast(
     {
@@ -793,7 +802,9 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
 /** Mortgage details: amortization, payoff timeline, paydown vs plan. Mirrors BoligPage (homeowner). */
 export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
   const housingMode = blob.housingMode ?? 'first_buyer';
-  const m = activeMortgage(blob);
+  const m = activeMortgage(blob, monthKey);
+  const remaining = splitTermMonths(m.remainingMonths);
+  const timeline = housingMode === 'homeowner' ? loanTimeline(blob.homeowner?.startDate, m.remainingMonths / 12, monthKey) : null;
   const schedule = m.balance > 0 && m.termYears > 0 ? calcAmortizationSchedule(m.balance, m.ratePct, m.termYears) : [];
   const houseValue = blob.assets.houseValue;
   const monthlyFee = housingMode === 'homeowner' ? blob.homeowner?.termingebyr ?? 0 : blob.loan?.termingebyr ?? 0;
@@ -805,21 +816,25 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
     loanKind: housingMode === 'homeowner' ? 'current' : 'planned',
     balance: Math.round(m.balance),
     ratePct: m.ratePct,
-    termYears: m.termYears,
+    // Term left at monthKey (counts down for the current mortgage).
+    termYears: Math.round((m.remainingMonths / 12) * 100) / 100,
+    remainingMonths: m.remainingMonths,
+    remainingTerm: { years: remaining.years, months: remaining.months },
+    payoffMonth: housingMode === 'homeowner' ? timeline?.payoffDate ?? null : null,
     monthlyPayment: Math.round(calcMonthlyPayment(m.balance, m.ratePct, m.termYears) + monthlyFee),
     status: housingMode === 'homeowner' && blob.homeowner
       ? calcHomeownerMortgageStatus(
           blob.homeowner.currentMortgageBalance,
           blob.homeowner.originalLoanAmount,
           blob.homeowner.rente,
-          blob.homeowner.nedbetalingstid,
-          22,
+          paymentTermMonths(blob.homeowner) / 12,
+          RENTEFRADRAG_RATE_PCT,
         )
       : null,
     notifiedRate: blob.homeowner?.notifiedRate != null
       ? { ratePct: blob.homeowner.notifiedRate, from: blob.homeowner.notifiedRateFrom ?? null }
       : null,
-    timeline: housingMode === 'homeowner' ? loanTimeline(blob.homeowner?.startDate, m.termYears, monthKey) : null,
+    timeline,
     // Only an owned home has a value to measure against (BoligPage shows these to homeowners only).
     loanToValuePct: housingMode === 'homeowner' && houseValue > 0 ? Math.round((m.balance / houseValue) * 1000) / 10 : null,
     residence: housingMode === 'homeowner'
