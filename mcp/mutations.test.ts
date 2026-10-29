@@ -18,6 +18,23 @@ import {
   updateAssumptions,
   setAiContext,
   setProfile,
+  deleteGoal,
+  deleteFixedExpense,
+  addTransaction,
+  updateTransaction,
+  deleteTransaction,
+  addRule,
+  deleteRule,
+  updateAsset,
+  upsertSavingsAccount,
+  deleteSavingsAccount,
+  upsertDebt,
+  deleteDebt,
+  updateLoan,
+  updateCurrentMortgage,
+  setMonthlyIncome,
+  addSalary,
+  addBonus,
 } from './mutations';
 
 // Run a builder on a fresh clone; return the before-snapshot, the mutated blob, and the diff.
@@ -130,6 +147,214 @@ const cases: {
       expect(b.profile?.birthDate).toBe('1990-05-01'); // untouched
     },
   },
+  {
+    name: 'set_profile (birth date also sets the pension birth year, as the app does)',
+    touched: ['profile', 'pension'],
+    mutate: (b) => setProfile(b, { birthDate: '1985-03-02' }),
+    assertChange: (b) => {
+      expect(b.profile?.birthDate).toBe('1985-03-02');
+      expect(b.pension?.birthYear).toBe(1985);
+      expect(b.pension?.otpBalance).toBe(fullFixture().pension?.otpBalance); // rest of pension untouched
+    },
+  },
+  {
+    name: 'update_fixed_expense (category)',
+    touched: ['fixedExpenses'],
+    mutate: (b) => updateFixedExpense(b, { id: 'f2', category: 'subscriptions' }),
+    assertChange: (b) => expect(b.fixedExpenses.find((e) => e.id === 'f2')?.category).toBe('subscriptions'),
+  },
+  {
+    name: 'delete_goal',
+    touched: ['goals'],
+    mutate: (b) => deleteGoal(b, { id: 'g1' }),
+    assertChange: (b) => expect(b.goals?.map((g) => g.id)).toEqual(['g2']),
+  },
+  {
+    name: 'delete_fixed_expense',
+    touched: ['fixedExpenses'],
+    mutate: (b) => deleteFixedExpense(b, { id: 'f2' }),
+    assertChange: (b) => expect(b.fixedExpenses.map((e) => e.id)).toEqual(['f1', 'f3', 'f4']),
+  },
+  {
+    name: 'add_transaction',
+    touched: ['dailyTransactions'],
+    mutate: (b) => addTransaction(b, { id: 'new-tx', date: '2026-06-20', description: 'Bus', amount: 40, category: 'transport' }),
+    assertChange: (b) => expect(b.dailyTransactions.find((t) => t.id === 'new-tx')).toEqual({
+      id: 'new-tx', date: '2026-06-20', description: 'Bus', amount: 40, category: 'transport', categorySource: 'manual', kind: 'expense',
+    }),
+  },
+  {
+    name: 'update_transaction (category marks manual)',
+    touched: ['dailyTransactions'],
+    mutate: (b) => updateTransaction(b, { id: 't2', category: 'entertainment' }),
+    assertChange: (b) => {
+      expect(b.dailyTransactions.find((t) => t.id === 't2')).toMatchObject({
+        category: 'entertainment', categorySource: 'manual', amount: 2000, description: 'Restaurant',
+      });
+    },
+  },
+  {
+    name: 'delete_transaction (manual row leaves deletedBankIds alone)',
+    touched: ['dailyTransactions'],
+    mutate: (b) => deleteTransaction(b, { id: 't1' }),
+    assertChange: (b) => expect(b.dailyTransactions.some((t) => t.id === 't1')).toBe(false),
+  },
+  {
+    name: 'add_rule (category)',
+    touched: ['categoryRules'],
+    mutate: (b) => addRule(b, { id: 'cr-new', type: 'category', match: 'Ruter', category: 'transport' }),
+    assertChange: (b) => expect(b.categoryRules).toEqual([
+      { id: 'cr1', match: 'REMA', category: 'groceries' },
+      { id: 'cr-new', match: 'Ruter', category: 'transport' },
+    ]),
+  },
+  {
+    name: 'add_rule (category, same match replaces)',
+    touched: ['categoryRules'],
+    mutate: (b) => addRule(b, { id: 'cr-new', type: 'category', match: ' rema ', category: 'shopping' }),
+    assertChange: (b) => expect(b.categoryRules).toEqual([{ id: 'cr-new', match: 'rema', category: 'shopping' }]),
+  },
+  {
+    name: 'add_rule (label)',
+    touched: ['labelRules'],
+    mutate: (b) => addRule(b, { id: 'lr-new', type: 'label', match: 'VIPPS*', label: 'Vipps' }),
+    assertChange: (b) => expect(b.labelRules?.at(-1)).toEqual({ id: 'lr-new', match: 'VIPPS*', label: 'Vipps' }),
+  },
+  {
+    name: 'add_rule (transfer)',
+    touched: ['transferRules'],
+    mutate: (b) => addRule(b, { id: 'tr-new', type: 'transfer', match: 'Sparekonto' }),
+    assertChange: (b) => expect(b.transferRules?.at(-1)).toEqual({ id: 'tr-new', match: 'Sparekonto' }),
+  },
+  {
+    name: 'delete_rule (label)',
+    touched: ['labelRules'],
+    mutate: (b) => deleteRule(b, { type: 'label', id: 'lr1' }),
+    assertChange: (b) => expect(b.labelRules).toEqual([]),
+  },
+  {
+    name: 'update_asset (portfolio only)',
+    touched: ['assets'],
+    mutate: (b) => updateAsset(b, { portfolio: 550000, unrealizedGain: -5000 }),
+    assertChange: (b) => {
+      expect(b.assets.portfolio).toBe(550000);
+      expect(b.assets.unrealizedGain).toBe(-5000);
+      expect(b.assets.savingsAccounts).toEqual([{ id: 's1', name: 'Rainy day', balance: 80000 }]);
+    },
+  },
+  {
+    name: 'update_asset (houseDebt/houseValue mirror into homeowner and transition)',
+    touched: ['assets', 'homeowner', 'transition'],
+    mutate: (b) => updateAsset(b, { houseDebt: 2400000, houseValue: 4200000 }, '2026-07'),
+    assertChange: (b) => {
+      expect(b.assets.houseDebt).toBe(2400000);
+      expect(b.homeowner?.currentMortgageBalance).toBe(2400000);
+      expect(b.homeowner?.currentMortgageBalanceAsOf).toBe('2026-07');
+      expect(b.transition?.currentMortgageBalance).toBe(2400000);
+      expect(b.transition?.currentHouseValue).toBe(4200000);
+      expect(b.homeowner?.rente).toBe(5.5); // rest of the slice untouched
+    },
+  },
+  {
+    name: 'upsert_savings_account (create)',
+    touched: ['assets'],
+    mutate: (b) => upsertSavingsAccount(b, { id: 'sa-new', create: true, name: 'Holiday', balance: 5000 }),
+    assertChange: (b) => expect(b.assets.savingsAccounts?.at(-1)).toEqual({ id: 'sa-new', name: 'Holiday', balance: 5000 }),
+  },
+  {
+    name: 'upsert_savings_account (update balance)',
+    touched: ['assets'],
+    mutate: (b) => upsertSavingsAccount(b, { id: 's1', create: false, balance: 90000 }),
+    assertChange: (b) => {
+      expect(b.assets.savingsAccounts).toEqual([{ id: 's1', name: 'Rainy day', balance: 90000 }]);
+      expect(b.assets.portfolio).toBe(500000);
+    },
+  },
+  {
+    name: 'delete_savings_account',
+    touched: ['assets'],
+    mutate: (b) => deleteSavingsAccount(b, { id: 's1' }),
+    assertChange: (b) => expect(b.assets.savingsAccounts).toEqual([]),
+  },
+  {
+    name: 'upsert_debt (create)',
+    touched: ['debts'],
+    mutate: (b) => upsertDebt(b, { id: 'd-new', create: true, name: 'Car loan', type: 'consumer', balance: 90000, rate: 9, minPayment: 2500 }),
+    assertChange: (b) => expect(b.debts?.at(-1)).toEqual({
+      id: 'd-new', name: 'Car loan', type: 'consumer', balance: 90000, rate: 9, minPayment: 2500,
+    }),
+  },
+  {
+    name: 'upsert_debt (create revolving zeroes rate/minPayment)',
+    touched: ['debts'],
+    mutate: (b) => upsertDebt(b, { id: 'd-new', create: true, name: 'Card', type: 'credit_card', balance: 3000, revolving: true, creditLimit: 50000 }),
+    assertChange: (b) => expect(b.debts?.at(-1)).toMatchObject({ rate: 0, minPayment: 0, revolving: true, creditLimit: 50000 }),
+  },
+  {
+    name: 'upsert_debt (update balance)',
+    touched: ['debts'],
+    mutate: (b) => upsertDebt(b, { id: 'd1', create: false, balance: 190000 }),
+    assertChange: (b) => expect(b.debts?.find((d) => d.id === 'd1')).toMatchObject({ balance: 190000, interestFreeUntil: '2027-01' }),
+  },
+  {
+    name: 'delete_debt',
+    touched: ['debts'],
+    mutate: (b) => deleteDebt(b, { id: 'd2' }),
+    assertChange: (b) => expect(b.debts?.map((d) => d.id)).toEqual(['d1']),
+  },
+  {
+    name: 'update_loan',
+    touched: ['loan'],
+    mutate: (b) => updateLoan(b, { rente: 5.1, gyldigTil: '2027-03' }),
+    assertChange: (b) => expect(b.loan).toMatchObject({ rente: 5.1, gyldigTil: '2027-03', laanebelop: 2500000 }),
+  },
+  {
+    name: 'update_current_mortgage (term stamps its month, rate only touches homeowner)',
+    touched: ['homeowner'],
+    mutate: (b) => updateCurrentMortgage(b, { rente: 5.2, termYears: 24, termMonths: 3 }, '2026-07'),
+    assertChange: (b) => expect(b.homeowner).toMatchObject({
+      rente: 5.2, nedbetalingstid: 24.25, nedbetalingstidAsOf: '2026-07',
+      currentMortgageBalance: 2500000, currentMortgageBalanceAsOf: '2026-06',
+    }),
+  },
+  {
+    name: 'update_current_mortgage (balance mirrors into assets and transition)',
+    touched: ['homeowner', 'assets', 'transition'],
+    mutate: (b) => updateCurrentMortgage(b, { balance: 2450000 }, '2026-07'),
+    assertChange: (b) => {
+      expect(b.homeowner).toMatchObject({ currentMortgageBalance: 2450000, currentMortgageBalanceAsOf: '2026-07', nedbetalingstidAsOf: '2026-06' });
+      expect(b.assets.houseDebt).toBe(2450000);
+      expect(b.transition?.currentMortgageBalance).toBe(2450000);
+    },
+  },
+  {
+    name: 'set_monthly_income (set, including 0)',
+    touched: ['monthlyIncomes'],
+    mutate: (b) => setMonthlyIncome(b, { month: '2026-07', amount: 0 }),
+    assertChange: (b) => expect(b.monthlyIncomes).toEqual({ '2026-05': 61000, '2026-06': 60000, '2026-07': 0 }),
+  },
+  {
+    name: 'set_monthly_income (clear)',
+    touched: ['monthlyIncomes'],
+    mutate: (b) => setMonthlyIncome(b, { month: '2026-05', clear: true }),
+    assertChange: (b) => expect(b.monthlyIncomes).toEqual({ '2026-06': 60000 }),
+  },
+  {
+    name: 'add_salary',
+    touched: ['salaries'],
+    mutate: (b) => addSalary(b, { id: 'sal-new', jobId: 'j1', effectiveDate: '2026-07', grossAnnual: 760000, changeType: 'raise' }),
+    assertChange: (b) => expect(b.salaries?.at(-1)).toEqual({
+      id: 'sal-new', jobId: 'j1', effectiveDate: '2026-07', grossAnnual: 760000, changeType: 'raise',
+    }),
+  },
+  {
+    name: 'add_bonus',
+    touched: ['bonuses'],
+    mutate: (b) => addBonus(b, { id: 'b-new', date: '2026-06-15', amount: 20000, type: 'performance', jobId: 'j1', includeInBudget: true }),
+    assertChange: (b) => expect(b.bonuses?.at(-1)).toEqual({
+      id: 'b-new', date: '2026-06-15', amount: 20000, type: 'performance', jobId: 'j1', includeInBudget: true,
+    }),
+  },
 ];
 
 describe('write builders preserve all other data', () => {
@@ -175,5 +400,73 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
   });
   it('set_profile with no fields throws', () => {
     expect(() => setProfile(structuredClone(fullFixture()), {})).toThrow(/no profile/);
+  });
+
+  const fresh = () => structuredClone(fullFixture());
+  it.each([
+    ['delete_goal', () => deleteGoal(fresh(), { id: 'nope' }), /no goal/],
+    ['delete_fixed_expense', () => deleteFixedExpense(fresh(), { id: 'nope' }), /no fixed expense/],
+    ['update_transaction', () => updateTransaction(fresh(), { id: 'nope', amount: 1 }), /no transaction/],
+    ['update_transaction (no fields)', () => updateTransaction(fresh(), { id: 't1' }), /no transaction fields/],
+    ['delete_transaction', () => deleteTransaction(fresh(), { id: 'nope' }), /no transaction/],
+    ['add_rule (category without category)', () => addRule(fresh(), { id: 'x', type: 'category', match: 'A' }), /category is required/],
+    ['add_rule (label without label)', () => addRule(fresh(), { id: 'x', type: 'label', match: 'A' }), /label is required/],
+    ['add_rule (blank match)', () => addRule(fresh(), { id: 'x', type: 'transfer', match: '  ' }), /blank/],
+    ['delete_rule (id of another rule type)', () => deleteRule(fresh(), { type: 'category', id: 'lr1' }), /no category rule/],
+    ['update_asset (no fields)', () => updateAsset(fresh(), {}), /no asset fields/],
+    ['upsert_savings_account (create without name)', () => upsertSavingsAccount(fresh(), { id: 'x', create: true }), /name is required/],
+    ['upsert_savings_account (unknown id)', () => upsertSavingsAccount(fresh(), { id: 'nope', create: false, balance: 1 }), /no savings account/],
+    ['delete_savings_account', () => deleteSavingsAccount(fresh(), { id: 'nope' }), /no savings account/],
+    ['upsert_debt (create without type)', () => upsertDebt(fresh(), { id: 'x', create: true, name: 'A', balance: 1 }), /required/],
+    ['upsert_debt (create without rate, not revolving)', () => upsertDebt(fresh(), { id: 'x', create: true, name: 'A', type: 'other', balance: 1 }), /rate and minPayment/],
+    ['upsert_debt (unknown id)', () => upsertDebt(fresh(), { id: 'nope', create: false, balance: 1 }), /no debt/],
+    ['delete_debt', () => deleteDebt(fresh(), { id: 'nope' }), /no debt/],
+    ['update_loan (no fields)', () => updateLoan(fresh(), {}), /no loan fields/],
+    ['update_current_mortgage (no fields)', () => updateCurrentMortgage(fresh(), {}), /no mortgage fields/],
+    ['update_current_mortgage (years without months)', () => updateCurrentMortgage(fresh(), { termYears: 20 }), /together/],
+    ['update_current_mortgage (zero term)', () => updateCurrentMortgage(fresh(), { termYears: 0, termMonths: 0 }), /at least one month/],
+    ['set_monthly_income (neither)', () => setMonthlyIncome(fresh(), { month: '2026-07' }), /exactly one/],
+    ['set_monthly_income (both)', () => setMonthlyIncome(fresh(), { month: '2026-07', amount: 1, clear: true }), /exactly one/],
+    ['set_monthly_income (clear missing)', () => setMonthlyIncome(fresh(), { month: '2020-01', clear: true }), /no income override/],
+    ['add_salary (unknown job)', () => addSalary(fresh(), { id: 'x', jobId: 'nope', effectiveDate: '2026-07', grossAnnual: 1, changeType: 'raise' }), /no job/],
+    ['add_bonus (unknown job)', () => addBonus(fresh(), { id: 'x', date: '2026-07-01', amount: 1, type: 'other', jobId: 'nope' }), /no job/],
+  ] as const)('%s throws', (_name, call, msg) => {
+    expect(call).toThrow(msg);
+  });
+});
+
+describe('delete_transaction on a bank-imported row', () => {
+  // The documented two-key exception: without the deletedBankIds entry the
+  // server's reconcileBankTransactions would re-add the row on the next write.
+  function withBankRow() {
+    const blob = structuredClone(fullFixture());
+    blob.dailyTransactions = [
+      ...blob.dailyTransactions,
+      { id: 'eb-abc12345-1', date: '2026-06-11', description: 'Card purchase', amount: 300, kind: 'expense' },
+    ];
+    return blob;
+  }
+
+  it('removes the row and records its id in deletedBankIds', () => {
+    const blob = withBankRow();
+    const changes = deleteTransaction(blob, { id: 'eb-abc12345-1' });
+    expect(blob.dailyTransactions.some((t) => t.id === 'eb-abc12345-1')).toBe(false);
+    expect(blob.deletedBankIds).toEqual(['eb-old-1', 'eb-abc12345-1']);
+    expect(changes.map((c) => c.field)).toEqual(['dailyTransactions[eb-abc12345-1]', 'deletedBankIds']);
+  });
+
+  it('touches only dailyTransactions and deletedBankIds', () => {
+    const after = withBankRow();
+    const before = structuredClone(after);
+    deleteTransaction(after, { id: 'eb-abc12345-1' });
+    expectPreserved(before, after, ['dailyTransactions', 'deletedBankIds']);
+    expectJsonStable(after);
+  });
+
+  it('does not duplicate an id already in deletedBankIds', () => {
+    const blob = withBankRow();
+    blob.deletedBankIds = ['eb-abc12345-1'];
+    deleteTransaction(blob, { id: 'eb-abc12345-1' });
+    expect(blob.deletedBankIds).toEqual(['eb-abc12345-1']);
   });
 });

@@ -1,18 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { parsePayslipAmount } from './parsePayslipAmount';
 import { parseVismaPayslip } from './parseVismaPayslip';
+import { parseTripletexPayslip } from './parseTripletexPayslip';
 import { parsePayslip } from './index';
 
 // Text lines extracted from a real Visma payslip (payslip-3.pdf) via pdfjs,
 // grouped top-to-bottom / left-to-right. The PDF itself is never stored — this
 // fixture is the parser's contract.
 const VISMA_LINES: string[] = [
-  'Orange Business Digital Norway',
+  'Eksempel Digital Norway',
   'Lønnsslipp',
   'AS',
-  'Org.nr. 982211743',
+  'Org.nr. 999999999',
   'Lønnskjøring 2026-06',
-  'Lørenfaret 1E, 0585 OSLO',
+  'Kongens gate 1, 0153 OSLO',
   'Månedslønn',
   'Utbetalingsdato 19.06.2026',
   'Fødselsdato 01.01.1990',
@@ -39,7 +40,7 @@ const VISMA_LINES: string[] = [
   'Andre trekk Bankkonto Beløp',
   '0,00',
   'Netto til utbetaling Bankkonto Beløp',
-  'Morten Victor Nordbye 12345678903 67 003,39',
+  'Ola Nordmann 12345678903 67 003,39',
   '67 003,39',
   'Beskrivelse Totalt for Akkumulert totalt Beskrivelse Totalt for Akkumulert totalt',
   'perioden perioden',
@@ -50,6 +51,41 @@ const VISMA_LINES: string[] = [
   'Grunnlag prosenttrekk 0,00 0,00',
   'Copyright © Visma',
   'Side:1/1',
+];
+
+// Line layout of a Tripletex payslip as extractPdfText emits it. Every name,
+// number and amount is invented; only the structure mirrors a real payslip.
+// The first line joins the employee (left column) and employer (right column);
+// the tax-base description wraps onto the line after "Skattetrekk".
+const TRIPLETEX_LINES: string[] = [
+  'Kari Nordmann EKSEMPEL KONSULT AS',
+  'Storgata 10 NO 999 999 999 MVA',
+  'Kongens gate 1, 0153 OSLO',
+  '0155 Oslo',
+  'E-post: lonn@eksempel.no',
+  'Lønnsslipp for Utbetalingsdato Til utbetaling',
+  'Mars 2026 20.03.2026 43 812,40',
+  'Lønnsbilag: 3-2026',
+  'Fødselsnummer: 01019012345',
+  'Lønnsart Beskrivelse Antall Sats Grunnlag Beløp',
+  'Fastlønn Mars 2026 Prosent 62 500,00',
+  'Bonus Kvartalsbonus Prosent 5 000,00',
+  'Skattetrekk Grunnlag prosenttrekk (38,0%): -25 650,00',
+  '67 500,00.',
+  'Ansattutlegg nummer 12-2026, Kari Nordmann',
+  'Gjeld til ansatte Private utlegg 812,40',
+  'Ansattutlegg nummer 13-2026, Kari Nordmann',
+  'Gjeld til ansatte Private utlegg 1 150,00',
+  'Sum (utbetales til konto 1234.56.78903) 43 812,40',
+  'Totalt i 2026',
+  'Beskrivelse Beløp',
+  'Gjeld til ansatte 3 924,80',
+  'Fastlønn 187 500,00',
+  'Bonus 5 000,00',
+  'Grunnlag skatt 192 500,00',
+  'Skattetrekk -73 150,00',
+  'Grunnlag feriepenger 192 500,00',
+  'Feriepenger til gode - opptjent i 2026 23 100,00',
 ];
 
 describe('parsePayslipAmount', () => {
@@ -90,7 +126,7 @@ describe('parseVismaPayslip', () => {
   });
 
   it('reconstructs the employer name across the wrapped header', () => {
-    expect(p.employer).toBe('Orange Business Digital Norway AS');
+    expect(p.employer).toBe('Eksempel Digital Norway AS');
   });
 
   it('extracts the annual salary — the value v1 imports', () => {
@@ -128,11 +164,89 @@ describe('parseVismaPayslip', () => {
   });
 });
 
+describe('parseTripletexPayslip', () => {
+  const p = parseTripletexPayslip(TRIPLETEX_LINES)!;
+
+  it('recognises the payslip and reports the provider', () => {
+    expect(p).not.toBeNull();
+    expect(p.provider).toBe('tripletex');
+  });
+
+  it('reads the period and payment date from the header row', () => {
+    expect(p.period).toBe('2026-03');
+    expect(p.payDate).toBe('2026-03-20');
+  });
+
+  it('takes the employer from the right-hand column of the first line', () => {
+    expect(p.employer).toBe('EKSEMPEL KONSULT AS');
+  });
+
+  it('uses the amount paid out as net, reimbursements included', () => {
+    expect(p.net).toBeCloseTo(43812.4, 2);
+  });
+
+  it('reads the period figures, not the year-to-date totals', () => {
+    expect(p.monthlySalary).toBe(62500);
+    expect(p.taxWithheld).toBe(25650);
+    expect(p.gross).toBe(67500);
+  });
+
+  it('reads the withholding percentage', () => {
+    expect(p.taxPercent).toBe(38);
+  });
+
+  it('leaves fields the payslip does not print as null', () => {
+    expect(p.annualSalary).toBeNull();
+    expect(p.positionPct).toBeNull();
+    expect(p.jobStartMonth).toBeNull();
+  });
+
+  it("derives the period's holiday pay from the year's accrual rate", () => {
+    // 23 100 / 192 500 = 12 %, applied to the period's 67 500.
+    expect(p.holidayPayThisYear).toBe(8100);
+  });
+
+  it("ignores holiday pay carried over from an earlier year", () => {
+    const lines = [...TRIPLETEX_LINES, 'Feriepenger til gode - opptjent i 2025 90 000,00'];
+    expect(parseTripletexPayslip(lines)!.holidayPayThisYear).toBe(8100);
+  });
+
+  it('leaves holiday pay empty without a year-to-date holiday base', () => {
+    const lines = TRIPLETEX_LINES.filter(l => !l.startsWith('Grunnlag feriepenger'));
+    expect(parseTripletexPayslip(lines)!.holidayPayThisYear).toBeNull();
+  });
+
+  it('reads the tax base when the description does not wrap', () => {
+    const lines = TRIPLETEX_LINES.flatMap(l =>
+      l === '67 500,00.' ? [] :
+      l.startsWith('Skattetrekk Grunnlag') ? ['Skattetrekk Grunnlag prosenttrekk (38,0%): 67 500,00. -25 650,00'] :
+      [l]);
+    const q = parseTripletexPayslip(lines)!;
+    expect(q.gross).toBe(67500);
+    expect(q.taxWithheld).toBe(25650);
+  });
+
+  it('falls back to the whole first line when no employer name is found', () => {
+    const lines = ['Kari Nordmann Eksempel Konsult', ...TRIPLETEX_LINES.slice(1)];
+    expect(parseTripletexPayslip(lines)!.employer).toBe('Kari Nordmann Eksempel Konsult');
+  });
+
+  it('does not claim a Visma payslip, and Visma does not claim it', () => {
+    expect(parseTripletexPayslip(VISMA_LINES)).toBeNull();
+    expect(parseVismaPayslip(TRIPLETEX_LINES)).toBeNull();
+  });
+});
+
 describe('parsePayslip (registry)', () => {
   it('routes a Visma payslip to the Visma parser', () => {
     const p = parsePayslip(VISMA_LINES);
     expect(p?.provider).toBe('visma');
     expect(p?.annualSalary).toBe(740000);
+  });
+
+  it('routes a Tripletex payslip to the Tripletex parser', () => {
+    expect(parsePayslip(TRIPLETEX_LINES)?.provider).toBe('tripletex');
+    expect(parsePayslip(TRIPLETEX_LINES, 'visma')).toBeNull();
   });
 
   it('returns null when no parser recognises the text', () => {

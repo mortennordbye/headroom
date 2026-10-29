@@ -46,7 +46,7 @@ function dedupeByMonth(items: { parsed: ParsedPayslip; pageIndex: number }[]) {
 }
 
 /**
- * Import Visma payslips into the budget — a single month or a whole archive.
+ * Import payslips into the budget — a single month or a whole archive.
  * The PDF is parsed entirely in the browser (see extractPayslipPages); its bytes
  * are never uploaded, persisted, or added to app state. Parsed figures pre-fill
  * editable rows the user can correct, a rendered page lets them validate against
@@ -319,7 +319,7 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{im.supports}</p>
 
             {/* Payroll-provider picker — driven by the registry so new providers
-                appear automatically. One available today (Visma), pre-selected. */}
+                appear automatically. The first one is pre-selected. */}
             <div className="space-y-1.5">
               <div className="text-[11px] font-medium" style={{ color: 'var(--text-2)' }}>{im.providerLabel}</div>
               <div role="radiogroup" aria-label={im.providerLabel} className="space-y-1.5">

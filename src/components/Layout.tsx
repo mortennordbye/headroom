@@ -3,10 +3,7 @@ import { NavLink, Outlet, useLocation, useSearchParams } from 'react-router';
 import {
   ChevronLeft,
   ChevronRight,
-  BarChart3,
   TrendingUp,
-  LayoutDashboard,
-  LineChart as LineChartIcon,
   Menu as MenuIcon,
   X,
   HelpCircle,
@@ -14,6 +11,7 @@ import {
   Lock,
   Pencil,
   Check,
+  type LucideIcon,
 } from 'lucide-react';
 import { format, parse, subMonths, addMonths, startOfMonth, isSameMonth } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
@@ -25,7 +23,7 @@ import OnboardingTour from './onboarding/OnboardingTour';
 import HistoryManagerModal from './HistoryManagerModal';
 import GlossaryModal from './GlossaryModal';
 
-import { NAV_ITEMS, NAV_GROUPS, MORE_ROUTES, ALWAYS_VISIBLE_NAV, groupForPath, navKeyForPath } from './navItems';
+import { NAV_ITEMS, NAV_GROUPS, MORE_ROUTES, ALWAYS_VISIBLE_NAV, groupForPath, navKeyForPath, navIconForPath } from './navItems';
 import { SegmentedControl } from './ui/SegmentedControl';
 
 // Pages whose data is scoped to the selected month get the interactive month picker.
@@ -166,6 +164,7 @@ const Layout: React.FC = () => {
             <NavButton
               key={group.primary}
               to={group.primary}
+              icon={navIconForPath(group.primary)}
               label={t.nav[group.key]}
               active={activeGroup?.primary === group.primary}
             />
@@ -457,7 +456,7 @@ const Layout: React.FC = () => {
               {NAV_ITEMS
                 .filter(item => MORE_ROUTES.includes(item.path) && isVisible(item.path))
                 .map(item => (
-                  <SheetItem key={item.path} to={item.path} icon={item.icon} label={t.nav[item.key]} onNavigate={() => setMoreOpen(false)} />
+                  <SheetItem key={item.path} to={item.path} icon={<item.icon size={20} strokeWidth={1.75} />} label={t.nav[item.key]} onNavigate={() => setMoreOpen(false)} />
                 ))}
             </div>
             {/* Setup guide — the mobile trigger for the guided tour */}
@@ -490,10 +489,10 @@ const Layout: React.FC = () => {
           borderColor: 'var(--rule)',
         }}
       >
-        <MobileNavTab to="/" icon={<LayoutDashboard size={20} strokeWidth={1.75} />} label={t.nav.dashboard} active={activeGroup?.primary === '/'} />
-        <MobileNavTab to="/budget" icon={<BarChart3 size={20} strokeWidth={1.75} />} label={t.nav.budget} active={activeGroup?.primary === '/budget'} />
-        <MobileNavTab to="/assets" icon={<TrendingUp size={20} strokeWidth={1.75} />} label={t.nav.assets} active={activeGroup?.primary === '/assets'} />
-        <MobileNavTab to="/salary" icon={<LineChartIcon size={20} strokeWidth={1.75} />} label={t.nav.salary} active={activeGroup?.primary === '/salary'} />
+        <MobileNavTab to="/" icon={navIconForPath('/')} label={t.nav.dashboard} active={activeGroup?.primary === '/'} />
+        <MobileNavTab to="/budget" icon={navIconForPath('/budget')} label={t.nav.budget} active={activeGroup?.primary === '/budget'} />
+        <MobileNavTab to="/assets" icon={navIconForPath('/assets')} label={t.nav.assets} active={activeGroup?.primary === '/assets'} />
+        <MobileNavTab to="/salary" icon={navIconForPath('/salary')} label={t.nav.salary} active={activeGroup?.primary === '/salary'} />
         <button
           onClick={() => setMoreOpen(true)}
           className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
@@ -564,34 +563,41 @@ const SheetItem: React.FC<SheetItemProps> = ({ to, icon, label, onNavigate }) =>
 
 interface NavButtonProps {
   to: string;
+  icon?: LucideIcon;
   label: string;
   /** Active state is driven by the owning group, so the tab stays lit on a child route. */
   active: boolean;
 }
 
-const NavButton: React.FC<NavButtonProps> = ({ to, label, active }) => (
+// Section icons are brass like the active underline: full brass on the active
+// tab, the dimmed brass elsewhere, so the active tab still reads first. Shown
+// from xl only: below that the seven tabs plus icons collide with the month picker.
+const NavButton: React.FC<NavButtonProps> = ({ to, icon: Icon, label, active }) => (
   <NavLink
     to={to}
     end={to === '/'}
-    className="text-[13px] font-medium pb-1 border-b transition-colors"
+    className="inline-flex items-center gap-1.5 text-[13px] font-medium pb-1 border-b transition-colors"
     style={{
       borderColor: active ? 'var(--brass)' : 'transparent',
       color: active ? 'var(--text-1)' : 'var(--text-2)',
     }}
   >
+    {Icon && (
+      <Icon size={15} strokeWidth={1.75} aria-hidden className="hidden xl:block shrink-0" style={{ color: active ? 'var(--brass)' : 'var(--brass-dim)' }} />
+    )}
     {label}
   </NavLink>
 );
 
 interface MobileNavTabProps {
   to: string;
-  icon: React.ReactNode;
+  icon?: LucideIcon;
   label: string;
   /** Group-driven active state, so the tab stays lit on a folded child route. */
   active: boolean;
 }
 
-const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon, label, active }) => (
+const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, active }) => (
   <NavLink
     to={to}
     end={to === '/'}
@@ -600,7 +606,7 @@ const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon, label, active }) 
       color: active ? 'var(--brass)' : 'var(--text-3)',
     }}
   >
-    {icon}
+    {Icon && <Icon size={20} strokeWidth={1.75} aria-hidden style={{ color: active ? 'var(--brass)' : 'var(--brass-dim)' }} />}
     <span className="truncate max-w-full px-0.5">{label}</span>
   </NavLink>
 );

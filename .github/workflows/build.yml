@@ -41,6 +41,10 @@ jobs:
       - name: Typecheck
         run: npx tsc -b
 
+      # mcp/ has its own tsconfig that `tsc -b` does not reach.
+      - name: Typecheck MCP
+        run: npx tsc -p mcp/tsconfig.json --noEmit
+
       - name: Lint
         run: npm run lint
 

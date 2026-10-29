@@ -20,8 +20,10 @@ import { projectForecast, type EffectiveScenario, type ForecastScenario, type Fo
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
-import { currentMonthKey, addMonthsKey } from '../lib/date';
+import { currentMonthKey } from '../lib/date';
+import { latestInflationPct } from '../lib/inflation';
 import { formatAxisInt } from '../lib/format';
+import { paymentTermMonths } from '../lib/loanTerm';
 
 const ForecastPage: React.FC = () => {
   const {
@@ -107,15 +109,7 @@ const ForecastPage: React.FC = () => {
     return Number.isFinite(cagr) && cagr > 0 ? Math.round(cagr * 10) / 10 : 4.5;
   }, [salaries]);
 
-  const inflationSeed = useMemo(() => {
-    if (inflation.length === 0) return 3;
-    let latest = inflation[0];
-    for (const p of inflation) if (p.month > latest.month) latest = p;
-    const prior = inflation.find(p => p.month === addMonthsKey(latest.month, -12));
-    if (!prior || prior.cpiIndex <= 0) return 3;
-    const pct = (latest.cpiIndex / prior.cpiIndex - 1) * 100;
-    return Number.isFinite(pct) && pct > 0 ? Math.round(pct * 10) / 10 : 3;
-  }, [inflation]);
+  const inflationSeed = useMemo(() => latestInflationPct(inflation), [inflation]);
 
   const savingsSeed = useMemo(() => {
     const net = calcTaxByRegion(currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
@@ -158,7 +152,7 @@ const ForecastPage: React.FC = () => {
   const isHomeowner = housingMode === 'homeowner';
   const startingMortgage = (isHomeowner ? homeowner.currentMortgageBalance : loan.laanebelop) ?? 0;
   const mortgageRatePct = (isHomeowner ? homeowner.rente : loan.rente) ?? 5;
-  const mortgageTermYears = (isHomeowner ? homeowner.nedbetalingstid : loan.nedbetalingstid) ?? 25;
+  const mortgageTermYears = (isHomeowner ? paymentTermMonths(homeowner) / 12 : loan.nedbetalingstid) ?? 25;
   // Annual mortgage payment = 12 × the shared monthly annuity, so the forecast
   // uses the same payment as the Loan page rather than re-deriving it annually.
   const annualMortgagePayment = useMemo(

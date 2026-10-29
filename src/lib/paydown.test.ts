@@ -44,6 +44,20 @@ describe('paydownVsPlan', () => {
     expect(r.monthsAhead).toBeLessThan(0);
   });
 
+  it('prices the anchor over the term left at the balance month', () => {
+    const snap = {
+      housingMode: 'homeowner',
+      homeowner: {
+        currentMortgageBalance: 2_000_000, rente: 5, nedbetalingstid: 24.25,
+        nedbetalingstidAsOf: '2026-04', currentMortgageBalanceAsOf: '2026-01',
+      },
+      assets: { houseDebt: 2_000_000 },
+    } as unknown as BalanceSnapshot;
+    // 291 months entered in April, balance from January → 294 months.
+    const r = paydownVsPlan({ '2026-04': snap });
+    expect(r.monthlyPayment).toBeCloseTo(calcMonthlyPayment(2_000_000, 5, 294 / 12), 2);
+  });
+
   it('does not divide by zero on a single-snapshot / interest-free mortgage', () => {
     const r = paydownVsPlan({ '2026-01': mk(1_000_000, 0, 20) });
     expect(r.points).toHaveLength(1);

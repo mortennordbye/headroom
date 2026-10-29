@@ -36,9 +36,10 @@ drop-in. **What would unblock**: agree the visual treatment for a band on a stac
 
 ## Payslip importer — follow-ups
 
-Shipped (2026-07): client-side Visma payslip import on the Budget page. PDFs are parsed entirely in-browser (pdf.js, lazy-loaded) and never stored; a single-month PDF opens a detailed editable review, a multi-page archive opens a batch list that fills income history back in time. Per-month figures live in `payslips: Record<month, MonthlyPayslip>` (`src/context/FinanceContext.tsx`), and net pay is written as that month's income override. Parser + tests in `src/lib/payslip/` (`parseVismaPayslip.ts`, `parsePayslipAmount.ts`, provider registry in `index.ts`); browser extraction/render in `extractPdfText.ts`; UI in `src/components/PayslipImportModal.tsx` + `src/pages/BudgetPage.tsx`. Remaining:
+Shipped (2026-07): client-side Visma payslip import (Tripletex added 2026-10) on the Budget page. PDFs are parsed entirely in-browser (pdf.js, lazy-loaded) and never stored; a single-month PDF opens a detailed editable review, a multi-page archive opens a batch list that fills income history back in time. Per-month figures live in `payslips: Record<month, MonthlyPayslip>` (`src/context/FinanceContext.tsx`), and net pay is written as that month's income override. Parser + tests in `src/lib/payslip/` (`parseVismaPayslip.ts`, `parsePayslipAmount.ts`, provider registry in `index.ts`); browser extraction/render in `extractPdfText.ts`; UI in `src/components/PayslipImportModal.tsx` + `src/pages/BudgetPage.tsx`. Remaining:
 
-- **Only Visma is supported.** The provider registry (`src/lib/payslip/index.ts`, `parsePayslip` iterating `PARSERS`) is built to take more formats, but only `parseVismaPayslip` exists. Adding another payroll provider = write a `PayslipParser` (returns `null` when it doesn't recognise the text) and push it onto `PARSERS`. **Unblock**: a sample PDF from the new provider to build a fixture from (tests inline the extracted text lines, never the binary).
+- **Visma and Tripletex are supported.** Adding another payroll provider = write a `PayslipParser` (returns `null` when it doesn't recognise the text) and push it onto `PROVIDERS` in `src/lib/payslip/index.ts`. **Unblock**: a sample PDF from the new provider to build a fixture from (tests inline invented text lines that mirror the layout, never the binary or real figures).
+- **Tripletex leaves some fields empty.** The Tripletex payslip prints no annual salary or position %, so `annualSalary` and `positionPct` come back `null`. Holiday pay is only printed year-to-date, so the period's figure is derived as period gross × (YTD accrued ÷ YTD holiday base), which assumes the holiday base equals the tax base for the month. Gross is the period's tax base ("Grunnlag prosenttrekk ...: X."), and net is the amount paid out, which includes expense reimbursements ("Gjeld til ansatte"). Bonus rows aren't mapped to `BonusEntry`. Only a single-month prosenttrekk slip has been seen; tabelltrekk and multi-page Tripletex exports are untested. **What would unblock**: more Tripletex samples (a tabelltrekk month, a month where the holiday base differs from the tax base, a multi-month export). **Where**: `src/lib/payslip/parseTripletexPayslip.ts`.
 - **Line items (on-call / overtime) aren't parsed into their own entries.** The Visma parser deliberately drops the pay-line table (Fastlønn / On-Call / Feriepenger rows) because the thousands-space and column-separator are the same character, making per-column amounts ambiguous (e.g. `On-Call ... 24/7 108,00` mis-bridges to `7 108,00`). Only the headline figures (gross/net/tax/base/holiday) are extracted. **What would unblock**: column parsing anchored on the payslip's fixed X positions (available from pdf.js `transform[4]`) instead of regex over the joined line, then map rows to `OvertimeEntry`/`BonusEntry`. **Where**: `src/lib/payslip/parseVismaPayslip.ts` (extraction), `src/lib/payslip/extractPdfText.ts` (would need to preserve per-item X), `src/components/PayslipImportModal.tsx` (write mapping).
 
 ## Time/data-model rethink — follow-ups
@@ -566,10 +567,6 @@ Remaining:
   rate. Needs the amortization split `src/lib/automation.ts` already computes,
   threaded into the rate. **Where**: `savingsContributionTotal` in
   `src/lib/savingsRate.ts` (the destinationKind filter), `src/lib/automation.ts`.
-- **`mcp/derive` doesn't pass `fixedExpenses`,** so it keeps the old
-  double-counting behaviour and disagrees with the Budget page. The reconciliation arg
-  is optional precisely so callers could be migrated separately; it needs a
-  fixed-expense list plumbed to the call site. **Where**: `mcp/derive.ts:155` and `:333`.
 - **The overlapping-jobs warning only checks the current month.** A job change
   entered with a stale end date in a *past* or future month still double-counts
   gross there (and so in the 12-month income series, volatility, and every chart
@@ -741,12 +738,43 @@ Remaining — the visual half, deliberately left out to keep the model change re
   but it is the only remaining spot where the two shapes meet, so it is where a future change is
   most likely to go wrong. **Where**: `createExpenses` in `src/components/SavingsAllocationPanel.tsx`.
 
-## MCP server ignores one-month saving adjustments
+## MCP generic `set_field` / `describe_field` tools
 
-**What:** the Budget page can now set one month's saving (`savingsMonthOverrides`, kroner per
-`'yyyy-MM'`) without changing the plan. The MCP server's budget summary still reports only the plan
-(`savingsTargetPercent`), so an assistant reading it doesn't see that a month was adjusted.
-**Why deferred:** kept the change to the app; the MCP read path has its own derive layer and tests.
-**Unblock:** include the viewed month's adjustment in the budget summary and document it in the tool
-description. **Where:** `mcp/derive.ts` (budget summary, ~line 168), adjustment semantics in
-`src/lib/savingsRate.ts` (`resolveSavingsForMonth`).
+**What:** a `describe_field(key)` read tool and a `set_field(key, value)` write tool covering every
+`PersistedKey`, validating `value` with that key's payload-registry `read()` guard.
+**Why deferred:** `makePayloadRegistry` needs the default `assets`/`loan`/`pension`/`homeowner`/
+`transition`/`fixedExpenses` objects, and those are module-private constants in
+`src/context/FinanceContext.tsx`, which pulls in React. The MCP server must not import it. Also,
+about 20 keys read with `whenDefined`/`whenTruthy`, which accept any non-undefined value
+(`income: "abc"` passes), so the registry guard alone cannot reject a wrong type for those keys.
+**Unblock:** move the six default constants into `src/lib` (FinanceContext re-imports them), and
+decide how to type-check the weakly guarded keys (per-key zod schemas, or a check against the
+registry `default`). **Where:** `src/lib/payloadRegistry.ts`, `src/context/FinanceContext.tsx`
+(`DEFAULT_ASSETS` ~line 584 through `DEFAULT_PENSION`, `PAYLOAD_REGISTRY` ~line 659),
+`mcp/tools/write.ts`.
+
+## MCP server is not type-checked in CI
+
+**What:** `npx tsc -b` only covers `tsconfig.app.json` and `tsconfig.node.json`, so `mcp/` is never
+type-checked. `npx tsc -p mcp/tsconfig.json --noEmit` reports errors on main: `mcp/fixture.ts` is
+missing required `Assets`/`Pension` fields and sets `skattefradragssats`, which no longer exists on
+`LoanData`/`HomeownerData`. `mcp/derive.ts` reads `homeowner.skattefradragssats` in `overview` and
+`whatIfPrepayVsInvest`, so those two always fall back to 22.
+**Why deferred:** found while adding the MCP read tools; fixing the fixture types touches every MCP
+test and is separate from that work.
+**Unblock:** fix the fixture and the two `skattefradragssats` reads, then add `mcp/tsconfig.json` to
+the CI type-check step (or as a reference in the root `tsconfig.json`).
+**Where:** `mcp/tsconfig.json`, `mcp/fixture.ts`, `mcp/derive.ts`, `.github/workflows/`.
+
+## Revision-history prune scans every snapshot on each save
+
+**What:** the byte-cap prune in `recordHistory` sums `LENGTH(content)` over every `finance_history`
+row on every save, which reads each snapshot. Measured at the 200 MB cap: about 70-120 ms of blocked
+event loop per save. `GET /api/history` does the same scan. At today's ~110 KB blob the table stays
+far below the cap, so the cost is small.
+**Why deferred:** found in the post-merge audit of the revision system; not a correctness issue and
+not reachable at current data size.
+**Unblock:** add a `bytes` column filled at insert time (backfill once on startup) and sum that in
+the prune and list queries.
+**Where:** `server/index.js` (`historyPruneBytesStmt`, `historyListStmt`, `recordHistory`).
+

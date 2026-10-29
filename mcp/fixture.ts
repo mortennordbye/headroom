@@ -18,11 +18,13 @@ import type {
 const ASSETS: Assets = {
   portfolio: 500000,
   unrealizedGain: 100000,
+  shieldingDeduction: 0,
   taxRate: 37.84,
   crypto: 50000,
   cryptoUnrealizedGain: 10000,
   cryptoTaxRate: 37.84,
   bsu: 30000,
+  bsuAnnualContribution: 0,
   savings: 0,
   savingsAccounts: [{ id: 's1', name: 'Rainy day', balance: 80000 }],
   houseValue: 4000000,
@@ -33,12 +35,13 @@ const ASSETS: Assets = {
 const LOAN: LoanData = {
   arslonn: 720000, eksisterendeGjeld: 0, egenkapital: 800000, laanebelop: 2500000,
   rente: 5.5, nedbetalingstid: 25, termingebyr: 65, etableringsgebyr: 5000,
-  skattefradragssats: 22, betingetLaan: 0, kjoepesum: 4000000, gyldigTil: '2026-12',
+  betingetLaan: 0, kjoepesum: 4000000, gyldigTil: '2026-12',
 };
 
 const HOMEOWNER: HomeownerData = {
   currentMortgageBalance: 2500000, originalLoanAmount: 3000000, rente: 5.5,
-  nedbetalingstid: 25, termingebyr: 65, skattefradragssats: 22, accountLabel: 'Boliglån',
+  nedbetalingstid: 25, termingebyr: 65, accountLabel: 'Boliglån',
+  nedbetalingstidAsOf: '2026-06', currentMortgageBalanceAsOf: '2026-06',
   startDate: '2020-01', notifiedRate: 5.7, notifiedRateFrom: '2026-08',
 };
 
@@ -50,6 +53,8 @@ const TRANSITION: TransitionData = {
 const PENSION: Pension = {
   otpBalance: 250000, otpEmployerPct: 5, otpEmployeePct: 0, otpGrowthRate: 5,
   ipsBalance: 40000, ipsAnnualContribution: 15000, ipsGrowthRate: 5, birthYear: 1990, retirementAge: 67,
+  folketrygdBeholdning: 0, folketrygdSingle: true, pensionPayoutYears: 10, afpEligible: false,
+  otpAutoPost: false, ipsAutoPost: false,
 };
 
 export function fullFixture(): ExportPayload {
@@ -123,7 +128,7 @@ export function fullFixture(): ExportPayload {
 
     // --- consulting ---
     employerCostConfig: { feriepengesatsPct: 12, payrollTaxPct: 14.1, overheadAnnual: 50000, overheadPct: 0 },
-    billingConfig: { workHoursPerYear: 1950, utilizationPct: 80, billableHoursOverride: null, targetMarginPct: 20, hoursPerDay: 7.5 },
+    billingConfig: { workHoursPerYear: 1950, utilizationPct: 80, billableHoursOverride: null, targetMarginPct: 20, hoursPerDay: 7.5, billedHourly: null, solveFor: 'rate' },
 
     // --- profile ---
     profile: { name: 'Alex Doe', birthDate: '1990-05-01' },

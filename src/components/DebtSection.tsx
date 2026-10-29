@@ -210,7 +210,7 @@ export default function DebtSection({ debts: debtsProp, readOnly = false }: Debt
             })}
             <div className="pt-4 flex justify-between items-baseline">
               <SectionLabel>{d.sum}</SectionLabel>
-              <span className="text-xl font-bold font-mono" style={{ color: 'var(--negative)' }}>−{formatCurrency(totalDebt)}</span>
+              <span className="text-xl font-bold font-mono" style={{ color: totalDebt > 0 ? 'var(--negative)' : 'var(--text-1)' }}>{totalDebt > 0 ? '−' : ''}{formatCurrency(totalDebt)}</span>
             </div>
           </div>
 

@@ -40,7 +40,7 @@ describe('categorize', () => {
     ['TRENITALIA - PT WL', 'transport'],
     ['FLYBUSSEN CONNECT', 'transport'],
     ['DUTY FREE 7108 AVGANG NOR', 'shopping'],
-    ['Google Workspace_nordbye', 'subscriptions'],
+    ['Google Workspace_example', 'subscriptions'],
     // Real-data coverage: outgoing "Til:" account/person payments → transfers.
     ['Til:98765432101', 'transfers'],
     ['Til: Trustly Norway AS Betalt: 20.06.26', 'transfers'],
