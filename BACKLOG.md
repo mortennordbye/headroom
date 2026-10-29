@@ -753,19 +753,6 @@ registry `default`). **Where:** `src/lib/payloadRegistry.ts`, `src/context/Finan
 (`DEFAULT_ASSETS` ~line 584 through `DEFAULT_PENSION`, `PAYLOAD_REGISTRY` ~line 659),
 `mcp/tools/write.ts`.
 
-## MCP server is not type-checked in CI
-
-**What:** `npx tsc -b` only covers `tsconfig.app.json` and `tsconfig.node.json`, so `mcp/` is never
-type-checked. `npx tsc -p mcp/tsconfig.json --noEmit` reports errors on main: `mcp/fixture.ts` is
-missing required `Assets`/`Pension` fields and sets `skattefradragssats`, which no longer exists on
-`LoanData`/`HomeownerData`. `mcp/derive.ts` reads `homeowner.skattefradragssats` in `overview` and
-`whatIfPrepayVsInvest`, so those two always fall back to 22.
-**Why deferred:** found while adding the MCP read tools; fixing the fixture types touches every MCP
-test and is separate from that work.
-**Unblock:** fix the fixture and the two `skattefradragssats` reads, then add `mcp/tsconfig.json` to
-the CI type-check step (or as a reference in the root `tsconfig.json`).
-**Where:** `mcp/tsconfig.json`, `mcp/fixture.ts`, `mcp/derive.ts`, `.github/workflows/`.
-
 ## Revision-history prune scans every snapshot on each save
 
 **What:** the byte-cap prune in `recordHistory` sums `LENGTH(content)` over every `finance_history`
