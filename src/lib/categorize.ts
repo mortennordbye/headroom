@@ -263,6 +263,16 @@ export function categorizeWithRules(input: CategorizeInput, rules: CategoryRule[
   return categorize(input);
 }
 
+/**
+ * An auto label that an older ruleset got wrong and the current one would not
+ * give: `vipps` used to be a transfers keyword, so Vipps shop payments were
+ * filed as transfers. Such rows are re-run through the engine; a Vipps row the
+ * engine still calls a transfer (e.g. "Vipps Til: …") keeps its label.
+ */
+export function isStaleAutoLabel(category: string | undefined, merchant?: string, description?: string): boolean {
+  return category === 'transfers' && buildMatchHaystack(merchant, description).includes('vipps');
+}
+
 /** Categorize a transaction. Income short-circuits to `income`. */
 export function categorize(input: CategorizeInput): CategorizeResult {
   if (input.kind === 'income') return { category: 'income', source: 'auto' };
