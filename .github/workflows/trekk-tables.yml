@@ -1,0 +1,148 @@
+name: Trekk tables
+
+# Skatteetaten publishes next year's trekkrutine (Konstanter.java) and the
+# "trekktabeller i tekstformat" file in December. This adds the year's constants
+# with scripts/trekk/update-trekk-year.mjs, checks the port against every row of
+# the official file, runs the full verify, and opens a tier:review PR. If the
+# trekkrutine changed in a way the script or the port can't follow, it opens an
+# issue instead.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC, November–February.
+    - cron: '0 6 * 11,12,1,2 1'
+  workflow_dispatch:
+    inputs:
+      year:
+        description: Income year to add (default tries next year, then this year)
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trekk-tables
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+          cache: npm
+
+      - name: Add the year's constants
+        id: pick
+        env:
+          INPUT_YEAR: ${{ inputs.year }}
+        run: |
+          now=$(date -u +%Y)
+          years="${INPUT_YEAR:-$((now + 1)) $now}"
+          for y in $years; do
+            if git ls-remote --exit-code --heads origin "chore/trekk-tables-$y" >/dev/null; then
+              echo "A PR branch for $y already exists"; continue
+            fi
+            out=$(mktemp)
+            if ! GITHUB_OUTPUT="$out" node scripts/trekk/update-trekk-year.mjs "$y" 2>"$out.err"; then
+              { echo "status=broken"; echo "year=$y"; } >> "$GITHUB_OUTPUT"
+              cat "$out.err"; cp "$out.err" "$RUNNER_TEMP/error.txt"; exit 0
+            fi
+            cat "$out"
+            if grep -q '^status=updated' "$out"; then
+              if ! grep -q '^zip_url=http' "$out"; then
+                echo "$y constants are out but the table file isn't yet; trying again next run"
+                git checkout -- src; continue
+              fi
+              cat "$out" >> "$GITHUB_OUTPUT"; echo "year=$y" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          done
+          echo "status=none" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        if: steps.pick.outputs.status == 'updated'
+        run: npm ci && npm ci --prefix server
+
+      - name: Check against the official table file
+        id: verify
+        if: steps.pick.outputs.status == 'updated'
+        env:
+          ZIP_URL: ${{ steps.pick.outputs.zip_url }}
+          YEAR: ${{ steps.pick.outputs.year }}
+        run: |
+          set -o pipefail
+          dir="$RUNNER_TEMP/trekk"; mkdir -p "$dir"
+          curl -fsSL "$ZIP_URL" -o "$dir/tables.zip"
+          unzip -q -o "$dir/tables.zip" -d "$dir"
+          file=$(find "$dir" -name '*.txt' | head -1)
+          {
+            TREKK_FILE="$file" TREKK_YEAR="$YEAR" npx vitest run src/lib/forskuddstrekk.file.test.ts
+            npx tsc -b
+            npx tsc -p mcp/tsconfig.json --noEmit
+            npm run lint
+            npm test
+          } 2>&1 | tee "$RUNNER_TEMP/verify.txt"
+        continue-on-error: true
+
+      - name: Open the PR
+        if: steps.pick.outputs.status == 'updated' && steps.verify.outcome == 'success'
+        env:
+          YEAR: ${{ steps.pick.outputs.year }}
+          TAX_ADDED: ${{ steps.pick.outputs.tax_params_added }}
+        run: |
+          branch="chore/trekk-tables-$YEAR"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add src/lib/forskuddstrekk.ts src/lib/norwegianTax.ts
+          git commit -m "fix(tax): add the $YEAR withholding tables" \
+            -m "Constants from Skatteetaten's trekkrutine$YEAR (Konstanter.java), added by scripts/trekk/update-trekk-year.mjs."
+          git push -u origin "$branch"
+          tax_note="TAX_PARAMS already had $YEAR, so only TREKK_PARAMS changed."
+          if [ "$TAX_ADDED" = "true" ]; then
+            tax_note="TAX_PARAMS[$YEAR] was missing and is generated from the same constants; check it against the adopted figures (Forskuddsutskrivingen $YEAR)."
+          fi
+          gh pr create --base main --head "$branch" --label tier:review \
+            --title "fix(tax): add the $YEAR withholding tables" \
+            --body "## Why
+          Skatteetaten has published the $YEAR trekkrutine and table file.
+
+          ## What
+          - \`TREKK_PARAMS[$YEAR]\` in \`src/lib/forskuddstrekk.ts\`, from trekkrutine$YEAR/Konstanter.java.
+          - $tax_note
+          - Still manual if they changed: \`PENSION_TAX_PARAMS\` and \`WEALTH_TAX_PARAMS\` in \`src/lib/norwegianTax.ts\`.
+
+          ## Verification
+          Run by the Trekk tables workflow: every monthly, 14-day and weekly row of the $YEAR \"trekktabeller i tekstformat\" file matches (\`src/lib/forskuddstrekk.file.test.ts\`), plus tsc, the MCP typecheck, lint and the full test suite.
+
+          This PR is opened with GITHUB_TOKEN, so the required checks don't start on it. Push a commit to the branch to run CI, or merge with --admin like the release PRs."
+
+      - name: Report a failed update
+        if: steps.pick.outputs.status == 'broken' || (steps.pick.outputs.status == 'updated' && steps.verify.outcome != 'success')
+        env:
+          YEAR: ${{ steps.pick.outputs.year }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Trekk tables $YEAR: automatic update needs a hand"
+          if gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number' | grep -q .; then
+            echo "Issue already open"; exit 0
+          fi
+          log=$(tail -c 6000 "$RUNNER_TEMP/error.txt" 2>/dev/null || tail -c 6000 "$RUNNER_TEMP/verify.txt" 2>/dev/null || true)
+          gh issue create --label tier:review --title "$title" --body "Skatteetaten has published the $YEAR trekkrutine, but the automatic update didn't pass: either Konstanter.java no longer has the shape \`scripts/trekk/update-trekk-year.mjs\` expects, or the port no longer matches the official table file.
+
+          Run: $RUN_URL
+
+          \`\`\`
+          $log
+          \`\`\`"
