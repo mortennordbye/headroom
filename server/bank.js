@@ -272,9 +272,26 @@ function readStore() {
 
 // Stable per-account key stamped onto every imported transaction, so the client
 // can badge and (later) filter by account even across banks with colliding
-// account names.
+// account names. `key_uid` is the uid the account had when first linked: the
+// ASPSP issues new account uids on a re-link, and keying on the current uid
+// would split one real account into two (and orphan its custom name).
 function accountKey(connection, acc) {
-  return `${connection.id.slice(0, 8)}:${acc.uid}`;
+  return `${connection.id.slice(0, 8)}:${acc.key_uid || acc.uid}`;
+}
+
+/**
+ * Carry each account's key forward when a connection's account list is replaced
+ * (re-link, or the account-list refresh): an account matching a previous one by
+ * IBAN, or failing that by uid, keeps that account's key uid. New accounts key
+ * on their own uid. Pure.
+ */
+function carryAccountKeys(prevAccounts, nextAccounts) {
+  const prev = Array.isArray(prevAccounts) ? prevAccounts : [];
+  return nextAccounts.map((a) => {
+    const match = (a.iban && prev.find((p) => p.iban && p.iban === a.iban)) || prev.find((p) => p.uid === a.uid);
+    const keyUid = match ? match.key_uid || match.uid : null;
+    return keyUid && keyUid !== a.uid ? { ...a, key_uid: keyUid } : a;
+  });
 }
 
 // --- redirect URL + app id: env wins, else a UI setting in eb-config.json ---
@@ -625,7 +642,7 @@ async function finishLink(code, state) {
     // Preserve the prior sync time on a re-link so we don't refetch 90 days.
     last_sync: idx >= 0 ? store.connections[idx].last_sync || null : null,
     needs_relink: false,
-    accounts,
+    accounts: idx >= 0 ? carryAccountKeys(store.connections[idx].accounts, accounts) : accounts,
     accounts_note: note,
   };
   if (idx >= 0) store.connections[idx] = connection;
@@ -728,7 +745,7 @@ async function fetchMappedTransactions() {
     if (!hasAccounts || (missingIban && !c.accounts_enriched)) {
       try {
         const { accounts: refreshed, note } = await resolveSessionAccounts({ session_id: c.session_id });
-        if (refreshed.length) c.accounts = refreshed;
+        if (refreshed.length) c.accounts = carryAccountKeys(c.accounts, refreshed);
         c.accounts_note = note;
         if (missingIban) c.accounts_enriched = true;
         writeStore(store);
@@ -849,6 +866,7 @@ module.exports = {
   evictSupersededPending,
   dropStaleBareTwins,
   normalizeAccount,
+  carryAccountKeys,
   lastSyncAgeMs,
   // flow
   getAspsps,

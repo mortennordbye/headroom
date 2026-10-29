@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 // The Enable Banking mapping lives in the CommonJS server engine (server/bank.js)
 // so it ships in the production image; it's tested here via Vitest.
-import { mapEBTransaction, mapEBTransactions, mergeTransactions, evictSupersededPending, dropStaleBareTwins, normalizeAccount } from '../../server/bank.js';
+import { mapEBTransaction, mapEBTransactions, mergeTransactions, evictSupersededPending, dropStaleBareTwins, normalizeAccount, carryAccountKeys } from '../../server/bank.js';
 import type { MappedTransaction } from '../../server/bank';
 
 interface EBTransaction {
@@ -337,5 +337,33 @@ describe('dropStaleBareTwins', () => {
     const clean = [row({ id: 'eb-onlylegacy' }), row({ id: 'eb-cccc3333-other', account: 'x' }), row({ id: 'manual-2' })];
     expect(dropStaleBareTwins(clean)).toHaveLength(3);
     expect(dropStaleBareTwins(dropStaleBareTwins(clean))).toHaveLength(3);
+  });
+});
+
+describe('carryAccountKeys', () => {
+  it('keeps the old key when a re-link issues a new uid for the same IBAN', () => {
+    const prev = [{ uid: 'old-1', iban: 'NO111' }, { uid: 'old-2', iban: 'NO222' }];
+    const next = [{ uid: 'new-2', iban: 'NO222' }, { uid: 'new-1', iban: 'NO111' }];
+    expect(carryAccountKeys(prev, next)).toEqual([
+      { uid: 'new-2', iban: 'NO222', key_uid: 'old-2' },
+      { uid: 'new-1', iban: 'NO111', key_uid: 'old-1' },
+    ]);
+  });
+
+  it('keeps the original key across several re-links', () => {
+    const once = carryAccountKeys([{ uid: 'a', iban: 'NO1' }], [{ uid: 'b', iban: 'NO1' }]);
+    expect(carryAccountKeys(once, [{ uid: 'c', iban: 'NO1' }])).toEqual([{ uid: 'c', iban: 'NO1', key_uid: 'a' }]);
+  });
+
+  it('matches by uid when there is no IBAN, and leaves new accounts on their own uid', () => {
+    expect(carryAccountKeys([{ uid: 'u1' }], [{ uid: 'u1' }, { uid: 'u9', iban: 'NO9' }])).toEqual([{ uid: 'u1' }, { uid: 'u9', iban: 'NO9' }]);
+  });
+
+  it('does not match two accounts on an absent IBAN', () => {
+    expect(carryAccountKeys([{ uid: 'a' }], [{ uid: 'b' }])).toEqual([{ uid: 'b' }]);
+  });
+
+  it('handles no previous accounts', () => {
+    expect(carryAccountKeys(undefined, [{ uid: 'b', iban: 'NO1' }])).toEqual([{ uid: 'b', iban: 'NO1' }]);
   });
 });
