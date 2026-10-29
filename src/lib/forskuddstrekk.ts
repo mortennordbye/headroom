@@ -12,10 +12,13 @@
 // so Finnmark tables can use a lower felles rate. Verified row-for-row against
 // Skatteetaten's "trekktabeller i tekstformat" file in forskuddstrekk.test.ts.
 
-import { TAX_YEAR } from './norwegianTax';
+import { TAX_YEAR, IPS_MAX_DEDUCTION } from './norwegianTax';
+
+export type PayPeriod = 'month' | '14d' | 'week';
 
 export type TaxCard =
-  | { kind: 'table'; table: string }
+  // `period` absent = monthly pay (cards saved before pay periods existed).
+  | { kind: 'table'; table: string; period?: PayPeriod }
   | { kind: 'percent'; pct: number };
 
 interface TrekkParams {
@@ -130,8 +133,16 @@ export function parseTableNumber(input: string): TrekkTable | null {
   return null;
 }
 
-// Monthly period constants (Periode.PERIODE_1_MAANED).
-const MONTH_STEP = 100;
+// Pay-period constants (trekkrutine Periode): payouts per year, payouts that
+// carry trekk on a 10.5-month table, and the grunnlag step the tables use.
+// `inntekt` annualises a payout on ordinary tables (the trekkrutine's 12.12 /
+// 26.26 / 52.52); the special tables annualise by the plain payout count.
+interface PeriodSpec { payouts: number; trekkPayouts: number; inntekt: number; step: number; juneFree: number; decemberHalf: number }
+const PERIODS: Record<PayPeriod, PeriodSpec> = {
+  month: { payouts: 12, trekkPayouts: 10.5, inntekt: 12.12, step: 100, juneFree: 1, decemberHalf: 1 },
+  '14d': { payouts: 26, trekkPayouts: 23, inntekt: 26.26, step: 50, juneFree: 2, decemberHalf: 2 },
+  week: { payouts: 52, trekkPayouts: 46, inntekt: 52.52, step: 20, juneFree: 4, decemberHalf: 4 },
+};
 
 function minstefradrag(t: TrekkTable, P: TrekkParams, pi: number): number {
   const sjo = t.type === 'sjo';
@@ -160,17 +171,23 @@ function trygdeavgift(t: TrekkTable, P: TrekkParams, pi: number): number {
 }
 
 /**
- * Tabelltrekk for one month's trekkgrunnlag on a full-trekk month. Returns 0 for
- * non-finite or negative input.
+ * Tabelltrekk for one payout's trekkgrunnlag on a full-trekk payout. Returns 0
+ * for non-finite or negative input.
  */
-export function calcTabelltrekk(t: TrekkTable, monthlyGrunnlag: number, year: number = TAX_YEAR): number {
-  if (!Number.isFinite(monthlyGrunnlag) || monthlyGrunnlag <= 0) return 0;
+export function calcTabelltrekk(
+  t: TrekkTable,
+  grunnlagPerPayout: number,
+  year: number = TAX_YEAR,
+  period: PayPeriod = 'month',
+): number {
+  if (!Number.isFinite(grunnlagPerPayout) || grunnlagPerPayout <= 0) return 0;
   const P = paramsFor(year);
-  const grunnlag = Math.floor(monthlyGrunnlag);
-  // Tables are stepped: every grunnlag in a 100-kr band uses the band's midpoint.
-  const rounded = Math.floor(grunnlag / MONTH_STEP) * MONTH_STEP + MONTH_STEP / 2;
+  const S = PERIODS[period];
+  const grunnlag = Math.floor(grunnlagPerPayout);
+  // Tables are stepped: every grunnlag in a band uses the band's midpoint.
+  const rounded = Math.floor(grunnlag / S.step) * S.step + S.step / 2;
   const vanlig = t.type === 'vanlig';
-  const pi = Math.round(rounded * (vanlig ? 12.12 : 12));
+  const pi = Math.round(rounded * (vanlig ? S.inntekt : S.payouts));
 
   const standardfradrag = t.type === 'standardfradrag' || t.type === 'sjo' || t.type === 'finnmark'
     ? Math.min(Math.round((pi * P.standardfradragPct) / 100), P.standardfradragMax)
@@ -183,17 +200,21 @@ export function calcTabelltrekk(t: TrekkTable, monthlyGrunnlag: number, year: nu
   const felles = alminnelig < 0 ? 0 : Math.round((alminnelig * (t.finnmark ? P.fellesFinnmarkPct : P.fellesPct)) / 100);
   const sumSkatt = kommune + felles + trinnskatt(P, pi) + trygdeavgift(t, P, pi);
 
-  const perMonth = sumSkatt / (vanlig || !t.twelveMonths ? 10.5 : 12);
-  const trekk = t.type === 'sjo' ? Math.floor(perMonth) : Math.round(perMonth);
+  const perPayout = sumSkatt / (vanlig || !t.twelveMonths ? S.trekkPayouts : S.payouts);
+  const trekk = t.type === 'sjo' ? Math.floor(perPayout) : Math.round(perPayout);
   return Math.min(trekk, grunnlag);
 }
+
+const PAY_PERIODS: readonly PayPeriod[] = ['month', '14d', 'week'];
 
 /** Validated skattekort from untrusted input, or null when it isn't usable. */
 export function sanitizeTaxCard(v: unknown): TaxCard | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
   if (o.kind === 'table' && typeof o.table === 'string' && parseTableNumber(o.table)) {
-    return { kind: 'table', table: o.table.trim() };
+    if (o.period === undefined) return { kind: 'table', table: o.table.trim() };
+    if (!PAY_PERIODS.includes(o.period as PayPeriod)) return null;
+    return { kind: 'table', table: o.table.trim(), period: o.period as PayPeriod };
   }
   if (o.kind === 'percent' && typeof o.pct === 'number' && Number.isFinite(o.pct) && o.pct >= 0 && o.pct <= 100) {
     return { kind: 'percent', pct: o.pct };
@@ -202,30 +223,79 @@ export function sanitizeTaxCard(v: unknown): TaxCard | null {
 }
 
 /**
- * What is withheld from `monthlyGross` in calendar month `month` (1–12). On a
- * 10.5-month table June has no trekk and December half; 12-month tables and
+ * What is withheld in calendar month `month` (1–12) from that month's regular
+ * gross plus any one-off `extraGross` (bonus, overtime) paid that month.
+ *
+ * Regular pay: on a 10.5-month table June's payouts carry no trekk and
+ * December's carry half (one payout each on monthly pay, two on 14-day, four on
+ * weekly); the remaining payouts are spread evenly over the other ten months, so
+ * the year withholds exactly the table's trekk-payout count. 12-month tables and
  * prosenttrekk withhold the same way every month.
+ *
+ * One-off pay goes through the table on top of one regular payout (the trekk
+ * the payout gains), in any month, June included.
  */
-export function withholdingForMonth(card: TaxCard, monthlyGross: number, month: number, year: number = TAX_YEAR): number {
-  if (!Number.isFinite(monthlyGross) || monthlyGross <= 0) return 0;
+export function withholdingForMonth(
+  card: TaxCard,
+  monthlyGross: number,
+  month: number,
+  extraGross: number = 0,
+  year: number = TAX_YEAR,
+): number {
+  const gross = Number.isFinite(monthlyGross) && monthlyGross > 0 ? monthlyGross : 0;
+  const extra = Number.isFinite(extraGross) && extraGross > 0 ? extraGross : 0;
   if (card.kind === 'percent') {
     const pct = Number.isFinite(card.pct) ? Math.min(100, Math.max(0, card.pct)) : 0;
-    return Math.round((monthlyGross * pct) / 100);
+    return Math.round(((gross + extra) * pct) / 100);
   }
   const t = parseTableNumber(card.table);
   if (!t) return 0;
-  const full = calcTabelltrekk(t, monthlyGross, year);
-  if (t.twelveMonths) return full;
-  if (month === 6) return 0;
-  if (month === 12) return Math.round(full / 2);
-  return full;
+  const period = card.period ?? 'month';
+  const S = PERIODS[period];
+  const perPayout = (gross * 12) / S.payouts;
+  const full = calcTabelltrekk(t, perPayout, year, period);
+  const extraTrekk = extra > 0 ? calcTabelltrekk(t, perPayout + extra, year, period) - full : 0;
+
+  let regular: number;
+  if (t.twelveMonths) regular = full * (S.payouts / 12);
+  else if (month === 6) regular = 0;
+  else if (month === 12) regular = (full / 2) * S.decemberHalf;
+  else regular = full * ((S.payouts - S.juneFree - S.decemberHalf) / 10);
+  return Math.round(regular + extraTrekk);
 }
 
 /** Withholding for each month Jan–Dec (index 0 = January). */
 export function withholdingByMonth(
   card: TaxCard,
   monthlyGrossFor: (month: number) => number,
+  extraGrossFor: (month: number) => number = () => 0,
   year: number = TAX_YEAR,
 ): number[] {
-  return Array.from({ length: 12 }, (_, i) => withholdingForMonth(card, monthlyGrossFor(i + 1), i + 1, year));
+  return Array.from({ length: 12 }, (_, i) =>
+    withholdingForMonth(card, monthlyGrossFor(i + 1), i + 1, extraGrossFor(i + 1), year));
+}
+
+/**
+ * A budget month's take-home on a skattekort: that month's gross plus one-off
+ * pay, less what the card withholds and the IPS contribution (which leaves the
+ * paycheck in the annual model too). Returns null when the card doesn't apply:
+ * no card, another region, or a month outside `currentYear` (a skattekort is
+ * per year). The table already carries the user's deductions, so nothing else
+ * is taken off.
+ */
+export function cardNetForMonth(
+  card: TaxCard | null | undefined,
+  region: string,
+  monthKey: string,
+  currentYear: number,
+  grossAnnual: number,
+  extraGross: number,
+  ipsAnnualContribution: number,
+): number | null {
+  if (!card || region !== 'no' || !monthKey.startsWith(`${currentYear}-`)) return null;
+  const monthlyGross = Number.isFinite(grossAnnual) ? Math.max(0, grossAnnual) / 12 : 0;
+  const extra = Number.isFinite(extraGross) ? Math.max(0, extraGross) : 0;
+  const ips = Number.isFinite(ipsAnnualContribution) ? Math.min(Math.max(0, ipsAnnualContribution), IPS_MAX_DEDUCTION) / 12 : 0;
+  const withheld = withholdingForMonth(card, monthlyGross, Number(monthKey.slice(5, 7)), extra);
+  return Math.round(monthlyGross + extra - withheld - ips);
 }

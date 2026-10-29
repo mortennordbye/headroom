@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import { calcTaxByRegion } from '../lib/norwegianTax';
-import { parseTableNumber, withholdingByMonth, trekkYear, type TaxCard } from '../lib/forskuddstrekk';
+import { parseTableNumber, withholdingByMonth, trekkYear, type TaxCard, type PayPeriod } from '../lib/forskuddstrekk';
 import { restskattStatus } from '../lib/restskatt';
 import { parseLocaleNumber } from '../lib/validators';
 import { Card } from './ui/Card';
@@ -17,12 +17,13 @@ const draftFor = (card: TaxCard | null, locale: string): string =>
 /**
  * Skattekort editor + what it withholds month by month this year, and the
  * restskatt / refund that leaves against the modelled annual tax. Norwegian
- * region only; the budget's monthly income is deliberately not affected.
+ * region only. This year's budget income follows the same card
+ * (`derivedNetMonthlyFor`).
  */
 export function TaxCardSection() {
   const {
     t, lang, formatCurrency, taxCard, setTaxCard,
-    salaries, jobs, region, customTaxRatePct, pension, annualMortgageInterest,
+    salaries, jobs, bonuses, overtime, region, customTaxRatePct, pension, annualMortgageInterest,
   } = useFinance();
   const sp = t.salaryPage;
   const inputId = useId();
@@ -30,9 +31,16 @@ export function TaxCardSection() {
   const [mode, setMode] = useState<Mode>(taxCard?.kind ?? 'none');
   const [draft, setDraft] = useState(draftFor(taxCard, locale));
   const [error, setError] = useState<string | null>(null);
+  const storedPeriod: PayPeriod = taxCard?.kind === 'table' ? taxCard.period ?? 'month' : 'month';
+  const [period, setPeriod] = useState<PayPeriod>(storedPeriod);
   // Re-sync when the stored card changes from outside (load, import, undo).
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setMode(taxCard?.kind ?? 'none'); setDraft(draftFor(taxCard, locale)); setError(null); }, [taxCard, locale]);
+  useEffect(() => { setMode(taxCard?.kind ?? 'none'); setDraft(draftFor(taxCard, locale)); setPeriod(storedPeriod); setError(null); }, [taxCard, locale, storedPeriod]);
+
+  const changePeriod = (p: PayPeriod) => {
+    setPeriod(p);
+    if (taxCard?.kind === 'table') setTaxCard({ ...taxCard, period: p });
+  };
 
   // The stored card only changes on a valid commit (or "none"), so switching
   // modes to look doesn't throw the old card away.
@@ -53,7 +61,7 @@ export function TaxCardSection() {
     if (mode === 'table') {
       if (!parseTableNumber(draft)) { setError(sp.taxCardInvalidTable); return; }
       setError(null);
-      setTaxCard({ kind: 'table', table: draft.trim() });
+      setTaxCard({ kind: 'table', table: draft.trim(), period });
     } else if (mode === 'percent') {
       const pct = parseLocaleNumber(draft);
       if (!Number.isFinite(pct) || pct < 0 || pct > 100) { setError(sp.taxCardInvalidPercent); return; }
@@ -66,21 +74,26 @@ export function TaxCardSection() {
   const currentMonth = new Date().getMonth() + 1;
   const summary = useMemo(() => {
     if (!taxCard) return null;
-    const grossFor = (m: number) => calcActiveGrossAnnual(salaries, jobs, `${year}-${String(m).padStart(2, '0')}`) / 12;
-    const months = withholdingByMonth(taxCard, grossFor);
-    const yearGross = Array.from({ length: 12 }, (_, i) => grossFor(i + 1)).reduce((s, g) => s + g, 0);
+    const key = (m: number) => `${year}-${String(m).padStart(2, '0')}`;
+    const grossFor = (m: number) => calcActiveGrossAnnual(salaries, jobs, key(m)) / 12;
+    // Every bonus and overtime payout dated this year, in the month it lands.
+    const extraFor = (m: number) =>
+      bonuses.reduce((s, b) => (b.date.startsWith(key(m)) ? s + b.amount : s), 0) +
+      overtime.reduce((s, o) => (o.date.startsWith(key(m)) ? s + o.amount : s), 0);
+    const months = withholdingByMonth(taxCard, grossFor, extraFor);
+    const yearGross = Array.from({ length: 12 }, (_, i) => grossFor(i + 1) + extraFor(i + 1)).reduce((s, g) => s + g, 0);
     if (!(yearGross > 0)) return null;
     const yearWithheld = months.reduce((s, v) => s + v, 0);
     const expectedTax = calcTaxByRegion(yearGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).totalTax;
     const gap = expectedTax - yearWithheld;
-    const thisGross = grossFor(currentMonth);
+    const thisGross = grossFor(currentMonth) + extraFor(currentMonth);
     return {
       months, yearWithheld, expectedTax, gap,
       status: restskattStatus(gap, expectedTax),
       thisWithheld: months[currentMonth - 1],
       thisNet: thisGross - months[currentMonth - 1],
     };
-  }, [taxCard, salaries, jobs, year, currentMonth, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest]);
+  }, [taxCard, salaries, jobs, bonuses, overtime, year, currentMonth, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest]);
 
   const evenSpread = taxCard?.kind === 'percent' || (taxCard?.kind === 'table' && parseTableNumber(taxCard.table)?.twelveMonths);
   const monthLabel = (i: number) => new Date(year, i, 1).toLocaleString(locale, { month: 'short' });
@@ -121,6 +134,18 @@ export function TaxCardSection() {
               className="w-16 h-6 text-center rounded-[4px] border border-[var(--border)] bg-[var(--bg-raised)] text-[13px] font-mono text-[var(--text-1)] outline-none focus:ring-2 focus:ring-[var(--positive)] placeholder:text-[var(--text-3)]"
             />
           </div>
+        )}
+        {mode === 'table' && (
+          <SegmentedControl<PayPeriod>
+            ariaLabel={sp.taxCardPeriod}
+            value={period}
+            onChange={changePeriod}
+            items={[
+              { value: 'month', label: sp.taxCardPeriodMonth },
+              { value: '14d', label: sp.taxCardPeriod14d },
+              { value: 'week', label: sp.taxCardPeriodWeek },
+            ]}
+          />
         )}
       </div>
       {error && <p role="alert" className="text-[12px]" style={{ color: 'var(--negative)' }}>{error}</p>}
@@ -167,7 +192,7 @@ export function TaxCardSection() {
             ))}
           </ol>
           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {evenSpread ? sp.taxCardNoteEven : sp.taxCardNoteSplit.replace('{year}', String(trekkYear()))}
+            {evenSpread ? sp.taxCardNoteEven : sp.taxCardNoteSplit.replace('{year}', String(trekkYear()))} {sp.taxCardBudgetNote}
           </p>
         </>
       )}

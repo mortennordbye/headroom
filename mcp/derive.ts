@@ -52,6 +52,7 @@ import {
   TAX_YEAR,
 } from '../src/lib/norwegianTax';
 import { restskattEstimate } from '../src/lib/restskatt';
+import { cardNetForMonth } from '../src/lib/forskuddstrekk';
 import { projectPensionWealth } from '../src/lib/pension';
 import { inTodaysKroner, DEFAULT_INFLATION_PCT } from '../src/lib/inflation';
 import { estimateBeholdning, projectBeholdning, annualFolketrygdPension } from '../src/lib/folketrygd';
@@ -160,6 +161,11 @@ export function netMonthlyFor(blob: ExportPayload, monthKey: string): number {
   const extraGross =
     (blob.bonuses ?? []).reduce((s, b) => (b.includeInBudget && b.date.startsWith(monthKey) ? s + b.amount : s), 0) +
     (blob.overtime ?? []).reduce((s, o) => (o.includeInBudget && o.date.startsWith(monthKey) ? s + o.amount : s), 0);
+  const onCard = cardNetForMonth(
+    blob.taxCard, blob.region ?? 'no', monthKey, new Date().getFullYear(),
+    totalAnnual, extraGross, blob.pension?.ipsAnnualContribution ?? 0,
+  );
+  if (onCard != null) return onCard;
   if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
   const netWithExtra = taxFor(blob, totalAnnual + extraGross).netAnnual;
   return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseTableNumber, calcTabelltrekk, withholdingForMonth, withholdingByMonth, sanitizeTaxCard, trekkYear,
-  type TrekkTable,
+  parseTableNumber, calcTabelltrekk, withholdingForMonth, withholdingByMonth, sanitizeTaxCard, trekkYear, cardNetForMonth,
+  type TrekkTable, type PayPeriod,
 } from './forskuddstrekk';
 
 const table = (n: string): TrekkTable => {
@@ -55,6 +55,18 @@ describe('calcTabelltrekk', () => {
   });
 });
 
+// Same file, 14-day (period 2) and weekly (period 3) rows: [table, period, grunnlag, trekk].
+const GOLDEN_PERIODS_2026: Array<[string, PayPeriod, number, number]> = [
+  ['8130', '14d', 30000, 8156], ['8130', '14d', 60000, 23838], ['7350', '14d', 30000, 7846], ['0101', '14d', 30000, 7018],
+  ['8130', 'week', 15000, 4077], ['8130', 'week', 30000, 11918], ['7350', 'week', 15000, 3922], ['6300', 'week', 15000, 3840],
+];
+
+describe('calcTabelltrekk on other pay periods', () => {
+  it.each(GOLDEN_PERIODS_2026)('table %s per %s at %i matches Skatteetaten (%i)', (n, period, grunnlag, trekk) => {
+    expect(calcTabelltrekk(table(n), grunnlag, 2026, period)).toBe(trekk);
+  });
+});
+
 describe('parseTableNumber', () => {
   it('maps ordinary tables to their deduction or addition', () => {
     expect(table('8130').tableFradrag).toBe(130000);
@@ -71,14 +83,14 @@ describe('withholdingForMonth', () => {
   it('skips June and halves December on a 10.5-month table', () => {
     const card = { kind: 'table' as const, table: '8130' };
     const full = calcTabelltrekk(table('8130'), 50000, 2026);
-    expect(withholdingForMonth(card, 50000, 5, 2026)).toBe(full);
-    expect(withholdingForMonth(card, 50000, 6, 2026)).toBe(0);
-    expect(withholdingForMonth(card, 50000, 12, 2026)).toBe(Math.round(full / 2));
+    expect(withholdingForMonth(card, 50000, 5, 0, 2026)).toBe(full);
+    expect(withholdingForMonth(card, 50000, 6, 0, 2026)).toBe(0);
+    expect(withholdingForMonth(card, 50000, 12, 0, 2026)).toBe(Math.round(full / 2));
   });
 
   it('withholds every month on a 12-month table', () => {
     const card = { kind: 'table' as const, table: '7350' };
-    const months = withholdingByMonth(card, () => 50000, 2026);
+    const months = withholdingByMonth(card, () => 50000, undefined, 2026);
     expect(new Set(months).size).toBe(1);
     expect(months[0]).toBeGreaterThan(0);
   });
@@ -86,8 +98,32 @@ describe('withholdingForMonth', () => {
   it('a 10.5-month table withholds 10.5 months of the same trekk over the year', () => {
     const card = { kind: 'table' as const, table: '8000' };
     const full = calcTabelltrekk(table('8000'), 60000, 2026);
-    const year = withholdingByMonth(card, () => 60000, 2026).reduce((s, v) => s + v, 0);
+    const year = withholdingByMonth(card, () => 60000, undefined, 2026).reduce((s, v) => s + v, 0);
     expect(year).toBe(full * 10 + Math.round(full / 2));
+  });
+
+  it('withholds the table\'s trekk-payout count over a year on 14-day and weekly pay', () => {
+    // 26 payouts → 23 carry trekk (2 free in June, 2 at half in December); 52 → 46.
+    for (const [period, perYear, trekkPayouts] of [['14d', 26, 23], ['week', 52, 46]] as const) {
+      const card = { kind: 'table' as const, table: '8000', period };
+      const perPayout = calcTabelltrekk(table('8000'), (60000 * 12) / perYear, 2026, period);
+      const months = withholdingByMonth(card, () => 60000, undefined, 2026);
+      expect(months[5]).toBe(0);
+      expect(months.reduce((s, v) => s + v, 0)).toBeCloseTo(perPayout * trekkPayouts, -1);
+    }
+  });
+
+  it('runs a bonus through the table on top of one payout, June included', () => {
+    const card = { kind: 'table' as const, table: '8130' };
+    const t = table('8130');
+    const gain = calcTabelltrekk(t, 50000 + 30000, 2026) - calcTabelltrekk(t, 50000, 2026);
+    expect(withholdingForMonth(card, 50000, 3, 30000, 2026)).toBe(calcTabelltrekk(t, 50000, 2026) + gain);
+    expect(withholdingForMonth(card, 50000, 6, 30000, 2026)).toBe(gain);
+    expect(gain).toBeGreaterThan(30000 * 0.3);
+  });
+
+  it('applies prosenttrekk to a bonus too', () => {
+    expect(withholdingForMonth({ kind: 'percent', pct: 30 }, 50000, 4, 10000)).toBe(18000);
   });
 
   it('applies prosenttrekk every month', () => {
@@ -107,11 +143,12 @@ describe('sanitizeTaxCard', () => {
   it('keeps a valid table or percent card', () => {
     expect(sanitizeTaxCard({ kind: 'table', table: '8130' })).toEqual({ kind: 'table', table: '8130' });
     expect(sanitizeTaxCard({ kind: 'percent', pct: 0 })).toEqual({ kind: 'percent', pct: 0 });
+    expect(sanitizeTaxCard({ kind: 'table', table: '8130', period: '14d' })).toEqual({ kind: 'table', table: '8130', period: '14d' });
   });
 
   it('drops anything malformed', () => {
     for (const v of [null, 42, 'x', {}, { kind: 'table', table: '8135' }, { kind: 'table', table: 8130 },
-      { kind: 'percent', pct: '30' }, { kind: 'percent', pct: 101 }, { kind: 'percent', pct: -1 }, { kind: 'other' }]) {
+      { kind: 'table', table: '8130', period: 'daily' }, { kind: 'percent', pct: '30' }, { kind: 'percent', pct: 101 }, { kind: 'percent', pct: -1 }, { kind: 'other' }]) {
       expect(sanitizeTaxCard(v)).toBeNull();
     }
   });
@@ -121,5 +158,34 @@ describe('trekkYear', () => {
   it('falls back to the latest published table year', () => {
     expect(trekkYear(2026)).toBe(2026);
     expect(trekkYear(2031)).toBe(2026);
+  });
+});
+
+describe('cardNetForMonth', () => {
+  const card = { kind: 'table' as const, table: '8130' };
+
+  it('pays out gross + one-off pay minus the card\'s trekk and IPS', () => {
+    const w = withholdingForMonth(card, 60000, 3, 10000, 2026);
+    expect(cardNetForMonth(card, 'no', '2026-03', 2026, 720000, 10000, 12000)).toBe(Math.round(60000 + 10000 - w - 1000));
+  });
+
+  it('is untaxed in June on a 10.5-month table', () => {
+    expect(cardNetForMonth(card, 'no', '2026-06', 2026, 720000, 0, 0)).toBe(60000);
+  });
+
+  it('caps the IPS deduction like the annual model', () => {
+    const a = cardNetForMonth(card, 'no', '2026-06', 2026, 720000, 0, 15000);
+    const b = cardNetForMonth(card, 'no', '2026-06', 2026, 720000, 0, 40000);
+    expect(a).toBe(b);
+  });
+
+  it('does not apply without a card, outside Norway or outside the current year', () => {
+    expect(cardNetForMonth(null, 'no', '2026-03', 2026, 720000, 0, 0)).toBeNull();
+    expect(cardNetForMonth(card, 'generic', '2026-03', 2026, 720000, 0, 0)).toBeNull();
+    expect(cardNetForMonth(card, 'no', '2025-03', 2026, 720000, 0, 0)).toBeNull();
+  });
+
+  it('keeps NaN out of the result', () => {
+    expect(cardNetForMonth(card, 'no', '2026-03', 2026, NaN, NaN, NaN)).toBe(0);
   });
 });

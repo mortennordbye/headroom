@@ -16,7 +16,7 @@ import { ownershipShares, rewriteSnapshotCoOwners, snapshotCoOwners } from '../l
 import { markGainReview } from '../lib/gainReview';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
-import type { TaxCard } from '../lib/forskuddstrekk';
+import { cardNetForMonth, type TaxCard } from '../lib/forskuddstrekk';
 import { calcBsuTaxCredit } from '../lib/bsu';
 import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
@@ -1952,10 +1952,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const extraGross =
       bonuses.reduce((s, b) => (b.includeInBudget && b.date.startsWith(mKey) ? s + b.amount : s), 0) +
       overtime.reduce((s, o) => (o.includeInBudget && o.date.startsWith(mKey) ? s + o.amount : s), 0);
+    // With a skattekort, this year's months pay out what the card withholds
+    // (June/December pattern included) rather than the smoothed annual tax.
+    const onCard = cardNetForMonth(taxCard, region, mKey, new Date().getFullYear(), totalAnnual, extraGross, pension.ipsAnnualContribution);
+    if (onCard != null) return onCard;
     if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
     const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));
-  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, assets.bsuAnnualContribution, pension.birthYear, housingMode]);
+  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, assets.bsuAnnualContribution, pension.birthYear, housingMode, taxCard]);
 
   const derivedMonthlyIncome = useMemo(
     () => derivedNetMonthlyFor(monthKey),
