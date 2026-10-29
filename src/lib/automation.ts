@@ -90,17 +90,20 @@ export interface ResolvedPosting {
  * Mirrors the amortize() loop in debt.ts: interest accrues, then the payment
  * applies. When the payment can't even cover the first month's interest the
  * balance can't shrink — reported as `infeasible` and left unchanged (we never
- * grow a debt from an under-funded expense).
+ * grow a debt from an under-funded expense). `interestCharged[i]` marks a month
+ * whose interest another payment to the same loan already charged, so that
+ * month's payment is all principal.
  */
 export function applyAmortization(
   balance: number, annualRatePct: number, payment: number, months: number,
+  interestCharged: readonly boolean[] = [],
 ): { balance: number; infeasible: boolean } {
   if (!(balance > 0)) return { balance: 0, infeasible: false };
   const r = annualRatePct / 1200;
-  if (r > 0 && payment <= balance * r) return { balance, infeasible: true };
+  if (r > 0 && !interestCharged[0] && payment <= balance * r) return { balance, infeasible: true };
   let bal = balance;
   for (let i = 0; i < months && bal > 0; i++) {
-    const interest = bal * r;
+    const interest = interestCharged[i] ? 0 : bal * r;
     bal = Math.max(0, bal + interest - Math.min(payment, bal + interest));
   }
   return { balance: bal, infeasible: false };
@@ -111,13 +114,17 @@ export function applyAmortization(
  * applied (used for the "decline catch-up → post one month only" path); the
  * stamp still advances to `currentMonth`, so the skipped months don't re-prompt.
  * A rule whose linked target no longer exists is skipped WITHOUT a stamp, so it
- * resumes cleanly if the target reappears.
+ * resumes cleanly if the target reappears. `others` are rules not posted in this
+ * call whose stamps still count: a month another rule already paid into the
+ * same loan has had its interest charged. (A declined catch-up stamps months it
+ * never paid, so those count as charged too.)
  */
 export function computeAutomationPostings(
   rules: AutomationRule[],
   state: AutomationState,
   currentMonth: string,
   capMonths?: number,
+  others: AutomationRule[] = [],
 ): ResolvedPosting[] {
   // Working copies so two expenses pointed at the same target stack rather than
   // clobber (each posting's newBalance already includes the earlier ones).
@@ -126,18 +133,41 @@ export function computeAutomationPostings(
   const debts: Record<string, { balance: number; rate: number }> =
     Object.fromEntries(Object.entries(state.debts).map(([id, d]) => [id, { ...d }]));
   let mortgage = state.mortgage;
+  // Months whose interest is already charged, per loan ('mortgage' or a debt
+  // id): a second payment to the same loan in the same month is all principal.
+  const charged: Record<string, Set<string>> = {};
+  const loanOf = (r: AutomationRule) =>
+    r.targetKind === 'mortgage' ? 'mortgage' : r.targetKind === 'debt' ? `debt:${r.debtId}` : undefined;
+  const postedThrough: Record<string, string> = {};
+  for (const r of [...rules, ...others]) {
+    const loan = loanOf(r);
+    if (loan && r.lastPostedMonth && !(postedThrough[loan] >= r.lastPostedMonth)) postedThrough[loan] = r.lastPostedMonth;
+  }
+  // The largest payment to a loan goes first, so a small extra payment is never
+  // judged alone against the month's whole interest. Stable, so every other
+  // rule keeps its order.
+  const loanPayment = (r: AutomationRule) => (loanOf(r) ? r.amount : 0);
+  const ordered = [...rules].sort((a, b) => loanPayment(b) - loanPayment(a));
 
   const out: ResolvedPosting[] = [];
-  for (const rule of rules) {
+  for (const rule of ordered) {
     const fromMonth = rule.lastPostedMonth ? addMonthsKey(rule.lastPostedMonth, 1) : rule.startMonth;
     const dueMonths = monthsBetween(fromMonth, currentMonth);
     const due = dueMonths.length;
     if (due <= 0) continue;
     const monthsDue = capMonths != null ? Math.min(due, capMonths) : due;
-    // What a balance-growing target gains over the months applied — the most
-    // recent ones when capped — each at its own month's amount.
-    const added = dueMonths.slice(due - monthsDue)
-      .reduce((sum, m) => sum + (rule.amountByMonth?.[m] ?? rule.amount), 0);
+    // The months applied — the most recent ones when capped.
+    const appliedMonths = dueMonths.slice(due - monthsDue);
+    // What a balance-growing target gains over them, each at its own month's amount.
+    const added = appliedMonths.reduce((sum, m) => sum + (rule.amountByMonth?.[m] ?? rule.amount), 0);
+    const amortize = (loan: string, balance: number, rate: number, payment: number) => {
+      const seen = (charged[loan] ??= new Set());
+      const through = postedThrough[loan];
+      const res = applyAmortization(balance, rate, payment, monthsDue,
+        appliedMonths.map(m => seen.has(m) || (through !== undefined && m <= through)));
+      if (!res.infeasible) appliedMonths.forEach(m => seen.add(m));
+      return res;
+    };
 
     let newBalance: number;
     let infeasible = false;
@@ -164,7 +194,7 @@ export function computeAutomationPostings(
         noChange = true;
       } else {
         const payment = rule.mortgagePaymentScope === 'myShare' ? rule.amount / share : rule.amount;
-        const res = applyAmortization(mortgage, state.mortgageRate, payment, monthsDue);
+        const res = amortize(loanOf(rule)!, mortgage, state.mortgageRate, payment);
         newBalance = Math.round(res.balance);
         infeasible = res.infeasible;
         mortgage = newBalance;
@@ -172,7 +202,7 @@ export function computeAutomationPostings(
     } else {
       if (!rule.debtId || !(rule.debtId in debts)) continue;
       const d = debts[rule.debtId];
-      const res = applyAmortization(d.balance, d.rate, rule.amount, monthsDue);
+      const res = amortize(loanOf(rule)!, d.balance, d.rate, rule.amount);
       newBalance = Math.round(res.balance);
       infeasible = res.infeasible;
       d.balance = newBalance;

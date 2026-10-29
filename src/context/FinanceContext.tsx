@@ -2728,8 +2728,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
     setPendingCatchups(prev => (stableStringify(prev) === stableStringify(nextPending) ? prev : nextPending));
 
-    const immediate = postings.filter(p => p.monthsDue === 1 || p.noChange);
-    if (immediate.length === 0) return;
+    const immediateIds = new Set(postings.filter(p => p.monthsDue === 1 || p.noChange).map(p => p.rule.id));
+    if (immediateIds.size === 0) return;
+    // Re-resolve without the deferred rules, so a pending catch-up can't take a
+    // month's loan interest (or stack its balance) ahead of a posting applied now.
+    const immediate = computeAutomationPostings(
+      automationRules.filter(r => immediateIds.has(r.id)), automationState, currentMonth, undefined, automationRules);
     // Deliberate: post this month's automations into persisted state. The
     // lastPostedMonth stamp + no-op guard make a re-run converge (monthsDue → 0),
     // same shape as the balance-snapshot effect above.
@@ -2742,7 +2746,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const confirmCatchup = useCallback((expenseId: string) => {
     const currentMonth = currentMonthKey();
     const [posting] = computeAutomationPostings(
-      automationRules.filter(r => r.id === expenseId), automationState, currentMonth);
+      automationRules.filter(r => r.id === expenseId), automationState, currentMonth, undefined, automationRules);
     if (posting) applyPostingBalances([posting]);
     stampPosted(new Set([expenseId]), currentMonth, posting ? [posting] : []);
     setPendingCatchups(prev => prev.filter(p => p.expenseId !== expenseId));
@@ -2752,7 +2756,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const currentMonth = currentMonthKey();
     // Apply a single month, then stamp to current so the skipped months don't re-prompt.
     const [posting] = computeAutomationPostings(
-      automationRules.filter(r => r.id === expenseId), automationState, currentMonth, 1);
+      automationRules.filter(r => r.id === expenseId), automationState, currentMonth, 1, automationRules);
     if (posting) applyPostingBalances([posting]);
     stampPosted(new Set([expenseId]), currentMonth, posting ? [posting] : []);
     setPendingCatchups(prev => prev.filter(p => p.expenseId !== expenseId));

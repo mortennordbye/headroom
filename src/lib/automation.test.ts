@@ -231,6 +231,61 @@ describe('computeAutomationPostings — co-owned mortgage scope', () => {
   });
 });
 
+describe('computeAutomationPostings — two payments to one loan', () => {
+  const loanRule = (over: Partial<AutomationRule> = {}) =>
+    rule({ targetKind: 'mortgage', savingsAccountId: undefined, lastPostedMonth: '2026-06', ...over });
+  // 1 000 000 at 5 %: one month's interest is 4 166.67.
+
+  it("charges the month's interest once, whichever order the rules come in", () => {
+    const main = loanRule({ id: 'main', amount: 10_000 });
+    const extra = loanRule({ id: 'extra', amount: 2000 });
+    const expected = Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 12_000);
+    for (const rules of [[main, extra], [extra, main]]) {
+      const postings = computeAutomationPostings(rules, state(), '2026-07');
+      expect(postings.map(p => p.infeasible)).toEqual([false, false]);
+      expect(postings.at(-1)!.newBalance).toBe(expected);
+    }
+  });
+
+  it('keeps charging interest once per month across a catch-up', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' });
+    const extra = loanRule({ id: 'extra', amount: 2000, lastPostedMonth: '2026-04' });
+    const postings = computeAutomationPostings([main, extra], state(), '2026-07');
+    // 'main' pays June and July with interest (its stamp says May was paid);
+    // 'extra' then catches up May to July as principal only.
+    const m1 = 1_000_000 + 1_000_000 * 0.05 / 12 - 10_000;
+    const m2 = m1 + m1 * 0.05 / 12 - 10_000;
+    expect(postings.at(-1)!.newBalance).toBe(Math.round(m2) - 6000);
+  });
+
+  it("counts a month another rule's stamp covers as interest-charged", () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' });
+    const extra = loanRule({ id: 'extra', amount: 2000, lastPostedMonth: '2026-06' });
+    const postings = computeAutomationPostings([main, extra], state(), '2026-07');
+    // 'extra' already paid June in an earlier run, so June's interest is charged.
+    const m1 = 1_000_000 - 10_000;
+    const m2 = m1 + m1 * 0.05 / 12 - 10_000;
+    expect(postings.at(-1)!.newBalance).toBe(Math.round(m2) - 2000);
+  });
+
+  it("treats a month another rule already posted to the loan as interest-charged", () => {
+    // 'main' already posted through July, so confirming the extra payment's
+    // two-month catch-up afterwards pays principal only.
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-07' });
+    const extra = loanRule({ id: 'extra', amount: 2000, lastPostedMonth: '2026-05' });
+    const [p] = computeAutomationPostings([extra], state(), '2026-07', undefined, [main, extra]);
+    expect(p.newBalance).toBe(1_000_000 - 4000);
+  });
+
+  it('charges each debt its own interest', () => {
+    const s = state({ debts: { 'debt-1': { balance: 50_000, rate: 12 }, 'debt-2': { balance: 50_000, rate: 12 } } });
+    const a = loanRule({ id: 'a', targetKind: 'debt', debtId: 'debt-1', amount: 5000 });
+    const b = loanRule({ id: 'b', targetKind: 'debt', debtId: 'debt-2', amount: 5000 });
+    const postings = computeAutomationPostings([a, b], s, '2026-07');
+    expect(postings.map(p => p.newBalance)).toEqual([45_500, 45_500]);
+  });
+});
+
 describe('computeAutomationPostings — mixed batch', () => {
   it('resolves several rules in one call', () => {
     const savings = rule({ id: 's1', lastPostedMonth: '2026-06' });
