@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.1](https://github.com/mortennordbye/headroom/compare/v3.8.0...v3.8.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **bank:** keep an account's key when a re-link issues a new uid ([#236](https://github.com/mortennordbye/headroom/issues/236)) ([3320159](https://github.com/mortennordbye/headroom/commit/332015961b0a215dcf987c29647d3dd194e5dbc4))
+
 ## [3.8.0](https://github.com/mortennordbye/headroom/compare/v3.7.0...v3.8.0) (2026-10-29)
 
 
