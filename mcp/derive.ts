@@ -45,6 +45,7 @@ import {
   calcPensionIncomeTax,
   calcWealthTax,
   IPS_MAX_DEDUCTION,
+  RENTEFRADRAG_RATE_PCT,
   TAX_YEAR,
 } from '../src/lib/norwegianTax';
 import { restskattEstimate } from '../src/lib/restskatt';
@@ -259,7 +260,7 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
         blob.homeowner?.originalLoanAmount ?? blob.assets.houseDebt,
         blob.homeowner?.rente ?? blob.loan?.rente ?? 0,
         blob.homeowner?.nedbetalingstid ?? blob.loan?.nedbetalingstid ?? 0,
-        blob.homeowner?.skattefradragssats ?? 22,
+        RENTEFRADRAG_RATE_PCT,
       )
     : null;
   const currentJob = (blob.jobs ?? []).find((j) => !j.endDate);
@@ -535,8 +536,7 @@ export function whatIfPrepayVsInvest(
 ) {
   const mortgageRate = blob.homeowner?.rente ?? blob.loan?.rente ?? 0;
   const returnPct = investReturnPct ?? blob.growthReturnRate ?? 7;
-  const deduction = blob.homeowner?.skattefradragssats ?? 22;
-  return prepayVsInvest(extraMonthly, mortgageRate, returnPct, years, deduction, blob.assets.taxRate ?? 0);
+  return prepayVsInvest(extraMonthly, mortgageRate, returnPct, years, RENTEFRADRAG_RATE_PCT, blob.assets.taxRate ?? 0);
 }
 
 export function whatIfExtraDebtPayment(
