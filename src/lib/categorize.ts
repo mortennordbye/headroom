@@ -269,7 +269,7 @@ export function categorizeWithRules(input: CategorizeInput, rules: CategoryRule[
  * filed as transfers. Such rows are re-run through the engine; a Vipps row the
  * engine still calls a transfer (e.g. "Vipps Til: …") keeps its label.
  */
-export function isStaleAutoLabel(category: CategoryKey | undefined, merchant?: string, description?: string): boolean {
+export function isStaleAutoLabel(category: string | undefined, merchant?: string, description?: string): boolean {
   return category === 'transfers' && buildMatchHaystack(merchant, description).includes('vipps');
 }
 
