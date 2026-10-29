@@ -184,7 +184,7 @@ function fullPayload(): ExportPayload {
     ],
     region: 'generic',
     customTaxRatePct: 28,
-    taxCard: { kind: 'table', table: '8130' },
+    taxCard: { kind: 'table', table: '8130', year: 2026 },
     employerCostConfig: { ...DEFAULT_EMPLOYER_COST_CONFIG },
     billingConfig: { ...DEFAULT_BILLING_CONFIG },
     hiddenNavItems: ['forecast'],

@@ -162,7 +162,7 @@ export function netMonthlyFor(blob: ExportPayload, monthKey: string): number {
     (blob.bonuses ?? []).reduce((s, b) => (b.includeInBudget && b.date.startsWith(monthKey) ? s + b.amount : s), 0) +
     (blob.overtime ?? []).reduce((s, o) => (o.includeInBudget && o.date.startsWith(monthKey) ? s + o.amount : s), 0);
   const onCard = cardNetForMonth(
-    blob.taxCard, blob.region ?? 'no', monthKey, new Date().getFullYear(),
+    blob.taxCard, blob.region ?? 'no', monthKey,
     totalAnnual, extraGross, blob.pension?.ipsAnnualContribution ?? 0,
   );
   if (onCard != null) return onCard;

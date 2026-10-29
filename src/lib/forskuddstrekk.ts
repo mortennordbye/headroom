@@ -16,10 +16,11 @@ import { TAX_YEAR, IPS_MAX_DEDUCTION } from './norwegianTax';
 
 export type PayPeriod = 'month' | '14d' | 'week';
 
+// A skattekort is issued per income year; `year` is the one it was entered for.
 export type TaxCard =
-  // `period` absent = monthly pay (cards saved before pay periods existed).
-  | { kind: 'table'; table: string; period?: PayPeriod }
-  | { kind: 'percent'; pct: number };
+  // `period` absent = monthly pay.
+  | { kind: 'table'; table: string; period?: PayPeriod; year: number }
+  | { kind: 'percent'; pct: number; year: number };
 
 interface TrekkParams {
   personfradrag: number;
@@ -122,6 +123,7 @@ const SPECIAL: Record<string, Omit<TrekkTable, 'number' | 'tableFradrag'>> = {
  * Returns null for anything Skatteetaten doesn't publish.
  */
 export function parseTableNumber(input: string): TrekkTable | null {
+  if (typeof input !== 'string') return null;
   const s = input.trim();
   if (!/^\d{4}$/.test(s)) return null;
   const special = SPECIAL[s];
@@ -211,13 +213,15 @@ const PAY_PERIODS: readonly PayPeriod[] = ['month', '14d', 'week'];
 export function sanitizeTaxCard(v: unknown): TaxCard | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
+  if (typeof o.year !== 'number' || !Number.isInteger(o.year) || o.year < 2000 || o.year > 2100) return null;
+  const year = o.year;
   if (o.kind === 'table' && typeof o.table === 'string' && parseTableNumber(o.table)) {
-    if (o.period === undefined) return { kind: 'table', table: o.table.trim() };
+    if (o.period === undefined) return { kind: 'table', table: o.table.trim(), year };
     if (!PAY_PERIODS.includes(o.period as PayPeriod)) return null;
-    return { kind: 'table', table: o.table.trim(), period: o.period as PayPeriod };
+    return { kind: 'table', table: o.table.trim(), period: o.period as PayPeriod, year };
   }
   if (o.kind === 'percent' && typeof o.pct === 'number' && Number.isFinite(o.pct) && o.pct >= 0 && o.pct <= 100) {
-    return { kind: 'percent', pct: o.pct };
+    return { kind: 'percent', pct: o.pct, year };
   }
   return null;
 }
@@ -250,7 +254,7 @@ export function withholdingForMonth(
   }
   const t = parseTableNumber(card.table);
   if (!t) return 0;
-  const period = card.period ?? 'month';
+  const period: PayPeriod = card.period && PERIODS[card.period] ? card.period : 'month';
   const S = PERIODS[period];
   const perPayout = (gross * 12) / S.payouts;
   const full = calcTabelltrekk(t, perPayout, year, period);
@@ -276,26 +280,33 @@ export function withholdingByMonth(
 }
 
 /**
- * A budget month's take-home on a skattekort: that month's gross plus one-off
- * pay, less what the card withholds and the IPS contribution (which leaves the
- * paycheck in the annual model too). Returns null when the card doesn't apply:
- * no card, another region, or a month outside `currentYear` (a skattekort is
- * per year). The table already carries the user's deductions, so nothing else
- * is taken off.
+ * A budget month's flat take-home on a skattekort, or null when the card doesn't
+ * apply (no usable card, another region, or a month outside the card's year).
+ *
+ * Flat on purpose: budget income is a smoothed monthly figure that the seasonal
+ * model (`feriepengerMonthlyNet`) shapes into June/December itself, so the card
+ * contributes its *yearly* regular trekk spread over 12 months, not the June 0 /
+ * December half pattern (that would count the season twice). One-off pay that
+ * month nets out at the card's trekk on it. IPS leaves the paycheck, as in the
+ * annual model. The table already carries the user's deductions.
  */
 export function cardNetForMonth(
-  card: TaxCard | null | undefined,
+  rawCard: unknown,
   region: string,
   monthKey: string,
-  currentYear: number,
   grossAnnual: number,
   extraGross: number,
   ipsAnnualContribution: number,
 ): number | null {
-  if (!card || region !== 'no' || !monthKey.startsWith(`${currentYear}-`)) return null;
+  const card = sanitizeTaxCard(rawCard);
+  if (!card || region !== 'no' || !monthKey.startsWith(`${card.year}-`)) return null;
+  const month = Number(monthKey.slice(5, 7));
   const monthlyGross = Number.isFinite(grossAnnual) ? Math.max(0, grossAnnual) / 12 : 0;
   const extra = Number.isFinite(extraGross) ? Math.max(0, extraGross) : 0;
   const ips = Number.isFinite(ipsAnnualContribution) ? Math.min(Math.max(0, ipsAnnualContribution), IPS_MAX_DEDUCTION) / 12 : 0;
-  const withheld = withholdingForMonth(card, monthlyGross, Number(monthKey.slice(5, 7)), extra);
-  return Math.round(monthlyGross + extra - withheld - ips);
+  const yearlyRegular = withholdingByMonth(card, () => monthlyGross, undefined, card.year).reduce((sum, w) => sum + w, 0);
+  const extraTrekk = extra > 0
+    ? withholdingForMonth(card, monthlyGross, month, extra, card.year) - withholdingForMonth(card, monthlyGross, month, 0, card.year)
+    : 0;
+  return Math.round(monthlyGross - yearlyRegular / 12 + extra - extraTrekk - ips);
 }

@@ -1952,9 +1952,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const extraGross =
       bonuses.reduce((s, b) => (b.includeInBudget && b.date.startsWith(mKey) ? s + b.amount : s), 0) +
       overtime.reduce((s, o) => (o.includeInBudget && o.date.startsWith(mKey) ? s + o.amount : s), 0);
-    // With a skattekort, this year's months pay out what the card withholds
-    // (June/December pattern included) rather than the smoothed annual tax.
-    const onCard = cardNetForMonth(taxCard, region, mKey, new Date().getFullYear(), totalAnnual, extraGross, pension.ipsAnnualContribution);
+    // With a skattekort for this month's year, the budget uses the card's
+    // withholding instead of the modelled annual tax (still a flat figure).
+    const onCard = cardNetForMonth(taxCard, region, mKey, totalAnnual, extraGross, pension.ipsAnnualContribution);
     if (onCard != null) return onCard;
     if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
     const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;

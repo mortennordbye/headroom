@@ -695,6 +695,6 @@ the prune and list queries.
 
 ## Skattekort (tax table / trekkprosent) — follow-ups
 
-Shipped (2026-10): the Salary page takes a skattekort (table number with monthly, 14-day or weekly pay, or a trekkprosent) and shows monthly withholding, bonus and overtime included, plus the restskatt/refund against the modelled annual tax. This year's budget income follows the card. Tabelltrekk is a port of Skatteetaten's trekkrutine, checked against every monthly, 14-day and weekly row of the 2026 "trekktabeller i tekstformat" file.
+Shipped (2026-10): the Salary page takes a skattekort (table number with monthly, 14-day or weekly pay, or a trekkprosent) and shows monthly withholding, bonus and overtime included, plus the restskatt/refund against the modelled annual tax. This year's budget income uses the card's yearly withholding, spread evenly (the existing feriepenger model adds the June/December shape). Tabelltrekk is a port of Skatteetaten's trekkrutine, checked against every monthly, 14-day and weekly row of the 2026 "trekktabeller i tekstformat" file.
 
 - **New tax year needs new constants.** `TREKK_PARAMS` only has 2026; later years fall back to the 2026 tables. Not available yet: as of 2026-10-29 the trekkrutine repo has no 2027 package and the 2027 text file isn't published. **Unblock**: Skatteetaten publishes the next year's `Konstanter.java` in github.com/Skatteetaten/trekktabell (December); add the year to `TREKK_PARAMS` and refresh the golden rows from the new text file. **Where**: `src/lib/forskuddstrekk.ts`, `src/lib/forskuddstrekk.test.ts`.
