@@ -472,6 +472,33 @@ like `salaries` in `src/lib/payloadRegistry.ts`), enriched `HomeownerData`, pure
   proves annoying. **Where**: transitioning block in `src/pages/BoligPage.tsx`, `residences` CRUD
   in `src/context/FinanceContext.tsx`.
 
+## Co-owned home — follow-ups (2026-10)
+
+Shipped: co-owners of the current home with ownership and loan share (`assets.coOwners`, pure
+logic in `src/lib/ownership.ts`). Home value and loan are stored in full; net worth, wealth tax,
+rentefradrag and the gjeldsgrad headline use the user's share. Remaining:
+
+- **2026 primary-home threshold looks stale.** `WEALTH_TAX_PARAMS[2026].primaryHomeHighThreshold`
+  is 10 000 000, carried forward from 2025. skatteetaten.no/en/rates/tax-value-of-housing/ (income
+  year 2026) lists 25 % up to NOK 14 000 000, 70 % above. Not changed here: `norwegianTax.ts` is
+  no-go without an issue filed by the owner. **What would unblock**: confirm the figure against
+  the adopted 2026 budget and file the issue. **Where**: `src/lib/norwegianTax.ts`
+  (`WEALTH_TAX_PARAMS`); `primaryHomeWealthValue` in `src/lib/ownership.ts` reads it.
+- **Spouses.** Married co-owners get a doubled wealth-tax bunnfradrag and can split
+  rentefradrag freely; the app models one person. **Why deferred**: needs a marital-status field
+  and touches `norwegianTax.ts`. **What would unblock**: an issue covering both. **Where**:
+  `calcWealthTax` in `src/lib/norwegianTax.ts`, `annualMortgageInterest` in
+  `src/context/FinanceContext.tsx` and `mcp/derive.ts`.
+- **Onboarding step for ownership share.** The home topic asks only value and debt. **Where**:
+  `src/lib/onboarding.ts` (home topic).
+- **Two mortgage rules stack and each charges a month's interest again** (pre-existing): two
+  fixed expenses aimed at the mortgage each run `applyAmortization`, so interest accrues twice.
+  **What would unblock**: decide whether a month's interest is charged once per balance. **Where**:
+  `computeAutomationPostings` in `src/lib/automation.ts` (mortgage branch).
+- **MCP server clock vs browser clock.** Co-owner `since`/`until`, the term countdown and the
+  snapshot month use the local month, so the two can disagree for a few hours at month end.
+  **Where**: `currentMonthKey` in `src/lib/date.ts`, its uses in `mcp/derive.ts`.
+
 ## Sekundærbolig (second-home) tool — deferred items
 
 Shipped (2026-07): the `/loan` page became a **Bolig hub** (`/bolig`, old path redirects) with

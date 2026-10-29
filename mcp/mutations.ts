@@ -12,6 +12,8 @@
 // - updateAsset on houseValue/houseDebt also mirrors the value into `homeowner`
 //   and `transition` (when present), as FinanceContext.updateAsset does, so the
 //   three slices that describe the same home never disagree.
+// - setCoOwners also rewrites the co-owners stored in `balanceSnapshots`, as
+//   FinanceContext.setCoOwners does, so history shows the share in force each month.
 
 import type {
   ExportPayload,
@@ -32,6 +34,7 @@ import { diff, type FieldChange } from './util';
 import { birthYearFrom } from '../src/lib/profile';
 import { currentMonthKey } from '../src/lib/date';
 import { isValidTermParts, yearsFromParts } from '../src/lib/loanTerm';
+import { rewriteSnapshotCoOwners, sanitizeCoOwners, validateCoOwners, type CoOwnerError } from '../src/lib/ownership';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -539,6 +542,38 @@ export function updateCurrentMortgage(
       changes.push(diff('transition.currentMortgageBalance', blob.transition.currentMortgageBalance, balance));
       blob.transition = { ...blob.transition, currentMortgageBalance: balance };
     }
+  }
+  return changes;
+}
+
+const CO_OWNER_ERRORS: Record<CoOwnerError, string> = {
+  range: 'ownershipPct and debtSharePct must be 0-100',
+  sumOwnership: 'co-owners together own more than 100% of the home in some month',
+  sumDebt: 'co-owners together carry more than 100% of the loan in some month',
+  dates: "since/until must be 'YYYY-MM' with since <= until",
+};
+
+/**
+ * Replace the whole co-owner list of the current home (`assets.coOwners`); the
+ * shares must validate together, so there is no per-row upsert. The user's share
+ * is what is left. Also rewrites every stored snapshot's co-owners from each
+ * row's since/until, so history shows the share in force that month.
+ */
+export function setCoOwners(blob: ExportPayload, args: { coOwners: unknown[] }): FieldChange[] {
+  const list = sanitizeCoOwners(args.coOwners);
+  const v = validateCoOwners(list);
+  if (!v.ok) throw new Error(CO_OWNER_ERRORS[v.error]);
+  const changes = [diff('assets.coOwners', blob.assets.coOwners ?? [], list)];
+  blob.assets = { ...blob.assets, coOwners: list };
+  if (blob.balanceSnapshots) {
+    const next = rewriteSnapshotCoOwners(blob.balanceSnapshots, list);
+    for (const [month, snap] of Object.entries(next)) {
+      const before = blob.balanceSnapshots[month]?.assets?.coOwners ?? [];
+      const after = snap?.assets?.coOwners ?? [];
+      if (JSON.stringify(before) === JSON.stringify(after)) continue;
+      changes.push(diff(`balanceSnapshots.${month}.assets.coOwners`, before, after));
+    }
+    blob.balanceSnapshots = next;
   }
   return changes;
 }

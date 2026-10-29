@@ -22,6 +22,7 @@ import { DEFAULT_PROFILE } from './profile';
 import { DEFAULT_CAPACITY_OVERRIDES } from './capacityOverrides';
 import { dedupeBankTransactions } from './bankDedup';
 import { migrateSavingsAccounts, migrateSnapshotSavings, partitionSavings, mergeStoredSavings } from './savingsMigration';
+import { sanitizeCoOwners, sanitizeSnapshotCoOwners } from './ownership';
 
 // Every persisted field. `currentMonth` is view state — added by the callers
 // that need it, never built here — so it is the one `ExportPayload` key excluded.
@@ -126,7 +127,9 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     netWorthHistory: { group: 'reset', demo: 'personal', read: whenDefined('netWorthHistory'), default: {} },
     balanceSnapshots: {
       group: 'reset', demo: 'personal', default: {},
-      read: (data) => (data.balanceSnapshots !== undefined ? migrateSnapshotSavings(data.balanceSnapshots) : ABSENT),
+      read: (data) => (data.balanceSnapshots !== undefined
+        ? sanitizeSnapshotCoOwners(migrateSnapshotSavings(data.balanceSnapshots))
+        : ABSENT),
     },
     fixedExpenses: {
       group: 'reset', demo: 'personal', default: d.fixedExpenses,
@@ -158,7 +161,9 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
       group: 'reset', demo: 'personal', default: d.assets,
       read: (data) => {
         const a = data.assets;
-        return a ? { ...d.assets, ...a, savings: 0, savingsAccounts: migrateSavingsAccounts(a) } : ABSENT;
+        return a
+          ? { ...d.assets, ...a, savings: 0, savingsAccounts: migrateSavingsAccounts(a), coOwners: sanitizeCoOwners(a.coOwners) }
+          : ABSENT;
       },
     },
     loan: { group: 'reset', demo: 'personal', read: whenTruthy('loan'), default: d.loan },

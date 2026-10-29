@@ -1,4 +1,5 @@
 import type { Assets } from '../context/FinanceContext';
+import { myHouseDebt, myHouseValue } from './ownership';
 
 export interface EquityBreakdown {
   taxOnGain: number;
@@ -67,7 +68,8 @@ export function computeEquityBreakdown(a: Assets): EquityBreakdown {
   const shieldingUsed = Math.min(shielding, Math.max(0, gain));
   const taxOnGain = ((gain - shieldingUsed) * (a.taxRate ?? 0)) / 100;
   const netInvestment = (a.portfolio ?? 0) - taxOnGain;
-  const houseEquity = (a.houseValue ?? 0) - (a.houseDebt ?? 0);
+  // The user's share of a co-owned home (full amounts when there are no co-owners).
+  const houseEquity = myHouseValue(a) - myHouseDebt(a);
   const cryptoTaxOnGain = ((a.cryptoUnrealizedGain ?? 0) * (a.cryptoTaxRate ?? 0)) / 100;
   const netCrypto = (a.crypto ?? 0) - cryptoTaxOnGain;
   const savingsTotal = sumSavings(a);

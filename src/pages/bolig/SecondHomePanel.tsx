@@ -31,6 +31,7 @@ import {
 } from '../../lib/secondHome';
 import { Card } from '../../components/ui/Card';
 import { SectionLabel } from '../../components/ui/SectionLabel';
+import { activeCoOwners } from '../../lib/ownership';
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
@@ -506,6 +507,10 @@ const SecondHomePanel: React.FC = () => {
                 <div className="space-y-3">
                   <h3 className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>{bp.borrowCap.debtTitle}</h3>
                   <Row label={bp.borrowCap.existingMortgage} value={formatCurrency(Math.round(assets.houseDebt))} />
+                  {/* The bank counts the whole joint loan (solidaransvar), not the user's share. */}
+                  {activeCoOwners(assets.coOwners).length > 0 && (
+                    <p className="text-[11px] -mt-1" style={{ color: 'var(--text-3)' }}>{t.ownership.jointLiabilityNote}</p>
+                  )}
                   <Row label={bp.borrowCap.otherDebt} value={formatCurrency(Math.round(nonFrameDebt))} />
                   <NumberRow label={bp.borrowCap.creditFrames} value={creditFrames} onCommit={(v) => updateBoligAssumptions({ creditFramesOverride: v })} suffix="kr" />
                   <div className="flex items-center justify-between gap-2 -mt-1">

@@ -48,6 +48,10 @@ export interface AutomationRule {
   targetKind: AutomationTargetKind;
   savingsAccountId?: string;  // set iff targetKind === 'savingsAccount'
   debtId?: string;            // set iff targetKind === 'debt'
+  /** Mortgage fixed expenses only: 'myShare' = `amount` is the user's share of a
+   *  joint instalment, so the loan is paid down by amount ÷ debt share.
+   *  Absent = 'whole'. */
+  mortgagePaymentScope?: 'whole' | 'myShare';
   startMonth: string;         // 'yyyy-MM', first eligible month (fallback when never posted)
   lastPostedMonth?: string;   // 'yyyy-MM' last applied; absent = never. Double-apply guard.
 }
@@ -59,6 +63,8 @@ export interface AutomationState {
   scalars: Record<ScalarTargetKind, number>;
   mortgage: number;                                      // assets.houseDebt (the mirrored balance)
   mortgageRate: number;                                  // annual %, homeowner.rente | loan.rente by mode
+  /** The user's share (0..1) of the joint mortgage; absent = 1. */
+  mortgageDebtShare?: number;
   debts: Record<string, { balance: number; rate: number }>; // by debtId; rate is annual %
   housingMode: HousingMode;
 }
@@ -143,7 +149,16 @@ export function computeAutomationPostings(
       scalars[rule.targetKind] = newBalance;
     } else if (rule.targetKind === 'mortgage') {
       if (state.housingMode === 'first_buyer') continue; // no mortgage exists in this mode
-      const res = applyAmortization(mortgage, state.mortgageRate, rule.amount, monthsDue);
+      // A 'myShare' amount is the user's part of the joint instalment: the loan
+      // receives the whole instalment. A catch-up uses today's share for every
+      // month it applies.
+      let payment = rule.amount;
+      if (rule.mortgagePaymentScope === 'myShare') {
+        const share = state.mortgageDebtShare ?? 1;
+        if (!(share > 0)) continue; // carries none of the loan: nothing to gross up
+        payment = rule.amount / share;
+      }
+      const res = applyAmortization(mortgage, state.mortgageRate, payment, monthsDue);
       newBalance = Math.round(res.balance);
       infeasible = res.infeasible;
       mortgage = newBalance;

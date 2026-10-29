@@ -15,6 +15,9 @@ import {
   TrendingDown,
   ExternalLink,
   RotateCcw,
+  Trash2,
+  Plus,
+  Users,
 } from 'lucide-react';
 import {
   BarChart,
@@ -32,6 +35,7 @@ import {
   type HomeownerData,
   type TransitionData,
   type HousingMode,
+  type CoOwner,
 } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import EditModal, { type ModalField } from '../components/EditModal';
@@ -54,6 +58,9 @@ import type { CapacityOverrides } from '../lib/capacityOverrides';
 import { RENTEFRADRAG_RATE_PCT } from '../lib/norwegianTax';
 import { extraPaymentSavings, formatMonths } from '../lib/debt';
 import { loanTimeline, currentResidence, residenceMetrics } from '../lib/property';
+import { ownershipShares, myHouseValue, myHouseDebt, mySaleProceeds, validateCoOwners } from '../lib/ownership';
+import { makeId } from '../lib/savingsMigration';
+import { currentMonthKey } from '../lib/date';
 import {
   effectiveRemainingMonths, paymentTermMonths, splitTermMonths, yearsFromParts, formatTerm, isValidTermParts,
 } from '../lib/loanTerm';
@@ -72,6 +79,7 @@ interface ModalConfig {
   fields: ModalField[];
   onSave: (values: Record<string, string>) => void;
   error?: string;
+  saveLabel?: string;
 }
 
 const LtvChart = lazy(() => import('../components/charts/LtvChart'));
@@ -83,7 +91,7 @@ const BoligPage: React.FC = () => {
     housingMode: liveHousingMode, setHousingMode,
     homeowner: liveHomeowner, updateHomeowner,
     transition: liveTransition, updateTransition,
-    assets: liveAssets,
+    assets: liveAssets, setCoOwners,
     residences,
     grossAnnualIncome, capacityDebt,
     formatCurrency,
@@ -108,7 +116,7 @@ const BoligPage: React.FC = () => {
   const transition = snap?.transition ?? liveTransition;
   const assets = snap?.assets ?? liveAssets;
   const housingMode = snap?.housingMode ?? liveHousingMode;
-  const equityBreakdown = computeEquityBreakdown(assets);
+  const equityBreakdown = useMemo(() => computeEquityBreakdown(assets), [assets]);
   const houseEquity = equityBreakdown.houseEquity;
 
   // ── Låneevne inputs auto-filled from the app's real data, with a per-field
@@ -126,6 +134,12 @@ const BoligPage: React.FC = () => {
   // frame), so `capacityDebt` — not the drawn `totalDebt` — auto-fills the live value.
   const effGjeld = gjeldOverride ?? (hist.isLive ? capacityDebt : loan.eksisterendeGjeld);
   const effEgenkapital = egenkapitalOverride ?? (hist.isLive ? liquidEquity : loan.egenkapital);
+
+  // Value, loan, payment and LTV are the property's (the bank's view); the user's
+  // share is shown beside them when there are co-owners.
+  const coOwners = assets.coOwners ?? [];
+  const shares = useMemo(() => ownershipShares(assets), [assets]);
+  const hasCoOwners = shares.own < 1 || shares.debt < 1;
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [showAmortization, setShowAmortization] = useState(false);
@@ -212,6 +226,85 @@ const BoligPage: React.FC = () => {
       onSave: (vals) => {
         updateHomeowner(key, vals.value);
         closeModal();
+      },
+    });
+  };
+
+  // ── Co-owners: edited as a whole list so the shares validate together. ──
+  const om = t.ownership;
+  const saveCoOwners = (next: CoOwner[]): boolean => {
+    const v = validateCoOwners(next);
+    if (!v.ok) {
+      setModal(prev => (prev ? { ...prev, error: om.errors[v.error] } : prev));
+      return false;
+    }
+    setCoOwners(next);
+    return true;
+  };
+
+  const editCoOwner = (c?: CoOwner) => {
+    // New co-owners default to owning since the move-in of the current home.
+    const defaultSince = currentResidence(residences)?.moveInDate?.slice(0, 7) || currentMonthKey();
+    const pctValue = c?.ownershipPct ?? 50;
+    openModal({
+      title: c ? c.name : om.add,
+      fields: [
+        { key: 'name', label: om.name, type: 'text', value: c?.name ?? om.defaultName.replace('{n}', String(coOwners.length + 1)) },
+        { key: 'ownershipPct', label: om.ownershipPct, type: 'number', value: String(pctValue) },
+        { key: 'debtFollows', label: om.debtFollows, type: 'checkbox', value: c?.debtSharePct === undefined ? 'true' : 'false' },
+        {
+          key: 'debtSharePct', label: om.debtSharePct, type: 'number',
+          value: String(c?.debtSharePct ?? pctValue),
+          showWhen: (v) => v.debtFollows !== 'true',
+        },
+        { key: 'since', label: om.since, type: 'monthpicker', pickerMode: 'month', value: c?.since ?? defaultSince },
+      ],
+      onSave: (vals) => {
+        const ownershipPct = parseLocaleNumber(vals.ownershipPct);
+        const debtSharePct = vals.debtFollows === 'true' ? undefined : parseLocaleNumber(vals.debtSharePct);
+        if (isNaN(ownershipPct) || (debtSharePct !== undefined && isNaN(debtSharePct))) {
+          setModal(prev => (prev ? { ...prev, error: om.errors.range } : prev));
+          return;
+        }
+        const row: CoOwner = {
+          id: c?.id ?? makeId('coo'),
+          name: vals.name.trim() || om.defaultName.replace('{n}', String(coOwners.length + 1)),
+          ownershipPct,
+          ...(debtSharePct !== undefined ? { debtSharePct } : {}),
+          ...(vals.since ? { since: vals.since.slice(0, 7) } : {}),
+          ...(c?.until ? { until: c.until } : {}),
+        };
+        const next = c ? coOwners.map(x => (x.id === c.id ? row : x)) : [...coOwners, row];
+        if (saveCoOwners(next)) closeModal();
+      },
+    });
+  };
+
+  // Two ways out: a row entered by mistake is deleted from all history; a
+  // co-owner who sold their share keeps the row with a last month, so history
+  // before then keeps the split.
+  const removeCoOwner = (c: CoOwner) => {
+    openModal({
+      title: om.removeTitle.replace('{name}', c.name),
+      fields: [
+        {
+          key: 'reason', label: om.removeReason, type: 'select', value: 'sold',
+          options: [
+            { value: 'sold', label: om.removeSold },
+            { value: 'mistake', label: om.removeMistake },
+          ],
+        },
+        {
+          key: 'until', label: om.lastMonth, type: 'monthpicker', pickerMode: 'month',
+          value: c.until ?? currentMonthKey(), showWhen: (v) => v.reason === 'sold',
+        },
+      ],
+      saveLabel: om.remove,
+      onSave: (vals) => {
+        const next = vals.reason === 'mistake'
+          ? coOwners.filter(x => x.id !== c.id)
+          : coOwners.map(x => (x.id === c.id ? { ...x, until: (vals.until || currentMonthKey()).slice(0, 7) } : x));
+        if (saveCoOwners(next)) closeModal();
       },
     });
   };
@@ -320,14 +413,19 @@ const BoligPage: React.FC = () => {
     [transition.currentMortgageBalance, transition.bridgeLoanRate, transition.bridgeMonths]
   );
 
+  // The user's part of the sale (proceeds split by ownership, loan by debt share).
+  const mySale = useMemo(
+    () => mySaleProceeds(saleProceeds.netProceeds, transition.currentMortgageBalance, shares),
+    [saleProceeds.netProceeds, transition.currentMortgageBalance, shares],
+  );
   const transitionNewLoan = useMemo(() => {
-    const equityFromSale = Math.max(0, saleProceeds.netProceeds);
+    const equityFromSale = Math.max(0, mySale);
     const totalEquityNew = equityFromSale + loan.egenkapital;
     const newLoanNeeded = Math.max(0, loan.kjoepesum - totalEquityNew);
     const newMonthlyPayment = calcMonthlyPayment(newLoanNeeded, loan.rente, loan.nedbetalingstid) + loan.termingebyr;
     const totalTransactionCosts = saleProceeds.agentCost + transition.documentFee + transition.otherSaleCosts + bridgeCost;
     return { equityFromSale, totalEquityNew, newLoanNeeded, newMonthlyPayment, totalTransactionCosts };
-  }, [saleProceeds, bridgeCost, loan, transition.documentFee, transition.otherSaleCosts]);
+  }, [saleProceeds, mySale, bridgeCost, loan, transition.documentFee, transition.otherSaleCosts]);
 
   const fmtNum = (n: number) => formatCurrency(Math.round(n));
   const fmtPct = (n: number) => `${n.toFixed(2)}%`;
@@ -343,7 +441,48 @@ const BoligPage: React.FC = () => {
   // Homeowner KPI tiles: equity, value, debt, LTV + purchase-vs-value metrics.
   const propMetrics = residenceMetrics(currentResidence(residences), assets.houseValue);
   const ltvPct = assets.houseValue > 0 ? (homeowner.currentMortgageBalance / assets.houseValue) * 100 : null;
-  const equityPct = assets.houseValue > 0 ? (houseEquity / assets.houseValue) * 100 : null;
+  // Property-level, like LTV: the whole home's equity over its whole value.
+  const equityPct = ltvPct != null ? 100 - ltvPct : null;
+  const monthlyPaymentFull = homeownerStatus.monthlyPaymentCalc + homeowner.termingebyr;
+  const fmtShare = (f: number) => String(Math.round(f * 1000) / 10);
+  const sharesText = (o: number, d: number) => om.sharesShort.replace('{own}', fmtShare(o)).replace('{debt}', fmtShare(d));
+  const coOwnerNote = (c: CoOwner) => [
+    c.since ? om.fromMonth.replace('{month}', fmtMonthKey(c.since)) : '',
+    c.until ? om.toMonth.replace('{month}', fmtMonthKey(c.until)) : '',
+  ].filter(Boolean).join(' · ') || undefined;
+
+  // "Eierskap og lån": shown in homeowner and transitioning modes.
+  const coOwnersCard = (
+    <Card padding="none" className="p-5 md:p-7 space-y-5">
+      <div className="flex items-center justify-between gap-2 pb-4 border-b border-[var(--border)]">
+        <div className="flex items-center gap-2 min-w-0">
+          <Users size={14} strokeWidth={2} className="text-[var(--text-2)] shrink-0" />
+          <SectionLabel>{om.cardTitle}</SectionLabel>
+        </div>
+        <span className="text-[11px] text-[var(--text-3)] text-right">{om.sharesLegend}</span>
+      </div>
+      <p className="text-[12px] text-[var(--text-2)]">{om.helper}</p>
+      <div className="space-y-1">
+        <LoanRow label={om.you} value={sharesText(shares.own, shares.debt)} highlight />
+        {coOwners.map(c => (
+          <LoanRow key={c.id} label={c.name} notes={coOwnerNote(c)}
+            value={sharesText(c.ownershipPct / 100, (c.debtSharePct ?? c.ownershipPct) / 100)}
+            onEdit={hist.isLive ? () => editCoOwner(c) : undefined}
+            onRemove={hist.isLive ? () => removeCoOwner(c) : undefined}
+            removeLabel={`${om.remove} ${c.name}`} />
+        ))}
+      </div>
+      {hist.isLive && (
+        <button
+          type="button"
+          onClick={() => editCoOwner()}
+          className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--accent)] hover:opacity-80 transition-opacity"
+        >
+          <Plus size={13} /> {om.add}
+        </button>
+      )}
+    </Card>
+  );
 
   const modeOptions: { mode: HousingMode; label: string; icon: React.ReactNode }[] = [
     { mode: 'first_buyer', label: t.housingModeFirstBuyer, icon: <Key size={13} strokeWidth={2} /> },
@@ -559,18 +698,25 @@ const BoligPage: React.FC = () => {
             <StatCard
               title={lp.propertyCurrentValue}
               value={fmtNum(assets.houseValue)}
-              sublabel={propMetrics.gainKr != null
-                ? <span style={{ color: propMetrics.gainKr >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
-                    {propMetrics.gainKr >= 0 ? '+' : ''}{fmtNum(propMetrics.gainKr)} {lp.kpiSincePurchase}
-                  </span>
+              sublabel={propMetrics.gainKr != null || hasCoOwners
+                ? <>
+                    {propMetrics.gainKr != null && (
+                      <span style={{ color: propMetrics.gainKr >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
+                        {propMetrics.gainKr >= 0 ? '+' : ''}{fmtNum(propMetrics.gainKr)} {lp.kpiSincePurchase}
+                      </span>
+                    )}
+                    {hasCoOwners && <span className="block">{om.yourShare}: {fmtNum(myHouseValue(assets))}</span>}
+                  </>
                 : undefined}
             />
             <StatCard
               title={t.currentMortgageBalance}
               value={fmtNum(homeowner.currentMortgageBalance)}
-              sublabel={homeowner.originalLoanAmount > 0
-                ? `${lp.kpiOf} ${fmtNum(homeowner.originalLoanAmount)} ${lp.kpiOriginal}`
-                : undefined}
+              sublabel={hasCoOwners
+                ? `${om.yourShare}: ${fmtNum(myHouseDebt(assets))}`
+                : homeowner.originalLoanAmount > 0
+                  ? `${lp.kpiOf} ${fmtNum(homeowner.originalLoanAmount)} ${lp.kpiOriginal}`
+                  : undefined}
             />
             <StatCard
               title={lp.ltv}
@@ -618,8 +764,11 @@ const BoligPage: React.FC = () => {
                   value={fmtNum(homeowner.termingebyr)}
                   onEdit={() => editHomeowner(lp.termFee, 'termingebyr', homeowner.termingebyr)} />
                 <LoanRow label={t.monthlyPaymentCalc}
-                  value={paymentTermYears > 0 ? fmtNum(homeownerStatus.monthlyPaymentCalc + homeowner.termingebyr) : '–'}
+                  value={paymentTermYears > 0 ? fmtNum(monthlyPaymentFull) : '–'}
                   highlight />
+                {hasCoOwners && paymentTermYears > 0 && (
+                  <LoanRow label={om.yourPart} value={fmtNum(monthlyPaymentFull * shares.debt)} />
+                )}
                 <LoanRow label={lp.ofWhichInterest}
                   value={paymentTermYears > 0 ? fmtNum(homeownerStatus.monthlyInterest) : '–'} />
                 <LoanRow label={lp.ofWhichPrincipal}
@@ -635,6 +784,8 @@ const BoligPage: React.FC = () => {
                 </div>
               )}
             </Card>
+
+            {coOwnersCard}
 
             {/* Bolig & kjøp */}
             <PropertyCard currentValue={assets.houseValue} readOnly={!hist.isLive} />
@@ -659,8 +810,9 @@ const BoligPage: React.FC = () => {
                   value={fmtNum(homeownerStatus.monthlyInterest)} />
                 <LoanRow label={lp.deductionRate}
                   value={fmtPct(RENTEFRADRAG_RATE_PCT)} />
+                {/* Rentefradrag follows the user's share of the joint loan. */}
                 <LoanRow label={t.annualTaxBenefit}
-                  value={fmtNum(homeownerStatus.annualTaxDeduction)}
+                  value={fmtNum(homeownerStatus.annualTaxDeduction * shares.debt)}
                   highlight highlightColor="green" />
               </div>
             </Card>
@@ -782,8 +934,14 @@ const BoligPage: React.FC = () => {
                   highlight
                   highlightColor={saleProceeds.netProceeds < 0 ? 'red' : 'blue'}
                 />
+                {hasCoOwners && (
+                  <LoanRow label={om.saleShare} value={fmtNum(mySale)} highlight
+                    highlightColor={mySale < 0 ? 'red' : 'blue'} />
+                )}
               </div>
             </Card>
+
+            {coOwnersCard}
 
             {/* Mellomfinansieringsperiode */}
             <Card padding="none" className="p-5 md:p-7 space-y-5">
@@ -1047,9 +1205,12 @@ interface LoanRowProps {
   onReset?: () => void;
   /** Accessible label for the reset-to-auto control. */
   resetLabel?: string;
+  /** When set, shows a remove control after the value. */
+  onRemove?: () => void;
+  removeLabel?: string;
 }
 
-function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blue', badge, onReset, resetLabel }: LoanRowProps) {
+function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blue', badge, onReset, resetLabel, onRemove, removeLabel }: LoanRowProps) {
   const isCalculated = !onEdit;
   const valueColor = highlight
     ? highlightColor === 'brass'
@@ -1093,6 +1254,16 @@ function LoanRow({ label, value, notes, onEdit, highlight, highlightColor = 'blu
           </span>
         ) : (
           <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${valueColor}`}>{value}</span>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="p-1.5 rounded-md text-[var(--text-2)] hover:text-[var(--negative)] hover:bg-[var(--bg-elev)] transition-colors shrink-0"
+            aria-label={removeLabel}
+          >
+            <Trash2 size={13} />
+          </button>
         )}
       </div>
     </div>

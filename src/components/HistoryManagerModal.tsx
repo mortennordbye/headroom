@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
-import { useFinance, type BalanceSnapshot } from '../context/FinanceContext';
+import { useFinance, type BalanceSnapshot, type CoOwner } from '../context/FinanceContext';
 import { ModalShell } from './ui/ModalShell';
 import { NumberRow } from './ui/NumberRow';
 import { netWorthFromSnapshot } from '../lib/netWorth';
+import { snapshotCoOwners } from '../lib/ownership';
 import {
   nearestSnapshot,
   historyRows,
@@ -98,14 +99,16 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
     // Opened straight into this month (balance-page "edit this month"): save/cancel
     // closes the modal rather than dropping to the grid the user never saw.
     const done = editing === initialMonth ? onClose : () => setEditing(null);
+    const coOwners = snapshotCoOwners(assets.coOwners, editing);
     return (
       <SnapshotEditor
         monthTitle={monthLabel(editing)}
         initial={snapshotBalances(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate })}
         base={base}
+        coOwners={coOwners}
         onCancel={done}
         onSave={(balances) => {
-          setManualSnapshot(editing, buildManualSnapshot(base, balances));
+          setManualSnapshot(editing, buildManualSnapshot(base, balances, coOwners));
           done();
         }}
       />
@@ -224,11 +227,12 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
 // ── The per-month balances editor ────────────────────────────────────────────
 
 function SnapshotEditor({
-  monthTitle, initial, base, onCancel, onSave,
+  monthTitle, initial, base, coOwners, onCancel, onSave,
 }: {
   monthTitle: string;
   initial: SnapshotBalances;
   base: BalanceSnapshot;
+  coOwners: CoOwner[];
   onCancel: () => void;
   onSave: (balances: SnapshotBalances) => void;
 }) {
@@ -244,7 +248,7 @@ function SnapshotEditor({
   const setDebt = (id: string, balance: number) =>
     set({ debts: b.debts.map(d => (d.id === id ? { ...d, balance } : d)) });
 
-  const preview = netWorthFromSnapshot(buildManualSnapshot(base, b));
+  const preview = netWorthFromSnapshot(buildManualSnapshot(base, b, coOwners));
 
   return (
     <ModalShell

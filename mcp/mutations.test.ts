@@ -32,6 +32,7 @@ import {
   deleteDebt,
   updateLoan,
   updateCurrentMortgage,
+  setCoOwners,
   setMonthlyIncome,
   addSalary,
   addBonus,
@@ -328,6 +329,16 @@ const cases: {
     },
   },
   {
+    name: 'set_co_owners (writes the list and the stored history)',
+    touched: ['assets', 'balanceSnapshots'],
+    mutate: (b) => setCoOwners(b, { coOwners: [{ id: 'coo-1', name: 'Samboer', ownershipPct: 50, since: '2026-01' }] }),
+    assertChange: (b) => {
+      expect(b.assets.coOwners).toEqual([{ id: 'coo-1', name: 'Samboer', ownershipPct: 50, since: '2026-01' }]);
+      expect(b.assets.houseValue).toBe(fullFixture().assets.houseValue); // full amounts untouched
+      expect(b.balanceSnapshots?.['2026-06'].assets.coOwners).toEqual([{ id: 'coo-1', name: 'Samboer', ownershipPct: 50 }]);
+    },
+  },
+  {
     name: 'set_monthly_income (set, including 0)',
     touched: ['monthlyIncomes'],
     mutate: (b) => setMonthlyIncome(b, { month: '2026-07', amount: 0 }),
@@ -425,6 +436,7 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
     ['update_current_mortgage (no fields)', () => updateCurrentMortgage(fresh(), {}), /no mortgage fields/],
     ['update_current_mortgage (years without months)', () => updateCurrentMortgage(fresh(), { termYears: 20 }), /together/],
     ['update_current_mortgage (zero term)', () => updateCurrentMortgage(fresh(), { termYears: 0, termMonths: 0 }), /at least one month/],
+    ['set_co_owners (over 100 %)', () => setCoOwners(fresh(), { coOwners: [{ name: 'A', ownershipPct: 60 }, { name: 'B', ownershipPct: 50 }] }), /more than 100%/],
     ['set_monthly_income (neither)', () => setMonthlyIncome(fresh(), { month: '2026-07' }), /exactly one/],
     ['set_monthly_income (both)', () => setMonthlyIncome(fresh(), { month: '2026-07', amount: 1, clear: true }), /exactly one/],
     ['set_monthly_income (clear missing)', () => setMonthlyIncome(fresh(), { month: '2020-01', clear: true }), /no income override/],

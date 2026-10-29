@@ -1,4 +1,5 @@
 import { calcWealthTax, type Region } from './norwegianTax';
+import { primaryHomeWealthValueOfShare } from './ownership';
 
 export function calcMonthlyPayment(principal: number, annualRate: number, years: number): number {
   const monthlyRate = annualRate / 100 / 12;
@@ -373,6 +374,9 @@ export interface WealthTaxProjectionConfig {
   region: Region;
   /** Tax-year params for `calcWealthTax` (defaults to the current TAX_YEAR). */
   year?: number;
+  /** The user's ownership share (0..1) when the house inputs are their share of a
+   *  co-owned home; the 70 % threshold is then applied to the whole home. Default 1. */
+  ownShare?: number;
 }
 
 /**
@@ -489,7 +493,7 @@ export function calcNetWorthProjectionByBucket(
     if (wtOn) {
       const mortgage = Math.max(0, wealthTax!.mortgageByYear[y] ?? 0);
       wt = calcWealthTax({
-        primaryHomeValue: Math.max(0, houseVal + mortgage),
+        primaryHomeValue: primaryHomeWealthValueOfShare(Math.max(0, houseVal + mortgage), wealthTax!.ownShare ?? 1, wealthTax!.year),
         shares: Math.max(0, stocks),
         otherAssets: Math.max(0, cash + crypto),
         debt: Math.max(0, mortgage + debtVal),

@@ -1,4 +1,4 @@
-import type { BalanceSnapshot, Debt, SavingsAccount } from '../context/FinanceContext';
+import type { BalanceSnapshot, CoOwner, Debt, SavingsAccount } from '../context/FinanceContext';
 
 /**
  * The snapshot to default a backfilled month from: the nearest *older* recorded
@@ -110,11 +110,14 @@ export function snapshotBalances(
  * same invariant the live `updateAsset`/`updateHomeowner` mirror keeps. Loan
  * params, fixed expenses and category budgets carry over from `base` untouched.
  */
-export function buildManualSnapshot(base: BalanceSnapshot, b: SnapshotBalances): BalanceSnapshot {
+export function buildManualSnapshot(base: BalanceSnapshot, b: SnapshotBalances, coOwners?: CoOwner[]): BalanceSnapshot {
   return {
     ...base,
     assets: {
       ...base.assets,
+      // The share in force that month (snapshotCoOwners of the live list), not
+      // whatever the nearest snapshot used as `base` carried.
+      ...(coOwners ? { coOwners } : {}),
       savings: 0,
       savingsAccounts: b.savingsAccounts,
       bsu: b.bsu,

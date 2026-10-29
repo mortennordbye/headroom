@@ -131,6 +131,18 @@ describe('computeEquityBreakdown', () => {
   });
 });
 
+describe('computeEquityBreakdown — co-owned home', () => {
+  it('counts the user\'s share of value and of the loan', () => {
+    const a = assets({ houseValue: 6_000_000, houseDebt: 4_000_000, coOwners: [{ id: 'c', name: 'C', ownershipPct: 40, debtSharePct: 50 }] });
+    expect(computeEquityBreakdown(a).houseEquity).toBe(3_600_000 - 2_000_000);
+  });
+  it('no co-owners and an empty list give the same numbers', () => {
+    const a = assets({ houseValue: 6_000_000, houseDebt: 4_000_000 });
+    expect(computeEquityBreakdown({ ...a, coOwners: [] })).toEqual(computeEquityBreakdown(a));
+    expect(computeEquityBreakdown(a).houseEquity).toBe(2_000_000);
+  });
+});
+
 describe('equitySeriesFrom', () => {
   it('yields one breakdown per month, sorted oldest → newest', () => {
     const series = equitySeriesFrom({

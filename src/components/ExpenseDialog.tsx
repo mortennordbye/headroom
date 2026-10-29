@@ -6,6 +6,7 @@ import { currentMonthKey } from '../lib/date';
 import { parseLocaleNumber, isNonEmpty } from '../lib/validators';
 import { CATEGORIES, isCategoryKey } from '../lib/categories';
 import { CHART } from '../lib/chartColors';
+import { ownershipShares } from '../lib/ownership';
 
 // The add/edit dialog for a fixed expense. Replaces the flat EditModal form with
 // a grouped layout: essentials up front, the paydown destination reframed as the
@@ -33,7 +34,12 @@ const lbl = `${lblBare} mb-2`;
 const input = 'w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[10px] px-3.5 py-3 text-[15px] text-[var(--text-1)] outline-none focus:border-[var(--forest)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--forest)_30%,transparent)] placeholder:text-[var(--text-3)] transition-colors';
 
 export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
-  const { t, debts, housingMode } = useFinance();
+  const { t, debts, housingMode, assets, formatCurrency } = useFinance();
+  // With a joint mortgage the amount may be the whole instalment (paid from a
+  // joint account) or only the user's share of it; the rule engine grosses a
+  // share up by the debt share so the loan is paid down by the whole instalment.
+  const debtShare = ownershipShares(assets).debt;
+  const [scope, setScope] = useState<'whole' | 'myShare'>(expense?.mortgagePaymentScope ?? 'whole');
 
   const [name, setName] = useState(expense?.name ?? '');
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
@@ -61,6 +67,8 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
   ];
 
   const typedAmount = parseLocaleNumber(amount);
+  const showScope = flow === 'debt' && debtTarget === 'mortgage' && debtShare < 1;
+  const loanPaydown = scope === 'myShare' && debtShare > 0 ? typedAmount / debtShare : typedAmount;
 
   const submit = () => {
     if (!isNonEmpty(name)) { setError(t.newExpenseName + t.validation.requiredSuffix); return; }
@@ -79,6 +87,8 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     const resumed = !!expense?.automationPaused && !paused;
     const lastPostedMonth = !destinationKind ? undefined
       : sameDest && !resumed ? expense?.lastPostedMonth : currentMonthKey();
+    // Hidden without co-owners: keep whatever the rule had.
+    const chosenScope = destinationKind !== 'mortgage' ? undefined : showScope ? scope : expense?.mortgagePaymentScope;
 
     onSave({
       name: name.trim(),
@@ -88,6 +98,7 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
       match: match.trim() || undefined,
       destinationKind,
       debtId,
+      mortgagePaymentScope: chosenScope === 'myShare' ? 'myShare' : undefined,
       automationPaused: destinationKind && paused ? true : undefined,
       lastPostedMonth,
     });
@@ -192,6 +203,34 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
                     <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-2)]" />
                   </div>
                   <Explainer text={t.expenseDialog.explainDebt} />
+                  {showScope && (
+                    <fieldset className="mt-3">
+                      <legend className={lbl}>{t.ownership.scopeLabel}</legend>
+                      <div className="space-y-1.5">
+                        {(['whole', 'myShare'] as const).map(v => (
+                          <label key={v} className="flex items-center gap-2.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="mortgagePaymentScope"
+                              checked={scope === v}
+                              onChange={() => setScope(v)}
+                              className="w-4 h-4 shrink-0 accent-[var(--forest)] cursor-pointer"
+                            />
+                            <span className="text-[12.5px] text-[var(--text-1)]">
+                              {v === 'whole'
+                                ? t.ownership.scopeWhole
+                                : t.ownership.scopeMyShare.replace('{pct}', String(Math.round(debtShare * 1000) / 10))}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      {typedAmount > 0 && (
+                        <p className="text-[11px] text-[var(--text-3)] mt-1.5 leading-snug">
+                          {t.ownership.scopeHint.replace('{amount}', formatCurrency(Math.round(loanPaydown)))}
+                        </p>
+                      )}
+                    </fieldset>
+                  )}
                 </>
               )}
             </div>

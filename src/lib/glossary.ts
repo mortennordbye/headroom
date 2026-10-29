@@ -25,6 +25,8 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { key: 'termPayment' },
   { key: 'amortizationPeriod' },
   { key: 'stressTest' },
+  { key: 'ownershipShare' },
+  { key: 'coBorrower' },
   { key: 'feriepenger', no: true },
   { key: 'trinnskatt', no: true },
   { key: 'trygdeavgift', no: true },
@@ -40,6 +42,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { key: 'ask', no: true },
   { key: 'skjermingsfradrag', no: true },
   { key: 'mellomfinansiering', no: true },
+  { key: 'jointLiability', no: true },
 ];
 
 /** The terms visible for a region, in display order. */
