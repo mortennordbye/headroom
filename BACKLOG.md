@@ -472,6 +472,55 @@ like `salaries` in `src/lib/payloadRegistry.ts`), enriched `HomeownerData`, pure
   proves annoying. **Where**: transitioning block in `src/pages/BoligPage.tsx`, `residences` CRUD
   in `src/context/FinanceContext.tsx`.
 
+## Co-owned home — follow-ups (2026-10)
+
+Shipped in #220 and #223: co-owners of the current home with ownership and loan share
+(`assets.coOwners`, pure logic in `src/lib/ownership.ts`). Home value and loan are stored in full;
+net worth, wealth tax, rentefradrag and the gjeldsgrad headline use the user's share. Remaining:
+
+- **2026 primary-home threshold looks stale.** `WEALTH_TAX_PARAMS[2026].primaryHomeHighThreshold`
+  is 10 000 000, carried forward from 2025, but skatteetaten.no/en/rates/tax-value-of-housing/
+  (income year 2026) lists 25 % up to NOK 14 000 000 and 70 % above. Wealth tax is overstated for
+  homes above 10 MNOK. **Why deferred**: `norwegianTax.ts` is no-go without an issue from the owner.
+  **What would unblock**: confirm against the adopted 2026 budget and file the issue. **Where**:
+  `src/lib/norwegianTax.ts` (`WEALTH_TAX_PARAMS`); `primaryHomeWealthValue` in `src/lib/ownership.ts`
+  reads it.
+- **History months stored only as a total aren't split by share.** Months with a
+  `netWorthHistory` number but no balance snapshot keep their recorded value, so adding a co-owner
+  "since" an earlier month can still show a step in the net-worth chart between those months and the
+  first snapshot. **Why deferred**: the home value and loan for those months were never stored, and a
+  hand-entered total may already be the user's share, so scaling would be a guess. **What would
+  unblock**: the user backfilling those months as full snapshots (History manager), or a decision to
+  mark them as estimated inside a co-owner window. **Where**: `netWorthSeriesFrom` in
+  `src/lib/netWorth.ts`, `rewriteSnapshotCoOwners` in `src/lib/ownership.ts`.
+- **Spouses.** Married co-owners get a doubled wealth-tax bunnfradrag and can split rentefradrag
+  freely; the app models one person. **Why deferred**: needs a marital-status field and touches
+  `norwegianTax.ts`. **What would unblock**: an issue covering both. **Where**: `calcWealthTax` in
+  `src/lib/norwegianTax.ts`, `annualMortgageInterest` in `src/context/FinanceContext.tsx` and
+  `mcp/derive.ts`.
+- **Buy-and-sell with a jointly bought next home.** The new loan is the full purchase price minus
+  only the user's share of the sale, and the same co-owners carry over to the next home with a
+  `since` that refers to the old one. A note in the UI says the new home is calculated as the user's
+  alone. **What would unblock**: co-buyers in borrowing capacity (plan PR 3), then separate
+  co-owner sets for the sold and the new home. **Where**: `transitionNewLoan` in
+  `src/pages/BoligPage.tsx`.
+- **Projections use today's loan share.** `projectSnapshotBalances` and automation catch-ups gross
+  up a "my share" mortgage payment with today's `mortgageDebtShare`, even past a co-owner's `until`
+  or before a future `since`. **What would unblock**: pass the share per month into the runner.
+  **Where**: `computeAutomationPostings` in `src/lib/automation.ts`, `src/lib/projectBalances.ts`.
+- **Onboarding step for ownership share.** The home topic asks only value and debt. **Where**:
+  `src/lib/onboarding.ts` (home topic).
+- **Two mortgage rules stack and each charges a month's interest again** (pre-existing): two fixed
+  expenses aimed at the mortgage each run `applyAmortization`, so interest accrues twice. **What would
+  unblock**: decide whether a month's interest is charged once per balance. **Where**:
+  `computeAutomationPostings` in `src/lib/automation.ts` (mortgage branch).
+- **MCP server clock vs browser clock.** Co-owner `since`/`until`, the term countdown and the
+  snapshot month use the local month, so the two can disagree for a few hours at month end.
+  **Where**: `currentMonthKey` in `src/lib/date.ts`, its uses in `mcp/derive.ts`.
+- **`updateAsset` type-accepts `coOwners`.** `updateAsset(key: keyof Assets, value: number)` would
+  write a number into the list; no caller does. **Where**: `updateAsset` in
+  `src/context/FinanceContext.tsx`.
+
 ## Sekundærbolig (second-home) tool — deferred items
 
 Shipped (2026-07): the `/loan` page became a **Bolig hub** (`/bolig`, old path redirects) with
