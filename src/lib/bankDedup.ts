@@ -1,4 +1,5 @@
 import type { DailyTransaction } from '../context/FinanceContext';
+import type { TransactionSegment } from './segments';
 
 // Remove duplicate bank rows created when the Enable-Banking id format changed.
 // A transaction has historically been keyed two ways:
@@ -41,9 +42,10 @@ export function dedupeBankTransactions(txs: DailyTransaction[]): DailyTransactio
     const r = prefixedRef(t.id);
     if (r) prefixedRefs.add(r);
   }
-  // A manual category on a dropped bare twin is rescued onto its prefixed
+  // A manual category or segment on a dropped bare twin is rescued onto its prefixed
   // survivor so cleanup never loses a hand-set category.
   const rescue = new Map<string, Pick<DailyTransaction, 'category' | 'categorySource'>>();
+  const segmentRescue = new Map<string, TransactionSegment>();
   const out: DailyTransaction[] = [];
   for (const t of txs) {
     const br = bareRef(t.id);
@@ -51,15 +53,19 @@ export function dedupeBankTransactions(txs: DailyTransaction[]): DailyTransactio
       if (t.categorySource === 'manual' && t.category != null) {
         rescue.set(br, { category: t.category, categorySource: t.categorySource });
       }
+      if (t.segment) segmentRescue.set(br, t.segment);
       continue; // stale legacy twin — its prefixed row survives
     }
     out.push(t);
   }
-  if (rescue.size === 0) return out;
+  if (rescue.size === 0 && segmentRescue.size === 0) return out;
   return out.map((t) => {
     const r = prefixedRef(t.id);
     const resc = r ? rescue.get(r) : undefined;
-    return resc && t.categorySource !== 'manual' ? { ...t, ...resc } : t;
+    const seg = r ? segmentRescue.get(r) : undefined;
+    let row = resc && t.categorySource !== 'manual' ? { ...t, ...resc } : t;
+    if (seg && !t.segment) row = { ...row, segment: seg };
+    return row;
   });
 }
 
@@ -67,7 +73,7 @@ export function dedupeBankTransactions(txs: DailyTransaction[]): DailyTransactio
 // copy — change both or neither. Drops a provisional (pending) row once its
 // BOOKED twin arrives, so the two ids for the same transaction don't double-count.
 // Match is conservative (same account, |amount|, direction, within a few days);
-// a manual category on the dropped pending row is rescued onto the survivor.
+// a manual category or segment on the dropped pending row is rescued onto the survivor.
 const PENDING_SUPERSEDE_DAYS = 6;
 export function evictSupersededPending(txs: DailyTransaction[]): DailyTransaction[] {
   const pendings = txs.filter((t) => t.pending);
@@ -75,6 +81,7 @@ export function evictSupersededPending(txs: DailyTransaction[]): DailyTransactio
   const booked = txs.filter((t) => !t.pending);
   const dropped = new Set<string>();
   const rescue = new Map<string, Pick<DailyTransaction, 'category' | 'categorySource'>>();
+  const segmentRescue = new Map<string, TransactionSegment>();
   for (const p of pendings) {
     const match = booked.find(
       (b) => (b.account || '') === (p.account || '')
@@ -85,6 +92,7 @@ export function evictSupersededPending(txs: DailyTransaction[]): DailyTransactio
     if (match) {
       dropped.add(p.id);
       if (p.categorySource === 'manual' && p.category != null) rescue.set(match.id, { category: p.category, categorySource: p.categorySource });
+      if (p.segment) segmentRescue.set(match.id, p.segment);
     }
   }
   if (dropped.size === 0) return txs;
@@ -92,6 +100,9 @@ export function evictSupersededPending(txs: DailyTransaction[]): DailyTransactio
     .filter((t) => !dropped.has(t.id))
     .map((t) => {
       const r = rescue.get(t.id);
-      return r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+      const s = segmentRescue.get(t.id);
+      let row = r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+      if (s && !t.segment) row = { ...row, segment: s };
+      return row;
     });
 }

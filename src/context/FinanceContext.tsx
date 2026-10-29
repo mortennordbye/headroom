@@ -30,6 +30,7 @@ import { categorizeWithRules, isStaleAutoLabel, type CategoryRule } from '../lib
 import { buildMatchHaystack, normalizeMatchText } from '../lib/text';
 import type { LabelRule } from '../lib/labelRules';
 import { excludedTransferIds, type TransferRule } from '../lib/transferRules';
+import { isOneOff, withoutOneOffs, type TransactionSegment } from '../lib/segments';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
@@ -262,6 +263,12 @@ export interface DailyTransaction {
    * booked, manual, and legacy rows.
    */
   pending?: boolean;
+  /**
+   * The user's override for how this row counts (src/lib/segments.ts):
+   * 'transfer' = own-account move, 'oneOff' = spending outside the normal month.
+   * Absent = ordinary spending. Carried across bank re-sync.
+   */
+  segment?: TransactionSegment;
 }
 
 export interface TransactionTemplate {
@@ -2161,6 +2168,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     () => dailyTransactions.filter((tx) => !internalTransferIds.has(tx.id)),
     [dailyTransactions, internalTransferIds],
   );
+  // The normal month's spending: also without the rows marked as one-offs. The
+  // budget pacing and the spending analysis measure this; cashflow and the
+  // savings rate keep the one-offs, since that money did leave.
+  const budgetTransactions = useMemo(() => withoutOneOffs(nonTransferTransactions), [nonTransferTransactions]);
 
   // Every row dated in the viewed month — INCLUDING internal transfers, because
   // the ledger still shows them (marked ⇄). Display only: never feed this to the
@@ -2172,11 +2183,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, [dailyTransactions, currentMonth]);
 
-  // The same month, transfer-netted — the set every spend figure is measured on,
-  // so the running balance agrees with the category/trend/per-account surfaces
-  // (which have always used `nonTransferTransactions`).
+  // The same month, transfer-netted and without one-offs — the set every spend
+  // figure is measured on, so the running balance agrees with the category/trend
+  // surfaces (which use `budgetTransactions`).
   const spendTransactionsForMonth = useMemo(
-    () => transactionsForMonth.filter((tx) => !internalTransferIds.has(tx.id)),
+    () => transactionsForMonth.filter((tx) => !internalTransferIds.has(tx.id) && !isOneOff(tx)),
     [transactionsForMonth, internalTransferIds],
   );
 
@@ -2185,8 +2196,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // envelope down instead of hitting the daily budget a second time. Single source
   // of truth shared with the budget UI and charts (src/lib/envelopes.ts).
   const reconciliation = useMemo(
-    () => reconcile(viewFixedExpenses, nonTransferTransactions, monthKey),
-    [viewFixedExpenses, nonTransferTransactions, monthKey],
+    () => reconcile(viewFixedExpenses, budgetTransactions, monthKey),
+    [viewFixedExpenses, budgetTransactions, monthKey],
   );
 
   // Both sides of the "vs last month" chip, measured identically: income and
@@ -2194,12 +2205,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // discretionary spend counts, so the chip compares like with like instead of
   // counting salary deposits or own-account moves as spending.
   const prevMonthSpending = useMemo(
-    () => discretionarySpendForMonth(nonTransferTransactions, fixedExpenses, prevMonthKey),
-    [nonTransferTransactions, fixedExpenses, prevMonthKey],
+    () => discretionarySpendForMonth(budgetTransactions, fixedExpenses, prevMonthKey),
+    [budgetTransactions, fixedExpenses, prevMonthKey],
   );
   const currentMonthSpending = useMemo(
-    () => discretionarySpendForMonth(nonTransferTransactions, viewFixedExpenses, monthKey),
-    [nonTransferTransactions, viewFixedExpenses, monthKey],
+    () => discretionarySpendForMonth(budgetTransactions, viewFixedExpenses, monthKey),
+    [budgetTransactions, viewFixedExpenses, monthKey],
   );
 
   // Per-account view (Budget page only, not persisted). Accounts are grouped by
@@ -2236,13 +2247,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
     return [...seen.values()];
   }, [dailyTransactions]);
-  // The transaction set the Budget spending analysis uses: internal transfers
-  // removed, then narrowed to the selected account group (all when unset).
+  // The transaction set the Budget spending analysis uses: internal transfers and
+  // one-offs removed, then narrowed to the selected account group (all when unset).
   const visibleBudgetTransactions = useMemo(
     () => (accountFilter == null
-      ? nonTransferTransactions
-      : nonTransferTransactions.filter((tx) => accountGroupKey(tx, accountLabels) === accountFilter)),
-    [nonTransferTransactions, accountFilter, accountLabels],
+      ? budgetTransactions
+      : budgetTransactions.filter((tx) => accountGroupKey(tx, accountLabels) === accountFilter)),
+    [budgetTransactions, accountFilter, accountLabels],
   );
 
   const dailyData: DailyDataEntry[] = useMemo(() => {

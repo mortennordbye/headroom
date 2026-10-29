@@ -207,6 +207,23 @@ describe('mergeTransactions', () => {
     expect(merged[0].categorySource).toBe('manual');
   });
 
+  it('preserves a segment across a re-sync', () => {
+    const marked = mapEBTransactions([tx()]).map((t: MappedTransaction) => ({ ...t, segment: 'oneOff' as const }));
+    const merged = mergeTransactions(marked, mapEBTransactions([tx()]));
+    expect(merged[0].segment).toBe('oneOff');
+  });
+
+  it('rescues a segment from an evicted pending row onto its booked twin', () => {
+    const pending = mapEBTransactions(
+      [tx({ entry_reference: undefined, status: 'PDNG', booking_date: undefined, value_date: '2026-04-05' })],
+      { includePending: true, account: 'a:1' },
+    ).map((t: MappedTransaction) => ({ ...t, segment: 'transfer' as const }));
+    const booked = mapEBTransactions([tx({ entry_reference: 'ref-9', booking_date: '2026-04-06' })], { account: 'a:1' });
+    const merged = mergeTransactions(pending, booked);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].segment).toBe('transfer');
+  });
+
   it('keeps rows from two different connections side by side (no collision)', () => {
     const bankA = mapEBTransactions([tx({ entry_reference: 'ref-1' })], { idPrefix: 'eb-aaaa1111-', account: 'aaaa1111:1', accountName: 'Card' });
     const bankB = mapEBTransactions([tx({ entry_reference: 'ref-1' })], { idPrefix: 'eb-bbbb2222-', account: 'bbbb2222:1', accountName: 'Salary' });

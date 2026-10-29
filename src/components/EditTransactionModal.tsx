@@ -4,6 +4,7 @@ import { useFinance, type DailyTransaction } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
 import { isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
 import { matchesTransferRule } from '../lib/transferRules';
+import { isTransactionSegment } from '../lib/segments';
 
 /**
  * The single transaction editor, shared by the Budget ledger and the Dashboard
@@ -19,7 +20,7 @@ export default function EditTransactionModal({ tx, onClose }: { tx: DailyTransac
   } = useFinance();
   const [error, setError] = useState<string | undefined>();
 
-  const { id, description, amount, category, kind, merchant } = tx;
+  const { id, description, amount, category, kind, merchant, segment } = tx;
 
   const categoryOptions = [
     { value: '', label: t.uncategorized },
@@ -51,6 +52,12 @@ export default function EditTransactionModal({ tx, onClose }: { tx: DailyTransac
       { value: 'expense', label: t.txExpense },
       { value: 'income', label: t.txIncome },
     ] },
+    // Per-row override; a one-off only makes sense for money going out.
+    { key: 'segment', label: t.budgetPage.segment, type: 'select', value: segment ?? '', hint: t.budgetPage.segmentHint, options: [
+      { value: '', label: t.budgetPage.segmentNormal },
+      { value: 'transfer', label: t.budgetPage.segmentTransfer },
+      ...(kind === 'income' ? [] : [{ value: 'oneOff', label: t.budgetPage.segmentOneOff }]),
+    ] },
     { key: 'mapExpense', label: t.budgetPage.mapToFixedExpense, type: 'select', value: prevMapped?.id ?? '', options: expenseOptions, hint: t.budgetPage.mapToFixedExpenseHint },
     // Own-account transfer: only meaningful for an outflow (money leaving to one
     // of your accounts). Hidden on income rows, which never count as spend anyway.
@@ -65,8 +72,10 @@ export default function EditTransactionModal({ tx, onClose }: { tx: DailyTransac
       setError(!vals.description.trim() ? t.editDescription + t.validation.requiredSuffix : t.editAmount + t.validation.positiveAmountSuffix);
       return;
     }
+    const newKind = vals.kind === 'income' ? 'income' : 'expense';
+    const newSegment = isTransactionSegment(vals.segment) && !(newKind === 'income' && vals.segment === 'oneOff') ? vals.segment : undefined;
     setDailyTransactions(dailyTransactions.map(x => x.id === id
-      ? { ...x, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, categorySource: vals.category.trim() ? 'manual' : undefined, kind: vals.kind === 'income' ? 'income' : 'expense' }
+      ? { ...x, description: vals.description.trim(), amount: newAmount, category: vals.category.trim() || undefined, categorySource: vals.category.trim() ? 'manual' : undefined, kind: newKind, segment: newSegment }
       : x
     ));
     // Remember: create rules so matching rows (past + future) inherit only what

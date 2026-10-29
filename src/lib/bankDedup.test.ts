@@ -36,6 +36,15 @@ describe('dedupeBankTransactions', () => {
     expect(out[0].categorySource).toBe('manual');
   });
 
+  it('rescues a segment from the dropped bare twin onto its survivor', () => {
+    const out = dedupeBankTransactions([
+      tx({ id: 'eb-999', segment: 'oneOff' }),
+      tx({ id: 'eb-aaaaaaaa-999', account: 'x' }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].segment).toBe('oneOff');
+  });
+
   it('keeps a legacy bare row that has no prefixed twin', () => {
     const out = dedupeBankTransactions([
       tx({ id: 'eb-onlylegacy' }),
@@ -78,6 +87,11 @@ describe('evictSupersededPending', () => {
 
   it('drops a pending row superseded by a booked twin', () => {
     expect(evictSupersededPending([p({}), b({})]).map((t) => t.id)).toEqual(['b']);
+  });
+
+  it("rescues a pending row's segment onto the booked twin, never over the twin's own", () => {
+    expect(evictSupersededPending([p({ segment: 'transfer' }), b({})])[0].segment).toBe('transfer');
+    expect(evictSupersededPending([p({ segment: 'transfer' }), b({ segment: 'oneOff' })])[0].segment).toBe('oneOff');
   });
 
   it('keeps a pending row with no booked twin, and is a no-op without pending rows', () => {

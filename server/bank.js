@@ -438,20 +438,25 @@ function dropStaleBareTwins(txs) {
     if (m) prefixedRefs.add(m[1]);
   }
   const rescue = new Map();
+  const segmentRescue = new Map();
   const out = [];
   for (const t of txs) {
     const b = BARE.exec(t.id);
     if (b && prefixedRefs.has(b[1])) {
       if (t.categorySource === 'manual' && t.category != null) rescue.set(b[1], { category: t.category, categorySource: t.categorySource });
+      if (t.segment) segmentRescue.set(b[1], t.segment);
       continue;
     }
     out.push(t);
   }
-  if (rescue.size === 0) return out;
+  if (rescue.size === 0 && segmentRescue.size === 0) return out;
   return out.map((t) => {
     const m = PREFIXED.exec(t.id);
     const r = m && rescue.get(m[1]);
-    return r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+    const s = m && segmentRescue.get(m[1]);
+    let row = r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+    if (s && !t.segment) row = { ...row, segment: s };
+    return row;
   });
 }
 
@@ -461,7 +466,7 @@ function dropStaleBareTwins(txs) {
 // booking_date and may gain a reference. Once the booked twin arrives, drop the
 // pending row it superseded so the ledger doesn't double-count. Match is
 // conservative — same account, same |amount|, same direction, booking within a
-// few days — and a manual category on the dropped pending row is rescued onto
+// few days — and a manual category or segment on the dropped pending row is rescued onto
 // the booked survivor. Amount drift (tips, forex) isn't matched: a rare pending
 // row then lingers until manually removed, which is safer than fuzzy matching in
 // a money app.
@@ -476,6 +481,7 @@ function evictSupersededPending(txs) {
   const booked = txs.filter((t) => !t.pending);
   const dropped = new Set();
   const rescue = new Map();
+  const segmentRescue = new Map();
   for (const p of pendings) {
     const match = booked.find(
       (b) => (b.account || '') === (p.account || '')
@@ -486,6 +492,7 @@ function evictSupersededPending(txs) {
     if (match) {
       dropped.add(p.id);
       if (p.categorySource === 'manual' && p.category != null) rescue.set(match.id, { category: p.category, categorySource: p.categorySource });
+      if (p.segment) segmentRescue.set(match.id, p.segment);
     }
   }
   if (dropped.size === 0) return txs;
@@ -493,7 +500,10 @@ function evictSupersededPending(txs) {
     .filter((t) => !dropped.has(t.id))
     .map((t) => {
       const r = rescue.get(t.id);
-      return r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+      const s = segmentRescue.get(t.id);
+      let row = r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+      if (s && !t.segment) row = { ...row, segment: s };
+      return row;
     });
 }
 
@@ -505,13 +515,12 @@ function mergeTransactions(existing, incoming, deletedIds = []) {
     if (deleted.has(t.id)) continue; // honor client-side soft-deletes
     const prior = byId.get(t.id);
     // Re-synced rows come back category-less from the bank. Carry forward any
-    // label the client already assigned (auto or manual) so a re-sync never
-    // wipes categorization; the fresh bank fields (amount, etc.) still win.
-    if (prior && prior.category != null) {
-      byId.set(t.id, { ...t, category: prior.category, categorySource: prior.categorySource });
-    } else {
-      byId.set(t.id, t);
-    }
+    // label and segment the client already assigned (auto or manual) so a re-sync
+    // never wipes them; the fresh bank fields (amount, etc.) still win.
+    let row = t;
+    if (prior && prior.category != null) row = { ...row, category: prior.category, categorySource: prior.categorySource };
+    if (prior && prior.segment) row = { ...row, segment: prior.segment };
+    byId.set(t.id, row);
   }
   return evictSupersededPending(dropStaleBareTwins([...byId.values()]));
 }
