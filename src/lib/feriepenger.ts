@@ -59,3 +59,29 @@ export function feriepengerMonthlyNet(
   const feriepenger = grossAnnual * (Math.max(0, config.feriepengesatsPct) / 100);
   return flatNet - feriepenger / 10 - decBoost / 10;
 }
+
+/**
+ * Holiday pay above the salary it replaces, for income year `year`: the
+ * feriepenger paid in June (sats × last year's salary) minus the feriefratrekk
+ * taken from June's salary for the holiday weeks (5 weeks on the 12% rate, 6 on
+ * 14.3%, 25 virkedager on the 10.2% minimum). It is taxable income on top of
+ * the 12 months of salary, which is why Skatteetaten's trekk tables annualise
+ * monthly pay by 12.12 rather than 12. Usually ~2% of salary; negative after a
+ * large raise (this year's fratrekk outgrows last year's base).
+ *
+ * `grossFor(monthKey)` is the gross annual salary active in a month. Without any
+ * salary last year (no history entered), last year's base is taken to equal this
+ * June's salary. Salary only: bonus and overtime in the feriepengegrunnlag
+ * aren't counted. Returns 0 for a non-positive sats.
+ */
+export function feriepengerSurplus(year: number, grossFor: (monthKey: string) => number, satsPct: number): number {
+  if (!Number.isFinite(satsPct) || satsPct <= 0) return 0;
+  const sats = Math.min(100, satsPct) / 100;
+  const safe = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
+  let priorTotal = 0;
+  for (let m = 1; m <= 12; m++) priorTotal += safe(grossFor(`${year - 1}-${String(m).padStart(2, '0')}`)) / 12;
+  const juneGross = safe(grossFor(`${year}-06`));
+  const base = priorTotal > 0 ? priorTotal : juneGross;
+  const weeks = satsPct >= 14.3 ? 6 : satsPct >= 12 ? 5 : 25 / 6;
+  return base * sats - (juneGross * weeks) / 52;
+}

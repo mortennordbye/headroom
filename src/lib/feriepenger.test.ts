@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
+import { feriepengerMonthlyNet, feriepengerSurplus, type FeriepengerConfig } from './feriepenger';
+import { calcNorwegianTax } from './norwegianTax';
+import { parseTableNumber, withholdingByMonth } from './forskuddstrekk';
 
 const cfg = (over: Partial<FeriepengerConfig> = {}): FeriepengerConfig => ({
   grossAnnual: 600000,
@@ -54,5 +56,43 @@ describe('feriepengerMonthlyNet', () => {
     expect(june).toBe(flatNet);
     // December still spikes on the half-trekk alone
     expect(feriepengerMonthlyNet('2026-12', flatNet, cfg({ feriepengesatsPct: 0 }))).toBeCloseTo(45000, 4);
+  });
+});
+
+describe('feriepengerSurplus', () => {
+  const flat = (gross: number) => () => gross;
+
+  it('is holiday pay minus the fratrekk for the holiday weeks', () => {
+    // 12% × 600 000 − 600 000 × 5/52
+    expect(feriepengerSurplus(2026, flat(600000), 12)).toBeCloseTo(72000 - (600000 * 5) / 52, 6);
+    // 10.2% × 600 000 − 600 000 × (25/6)/52
+    expect(feriepengerSurplus(2026, flat(600000), 10.2)).toBeCloseTo(61200 - (600000 * 25) / 6 / 52, 6);
+    expect(feriepengerSurplus(2026, flat(600000), 14.3)).toBeCloseTo(85800 - (600000 * 6) / 52, 6);
+  });
+
+  it('bases the holiday pay on last year and the fratrekk on this June', () => {
+    const grossFor = (k: string) => (k.startsWith('2025-') ? 500000 : 600000);
+    expect(feriepengerSurplus(2026, grossFor, 12)).toBeCloseTo(60000 - (600000 * 5) / 52, 6);
+  });
+
+  it('assumes last year equals this June when no history is entered', () => {
+    const grossFor = (k: string) => (k.startsWith('2026-') ? 600000 : 0);
+    expect(feriepengerSurplus(2026, grossFor, 12)).toBeCloseTo(feriepengerSurplus(2026, flat(600000), 12), 6);
+  });
+
+  it('closes most of the gap between table withholding and modelled tax', () => {
+    // Table 8000 is the plain card; its trekk assumes the surplus is income.
+    const card = { kind: 'table' as const, table: '8000', year: 2026 };
+    const trekk = withholdingByMonth(card, () => 50000, undefined, 2026).reduce((s, v) => s + v, 0);
+    const without = calcNorwegianTax(600000, 0, 2026).totalTax;
+    const withSurplus = calcNorwegianTax(600000 + feriepengerSurplus(2026, flat(600000), 12), 0, 2026).totalTax;
+    expect(parseTableNumber('8000')).not.toBeNull();
+    expect(Math.abs(trekk - withSurplus)).toBeLessThan(Math.abs(trekk - without) / 10);
+  });
+
+  it('is 0 without a usable sats and never NaN', () => {
+    expect(feriepengerSurplus(2026, flat(600000), 0)).toBe(0);
+    expect(feriepengerSurplus(2026, flat(600000), NaN)).toBe(0);
+    expect(feriepengerSurplus(2026, () => NaN, 12)).toBe(0);
   });
 });

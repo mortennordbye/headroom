@@ -289,6 +289,9 @@ export function withholdingByMonth(
  * December half pattern (that would count the season twice). One-off pay that
  * month nets out at the card's trekk on it. IPS leaves the paycheck, as in the
  * annual model. The table already carries the user's deductions.
+ *
+ * `holidaySurplusAnnual` (`feriepengerSurplus`) is paid in June on top of salary:
+ * trekkfri on a table card, withheld at the card's percent on a prosentkort.
  */
 export function cardNetForMonth(
   rawCard: unknown,
@@ -297,6 +300,7 @@ export function cardNetForMonth(
   grossAnnual: number,
   extraGross: number,
   ipsAnnualContribution: number,
+  holidaySurplusAnnual: number = 0,
 ): number | null {
   const card = sanitizeTaxCard(rawCard);
   if (!card || region !== 'no' || !monthKey.startsWith(`${card.year}-`)) return null;
@@ -308,5 +312,7 @@ export function cardNetForMonth(
   const extraTrekk = extra > 0
     ? withholdingForMonth(card, monthlyGross, month, extra, card.year) - withholdingForMonth(card, monthlyGross, month, 0, card.year)
     : 0;
-  return Math.round(monthlyGross - yearlyRegular / 12 + extra - extraTrekk - ips);
+  const surplus = Number.isFinite(holidaySurplusAnnual) ? holidaySurplusAnnual : 0;
+  const surplusNet = card.kind === 'percent' ? surplus * (1 - Math.min(100, Math.max(0, card.pct)) / 100) : surplus;
+  return Math.round(monthlyGross - yearlyRegular / 12 + extra - extraTrekk - ips + surplusNet / 12);
 }
