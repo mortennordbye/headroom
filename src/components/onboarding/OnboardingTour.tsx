@@ -7,7 +7,7 @@ import {
   Wallet, Coins, PiggyBank, Home, TrendingUp, Bitcoin, Landmark, Briefcase,
   LayoutDashboard, LineChart, Target, CreditCard, Settings as SettingsIcon, Globe,
 } from 'lucide-react';
-import { useFinance, type Assets, type Pension, type Language, type Region, type ExpenseType, type DebtType, type FixedExpense } from '../../context/FinanceContext';
+import { useFinance, type Assets, type NumericAssetKey, type Pension, type Language, type Region, type ExpenseType, type DebtType, type FixedExpense } from '../../context/FinanceContext';
 import { DEBT_TYPES } from '../../lib/debt';
 import PayslipImportModal from '../PayslipImportModal';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -363,7 +363,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     if (isNaN(n) || (n < 0 && !f.allowNegative)) return; // keep the draft, don't push an invalid value
     if (f.writer === 'income') setMonthlyIncomeForMonth(monthKey, n);
     else if (f.writer === 'savingsTarget') setSavingsTargetPercent(Math.min(100, n));
-    else if (f.writer === 'asset') updateAsset(f.key as keyof Assets, n);
+    else if (f.writer === 'asset') updateAsset(f.key as NumericAssetKey, n);
     else if (f.writer === 'pension') updatePension(f.key as keyof Pension, n);
     else if (f.writer === 'growthRate') growthSetters[f.key]?.(n);
   };
