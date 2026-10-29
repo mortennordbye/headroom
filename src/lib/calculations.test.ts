@@ -437,13 +437,13 @@ describe('calcNetWorthProjectionByBucket', () => {
 
   describe('wealth-tax drag', () => {
     const zero = { stocks: 0, crypto: 0, cash: 0, house: 0 };
-    // 3M in listed shares → valued at 80% = 2.4M, 0.64M above the 1.76M bunnfradrag
+    // 3M in listed shares → valued at 80% = 2.4M, 0.64M above the 2025 1.76M bunnfradrag
     // → 6 400/yr at the first bracket (1.0%).
     const rich = { stocks: 3_000_000, crypto: 0, cash: 0, house: 0 };
 
     it('assesses tax on the valued wealth above the bunnfradrag and pays it from the pot', () => {
       const p = calcNetWorthProjectionByBucket(rich, 0, zero, 2, undefined, undefined, {
-        mortgageByYear: [0, 0, 0], region: 'no',
+        mortgageByYear: [0, 0, 0], region: 'no', year: 2025,
       });
       expect(p[0].wealthTax).toBe(6_400);          // 0.64M × 1.0%
       expect(p[0].total).toBe(3_000_000);          // year 0 = today, pre-deduction
@@ -482,9 +482,9 @@ describe('calcNetWorthProjectionByBucket', () => {
 
     it('recovers the home market value from equity + mortgage', () => {
       // 17M equity + 3M mortgage = 20M market value → valued 10M×25% + 10M×70% = 9.5M,
-      // less 3M debt = 6.5M net wealth; 4.74M above bunnfradrag × 1.0% = 47 400.
+      // less 3M debt = 6.5M net wealth; 4.74M above the 2025 bunnfradrag × 1.0% = 47 400.
       const p = calcNetWorthProjectionByBucket(zero, 0, zero, 0, [17_000_000], [0], {
-        mortgageByYear: [3_000_000], region: 'no',
+        mortgageByYear: [3_000_000], region: 'no', year: 2025,
       });
       expect(p[0].wealthTax).toBe(47_400);
     });

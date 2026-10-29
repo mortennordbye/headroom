@@ -410,13 +410,6 @@ Shipped in #220 and #223: co-owners of the current home with ownership and loan 
 (`assets.coOwners`, pure logic in `src/lib/ownership.ts`). Home value and loan are stored in full;
 net worth, wealth tax, rentefradrag and the gjeldsgrad headline use the user's share. Remaining:
 
-- **2026 primary-home threshold looks stale.** `WEALTH_TAX_PARAMS[2026].primaryHomeHighThreshold`
-  is 10 000 000, carried forward from 2025, but skatteetaten.no/en/rates/tax-value-of-housing/
-  (income year 2026) lists 25 % up to NOK 14 000 000 and 70 % above. Wealth tax is overstated for
-  homes above 10 MNOK. **Why deferred**: `norwegianTax.ts` is no-go without an issue from the owner.
-  **What would unblock**: confirm against the adopted 2026 budget and file the issue. **Where**:
-  `src/lib/norwegianTax.ts` (`WEALTH_TAX_PARAMS`); `primaryHomeWealthValue` in `src/lib/ownership.ts`
-  reads it.
 - **History months stored only as a total aren't split by share.** Months with a
   `netWorthHistory` number but no balance snapshot keep their recorded value, so adding a co-owner
   "since" an earlier month can still show a step in the net-worth chart between those months and the

@@ -201,15 +201,27 @@ describe('calcTaxByRegion — generic mode', () => {
 });
 
 describe('calcWealthTax (formuesskatt)', () => {
-  it('has params for the active tax year with the expected bunnfradrag', () => {
+  it('has params for the active tax year', () => {
     expect(WEALTH_TAX_PARAMS[TAX_YEAR]).toBeDefined();
-    expect(WEALTH_TAX_PARAMS[TAX_YEAR].bunnfradrag).toBe(1_760_000);
   });
+
+  it('uses the 2026 Skatteetaten figures', () => {
+    const p = WEALTH_TAX_PARAMS[2026];
+    expect(p.bunnfradrag).toBe(1_900_000);
+    expect(p.brackets).toEqual([{ from: 1_900_000, rate: 0.010 }, { from: 21_500_000, rate: 0.011 }]);
+    expect(p.primaryHomeHighThreshold).toBe(14_000_000);
+    // 14M ×0.25 + 2M ×0.70 = 3.5M + 1.4M = 4.9M; (4.9M − 1.9M) × 1.0%
+    const r = calcWealthTax({ primaryHomeValue: 16_000_000, shares: 0, otherAssets: 0, debt: 0 }, 2026);
+    expect(r.valuedAssets).toBeCloseTo(4_900_000, 2);
+    expect(r.tax).toBeCloseTo(30_000, 2);
+  });
+
+  // The cases below pin 2025 so their hand-worked figures don't move each year.
 
   it('golden case: valuation discounts + bunnfradrag on a typical household', () => {
     // home 8.0M ×0.25 = 2.0M; shares 5.0M ×0.80 = 4.0M; other 1.0M ×1.0 = 1.0M
     // valued 7.0M − debt 2.0M = net 5.0M; taxed slice 5.0M − 1.76M = 3.24M × 1.0%
-    const r = calcWealthTax({ primaryHomeValue: 8_000_000, shares: 5_000_000, otherAssets: 1_000_000, debt: 2_000_000 });
+    const r = calcWealthTax({ primaryHomeValue: 8_000_000, shares: 5_000_000, otherAssets: 1_000_000, debt: 2_000_000 }, 2025);
     expect(r.valuedAssets).toBeCloseTo(7_000_000, 2);
     expect(r.netWealth).toBeCloseTo(5_000_000, 2);
     expect(r.taxableBase).toBeCloseTo(3_240_000, 2);
@@ -225,13 +237,13 @@ describe('calcWealthTax (formuesskatt)', () => {
 
   it('applies the 1.1% high-value bracket above 20.7M net wealth', () => {
     // net 25.0M: (20.7M − 1.76M)×1.0% + (25.0M − 20.7M)×1.1% = 189 400 + 47 300
-    const r = calcWealthTax({ primaryHomeValue: 0, shares: 0, otherAssets: 25_000_000, debt: 0 });
+    const r = calcWealthTax({ primaryHomeValue: 0, shares: 0, otherAssets: 25_000_000, debt: 0 }, 2025);
     expect(r.tax).toBeCloseTo(236_700, 2);
   });
 
   it('values a primary home above 10M at the 70% rate on the excess', () => {
     // 10M ×0.25 + 4M ×0.70 = 2.5M + 2.8M = 5.3M
-    const r = calcWealthTax({ primaryHomeValue: 14_000_000, shares: 0, otherAssets: 0, debt: 0 });
+    const r = calcWealthTax({ primaryHomeValue: 14_000_000, shares: 0, otherAssets: 0, debt: 0 }, 2025);
     expect(r.valuedAssets).toBeCloseTo(5_300_000, 2);
     expect(r.tax).toBeCloseTo((5_300_000 - 1_760_000) * 0.010, 2);
   });

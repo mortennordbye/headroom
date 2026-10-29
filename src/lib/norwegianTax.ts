@@ -323,7 +323,7 @@ export function calcPensionIncomeTax(
 // Approximate Norwegian net-wealth tax. Net wealth = valued assets − debt; tax
 // applies to the slice above the personal deduction (bunnfradrag). Assets are
 // valued at official rates (verdsettingsrabatt): a primary residence at 25% of
-// market value (70% on the part above 10M), listed shares/funds at 80%, and
+// market value (70% on the part above the year's threshold), listed shares/funds at 80%, and
 // everything else (deposits, crypto, BSU, buffer) at full value.
 //
 // Simplifications (a "good-enough" estimate, not a tax return): single-person
@@ -356,22 +356,23 @@ export const WEALTH_TAX_PARAMS: Record<number, WealthTaxParams> = {
     primaryHomeHighRate: 0.70,
     sharesRate: 0.80,
   },
-  // Formuesskatt figures carried forward from 2025 (thresholds unchanged in the
-  // adopted 2026 budget); update if Stortinget revises them.
+  // Skatteetaten 2026: skatteetaten.no/satser/formuesskatt and
+  // skatteetaten.no/en/rates/tax-value-of-housing (income year 2026).
   2026: {
-    bunnfradrag: 1_760_000,
+    bunnfradrag: 1_900_000,
     brackets: [
-      { from: 1_760_000, rate: 0.010 },
-      { from: 20_700_000, rate: 0.011 },
+      { from: 1_900_000, rate: 0.010 },
+      { from: 21_500_000, rate: 0.011 },
     ],
     primaryHomeRate: 0.25,
-    primaryHomeHighThreshold: 10_000_000,
+    primaryHomeHighThreshold: 14_000_000,
     primaryHomeHighRate: 0.70,
     sharesRate: 0.80,
   },
 };
 
-const WEALTH_PARAMS = WEALTH_TAX_PARAMS[TAX_YEAR] ?? WEALTH_TAX_PARAMS[2025];
+/** The active year's wealth-tax figures (falls back to 2025 if the year has none). */
+export const WEALTH_PARAMS = WEALTH_TAX_PARAMS[TAX_YEAR] ?? WEALTH_TAX_PARAMS[2025];
 
 export interface WealthTaxComponents {
   /** Market value of the primary residence (valued at 25% / 70%). */
