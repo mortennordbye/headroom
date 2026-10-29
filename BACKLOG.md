@@ -266,6 +266,8 @@ data volume. Remaining:
     so they show no badge and fall outside every account group (can't be back-attributed). New
     syncs tag correctly; this only affects pre-upgrade rows.
 
+- **A re-link can import the overlap window twice when the bank changes its reference format.** A sync refetches from 7 days before `last_sync`, and rows dedup by id. On the 2026-10-29 re-link Handelsbanken switched from `2026-08-03-0`-style references to encrypted `enc!!…` ones, so the two rows booked on the overlap day came in again under new ids (a 3 013 kr and a 39 kr payment). **Unblock**: decide on a content match (same account key, date, amount and description, one old-style and one new-style id) limited to the first sync after a re-link; a blanket content dedup would also merge two genuine identical purchases. **Where**: `fetchMappedTransactions` / `mergeTransactions` in `server/bank.js`.
+
 ## Envelope budgeting (fixed-expense ↔ category reconciliation) — follow-ups
 
 Shipped (2026-07): a fixed expense can be linked to a tracked spending category (optional
