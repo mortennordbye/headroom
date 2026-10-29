@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ExportPayload } from '../src/context/FinanceContext';
+import { DEFAULT_EMPLOYER_COST_CONFIG } from '../src/lib/employerCost';
 import * as derive from './derive';
 import { computeEquityBreakdown } from '../src/lib/equity';
 import { essentialMonthlyExpenses } from '../src/lib/fixedExpenseTotals';
@@ -226,6 +227,20 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     };
     // 10% of a 27 500 kr contribution comes off the year's tax.
     expect(withBsu(0).expectedAnnualTax - withBsu(27500).expectedAnnualTax).toBeCloseTo(2750, 0);
+  });
+
+  it('net income counts holiday pay above salary as taxed income', () => {
+    const withSats = (sats: number) => {
+      const b = fullFixture();
+      b.employerCostConfig = { ...DEFAULT_EMPLOYER_COST_CONFIG, ...b.employerCostConfig, feriepengesatsPct: sats };
+      return b;
+    };
+    const surplus = derive.holidaySurplus(withSats(12), 2026);
+    expect(surplus).toBeGreaterThan(0);
+    const gain = (derive.netMonthlyFor(withSats(12), '2026-03') - derive.netMonthlyFor(withSats(0), '2026-03')) * 12;
+    // The surplus arrives net of tax at the marginal rate: more than nothing, less than all of it.
+    expect(gain).toBeGreaterThan(surplus * 0.4);
+    expect(gain).toBeLessThan(surplus);
   });
 
   it('salary & tax: no salary entries means no invented tax breakdown', () => {

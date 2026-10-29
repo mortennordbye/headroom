@@ -24,7 +24,7 @@ export function TaxCardSection() {
   const {
     t, lang, formatCurrency, taxCard, setTaxCard,
     salaries, jobs, bonuses, overtime, region, customTaxRatePct, pension, annualMortgageInterest,
-    bsuTaxCredit,
+    bsuTaxCredit, holidaySurplusFor,
   } = useFinance();
   const sp = t.salaryPage;
   const inputId = useId();
@@ -80,20 +80,26 @@ export function TaxCardSection() {
     const extraFor = (m: number) =>
       bonuses.reduce((s, b) => (b.date.startsWith(key(m)) ? s + b.amount : s), 0) +
       overtime.reduce((s, o) => (o.date.startsWith(key(m)) ? s + o.amount : s), 0);
-    const months = withholdingByMonth(taxCard, grossFor, extraFor, taxCard.year);
-    const yearGross = Array.from({ length: 12 }, (_, i) => grossFor(i + 1) + extraFor(i + 1)).reduce((s, g) => s + g, 0);
+    // Holiday pay above salary is paid in June: trekkfri on a table card,
+    // withheld at the card's percent on a prosentkort.
+    const surplus = holidaySurplusFor(year);
+    const juneSurplus = (m: number) => (m === 6 ? surplus : 0);
+    const months = withholdingByMonth(
+      taxCard, grossFor, taxCard.kind === 'percent' ? (m) => extraFor(m) + juneSurplus(m) : extraFor, taxCard.year,
+    );
+    const yearGross = Array.from({ length: 12 }, (_, i) => grossFor(i + 1) + extraFor(i + 1)).reduce((s, g) => s + g, 0) + surplus;
     if (!(yearGross > 0)) return null;
     const yearWithheld = months.reduce((s, v) => s + v, 0);
     const expectedTax = calcTaxByRegion(yearGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit).totalTax;
     const gap = expectedTax - yearWithheld;
-    const thisGross = grossFor(currentMonth) + extraFor(currentMonth);
+    const thisGross = grossFor(currentMonth) + extraFor(currentMonth) + juneSurplus(currentMonth);
     return {
       months, yearWithheld, expectedTax, gap,
       status: restskattStatus(gap, expectedTax),
       thisWithheld: months[currentMonth - 1],
       thisNet: thisGross - months[currentMonth - 1],
     };
-  }, [taxCard, salaries, jobs, bonuses, overtime, year, currentMonth, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit]);
+  }, [taxCard, salaries, jobs, bonuses, overtime, year, currentMonth, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor]);
 
   const evenSpread = taxCard?.kind === 'percent' || (taxCard?.kind === 'table' && parseTableNumber(taxCard.table)?.twelveMonths);
   const monthLabel = (i: number) => new Date(year, i, 1).toLocaleString(locale, { month: 'short' });

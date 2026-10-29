@@ -53,6 +53,7 @@ import {
 } from '../src/lib/norwegianTax';
 import { restskattEstimate } from '../src/lib/restskatt';
 import { cardNetForMonth } from '../src/lib/forskuddstrekk';
+import { feriepengerSurplus } from '../src/lib/feriepenger';
 import { projectPensionWealth } from '../src/lib/pension';
 import { inTodaysKroner, DEFAULT_INFLATION_PCT } from '../src/lib/inflation';
 import { estimateBeholdning, projectBeholdning, annualFolketrygdPension } from '../src/lib/folketrygd';
@@ -69,6 +70,7 @@ import {
   calcBilledRate,
   calcFairGross,
   DEFAULT_EMPLOYER_COST_CONFIG,
+  FERIEPENGER_DEFAULT_PCT,
   DEFAULT_BILLING_CONFIG,
 } from '../src/lib/employerCost';
 import { calcBsuTaxCredit } from '../src/lib/bsu';
@@ -147,6 +149,13 @@ export function taxFor(blob: ExportPayload, grossAnnual: number, withBsuCredit =
   );
 }
 
+/** Holiday pay above salary for an income year. Mirrors FinanceContext `holidaySurplusFor`. */
+export function holidaySurplus(blob: ExportPayload, year: number): number {
+  if ((blob.region ?? 'no') !== 'no') return 0;
+  const sats = blob.employerCostConfig?.feriepengesatsPct ?? FERIEPENGER_DEFAULT_PCT;
+  return feriepengerSurplus(year, (k) => activeGrossAnnual(blob, k), sats);
+}
+
 /**
  * Net monthly income derived from the salary system for a month, including that
  * month's budget-opted bonus/overtime after tax. Mirrors FinanceContext
@@ -157,17 +166,18 @@ export function netMonthlyFor(blob: ExportPayload, monthKey: string): number {
   if ((blob.salaries ?? []).length === 0) return income;
   const totalAnnual = activeGrossAnnual(blob, monthKey);
   if (totalAnnual === 0) return income;
-  const baseNetAnnual = taxFor(blob, totalAnnual).netAnnual;
+  const surplus = holidaySurplus(blob, Number(monthKey.slice(0, 4)));
+  const baseNetAnnual = taxFor(blob, totalAnnual + surplus).netAnnual;
   const extraGross =
     (blob.bonuses ?? []).reduce((s, b) => (b.includeInBudget && b.date.startsWith(monthKey) ? s + b.amount : s), 0) +
     (blob.overtime ?? []).reduce((s, o) => (o.includeInBudget && o.date.startsWith(monthKey) ? s + o.amount : s), 0);
   const onCard = cardNetForMonth(
     blob.taxCard, blob.region ?? 'no', monthKey,
-    totalAnnual, extraGross, blob.pension?.ipsAnnualContribution ?? 0,
+    totalAnnual, extraGross, blob.pension?.ipsAnnualContribution ?? 0, surplus,
   );
   if (onCard != null) return onCard;
   if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
-  const netWithExtra = taxFor(blob, totalAnnual + extraGross).netAnnual;
+  const netWithExtra = taxFor(blob, totalAnnual + surplus + extraGross).netAnnual;
   return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));
 }
 

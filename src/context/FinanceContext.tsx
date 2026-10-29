@@ -17,6 +17,7 @@ import { markGainReview } from '../lib/gainReview';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { cardNetForMonth, type TaxCard } from '../lib/forskuddstrekk';
+import { feriepengerSurplus } from '../lib/feriepenger';
 import { calcBsuTaxCredit } from '../lib/bsu';
 import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
@@ -1051,6 +1052,8 @@ interface FinanceDerivedContextType {
   annualMortgageInterest: number;
   /** The year's BSU tax credit (10%, under-34, non-homeowner); 0 when not eligible. */
   bsuTaxCredit: number;
+  /** Holiday pay above salary for an income year (`feriepengerSurplus`); 0 outside Norway. */
+  holidaySurplusFor: (year: number) => number;
   totalResidual: number;
   /** Everything that leaves free-to-spend every month: the fixed expenses PLUS
    *  the savings transfers. Savings are not consumption, but they do leave the
@@ -1936,20 +1939,30 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return housingMode === 'homeowner' ? interest * ownershipShares({ coOwners: assets.coOwners }).debt : interest;
   }, [housingMode, homeowner, loan.laanebelop, loan.rente, loan.nedbetalingstid, assets.coOwners]);
 
-  // Net monthly income derived from the salary system for an arbitrary month
-  // (falls back to the legacy static `income` when no salaries exist).
   // BSU tax credit (10%, under-34, non-homeowner) reduces the year's tax.
   const bsuTaxCredit = useMemo(() => calcBsuTaxCredit(assets.bsuAnnualContribution, {
     age: pension.birthYear > 1900 ? new Date().getFullYear() - pension.birthYear : -1,
     ownsHome: housingMode !== 'first_buyer',
   }), [assets.bsuAnnualContribution, pension.birthYear, housingMode]);
 
+  // Holiday pay above salary for an income year (Norway only): taxable income
+  // on top of the 12 months of salary.
+  const holidaySurplusFor = useCallback((year: number): number => (
+    region === 'no'
+      ? feriepengerSurplus(year, (k) => calcActiveGrossAnnual(salaries, jobs, k), employerCostConfig.feriepengesatsPct)
+      : 0
+  ), [region, salaries, jobs, employerCostConfig.feriepengesatsPct]);
+
+  // Net monthly income derived from the salary system for an arbitrary month
+  // (falls back to the legacy static `income` when no salaries exist).
   const derivedNetMonthlyFor = useCallback((mKey: string): number => {
     if (salaries.length === 0) return income;
     const totalAnnual = calcActiveGrossAnnual(salaries, jobs, mKey);
     if (totalAnnual === 0) return income;
     const bsuCredit = bsuTaxCredit;
-    const baseNetAnnual = calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
+    // The year's holiday pay above salary is income too, taxed with the salary.
+    const surplus = holidaySurplusFor(Number(mKey.slice(0, 4)));
+    const baseNetAnnual = calcTaxByRegion(totalAnnual + surplus, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     // Bonus/overtime entries opted into the budget: fold this month's opted-in
     // gross into the annual gross (so it's taxed at the marginal rate) and deliver
     // the after-tax value in the month it lands, not smeared across the year.
@@ -1958,12 +1971,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       overtime.reduce((s, o) => (o.includeInBudget && o.date.startsWith(mKey) ? s + o.amount : s), 0);
     // With a skattekort for this month's year, the budget uses the card's
     // withholding instead of the modelled annual tax (still a flat figure).
-    const onCard = cardNetForMonth(taxCard, region, mKey, totalAnnual, extraGross, pension.ipsAnnualContribution);
+    const onCard = cardNetForMonth(taxCard, region, mKey, totalAnnual, extraGross, pension.ipsAnnualContribution, surplus);
     if (onCard != null) return onCard;
     if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
-    const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
+    const netWithExtra = calcTaxByRegion(totalAnnual + surplus + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));
-  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, bsuTaxCredit, taxCard]);
+  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, bsuTaxCredit, taxCard, holidaySurplusFor]);
 
   const derivedMonthlyIncome = useMemo(
     () => derivedNetMonthlyFor(monthKey),
@@ -3288,7 +3301,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
@@ -3298,7 +3311,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
