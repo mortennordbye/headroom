@@ -3,7 +3,6 @@ import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import { calcTaxByRegion } from '../lib/norwegianTax';
 import { parseTableNumber, withholdingByMonth, trekkYear, type TaxCard, type PayPeriod } from '../lib/forskuddstrekk';
 import { restskattStatus } from '../lib/restskatt';
-import { calcBsuTaxCredit } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
@@ -25,7 +24,7 @@ export function TaxCardSection() {
   const {
     t, lang, formatCurrency, taxCard, setTaxCard,
     salaries, jobs, bonuses, overtime, region, customTaxRatePct, pension, annualMortgageInterest,
-    assets, housingMode,
+    bsuTaxCredit,
   } = useFinance();
   const sp = t.salaryPage;
   const inputId = useId();
@@ -85,12 +84,7 @@ export function TaxCardSection() {
     const yearGross = Array.from({ length: 12 }, (_, i) => grossFor(i + 1) + extraFor(i + 1)).reduce((s, g) => s + g, 0);
     if (!(yearGross > 0)) return null;
     const yearWithheld = months.reduce((s, v) => s + v, 0);
-    // Same BSU credit as the budget's tax model (`derivedNetMonthlyFor`).
-    const bsuCredit = calcBsuTaxCredit(assets.bsuAnnualContribution, {
-      age: pension.birthYear > 1900 ? year - pension.birthYear : -1,
-      ownsHome: housingMode !== 'first_buyer',
-    });
-    const expectedTax = calcTaxByRegion(yearGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).totalTax;
+    const expectedTax = calcTaxByRegion(yearGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit).totalTax;
     const gap = expectedTax - yearWithheld;
     const thisGross = grossFor(currentMonth) + extraFor(currentMonth);
     return {
@@ -99,7 +93,7 @@ export function TaxCardSection() {
       thisWithheld: months[currentMonth - 1],
       thisNet: thisGross - months[currentMonth - 1],
     };
-  }, [taxCard, salaries, jobs, bonuses, overtime, year, currentMonth, region, customTaxRatePct, pension.ipsAnnualContribution, pension.birthYear, annualMortgageInterest, assets.bsuAnnualContribution, housingMode]);
+  }, [taxCard, salaries, jobs, bonuses, overtime, year, currentMonth, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit]);
 
   const evenSpread = taxCard?.kind === 'percent' || (taxCard?.kind === 'table' && parseTableNumber(taxCard.table)?.twelveMonths);
   const monthLabel = (i: number) => new Date(year, i, 1).toLocaleString(locale, { month: 'short' });

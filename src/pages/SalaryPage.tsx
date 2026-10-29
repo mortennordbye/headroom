@@ -95,7 +95,7 @@ const SalaryPage: React.FC = () => {
     hoursSnapshots, removeHoursSnapshot,
     inflation, inflationStale, refreshInflation,
     wageStats, wageStatsStale, payslips,
-    region, customTaxRatePct, pension, annualMortgageInterest,
+    region, customTaxRatePct, pension, annualMortgageInterest, bsuTaxCredit,
     grossAnnualIncome,
   } = useFinance();
   const reduced = useReducedMotion();
@@ -540,9 +540,9 @@ const SalaryPage: React.FC = () => {
     return restskattEstimate(
       payslips,
       yearOf(currentMonthKey),
-      (gross) => calcTaxByRegion(gross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).totalTax,
+      (gross) => calcTaxByRegion(gross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit).totalTax,
     );
-  }, [isGeneric, payslips, currentMonthKey, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest]);
+  }, [isGeneric, payslips, currentMonthKey, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit]);
 
   // No chip when CPI is unknown (SSB hasn't published the recent months): a
   // beats/loses-CPI claim needs a real CPI to compare against.

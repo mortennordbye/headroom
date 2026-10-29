@@ -622,7 +622,7 @@ export function salaryAndTax(blob: ExportPayload, monthKey = currentMonthKey()) 
     netMonthlyOverridden: blob.monthlyIncomes?.[monthKey] !== undefined,
     payslip: payslips[monthKey] ?? null,
     restskatt: region === 'no'
-      ? restskattEstimate(payslips, year, (g) => taxFor(blob, g, false).totalTax)
+      ? restskattEstimate(payslips, year, (g) => taxFor(blob, g).totalTax)
       : null,
     salaryHistory: [...(blob.salaries ?? [])].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate)),
     bonusesThisYear: (blob.bonuses ?? []).filter((b) => b.date.startsWith(String(year))),

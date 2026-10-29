@@ -1049,6 +1049,8 @@ interface FinanceDerivedContextType {
   mortgageRate: number;
   mortgageTermYears: number;
   annualMortgageInterest: number;
+  /** The year's BSU tax credit (10%, under-34, non-homeowner); 0 when not eligible. */
+  bsuTaxCredit: number;
   totalResidual: number;
   /** Everything that leaves free-to-spend every month: the fixed expenses PLUS
    *  the savings transfers. Savings are not consumption, but they do leave the
@@ -1936,15 +1938,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Net monthly income derived from the salary system for an arbitrary month
   // (falls back to the legacy static `income` when no salaries exist).
+  // BSU tax credit (10%, under-34, non-homeowner) reduces the year's tax.
+  const bsuTaxCredit = useMemo(() => calcBsuTaxCredit(assets.bsuAnnualContribution, {
+    age: pension.birthYear > 1900 ? new Date().getFullYear() - pension.birthYear : -1,
+    ownsHome: housingMode !== 'first_buyer',
+  }), [assets.bsuAnnualContribution, pension.birthYear, housingMode]);
+
   const derivedNetMonthlyFor = useCallback((mKey: string): number => {
     if (salaries.length === 0) return income;
     const totalAnnual = calcActiveGrossAnnual(salaries, jobs, mKey);
     if (totalAnnual === 0) return income;
-    // BSU tax credit (10%, under-34, non-homeowner) reduces the year's tax.
-    const bsuCredit = calcBsuTaxCredit(assets.bsuAnnualContribution, {
-      age: pension.birthYear > 1900 ? new Date().getFullYear() - pension.birthYear : -1,
-      ownsHome: housingMode !== 'first_buyer',
-    });
+    const bsuCredit = bsuTaxCredit;
     const baseNetAnnual = calcTaxByRegion(totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     // Bonus/overtime entries opted into the budget: fold this month's opted-in
     // gross into the annual gross (so it's taxed at the marginal rate) and deliver
@@ -1959,7 +1963,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (extraGross <= 0) return Math.round(baseNetAnnual / 12);
     const netWithExtra = calcTaxByRegion(totalAnnual + extraGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuCredit).netAnnual;
     return Math.round(baseNetAnnual / 12 + (netWithExtra - baseNetAnnual));
-  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, assets.bsuAnnualContribution, pension.birthYear, housingMode, taxCard]);
+  }, [salaries, jobs, region, customTaxRatePct, income, pension.ipsAnnualContribution, bonuses, overtime, annualMortgageInterest, bsuTaxCredit, taxCard]);
 
   const derivedMonthlyIncome = useMemo(
     () => derivedNetMonthlyFor(monthKey),
@@ -3284,7 +3288,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
@@ -3294,7 +3298,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
