@@ -323,7 +323,7 @@ export function calcPensionIncomeTax(
 // Approximate Norwegian net-wealth tax. Net wealth = valued assets − debt; tax
 // applies to the slice above the personal deduction (bunnfradrag). Assets are
 // valued at official rates (verdsettingsrabatt): a primary residence at 25% of
-// market value (70% on the part above 10M), listed shares/funds at 80%, and
+// market value (70% on the part above the year's threshold), listed shares/funds at 80%, and
 // everything else (deposits, crypto, BSU, buffer) at full value.
 //
 // Simplifications (a "good-enough" estimate, not a tax return): single-person
@@ -371,7 +371,8 @@ export const WEALTH_TAX_PARAMS: Record<number, WealthTaxParams> = {
   },
 };
 
-const WEALTH_PARAMS = WEALTH_TAX_PARAMS[TAX_YEAR] ?? WEALTH_TAX_PARAMS[2025];
+/** The active year's wealth-tax figures (falls back to 2025 if the year has none). */
+export const WEALTH_PARAMS = WEALTH_TAX_PARAMS[TAX_YEAR] ?? WEALTH_TAX_PARAMS[2025];
 
 export interface WealthTaxComponents {
   /** Market value of the primary residence (valued at 25% / 70%). */

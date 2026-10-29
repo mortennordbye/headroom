@@ -41,7 +41,7 @@ import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { activeCoOwners, myHouseDebt, myHouseValue, myPrimaryHomeWealthValue, ownershipShares } from '../lib/ownership';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
-import { calcWealthTax, TAX_YEAR } from '../lib/norwegianTax';
+import { calcWealthTax, TAX_YEAR, WEALTH_PARAMS } from '../lib/norwegianTax';
 import { currentMonthKey } from '../lib/date';
 import { bsuStatus, calcBsuTaxCredit } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
@@ -627,7 +627,7 @@ const AssetPage: React.FC = () => {
               <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{formatCurrency(Math.round(wealthTax.taxableBase))}</span>
             </div>
           </div>
-          <p className="text-[11px] leading-[1.5] mt-auto pt-4" style={{ color: 'var(--text-3)' }}>{t.wealthTax.note}</p>
+          <p className="text-[11px] leading-[1.5] mt-auto pt-4" style={{ color: 'var(--text-3)' }}>{t.wealthTax.note.replace('{threshold}', String(WEALTH_PARAMS.primaryHomeHighThreshold / 1_000_000))}</p>
         </Card>
         )}
       </div>
