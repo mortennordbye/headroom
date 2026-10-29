@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.8.0](https://github.com/mortennordbye/headroom/compare/v3.7.0...v3.8.0) (2026-10-29)
+
+
+### Features
+
+* **bolig:** co-owners with ownership and loan share ([#220](https://github.com/mortennordbye/headroom/issues/220)) ([3f7b178](https://github.com/mortennordbye/headroom/commit/3f7b178f3eb6fe6300461680505a1657771b7419))
+* **budget:** mark a single transaction as a transfer or a one-off ([#230](https://github.com/mortennordbye/headroom/issues/230)) ([8b4ed08](https://github.com/mortennordbye/headroom/commit/8b4ed08d7ca91ef41103bb1b83e185009e11a14d))
+* **salary:** skattekort with monthly withholding and budget income ([#232](https://github.com/mortennordbye/headroom/issues/232)) ([bc07710](https://github.com/mortennordbye/headroom/commit/bc0771055a18dd6aac7617a4e9ed3c294c93a85b))
+
+
+### Bug Fixes
+
+* **automation:** charge a loan's monthly interest once across rules ([#226](https://github.com/mortennordbye/headroom/issues/226)) ([f2ba047](https://github.com/mortennordbye/headroom/commit/f2ba047691f0b0545a785337ab1fa557a58c285c))
+* **bolig:** co-owner review fixes ([#223](https://github.com/mortennordbye/headroom/issues/223)) ([37b5fb5](https://github.com/mortennordbye/headroom/commit/37b5fb5df7ece03854aa69115ae0941f63d59b39))
+* **categorize:** re-label Vipps rows the old vipps keyword filed as transfers ([#227](https://github.com/mortennordbye/headroom/issues/227)) ([22aa913](https://github.com/mortennordbye/headroom/commit/22aa91337b7321ee6228b295e058385518fe602d))
+* **tax:** count holiday pay above salary as taxed income ([#234](https://github.com/mortennordbye/headroom/issues/234)) ([9181ccd](https://github.com/mortennordbye/headroom/commit/9181ccda997b0004462dc68bfac96fc45207ece6))
+* **tax:** use the 2026 wealth tax figures ([#229](https://github.com/mortennordbye/headroom/issues/229)) ([abb580d](https://github.com/mortennordbye/headroom/commit/abb580d3cc65cfab70f4a9d3774e641080cf49a1))
+* **ui:** let a modal taller than the window scroll ([#233](https://github.com/mortennordbye/headroom/issues/233)) ([505e603](https://github.com/mortennordbye/headroom/commit/505e603ec872ecc5537edc333a76a06a31cbe56a))
+
 ## [3.7.0](https://github.com/mortennordbye/headroom/compare/v3.6.0...v3.7.0) (2026-10-29)
 
 
