@@ -665,23 +665,6 @@ SQLite storage as the container. All three artifacts have now been installed and
   (`headroom://`) as the redirect target and handle `open-url` / `second-instance` in the wrapper.
   **Where**: `desktop/main.js` (`FIRST_PORT`, `will-navigate`), `server/bank.js`.
 
-## Stale auto categories never re-label (2026-08)
-
-The auto-categorize effect in `FinanceContext` only (re)labels rows that are unlabeled or
-auto-`other`, so a confident auto label from an older ruleset stays put forever. Seven `Vipps*`
-rows in real data are still labelled `transfers` from back when `vipps` was a transfers keyword —
-Blivakker (cosmetics), NetOnNet and Elektroimportøren (electronics), Ryde and Voi (e-scooters).
-The engine now has correct answers for all of them, but the rows are stuck: they inflate
-"Overføringer" and, because transfers are netted out of spend, hide real spending.
-
-Deferred because the safe general fix is not obvious — re-running every auto row on every ruleset
-change would also churn labels the user is happy with, and there is no record of *which* ruleset
-version produced a given label. **What would unblock**: either stamping rows with a ruleset
-version so only outdated ones re-run, or a one-time migration that clears auto labels matching the
-known-removed keywords. In the meantime these are fixable by hand in the ledger.
-**Where**: `src/context/FinanceContext.tsx` (the auto-categorize `useEffect`, ~line 1712),
-`src/lib/categorize.ts` (the `transfers` block's `vipps` note).
-
 ## Savings as their own type — deferred UI work (shipped 2026-08)
 
 Shipped: savings are their own record (`Saving` in `src/context/FinanceContext.tsx`) in their own

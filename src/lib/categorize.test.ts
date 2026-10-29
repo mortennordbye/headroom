@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { categorize, categorizeWithRules, type CategoryRule } from './categorize';
+import { categorize, categorizeWithRules, isStaleAutoLabel, type CategoryRule } from './categorize';
 import { isCategoryKey } from './categories';
 
 describe('categorize', () => {
@@ -178,5 +178,18 @@ describe('categorizeWithRules', () => {
 
   it('ignores blank rule matches', () => {
     expect(categorizeWithRules({ merchant: 'REMA 1000' }, [{ id: 'x', match: '  ', category: 'dining' }]).category).toBe('groceries');
+  });
+});
+
+describe('isStaleAutoLabel', () => {
+  it('flags a Vipps row filed as a transfer by the old vipps keyword', () => {
+    expect(isStaleAutoLabel('transfers', 'Vipps*Blivakker')).toBe(true);
+    expect(isStaleAutoLabel('transfers', undefined, 'VIPPS*VOI TECHNOLOGY')).toBe(true);
+  });
+
+  it('leaves other transfers and other Vipps categories alone', () => {
+    expect(isStaleAutoLabel('transfers', 'Til: Sparekonto')).toBe(false);
+    expect(isStaleAutoLabel('shopping', 'Vipps*NETONNET')).toBe(false);
+    expect(isStaleAutoLabel(undefined, 'Vipps*NETONNET')).toBe(false);
   });
 });

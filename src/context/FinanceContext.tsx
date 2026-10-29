@@ -26,7 +26,7 @@ import { translations, type Language, type Translations } from '../i18n/translat
 
 // Re-exported so existing consumers can keep importing these from the context.
 export type { Language } from '../i18n/translations';
-import { categorizeWithRules, type CategoryRule } from '../lib/categorize';
+import { categorizeWithRules, isStaleAutoLabel, type CategoryRule } from '../lib/categorize';
 import { buildMatchHaystack, normalizeMatchText } from '../lib/text';
 import type { LabelRule } from '../lib/labelRules';
 import { excludedTransferIds, type TransferRule } from '../lib/transferRules';
@@ -1876,7 +1876,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // engine: rows with no category, and auto-labelled 'other' rows (so when the
   // ruleset improves — e.g. new MCC/keyword coverage — the existing "Annet" pile
   // upgrades itself on next load without a manual re-sync). Manual labels and
-  // already-confident auto labels are never touched. Loop-safe: it only writes
+  // already-confident auto labels are never touched, except ones an older
+  // ruleset got wrong (`isStaleAutoLabel`). Loop-safe: it only writes
   // when a row actually changes, so once nothing more can be matched it stops.
   useEffect(() => {
     let changed = false;
@@ -1890,7 +1891,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         const m = normalizeMatchText(r.match);
         return !!m && buildMatchHaystack(t.merchant, t.description).includes(m);
       });
-      if (!matchedByRule && t.category && t.category !== 'other') return t;
+      if (!matchedByRule && t.category && t.category !== 'other' && !isStaleAutoLabel(t.category, t.merchant, t.description)) return t;
       if (ruleHit.category === t.category) return t;
       changed = true;
       return { ...t, category: ruleHit.category, categorySource: ruleHit.source };
