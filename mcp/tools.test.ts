@@ -301,6 +301,20 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(m.timeline).not.toBeNull();
   });
 
+  it('mortgage: the remaining term counts down while the payment holds', () => {
+    // blob = the full fixture: term 25 y entered 2026-06, balance written 2026-06.
+    const now = derive.mortgage(blob, MONTH);
+    expect(now.remainingMonths).toBe(300);
+    expect(now.remainingTerm).toEqual({ years: 25, months: 0 });
+    expect(now.payoffMonth).toBe('2051-06');
+    const later = derive.mortgage(blob, '2027-09');
+    expect(later.remainingMonths).toBe(285);
+    expect(later.remainingTerm).toEqual({ years: 23, months: 9 });
+    expect(later.payoffMonth).toBe('2051-06');
+    expect(later.monthlyPayment).toBe(now.monthlyPayment);
+    expect(later.status?.annualTaxDeduction).toBe(now.status?.annualTaxDeduction);
+  });
+
   it('mortgage: outside homeowner mode the loan is a plan, with no LTV or residence metrics', () => {
     const b = fullFixture();
     b.housingMode = 'transitioning';

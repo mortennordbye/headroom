@@ -23,6 +23,7 @@ import { sumSavings } from '../lib/equity';
 import { currentMonthKey } from '../lib/date';
 import { latestInflationPct } from '../lib/inflation';
 import { formatAxisInt } from '../lib/format';
+import { paymentTermMonths } from '../lib/loanTerm';
 
 const ForecastPage: React.FC = () => {
   const {
@@ -151,7 +152,7 @@ const ForecastPage: React.FC = () => {
   const isHomeowner = housingMode === 'homeowner';
   const startingMortgage = (isHomeowner ? homeowner.currentMortgageBalance : loan.laanebelop) ?? 0;
   const mortgageRatePct = (isHomeowner ? homeowner.rente : loan.rente) ?? 5;
-  const mortgageTermYears = (isHomeowner ? homeowner.nedbetalingstid : loan.nedbetalingstid) ?? 25;
+  const mortgageTermYears = (isHomeowner ? paymentTermMonths(homeowner) / 12 : loan.nedbetalingstid) ?? 25;
   // Annual mortgage payment = 12 × the shared monthly annuity, so the forecast
   // uses the same payment as the Loan page rather than re-deriving it annually.
   const annualMortgagePayment = useMemo(

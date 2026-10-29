@@ -5,6 +5,7 @@ import { nb, enUS } from 'date-fns/locale';
 import { useFinance } from '../../context/FinanceContext';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { calcAmortizationSchedule } from '../../lib/calculations';
+import { effectiveRemainingMonths } from '../../lib/loanTerm';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
@@ -50,10 +51,12 @@ export default function LtvChart() {
     // Projection anchored at the latest actual balance/value (or live if none).
     const anchorDebt = homeowner.currentMortgageBalance;
     const anchorValue = assets.houseValue || 0;
-    const schedule = anchorDebt > 0 && homeowner.nedbetalingstid > 0
-      ? calcAmortizationSchedule(anchorDebt, homeowner.rente, homeowner.nedbetalingstid)
+    // Remaining term as of today (counts down); ceil so a partial last year is drawn.
+    const termYears = effectiveRemainingMonths(homeowner) / 12;
+    const schedule = anchorDebt > 0 && termYears > 0
+      ? calcAmortizationSchedule(anchorDebt, homeowner.rente, termYears)
       : [];
-    const years = Math.max(1, Math.round(homeowner.nedbetalingstid));
+    const years = Math.max(1, Math.ceil(termYears));
     const projected: LtvRow[] = Array.from({ length: years + 1 }, (_, y) => {
       const balance = y === 0 ? anchorDebt : (schedule[y - 1]?.balance ?? 0);
       const value = anchorValue * Math.pow(1 + houseGrowthRate / 100, y);

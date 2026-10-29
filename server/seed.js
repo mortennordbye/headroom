@@ -170,6 +170,8 @@ const homeowner = {
   rente: 5.65,
   nedbetalingstid: 22,
   termingebyr: 50,
+  nedbetalingstidAsOf: currentMonthKey,
+  currentMortgageBalanceAsOf: currentMonthKey,
 };
 
 const transition = {

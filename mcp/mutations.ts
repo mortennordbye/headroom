@@ -30,6 +30,8 @@ import type {
 } from '../src/context/FinanceContext';
 import { diff, type FieldChange } from './util';
 import { birthYearFrom } from '../src/lib/profile';
+import { currentMonthKey } from '../src/lib/date';
+import { isValidTermParts, yearsFromParts } from '../src/lib/loanTerm';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -354,7 +356,11 @@ export type AssetKey = (typeof ASSET_KEYS)[number];
  * `homeowner`/`transition` slices (when present) exactly as the app's own
  * updateAsset does, so the same home never shows two different numbers.
  */
-export function updateAsset(blob: ExportPayload, fields: Partial<Record<AssetKey, number>>): FieldChange[] {
+export function updateAsset(
+  blob: ExportPayload,
+  fields: Partial<Record<AssetKey, number>>,
+  monthKey = currentMonthKey(),
+): FieldChange[] {
   const after = { ...blob.assets };
   const changes: FieldChange[] = [];
   for (const key of ASSET_KEYS) {
@@ -369,7 +375,7 @@ export function updateAsset(blob: ExportPayload, fields: Partial<Record<AssetKey
   if (houseDebt !== undefined) {
     if (blob.homeowner) {
       changes.push(diff('homeowner.currentMortgageBalance', blob.homeowner.currentMortgageBalance, houseDebt));
-      blob.homeowner = { ...blob.homeowner, currentMortgageBalance: houseDebt };
+      blob.homeowner = { ...blob.homeowner, currentMortgageBalance: houseDebt, currentMortgageBalanceAsOf: monthKey };
     }
     if (blob.transition) {
       changes.push(diff('transition.currentMortgageBalance', blob.transition.currentMortgageBalance, houseDebt));
@@ -473,6 +479,67 @@ export function updateLoan(
   }
   if (changes.length === 0) throw new Error('no loan fields provided');
   blob.loan = after;
+  return changes;
+}
+
+export interface CurrentMortgageFields {
+  rente?: number;
+  termingebyr?: number;
+  startDate?: string;
+  balance?: number;
+  termYears?: number;
+  termMonths?: number;
+}
+
+/**
+ * Update the current mortgage (the `homeowner` slice). The remaining term is
+ * years + months and stamps the month it was entered, so it counts down; the
+ * balance stamps its month and mirrors into assets/transition as the app's
+ * updateHomeowner does.
+ */
+export function updateCurrentMortgage(
+  blob: ExportPayload,
+  args: CurrentMortgageFields,
+  monthKey = currentMonthKey(),
+): FieldChange[] {
+  if (!blob.homeowner) throw new Error('no current mortgage to update');
+  const { termYears, termMonths, balance } = args;
+  if ((termYears === undefined) !== (termMonths === undefined)) {
+    throw new Error('termYears and termMonths must be given together');
+  }
+  if (termYears !== undefined && !isValidTermParts(termYears, termMonths!)) {
+    throw new Error('term must be whole years 0-50 and months 0-11, at least one month');
+  }
+  const before = blob.homeowner;
+  const after = { ...before };
+  const changes: FieldChange[] = [];
+  for (const key of ['rente', 'termingebyr', 'startDate'] as const) {
+    const v = args[key];
+    if (v === undefined) continue;
+    changes.push(diff(`homeowner.${key}`, before[key], v));
+    (after[key] as unknown) = v;
+  }
+  if (termYears !== undefined) {
+    const years = yearsFromParts(termYears, termMonths!);
+    changes.push(diff('homeowner.nedbetalingstid', before.nedbetalingstid, years));
+    after.nedbetalingstid = years;
+    after.nedbetalingstidAsOf = monthKey;
+  }
+  if (balance !== undefined) {
+    changes.push(diff('homeowner.currentMortgageBalance', before.currentMortgageBalance, balance));
+    after.currentMortgageBalance = balance;
+    after.currentMortgageBalanceAsOf = monthKey;
+  }
+  if (changes.length === 0) throw new Error('no mortgage fields provided');
+  blob.homeowner = after;
+  if (balance !== undefined) {
+    changes.push(diff('assets.houseDebt', blob.assets.houseDebt, balance));
+    blob.assets = { ...blob.assets, houseDebt: balance };
+    if (blob.transition) {
+      changes.push(diff('transition.currentMortgageBalance', blob.transition.currentMortgageBalance, balance));
+      blob.transition = { ...blob.transition, currentMortgageBalance: balance };
+    }
+  }
   return changes;
 }
 

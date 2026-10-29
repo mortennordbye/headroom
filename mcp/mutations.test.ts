@@ -31,6 +31,7 @@ import {
   upsertDebt,
   deleteDebt,
   updateLoan,
+  updateCurrentMortgage,
   setMonthlyIncome,
   addSalary,
   addBonus,
@@ -244,10 +245,11 @@ const cases: {
   {
     name: 'update_asset (houseDebt/houseValue mirror into homeowner and transition)',
     touched: ['assets', 'homeowner', 'transition'],
-    mutate: (b) => updateAsset(b, { houseDebt: 2400000, houseValue: 4200000 }),
+    mutate: (b) => updateAsset(b, { houseDebt: 2400000, houseValue: 4200000 }, '2026-07'),
     assertChange: (b) => {
       expect(b.assets.houseDebt).toBe(2400000);
       expect(b.homeowner?.currentMortgageBalance).toBe(2400000);
+      expect(b.homeowner?.currentMortgageBalanceAsOf).toBe('2026-07');
       expect(b.transition?.currentMortgageBalance).toBe(2400000);
       expect(b.transition?.currentHouseValue).toBe(4200000);
       expect(b.homeowner?.rente).toBe(5.5); // rest of the slice untouched
@@ -305,6 +307,25 @@ const cases: {
     touched: ['loan'],
     mutate: (b) => updateLoan(b, { rente: 5.1, gyldigTil: '2027-03' }),
     assertChange: (b) => expect(b.loan).toMatchObject({ rente: 5.1, gyldigTil: '2027-03', laanebelop: 2500000 }),
+  },
+  {
+    name: 'update_current_mortgage (term stamps its month, rate only touches homeowner)',
+    touched: ['homeowner'],
+    mutate: (b) => updateCurrentMortgage(b, { rente: 5.2, termYears: 24, termMonths: 3 }, '2026-07'),
+    assertChange: (b) => expect(b.homeowner).toMatchObject({
+      rente: 5.2, nedbetalingstid: 24.25, nedbetalingstidAsOf: '2026-07',
+      currentMortgageBalance: 2500000, currentMortgageBalanceAsOf: '2026-06',
+    }),
+  },
+  {
+    name: 'update_current_mortgage (balance mirrors into assets and transition)',
+    touched: ['homeowner', 'assets', 'transition'],
+    mutate: (b) => updateCurrentMortgage(b, { balance: 2450000 }, '2026-07'),
+    assertChange: (b) => {
+      expect(b.homeowner).toMatchObject({ currentMortgageBalance: 2450000, currentMortgageBalanceAsOf: '2026-07', nedbetalingstidAsOf: '2026-06' });
+      expect(b.assets.houseDebt).toBe(2450000);
+      expect(b.transition?.currentMortgageBalance).toBe(2450000);
+    },
   },
   {
     name: 'set_monthly_income (set, including 0)',
@@ -401,6 +422,9 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
     ['upsert_debt (unknown id)', () => upsertDebt(fresh(), { id: 'nope', create: false, balance: 1 }), /no debt/],
     ['delete_debt', () => deleteDebt(fresh(), { id: 'nope' }), /no debt/],
     ['update_loan (no fields)', () => updateLoan(fresh(), {}), /no loan fields/],
+    ['update_current_mortgage (no fields)', () => updateCurrentMortgage(fresh(), {}), /no mortgage fields/],
+    ['update_current_mortgage (years without months)', () => updateCurrentMortgage(fresh(), { termYears: 20 }), /together/],
+    ['update_current_mortgage (zero term)', () => updateCurrentMortgage(fresh(), { termYears: 0, termMonths: 0 }), /at least one month/],
     ['set_monthly_income (neither)', () => setMonthlyIncome(fresh(), { month: '2026-07' }), /exactly one/],
     ['set_monthly_income (both)', () => setMonthlyIncome(fresh(), { month: '2026-07', amount: 1, clear: true }), /exactly one/],
     ['set_monthly_income (clear missing)', () => setMonthlyIncome(fresh(), { month: '2020-01', clear: true }), /no income override/],

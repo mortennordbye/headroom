@@ -40,6 +40,7 @@ import {
   upsertDebt,
   deleteDebt,
   updateLoan,
+  updateCurrentMortgage,
   setMonthlyIncome,
   SALARY_CHANGE_TYPES,
   BONUS_TYPES,
@@ -402,7 +403,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update mortgage application inputs',
       description:
-        'Change the first-buyer loan calculator inputs (the `loan` slice). Only provided fields change. For the current mortgage balance use update_asset houseDebt.',
+        'Change the planned-loan calculator inputs used in first-buyer and buy-and-sell modes (the `loan` slice). Only provided fields change. For the mortgage the user already has, use update_current_mortgage.',
       inputSchema: {
         arslonn: kr.optional().describe('Annual gross income in kr.'),
         eksisterendeGjeld: kr.optional().describe('Existing debt in kr.'),
@@ -419,6 +420,25 @@ export function registerWriteTools(server: McpServer) {
       annotations: { title: 'Update mortgage application inputs', ...readWrite, destructiveHint: true, idempotentHint: true },
     },
     (fields) => run((blob) => updateLoan(blob, fields)),
+  );
+
+  server.registerTool(
+    'update_current_mortgage',
+    {
+      title: 'Update the current mortgage',
+      description:
+        'Change the mortgage the user already has (the `homeowner` slice). Only provided fields change. The remaining term is given as termYears + termMonths (both together) and counts down from the current month. balance also updates assets.houseDebt. For a planned purchase loan use update_loan.',
+      inputSchema: {
+        rente: z.number().min(0).optional().describe('Nominal interest rate %.'),
+        termingebyr: kr.optional().describe('Fee per instalment in kr.'),
+        startDate: yearMonth.optional().describe("Loan start month 'YYYY-MM'."),
+        balance: kr.optional().describe('Remaining balance (restgjeld) in kr.'),
+        termYears: z.number().int().min(0).max(50).optional().describe('Remaining term, whole years. Requires termMonths.'),
+        termMonths: z.number().int().min(0).max(11).optional().describe('Remaining term, extra months 0-11. Requires termYears.'),
+      },
+      annotations: { title: 'Update the current mortgage', ...readWrite, destructiveHint: true, idempotentHint: true },
+    },
+    (fields) => run((blob) => updateCurrentMortgage(blob, fields)),
   );
 
   // ── Income ────────────────────────────────────────────────────────────────

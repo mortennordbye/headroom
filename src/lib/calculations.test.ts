@@ -50,6 +50,22 @@ describe('calcAmortizationSchedule', () => {
     const s = calcAmortizationSchedule(120_000, 0, 10);
     expect(s.reduce((sum, r) => sum + r.interestPaid, 0)).toBeCloseTo(0, 6);
   });
+
+  it('runs a years+months term to zero, with a partial last year', () => {
+    const s = calcAmortizationSchedule(1_000_000, 5, 12.25);
+    expect(s).toHaveLength(13);
+    expect(s[12].balance).toBeLessThan(1);
+    // 3 payments in the last row, each the 147-month annuity.
+    expect(s[12].annualPayment).toBeCloseTo(calcMonthlyPayment(1_000_000, 5, 147 / 12) * 3, 4);
+  });
+});
+
+describe('calcMonthlyPayment with a fractional term', () => {
+  it('prices 12 y 3 m as the 147-month annuity', () => {
+    const r = 0.05 / 12;
+    const expected = 1_000_000 * r / (1 - Math.pow(1 + r, -147));
+    expect(calcMonthlyPayment(1_000_000, 5, 12.25)).toBeCloseTo(expected, 6);
+  });
 });
 
 describe('calcHouseEquityByYear', () => {
