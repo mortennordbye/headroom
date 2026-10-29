@@ -19,7 +19,7 @@ export const IMPORT_SECTIONS: ImportSectionKey[] = ['incomeWork', 'budget', 'ass
 export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
   incomeWork: [
     'income', 'monthlyIncomes', 'payslips',
-    'jobs', 'salaries', 'bonuses', 'overtime', 'hoursSnapshots',
+    'jobs', 'salaries', 'bonuses', 'overtime', 'hoursSnapshots', 'taxCard',
   ],
   budget: [
     'fixedExpenses', 'savings', 'savingsMonthOverrides', 'dailyTransactions', 'deletedBankIds', 'accountLabels',

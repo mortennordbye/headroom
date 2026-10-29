@@ -692,3 +692,11 @@ not reachable at current data size.
 the prune and list queries.
 **Where:** `server/index.js` (`historyPruneBytesStmt`, `historyListStmt`, `recordHistory`).
 
+
+## Skattekort (tax table / trekkprosent) — follow-ups
+
+Shipped (2026-10): the Salary page takes a skattekort (table number or trekkprosent) and shows monthly withholding (June 0 and half December on 10.5-month tables), withheld-this-year and the restskatt/refund against the modelled annual tax. Tabelltrekk is a port of Skatteetaten's trekkrutine, checked against every monthly row of the 2026 "trekktabeller i tekstformat" file.
+
+- **Budget income doesn't use the card.** Monthly budget income stays yearly net / 12 by decision, so June/December payouts aren't reflected there. **Unblock**: decide whether budget months should follow the payslip (higher June/December) and how that interacts with feriepenger. **Where**: `derivedNetMonthlyFor` in `src/context/FinanceContext.tsx`.
+- **New tax year needs new constants.** `TREKK_PARAMS` only has 2026; later years fall back to 2026 tables. **Unblock**: Skatteetaten publishes the next year's `Konstanter.java` in github.com/Skatteetaten/trekktabell (December); add the year and refresh the golden rows from the new text file. **Where**: `src/lib/forskuddstrekk.ts`, `src/lib/forskuddstrekk.test.ts`.
+- **Monthly pay only; base salary only.** 14-day/weekly periods aren't supported, and bonus/overtime months aren't run through the table. **Unblock**: a user paid on another period, or a request to include opted-in bonuses. **Where**: `calcTabelltrekk` in `src/lib/forskuddstrekk.ts`, `src/components/TaxCardSection.tsx`.

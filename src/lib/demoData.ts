@@ -272,6 +272,7 @@ export function getDemoData(): Partial<ExportPayload> {
     // Demo shows the auto-derived figures, so no manual override is set.
     capacityOverrides: { arslonn: null, gjeld: null, egenkapital: null },
     employerSalaryOverride: null,
+    taxCard: null,
     aiContext:
       'Long-term: want to go independent and start my own consultancy in ~3 years, so keeping a bigger cash buffer than usual. Hoping to buy a rental flat once the mortgage is under 60% LTV.',
     // Three imported payslips, as if the presenter started importing PDFs a few

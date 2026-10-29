@@ -42,6 +42,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import ChartTooltip from '../components/ChartTooltip';
 import { PaydayField } from '../components/PaydayField';
 import { WageCalculator } from '../components/WageCalculator';
+import { TaxCardSection } from '../components/TaxCardSection';
 import RecordEventModal, { type RecordEditTarget, type RecordType } from '../components/RecordEventModal';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
@@ -758,6 +759,9 @@ const SalaryPage: React.FC = () => {
           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t.salaryPage.restskattNote}</p>
         </Card>
       )}
+
+      {/* Skattekort — monthly withholding from the user's tax table or percentage. */}
+      {!isGeneric && <TaxCardSection />}
 
       {/* Next salary review — forward-looking helper for negotiation moments. */}
       {!isGeneric && reviewContext && (

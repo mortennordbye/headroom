@@ -16,6 +16,7 @@ import { ownershipShares, rewriteSnapshotCoOwners, snapshotCoOwners } from '../l
 import { markGainReview } from '../lib/gainReview';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
+import type { TaxCard } from '../lib/forskuddstrekk';
 import { calcBsuTaxCredit } from '../lib/bsu';
 import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
@@ -744,6 +745,9 @@ interface FinanceSettingsContextType {
   setRegion: (r: Region) => void;
   customTaxRatePct: number;
   setCustomTaxRatePct: (v: number) => void;
+  /** The user's skattekort (tax table or percentage), or null when not entered. */
+  taxCard: TaxCard | null;
+  setTaxCard: (c: TaxCard | null) => void;
   /** Free-text notes about the user's plans / long-term goals (AI context). */
   aiContext: string;
   setAiContext: (v: string) => void;
@@ -1168,6 +1172,7 @@ export interface ExportPayload {
   savingsAllocations?: SavingsAllocation[];
   region?: Region;
   customTaxRatePct?: number;
+  taxCard?: TaxCard | null;
   employerCostConfig?: EmployerCostConfig;
   billingConfig?: BillingRateConfig;
   hiddenNavItems?: string[];
@@ -1315,6 +1320,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [wageStatsStale, setWageStatsStale] = useState<boolean>(false);
   const [region, setRegion] = useState<Region>('no');
   const [customTaxRatePct, setCustomTaxRatePct] = useState<number>(DEFAULT_TAX_RATES.customTaxRatePct);
+  const [taxCard, setTaxCard] = useState<TaxCard | null>(null);
   const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
@@ -1406,7 +1412,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals, savingsAllocations,
-    region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    region, customTaxRatePct, taxCard, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, savingsMonthOverrides, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
@@ -1416,7 +1422,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
-    goals, savingsAllocations, region, customTaxRatePct, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    goals, savingsAllocations, region, customTaxRatePct, taxCard, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, savingsMonthOverrides, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
@@ -1456,7 +1462,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       customCurrencyRate: setCustomCurrencyRate, jobs: setJobs, salaries: setSalaries, bonuses: setBonuses,
       overtime: setOvertime, hoursSnapshots: setHoursSnapshots, goals: setGoals,
       savingsAllocations: setSavingsAllocations, region: setRegion,
-      customTaxRatePct: setCustomTaxRatePct, employerCostConfig: setEmployerCostConfig,
+      customTaxRatePct: setCustomTaxRatePct, taxCard: setTaxCard, employerCostConfig: setEmployerCostConfig,
       billingConfig: setBillingConfig, hiddenNavItems: setHiddenNavItems,
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
       incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
@@ -3155,7 +3161,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     growthReturnRate, setGrowthReturnRate, forecastAssumptions, setForecastAssumptions,
     houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
-    region, setRegion, customTaxRatePct, setCustomTaxRatePct,
+    region, setRegion, customTaxRatePct, setCustomTaxRatePct, taxCard, setTaxCard,
     aiContext, setAiContext,
     profile, updateProfile,
     capacityOverrides, setCapacityOverride,
@@ -3179,7 +3185,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [
     lang, t, displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     currentMonth, projectionIncludeGrowth, savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate,
-    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, aiContext, profile, updateProfile,
+    cashGrowthRate, cryptoGrowthRate, region, customTaxRatePct, taxCard, aiContext, profile, updateProfile,
     capacityOverrides, setCapacityOverride, employerSalaryOverride, setEmployerSalaryOverride,
     dismissedLinkSuggestions, dismissLinkSuggestion, dismissedRecurringSuggestions, dismissRecurringSuggestion,
     transferHintDismissed, dismissTransferHint, hiddenNavItems, toggleNavItem,

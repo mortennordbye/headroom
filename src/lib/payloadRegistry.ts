@@ -23,6 +23,7 @@ import { DEFAULT_CAPACITY_OVERRIDES } from './capacityOverrides';
 import { dedupeBankTransactions } from './bankDedup';
 import { migrateSavingsAccounts, migrateSnapshotSavings, partitionSavings, mergeStoredSavings } from './savingsMigration';
 import { sanitizeCoOwners, sanitizeSnapshotCoOwners } from './ownership';
+import { sanitizeTaxCard } from './forskuddstrekk';
 
 // Every persisted field. `currentMonth` is view state — added by the callers
 // that need it, never built here — so it is the one `ExportPayload` key excluded.
@@ -240,6 +241,11 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     savingsAllocations: { group: 'preserve', demo: 'personal', read: whenArray('savingsAllocations') },
     region: { group: 'preserve', demo: 'preference', read: whenOneOf('region', ['no', 'generic']) },
     customTaxRatePct: { group: 'preserve', demo: 'preference', read: whenNumber('customTaxRatePct') },
+    // `null` = no skattekort entered. A malformed card reads as null, not absent.
+    taxCard: {
+      group: 'reset', demo: 'personal', default: null,
+      read: (data) => (data.taxCard === undefined ? ABSENT : sanitizeTaxCard(data.taxCard)),
+    },
     // Migrate the pre-rename '/loan' path to '/bolig' so a hidden tab stays hidden.
     hiddenNavItems: {
       group: 'preserve', demo: 'preference',
