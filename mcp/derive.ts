@@ -38,6 +38,7 @@ import { goalPace } from '../src/lib/goalPace';
 import { activeJobBreakdown } from '../src/lib/salary';
 import { isSpend } from '../src/lib/spend';
 import { excludedTransferIds } from '../src/lib/transferRules';
+import { withoutOneOffs } from '../src/lib/segments';
 import { yearReview, availableReportYears } from '../src/lib/yearReview';
 import { currentMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
 import { effectiveRemainingMonths, paymentTermMonths, splitTermMonths, termMonthsFromYears } from '../src/lib/loanTerm';
@@ -382,7 +383,8 @@ export function spendingAnalysis(blob: ExportPayload, monthKey = currentMonthKey
   // Net out own-account transfers exactly as the app's budget analysis does
   // (transferRules + auto-detected pairs), so category totals aren't inflated by
   // card payments / savings moves that show up as an expense + a matching income.
-  const txs = nonTransferTransactions(blob);
+  // One-offs are left out too, as in the app's spending analysis.
+  const txs = withoutOneOffs(nonTransferTransactions(blob));
   const prior6 = lastNMonthKeys(monthAnchor(addMonthsKey(monthKey, -1)), 6);
   return {
     monthKey,

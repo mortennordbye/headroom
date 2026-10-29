@@ -11,6 +11,7 @@ import {
   Wallet,
   X,
   ArrowLeftRight,
+  Flag,
   Search,
   CheckSquare,
   Square,
@@ -45,6 +46,7 @@ import { detectRecurring, type RecurringSuggestion } from '../lib/recurring';
 import { savingsRateStatus, targetRateOfIncome, planSavingsRateSeries, isPercentSavings, isRestSavings } from '../lib/savingsRate';
 import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
+import { isOneOff, oneOffSpend } from '../lib/segments';
 import { formatSignedPct } from '../lib/format';
 import { incomeDiffPct } from '../lib/income';
 import { CHART } from '../lib/chartColors';
@@ -581,6 +583,8 @@ const BudgetPage: React.FC = () => {
   // Raw ledger total (envelope-covered included) — the Dashboard deliberately
   // shows discretionary spend instead; see src/lib/spentTotals.ts.
   const totalSpentThisMonth = sumLedgerSpent(dailyData);
+  // One-offs sit outside the running balance; shown as their own line under it.
+  const oneOffThisMonth = oneOffSpend(dailyData.flatMap(d => d.transactions).filter(tx => !internalTransferIds.has(tx.id)));
 
   // The linked fixed-expense name covering a transaction's category, if any — used
   // to tag drawn-down transactions in the log so it's clear why they don't move the
@@ -1364,10 +1368,11 @@ const BudgetPage: React.FC = () => {
                   {day.transactions.filter(rowMatch).map((tx) => {
                     const coveredBy = envelopeNameFor(tx);
                     const isTransfer = internalTransferIds.has(tx.id);
+                    const isOneOffRow = isOneOff(tx);
                     const isPending = Boolean(tx.pending);
                     const isSelected = selected.has(tx.id);
                     return (
-                    <span key={tx.id} title={isPending ? t.budgetPage.pending : isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer || isPending ? 'opacity-60' : ''}`}>
+                    <span key={tx.id} title={isPending ? t.budgetPage.pending : isTransfer ? t.budgetPage.internalTransfer : isOneOffRow ? t.budgetPage.oneOff : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-1.5 bg-[var(--bg-raised)] border px-2.5 py-1 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer || isOneOffRow || isPending ? 'opacity-60' : ''}`}>
                       {selectMode && (
                         <button type="button" onClick={() => toggleSelect(tx.id)} aria-label={txDisplayName(tx, labelRules)} aria-pressed={isSelected} className="text-[var(--accent)] shrink-0">
                           {isSelected ? <CheckSquare size={13} /> : <Square size={13} className="text-[var(--text-3)]" />}
@@ -1378,6 +1383,7 @@ const BudgetPage: React.FC = () => {
                       )}
                       <span>{txDisplayName(tx, labelRules)}</span>
                       {isTransfer && <ArrowLeftRight size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.internalTransfer} />}
+                      {isOneOffRow && !isTransfer && <Flag size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.oneOff} />}
                       {isPending && <Clock size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.pending} />}
                       <AccountBadge tx={tx} size="xs" />
                       <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
@@ -1408,9 +1414,14 @@ const BudgetPage: React.FC = () => {
 
           <div className="p-4 flex justify-between items-center bg-[var(--bg-raised)]">
             <SectionLabel>{t.endPeriodSurplus}</SectionLabel>
-            <span className={`text-[15px] font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[var(--accent)]' : 'text-[var(--negative)]'}`}>
-              {formatCurrency(dailyData[dailyData.length - 1]?.balance || 0)}
-            </span>
+            <div className="text-right">
+              <span className={`text-[15px] font-bold font-mono ${dailyData[dailyData.length - 1]?.balance >= 0 ? 'text-[var(--accent)]' : 'text-[var(--negative)]'}`}>
+                {formatCurrency(dailyData[dailyData.length - 1]?.balance || 0)}
+              </span>
+              {oneOffThisMonth > 0 && (
+                <div className="text-[11px] font-mono text-[var(--text-3)] mt-0.5">{t.budgetPage.oneOffTotal.replace('{amount}', formatCurrency(oneOffThisMonth))}</div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1437,10 +1448,11 @@ const BudgetPage: React.FC = () => {
                       {day.transactions.filter(rowMatch).map((tx) => {
                         const coveredBy = envelopeNameFor(tx);
                         const isTransfer = internalTransferIds.has(tx.id);
+                        const isOneOffRow = isOneOff(tx);
                         const isPending = Boolean(tx.pending);
                         const isSelected = selected.has(tx.id);
                         return (
-                        <span key={tx.id} title={isPending ? t.budgetPage.pending : isTransfer ? t.budgetPage.internalTransfer : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer || isPending ? 'opacity-60' : ''}`}>
+                        <span key={tx.id} title={isPending ? t.budgetPage.pending : isTransfer ? t.budgetPage.internalTransfer : isOneOffRow ? t.budgetPage.oneOff : coveredBy ? t.envelopeCovered.replace('{name}', coveredBy) : undefined} className={`inline-flex items-center gap-2 bg-[var(--bg-raised)] border px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--text-1)] ${isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : 'border-[var(--border)]'} ${isTransfer || isOneOffRow || isPending ? 'opacity-60' : ''}`}>
                           {selectMode && (
                             <button type="button" onClick={() => toggleSelect(tx.id)} aria-label={txDisplayName(tx, labelRules)} aria-pressed={isSelected} className="text-[var(--accent)] shrink-0">
                               {isSelected ? <CheckSquare size={14} /> : <Square size={14} className="text-[var(--text-3)]" />}
@@ -1451,6 +1463,7 @@ const BudgetPage: React.FC = () => {
                           )}
                           <span>{txDisplayName(tx, labelRules)}</span>
                           {isTransfer && <ArrowLeftRight size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.internalTransfer} />}
+                          {isOneOffRow && !isTransfer && <Flag size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.oneOff} />}
                           {isPending && <Clock size={11} className="text-[var(--text-3)] shrink-0" aria-label={t.budgetPage.pending} />}
                           <AccountBadge tx={tx} size="xs" />
                           <span className={`font-mono ${coveredBy ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{formatCurrency(tx.amount)}</span>
@@ -1505,6 +1518,9 @@ const BudgetPage: React.FC = () => {
                   <div className="mt-1 font-mono font-medium text-[13px] text-[var(--text-2)]">
                     {totalSpentThisMonth > 0 ? `−${formatCurrency(totalSpentThisMonth)}` : '—'}
                   </div>
+                  {oneOffThisMonth > 0 && (
+                    <div className="mt-0.5 font-mono text-[11px] text-[var(--text-3)]">{t.budgetPage.oneOffTotal.replace('{amount}', formatCurrency(oneOffThisMonth))}</div>
+                  )}
                 </td>
                 <td className="px-7 py-5 text-right">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-2)]">{t.endPeriodSurplus}</div>

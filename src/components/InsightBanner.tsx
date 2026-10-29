@@ -4,6 +4,7 @@ import { subMonths, format } from 'date-fns';
 import { useFinance } from '../context/FinanceContext';
 import { topSpendInsight } from '../lib/insights';
 import { isCategoryKey } from '../lib/categories';
+import { withoutOneOffs } from '../lib/segments';
 import { Card } from './ui/Card';
 
 // A single auto-generated spending headline (e.g. "You spent 14% less on
@@ -11,8 +12,10 @@ import { Card } from './ui/Card';
 // notable to say. Text is assembled from the translations table — no lang branch.
 export default function InsightBanner() {
   // Net out internal transfers so moving money between own accounts doesn't
-  // read as spending, matching SavingsRateChart/CashflowChart.
-  const { nonTransferTransactions: dailyTransactions, currentMonth, t, formatCurrency } = useFinance();
+  // read as spending, and one-offs so a car purchase doesn't make the headline —
+  // the same set as the spending analysis.
+  const { nonTransferTransactions, currentMonth, t, formatCurrency } = useFinance();
+  const dailyTransactions = useMemo(() => withoutOneOffs(nonTransferTransactions), [nonTransferTransactions]);
 
   const insight = useMemo(() => {
     const monthKey = format(currentMonth, 'yyyy-MM');

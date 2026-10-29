@@ -36,8 +36,9 @@ export function matchesTransferRule(
 /**
  * All transaction ids that are internal (own-account) transfers rather than
  * spending: the two-legged pairs the matcher proves automatically
- * (`findInternalTransferIds`), plus one-legged spends to a destination the user
- * marked as their own account via a `TransferRule`.
+ * (`findInternalTransferIds`), rows the user marked `segment: 'transfer'`, plus
+ * one-legged spends to a destination the user marked as their own account via a
+ * `TransferRule`.
  *
  * This is the single source of the app's `internalTransferIds` derivation
  * (FinanceContext) so callers outside React — the MCP server — net transfers out
@@ -48,6 +49,8 @@ export function excludedTransferIds(
   rules: TransferRule[],
 ): Set<string> {
   const ids = findInternalTransferIds(txs);
+  // A row the user marked as a transfer by hand, either direction.
+  for (const tx of txs) if (tx.segment === 'transfer') ids.add(tx.id);
   if (rules && rules.length) {
     for (const tx of txs) {
       if (isSpend(tx) && matchesTransferRule(tx, rules)) ids.add(tx.id);

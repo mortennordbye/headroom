@@ -16,6 +16,8 @@ export interface MappedTransaction {
   // across a re-sync (see mergeTransactions).
   category?: string;
   categorySource?: 'auto' | 'manual';
+  // Set client-side too (src/lib/segments.ts); carried forward the same way.
+  segment?: 'transfer' | 'oneOff';
   // Provisional (not yet booked). Present only when pending import is enabled;
   // a booked twin later evicts it (see evictSupersededPending).
   pending?: boolean;
