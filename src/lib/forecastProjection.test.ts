@@ -35,9 +35,9 @@ describe('projectForecast — co-owned home', () => {
   it('applies the 70 % threshold to the whole home when homeOwnShare < 1', () => {
     const tax = projectForecast({ ...home, homeOwnShare: 0.5 }, s)[1].wealthTax;
     const solo = projectForecast(home, s)[1].wealthTax;
-    expect(solo).toBe(2_400);          // 8 M as a whole home → valued 2.0 M
-    expect(tax).toBeGreaterThan(solo); // half of 16 M → valued 3.35 M
-    expect(tax).toBeCloseTo((3_350_000 - 1_760_000) * 0.01, -2);
+    expect(solo).toBe(1_000);          // 8 M as a whole home → valued 2.0 M
+    expect(tax).toBeGreaterThan(solo); // half of 16 M → (14M × 0.25 + 2M × 0.7) / 2 = 2.45 M
+    expect(tax).toBeCloseTo((2_450_000 - 1_900_000) * 0.01, -2);
   });
 });
 
@@ -88,7 +88,7 @@ describe('projectForecast', () => {
 
   describe('wealth tax (formuesskatt)', () => {
     // All-financial, all listed shares → valued at 80%. 3M shares = 2.4M valued,
-    // 0.64M above the 1.76M bunnfradrag → 6 400/yr at the first bracket.
+    // 0.5M above the 2026 1.9M bunnfradrag → 5 000/yr at the first bracket.
     const noTaxDrift: EffectiveScenario = { raisePct: 0, savingsPct: 0, returnPct: 0, inflationPct: 0, years: 2, extraMonthly: 0 };
     const noInputs: ForecastInputs = {
       ...inputs, region: 'no', totalEquity: 3000000, startingMortgage: 0,
@@ -99,8 +99,8 @@ describe('projectForecast', () => {
       const rows = projectForecast(noInputs, noTaxDrift);
       expect(rows[0].netWorth).toBe(3000000);   // today, pre-deduction
       expect(rows[0].wealthTax).toBe(0);
-      expect(rows[1].wealthTax).toBe(6400);      // 0.64M × 1.0%, charged this year
-      expect(rows[1].netWorth).toBe(2993600);    // 3.0M − 6 400
+      expect(rows[1].wealthTax).toBe(5000);      // 0.5M × 1.0%, charged this year
+      expect(rows[1].netWorth).toBe(2995000);    // 3.0M − 5 000
       expect(rows[2].netWorth).toBeLessThan(rows[1].netWorth);
     });
 

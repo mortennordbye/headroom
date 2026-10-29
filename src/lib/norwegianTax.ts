@@ -356,16 +356,16 @@ export const WEALTH_TAX_PARAMS: Record<number, WealthTaxParams> = {
     primaryHomeHighRate: 0.70,
     sharesRate: 0.80,
   },
-  // Formuesskatt figures carried forward from 2025 (thresholds unchanged in the
-  // adopted 2026 budget); update if Stortinget revises them.
+  // Skatteetaten 2026: skatteetaten.no/satser/formuesskatt and
+  // skatteetaten.no/en/rates/tax-value-of-housing (income year 2026).
   2026: {
-    bunnfradrag: 1_760_000,
+    bunnfradrag: 1_900_000,
     brackets: [
-      { from: 1_760_000, rate: 0.010 },
-      { from: 20_700_000, rate: 0.011 },
+      { from: 1_900_000, rate: 0.010 },
+      { from: 21_500_000, rate: 0.011 },
     ],
     primaryHomeRate: 0.25,
-    primaryHomeHighThreshold: 10_000_000,
+    primaryHomeHighThreshold: 14_000_000,
     primaryHomeHighRate: 0.70,
     sharesRate: 0.80,
   },
