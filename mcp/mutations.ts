@@ -35,6 +35,7 @@ import { birthYearFrom } from '../src/lib/profile';
 import { currentMonthKey } from '../src/lib/date';
 import { isValidTermParts, yearsFromParts } from '../src/lib/loanTerm';
 import { rewriteSnapshotCoOwners, sanitizeCoOwners, validateCoOwners, type CoOwnerError } from '../src/lib/ownership';
+import { currentResidence } from '../src/lib/property';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -560,7 +561,13 @@ const CO_OWNER_ERRORS: Record<CoOwnerError, string> = {
  * row's since/until, so history shows the share in force that month.
  */
 export function setCoOwners(blob: ExportPayload, args: { coOwners: unknown[] }): FieldChange[] {
-  const list = sanitizeCoOwners(args.coOwners);
+  // A new row without `since` owns from the current home's move-in, as in the
+  // app; "always" would also halve the equity of earlier homes in history.
+  const known = new Set((blob.assets.coOwners ?? []).map(c => c.id));
+  const moveIn = currentResidence(blob.residences ?? [])?.moveInDate?.slice(0, 7);
+  const list = sanitizeCoOwners(args.coOwners).map(c => (
+    c.since || known.has(c.id) || !moveIn ? c : { ...c, since: moveIn }
+  ));
   const v = validateCoOwners(list);
   if (!v.ok) throw new Error(CO_OWNER_ERRORS[v.error]);
   const changes = [diff('assets.coOwners', blob.assets.coOwners ?? [], list)];

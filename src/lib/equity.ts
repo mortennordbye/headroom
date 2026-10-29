@@ -57,7 +57,9 @@ export function equitySeriesFrom(snapshots: Record<string, { assets: Assets }>):
     .map(monthKey => ({ monthKey, breakdown: computeEquityBreakdown(snapshots[monthKey].assets) }));
 }
 
-export function computeEquityBreakdown(a: Assets): EquityBreakdown {
+/** `month` picks the co-owners in force (default: today); snapshot rows carry
+ *  no dates, so it only matters for live assets. */
+export function computeEquityBreakdown(a: Assets, month?: string): EquityBreakdown {
   // Old balance snapshots are stored verbatim and may predate a field
   // (cryptoUnrealizedGain, bufferAccount, ...); guard each with ?? 0 so a
   // missing field can't turn the whole breakdown into NaN.
@@ -69,7 +71,7 @@ export function computeEquityBreakdown(a: Assets): EquityBreakdown {
   const taxOnGain = ((gain - shieldingUsed) * (a.taxRate ?? 0)) / 100;
   const netInvestment = (a.portfolio ?? 0) - taxOnGain;
   // The user's share of a co-owned home (full amounts when there are no co-owners).
-  const houseEquity = myHouseValue(a) - myHouseDebt(a);
+  const houseEquity = myHouseValue(a, month) - myHouseDebt(a, month);
   const cryptoTaxOnGain = ((a.cryptoUnrealizedGain ?? 0) * (a.cryptoTaxRate ?? 0)) / 100;
   const netCrypto = (a.crypto ?? 0) - cryptoTaxOnGain;
   const savingsTotal = sumSavings(a);

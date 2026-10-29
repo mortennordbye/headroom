@@ -447,14 +447,14 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Set the co-owners of the current home',
       description:
-        "Replace the whole list of other owners of the current home (assets.coOwners); pass [] to remove them all. Deliberately replace-all, unlike the upsert_* tools: the shares must add up together. assets.houseValue and houseDebt stay the whole property and loan; the user's share is 100% minus the co-owners active that month. debtSharePct is the co-owner's share of the joint loan as in the tax return (omit to follow ownershipPct). since/until bound when they owned it (until = their last month, e.g. after selling their share); stored history is rewritten to match. Read the current list from get_mortgage ownership.coOwners or get_raw_data assets.coOwners.",
+        "Replace the whole list of other owners of the current home (assets.coOwners); pass [] to remove them all. Deliberately replace-all, unlike the upsert_* tools: the shares must add up together. assets.houseValue and houseDebt stay the whole property and loan; the user's share is 100% minus the co-owners active that month. debtSharePct is the co-owner's share of the joint loan as in the tax return (omit to follow ownershipPct). since/until bound when they owned it (until = their last month, e.g. after selling their share); a new row without since owns from the current home's move-in. Stored history is rewritten to match. Read the full current list from get_mortgage ownership.coOwners (not activeCoOwners) and pass every row back, with its id: a row left out is deleted from history too.",
       inputSchema: {
         coOwners: z.array(z.object({
           id: z.string().min(1).optional().describe('Keep the existing id when editing a row; omit for a new one.'),
           name: z.string().describe("Free text, e.g. 'Samboer'."),
           ownershipPct: z.number().min(0).max(100).describe('Their share of the property, %.'),
           debtSharePct: z.number().min(0).max(100).optional().describe('Their share of the loan, %. Omit = same as ownershipPct.'),
-          since: yearMonth.optional().describe("First month as co-owner 'YYYY-MM'. Omit = always."),
+          since: yearMonth.optional().describe("First month as co-owner 'YYYY-MM'. Omit on a new row = the current home's move-in month."),
           until: yearMonth.optional().describe("Last month as co-owner 'YYYY-MM'."),
         })),
       },

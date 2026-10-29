@@ -233,9 +233,10 @@ export function totalNonMortgageDebt(blob: ExportPayload): number {
   return (blob.debts ?? []).reduce((s, d) => s + Math.max(0, d.balance), 0);
 }
 
-/** Net worth. Mirrors FinanceContext.tsx:1831-1835. */
-export function netWorth(blob: ExportPayload): number {
-  const { totalEquity } = computeEquityBreakdown(blob.assets);
+/** Net worth. Mirrors FinanceContext.tsx:1831-1835. `monthKey` picks the
+ *  co-owners in force (default: today). */
+export function netWorth(blob: ExportPayload, monthKey?: string): number {
+  const { totalEquity } = computeEquityBreakdown(blob.assets, monthKey);
   return totalEquity - totalNonMortgageDebt(blob);
 }
 
@@ -253,7 +254,7 @@ export function totalFixedExpenses(blob: ExportPayload, monthKey = currentMonthK
 export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
   const gross = grossAnnualIncome(blob, monthKey);
   const nonMortgageDebt = totalNonMortgageDebt(blob);
-  const breakdown = computeEquityBreakdown(blob.assets);
+  const breakdown = computeEquityBreakdown(blob.assets, monthKey);
   // DTI includes the mortgage and counts revolving lines at their full credit
   // frame (capacityDebt), mirroring DashboardPage.tsx: the headline uses the
   // user's share of a joint mortgage, `dtiFullLoan` the whole loan (the bank's view).
@@ -294,7 +295,7 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
       deadline: g.deadline ?? null,
       progressPct: g.target > 0 ? Math.round((goalCurrentValue(g, blob.assets) / g.target) * 100) : 0,
     })),
-    netWorth: Math.round(netWorth(blob)),
+    netWorth: Math.round(netWorth(blob, monthKey)),
     grossAnnualIncome: Math.round(gross),
     monthlyNetIncome: Math.round(effectiveIncome(blob, monthKey)),
     equityBreakdown: breakdown,
@@ -426,7 +427,7 @@ export function yearReviewSummary(
     payslips,
     snapshots,
     netWorthHistory: history,
-    currentNetWorth: netWorth(blob),
+    currentNetWorth: netWorth(blob, monthKey),
     nowMonthKey: monthKey,
   });
   return { availableYears: years, ...review };
@@ -534,7 +535,7 @@ export function recommendations(blob: ExportPayload, monthKey = currentMonthKey(
     history: computeHistoryInsights(
       blob.balanceSnapshots ?? {},
       blob.netWorthHistory ?? {},
-      netWorth(blob),
+      netWorth(blob, monthKey),
       monthKey,
     ),
   };
@@ -786,9 +787,9 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
     extraMonthly: a?.extraMonthly ?? 5000,
   };
   const m = activeMortgage(blob, monthKey);
-  const eq = computeEquityBreakdown(blob.assets);
+  const eq = computeEquityBreakdown(blob.assets, monthKey);
   // Mirrors ForecastPage: the user's share of a joint mortgage (homeowner) and home.
-  const shares = ownershipShares(blob.assets);
+  const shares = ownershipShares(blob.assets, monthKey);
   const startingMortgage = (blob.housingMode ?? 'first_buyer') === 'homeowner' ? m.balance * shares.debt : m.balance;
   const rows = projectForecast(
     {
@@ -801,7 +802,7 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       customTaxRatePct: customTaxRate(blob),
       ipsAnnualContribution: blob.pension?.ipsAnnualContribution ?? 0,
       startYear: yearOf(monthKey),
-      startHomeValue: myHouseValue(blob.assets),
+      startHomeValue: myHouseValue(blob.assets, monthKey),
       homeOwnShare: shares.own,
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,
@@ -855,7 +856,10 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
     ownership: {
       ownershipPct: Math.round(shares.own * 1000) / 10,
       debtSharePct: Math.round(shares.debt * 1000) / 10,
-      coOwners: activeCoOwners(blob.assets.coOwners, monthKey),
+      // The full stored list (pass it back whole to set_co_owners); `active`
+      // is the subset in force at monthKey.
+      coOwners: blob.assets.coOwners ?? [],
+      activeCoOwners: activeCoOwners(blob.assets.coOwners, monthKey),
       myHouseValue: Math.round(myHouseValue(blob.assets, monthKey)),
       myHouseDebt: Math.round(myHouseDebt(blob.assets, monthKey)),
       myMonthlyPayment: housingMode === 'homeowner' ? Math.round(monthlyPayment * shares.debt) : null,

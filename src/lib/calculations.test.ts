@@ -460,6 +460,18 @@ describe('calcNetWorthProjectionByBucket', () => {
       expect(p[2].total).toBe(1_000_000);
     });
 
+    it('values a co-owned home on the whole home, not on the share alone', () => {
+      // Half of a 16 MNOK home, no debt: the house bucket holds the 8 M share.
+      const half = { stocks: 0, crypto: 0, cash: 0, house: 8_000_000 };
+      const tax = (own?: number) => calcNetWorthProjectionByBucket(half, 0, zero, 0, undefined, undefined, {
+        mortgageByYear: [0], region: 'no', year: 2025, ownShare: own,
+      })[0].wealthTax;
+      // own 0.5: valued (10M × 0.25 + 6M × 0.7) / 2 = 3.35M → (3.35M − 1.76M) × 1 %
+      expect(tax(0.5)).toBe(15_900);
+      // Default (own 1) values the 8 M as a whole home: 2.0M → 2 400.
+      expect(tax()).toBe(2_400);
+    });
+
     it('is a no-op outside the Norwegian region', () => {
       const p = calcNetWorthProjectionByBucket(rich, 0, zero, 2, undefined, undefined, {
         mortgageByYear: [0, 0, 0], region: 'generic',

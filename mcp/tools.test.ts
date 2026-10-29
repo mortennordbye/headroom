@@ -337,6 +337,38 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(o.debt.debtToIncome.ratio).toBeLessThan(o.debt.debtToIncomeFullLoan.ratio);
   });
 
+  it('co-owners: get_mortgage returns the full stored list, and the active subset separately', () => {
+    const b = fullFixture();
+    b.assets.coOwners = [
+      { id: 'old', name: 'Ex', ownershipPct: 50, since: '2020-01', until: '2026-03' },
+      { id: 'new', name: 'Ny', ownershipPct: 30, since: '2026-05' },
+    ];
+    const m = derive.mortgage(b, MONTH);
+    expect(m.ownership.coOwners.map((c) => c.id)).toEqual(['old', 'new']);
+    expect(m.ownership.activeCoOwners.map((c) => c.id)).toEqual(['new']);
+  });
+
+  it('co-owners: rentefradrag and wealth tax use the share', () => {
+    const b = fullFixture();
+    const solo = { s: derive.salaryAndTax(b, '2026-07'), a: derive.assetsAndDebts(b) };
+    b.assets.coOwners = [{ id: 'c', name: 'Samboer', ownershipPct: 50, since: '2020-01' }];
+    const s = derive.salaryAndTax(b, '2026-07');
+    expect(s.annualMortgageInterestDeduction).toBe(Math.round(solo.s.annualMortgageInterestDeduction / 2));
+    const a = derive.assetsAndDebts(b);
+    expect(a.wealthTax!.valuedAssets).toBeLessThan(solo.a.wealthTax!.valuedAssets);
+    expect(a.equityBreakdown.houseEquity).toBeCloseTo(solo.a.equityBreakdown.houseEquity / 2, 6);
+  });
+
+  it('co-owners: overview reads equity and debt at the same month', () => {
+    const b = fullFixture();
+    b.assets.coOwners = [{ id: 'c', name: 'Samboer', ownershipPct: 50, since: '2026-05' }];
+    const before = derive.overview(b, '2026-04');
+    expect(before.equityBreakdown.houseEquity).toBe(b.assets.houseValue - b.assets.houseDebt);
+    expect(before.debt.mortgage).toBe(b.assets.houseDebt);
+    const after = derive.overview(b, MONTH);
+    expect(after.equityBreakdown.houseEquity).toBe((b.assets.houseValue - b.assets.houseDebt) / 2);
+  });
+
   it('no co-owners: every number matches the solo figures', () => {
     const b = fullFixture();
     const before = { o: derive.overview(b, MONTH), f: derive.forecast(b, {}, MONTH), a: derive.assetsAndDebts(b) };

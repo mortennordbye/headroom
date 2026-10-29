@@ -128,6 +128,13 @@ describe('buildManualSnapshot', () => {
     expect(s.v).toBe(2);
   });
 
+  it("writes the month's co-owners when given, else keeps base's", () => {
+    const rows = [{ id: 'c', name: 'C', ownershipPct: 50 }];
+    expect(buildManualSnapshot(base, balances, rows).assets.coOwners).toEqual(rows);
+    expect(buildManualSnapshot({ ...base, assets: { ...base.assets, coOwners: rows } }, balances).assets.coOwners).toEqual(rows);
+    expect(buildManualSnapshot(base, balances).assets.coOwners).toBeUndefined();
+  });
+
   it('carries loan params and fixed expenses over from base untouched', () => {
     const s = buildManualSnapshot(base, balances);
     expect(s.loan).toEqual(base.loan);

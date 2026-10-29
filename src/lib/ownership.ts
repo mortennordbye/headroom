@@ -1,6 +1,5 @@
 import type { Assets, BalanceSnapshot, CoOwner } from '../context/FinanceContext';
 import { currentMonthKey } from './date';
-import { makeId } from './savingsMigration';
 import { TAX_YEAR, WEALTH_TAX_PARAMS } from './norwegianTax';
 import { coerceNumber } from './sanitizePayload';
 
@@ -144,14 +143,23 @@ export function rewriteSnapshotCoOwners(
  *  → 0), bad months dropped, a missing id generated rather than the row dropped. */
 export function sanitizeCoOwners(raw: unknown): CoOwner[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(r => r && typeof r === 'object').map((r): CoOwner => {
-    const c = r as Record<string, unknown>;
+  const rows = raw.filter(r => r && typeof r === 'object') as Record<string, unknown>[];
+  const taken = new Set(rows.map(c => c.id).filter((id): id is string => typeof id === 'string' && id !== ''));
+  // Deterministic, so an id-less row doesn't get a new id (and a re-save) on every load.
+  const freshId = (i: number): string => {
+    let id = `coo-${i + 1}`;
+    while (taken.has(id)) id += '-x';
+    taken.add(id);
+    return id;
+  };
+  return rows.map((c, i): CoOwner => {
     const out: CoOwner = {
-      id: typeof c.id === 'string' && c.id ? c.id : makeId('coo'),
+      id: typeof c.id === 'string' && c.id ? c.id : freshId(i),
       name: typeof c.name === 'string' ? c.name : '',
       ownershipPct: coerceNumber(c.ownershipPct) ?? 0,
     };
-    if (c.debtSharePct !== undefined) out.debtSharePct = coerceNumber(c.debtSharePct) ?? 0;
+    // null/absent = follows ownership.
+    if (c.debtSharePct != null) out.debtSharePct = coerceNumber(c.debtSharePct) ?? 0;
     if (isMonthKey(c.since)) out.since = c.since;
     if (isMonthKey(c.until)) out.until = c.until;
     return out;

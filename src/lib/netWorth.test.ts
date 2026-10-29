@@ -57,6 +57,11 @@ describe('netWorthFromSnapshot', () => {
     expect(netWorthFromSnapshot(s)).toBe(250 - 40);
   });
 
+  it('counts the stored co-owners of that month', () => {
+    const s = { assets: { houseValue: 300, houseDebt: 200, coOwners: [{ id: 'c', name: 'C', ownershipPct: 50 }] } } as unknown as BalanceSnapshot;
+    expect(netWorthFromSnapshot(s)).toBe(50);
+  });
+
   it('renders equity-only when the snapshot predates debt historization', () => {
     const s = snap({ savings: 1000 }); // no debts field
     expect(netWorthFromSnapshot(s)).toBe(1000);

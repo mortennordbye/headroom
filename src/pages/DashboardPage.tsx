@@ -930,10 +930,9 @@ const DashboardPage: React.FC = () => {
                 className="mt-4"
               />
               <div className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
-                {/* Room left under the 5× rule is the bank's view: the whole joint loan. */}
-                {debtToIncomeFullLoan.status === 'high'
+                {debtToIncome.status === 'high'
                   ? t.dashboardPage.aboveCapText
-                  : `${formatCurrency(debtToIncomeFullLoan.borrowingHeadroom)} ${t.dashboardPage.headroomPrefix} ${debtToIncomeFullLoan.cap}${t.dashboardPage.capSuffix}`}
+                  : `${formatCurrency(debtToIncome.borrowingHeadroom)} ${t.dashboardPage.headroomPrefix} ${debtToIncome.cap}${t.dashboardPage.capSuffix}`}
               </div>
             </>
           )}

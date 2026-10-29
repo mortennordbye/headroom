@@ -245,6 +245,14 @@ describe('payloadRegistry — exhaustiveness', () => {
   });
 });
 
+describe('payloadRegistry — co-owners', () => {
+  it('leaves coOwners absent when the stored blob has none (a plain load stays clean)', () => {
+    const { coOwners: _drop, ...noCo } = canonicalAssets;
+    const state = roundTrip({ ...fullPayload(), assets: noCo as Assets }, true);
+    expect('coOwners' in (state.assets as Assets)).toBe(false);
+  });
+});
+
 describe('payloadRegistry — round-trip (apply → derive is identity)', () => {
   it('preserves every field of a fully-populated payload, byte-for-byte', () => {
     const input = fullPayload();

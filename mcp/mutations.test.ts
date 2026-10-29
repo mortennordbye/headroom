@@ -339,6 +339,12 @@ const cases: {
     },
   },
   {
+    name: 'set_co_owners (a new row without since owns from the current move-in)',
+    touched: ['assets', 'balanceSnapshots'],
+    mutate: (b) => setCoOwners(b, { coOwners: [{ name: 'Samboer', ownershipPct: 50 }] }),
+    assertChange: (b) => expect(b.assets.coOwners?.[0]).toMatchObject({ name: 'Samboer', since: '2020-01' }),
+  },
+  {
     name: 'set_monthly_income (set, including 0)',
     touched: ['monthlyIncomes'],
     mutate: (b) => setMonthlyIncome(b, { month: '2026-07', amount: 0 }),
@@ -436,6 +442,7 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
     ['update_current_mortgage (no fields)', () => updateCurrentMortgage(fresh(), {}), /no mortgage fields/],
     ['update_current_mortgage (years without months)', () => updateCurrentMortgage(fresh(), { termYears: 20 }), /together/],
     ['update_current_mortgage (zero term)', () => updateCurrentMortgage(fresh(), { termYears: 0, termMonths: 0 }), /at least one month/],
+    ['set_co_owners (since after until)', () => setCoOwners(fresh(), { coOwners: [{ name: 'A', ownershipPct: 10, since: '2026-05', until: '2026-01' }] }), /since <= until/],
     ['set_co_owners (over 100 %)', () => setCoOwners(fresh(), { coOwners: [{ name: 'A', ownershipPct: 60 }, { name: 'B', ownershipPct: 50 }] }), /more than 100%/],
     ['set_monthly_income (neither)', () => setMonthlyIncome(fresh(), { month: '2026-07' }), /exactly one/],
     ['set_monthly_income (both)', () => setMonthlyIncome(fresh(), { month: '2026-07', amount: 1, clear: true }), /exactly one/],
