@@ -347,6 +347,9 @@ export interface Assets {
   gainReviewAmount?: number;
 }
 
+/** The scalar `Assets` fields — the ones `updateAsset` may write. */
+export type NumericAssetKey = { [K in keyof Assets]-?: NonNullable<Assets[K]> extends number ? K : never }[keyof Assets];
+
 export interface Pension {
   otpBalance: number;                  // OTP (employer-mandated) current balance in kr
   otpEmployerPct: number;              // % of gross salary employer pays (typ 2–7)
@@ -892,7 +895,7 @@ interface FinanceDataContextType {
   recurringTemplates: TransactionTemplate[];
   setRecurringTemplates: (val: TransactionTemplate[]) => void;
   assets: Assets;
-  updateAsset: (key: keyof Assets, value: number) => void;
+  updateAsset: (key: NumericAssetKey, value: number) => void;
   addSavingsAccount: (name: string, balance: number) => void;
   updateSavingsAccount: (id: string, patch: Partial<Omit<SavingsAccount, 'id'>>) => void;
   removeSavingsAccount: (id: string) => void;
@@ -2345,7 +2348,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // the pages can never show contradictory numbers. (Previously only
   // assets↔homeowner were mirrored, and only in homeowner mode — the transition
   // slice drifted, and demo data seeded all three independently.)
-  const updateAsset = useCallback((key: keyof Assets, value: number) => {
+  const updateAsset = useCallback((key: NumericAssetKey, value: number) => {
     setAssets(prev => ({ ...prev, [key]: value }));
     if (key === 'houseDebt') {
       setHomeowner(prev => ({ ...prev, currentMortgageBalance: value, currentMortgageBalanceAsOf: currentMonthKey() }));

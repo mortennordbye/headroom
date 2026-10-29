@@ -22,7 +22,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { useFinance, DEFAULT_TAX_RATES, type Assets, type Debt, type Pension, type SavingsAccount } from '../context/FinanceContext';
+import { useFinance, DEFAULT_TAX_RATES, type NumericAssetKey, type Debt, type Pension, type SavingsAccount } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';
 import { ChartSkeleton } from '../components/ui/Skeleton';
@@ -176,7 +176,7 @@ const AssetPage: React.FC = () => {
     // `allowNegative` is for unrealized gain/loss fields: a loss is a legitimate
     // negative value (it carries a deductible latent tax benefit). All other
     // asset amounts stay non-negative.
-    const openAssetEdit = (label: string, currentVal: number, key: keyof Assets, allowNegative = false) => {
+    const openAssetEdit = (label: string, currentVal: number, key: NumericAssetKey, allowNegative = false) => {
     openModal({
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: currentVal.toString() }],

@@ -2,23 +2,6 @@
 
 Items deferred from prior work. When an item is finished, remove it.
 
-## Second-home "Real borrowing capacity" — deferred bits (shipped 2026-07)
-
-Shipped: a tested `calcRealBorrowingCapacity` (`src/lib/secondHome.ts`) + a "Real borrowing
-capacity (5×)" section in `src/pages/bolig/SecondHomePanel.tsx` — income build-up (base + optional
-bonus + rent at an adjustable bank factor), full debt build-up (existing mortgage + other debt +
-credit frames at full limit + new loan), the 5× verdict, and a liquidity (cash-required vs liquid)
-warning. Also fixed the panel's serviceability DTI to include `assets.houseDebt`.
-
-Done (2026-07): the borrowing-capacity knobs (base salary, bonus + include-toggle, rent factor,
-credit frames, liquid override) now persist in a single `boligAssumptions` blob object, threaded
-through `payloadRegistry` + FinanceContext build/apply + demo + import-sections + sanitize; the three
-seeded fields are `number | null` overrides that fall back to live/auto data. Credit frames now
-auto-seed from the sum of recorded `creditLimit`s via `creditFrameBreakdown` (`src/lib/debt.ts`), and
-the detailed `calcRealBorrowingCapacity` splits existing debt into drawn balances (`nonFrameDebt`) +
-full granted frames (`creditFrameTotal`) so a card's balance is never double-counted. **Where:**
-`src/lib/secondHome.ts` (`BoligAssumptions`), `src/pages/bolig/SecondHomePanel.tsx`, `src/lib/debt.ts`.
-
 ## Scenario bands on the other projection charts
 
 Shipped (2026-07): bear/base/bull uncertainty bands (return ±3pp) on the **Forecast**
@@ -71,11 +54,6 @@ The current home's value/mortgage are now hard-mirrored across `assets` ↔ `hom
 assets↔homeowner, only in homeowner mode). Code: `src/pages/BoligPage.tsx`,
 `src/context/FinanceContext.tsx`. Remaining:
 
-- **`skattefradragssats` dedup — DONE (2026-07).** The interest-deduction % was an editable copy
-  on both `loan` and `homeowner`; it's now a single shared constant `RENTEFRADRAG_RATE_PCT`
-  (`src/lib/norwegianTax.ts`, = the alminnelig-inntekt rate), and the two Bolig-page rows are
-  display-only. The field was removed from `LoanData`/`HomeownerData` + defaults + demo + resets;
-  old persisted blobs keep the stale key harmlessly (mergedWith ignores it).
 - **Loan-input overrides don't persist across reloads** — matches EmployerCost, and is fine
   for a what-if calculator, but if we later want a "sticky" manual salary/debt on the Loan
   page it needs a persisted `number | null` override model (or a `touched` set) rather than
@@ -94,48 +72,10 @@ raise/savings/return/inflation sliders from the user's salary CAGR, `recommended
   per-month manual override that never re-syncs when salary/tax/IPS change
   (`src/context/FinanceContext.tsx` `effectiveIncome`/`derivedNetMonthlyFor`). Partly
   deliberate; wants a "stale override" indicator or re-sync affordance rather than silent drift.
-- **BSU tax credit — DONE (2026-07).** New `assets.bsuAnnualContribution` field drives the BSU
-  income-tax credit (`calcBsuTaxCredit` in `src/lib/bsu.ts`, **10%** capped at 2 750 kr, gated on
-  age ≤ 33 and non-homeowner — the rate is 10%, not the old 20%). Applied as a non-refundable
-  fradrag i skatt via an optional `bsuTaxCredit` param on `calcNorwegianTax`/`calcTaxByRegion`,
-  threaded into the budget net-income derivation; shown on the Assets page with an eligibility
-  hint. **Where**: `src/lib/bsu.ts`, `src/lib/norwegianTax.ts`, `src/pages/AssetPage.tsx`,
-  `src/context/FinanceContext.tsx`.
-- **Wealth tax (formuesskatt) in projections — DONE (2026-07).** `calcWealthTax`
-  (`src/lib/norwegianTax.ts`, valuation discounts + bunnfradrag + brackets) is now folded into the
-  forward projections as a recurring annual drag, region-guarded to `'no'` and a no-op below the
-  bunnfradrag. Bucket engine (`calcNetWorthProjectionByBucket`) gained a `WealthTaxProjectionConfig`
-  ({mortgageByYear, region}) — computes the tax per year from that year's composition (home market
-  value recovered as equity + mortgage) and pays it out of the liquid buckets, so it compounds; this
-  covers **Dashboard 15y + Assets Growth** (shared engine). The **Forecast** (`projectForecast`,
-  blended-scalar engine) threads the starting composition in and deducts the tax from net worth each
-  year, with the bear/bull bands fed `contribution − wealthTax` so they stay consistent. Unit-tested
-  (6 bucket + 3 forecast cases). Remaining simplifications (deliberate, documented in code):
-  single-person bunnfradrag (no spousal doubling); the forecast splits financial assets into
-  shares-vs-other by *today's* ratio (home valuation stays exact); Pengestrøm (current-month cashflow)
-  still doesn't show a wealth-tax line — only the projections do. **Where**: `src/lib/calculations.ts`,
-  `src/lib/forecastProjection.ts`, `src/pages/{ForecastPage,DashboardPage,AssetPage}.tsx`.
-
-## Polish items noticed during the restyle
-
-Shipped (2026-07):
-- **Card / SectionLabel consolidation** — the per-file `card`/`sectionLabel` class-string
-  constants are gone; all 13 files that carried them (`AssetPage`, `BudgetPage`, `BoligPage`,
-  `SalaryPage`, `ForecastPage`, `SmartRecommendations`, `FunBudget`, `PropertyValueEstimate`,
-  `DebtSection`, `ResidenceHistory`, `GoalsSection`, `charts/PaydownVsPlanChart`,
-  `bolig/SecondHomePanel`) now use the shared `<Card>`/`<SectionLabel>` primitives
-  (`src/components/ui/`), matching Dashboard. Per-site padding was preserved via
-  `padding="none"`; the labels adopt the canonical primitive style (`font-semibold`,
-  `tracking-[0.14em]`, `var(--text-3)`). Verified in Docker across all pages (0 console errors).
-  Note: icon+label pairs were left as tag-swaps (icon sibling) rather than folded into
-  SectionLabel's `icon` prop, to avoid shrinking the 13–14px header icons to the slot's 12px.
-- **`BudgetDistributionChart` now uses the shared `ChartTooltip`** — `ChartTooltip` gained
-  optional, backward-compatible `title` (bold primary-text header), `extra` (a dim footer line),
-  and `hideNames` props; the chart's hand-rolled tooltip was replaced with it. **Where**:
-  `src/components/ChartTooltip.tsx`, `src/components/BudgetDistributionChart.tsx`.
-
-Remaining:
-- **`isDarkMode` field in `ExportPayload`** was removed from the producer side, but old JSON exports from before the dark-mode removal still carry the field. The importer ignores it gracefully — no action needed unless we want to clean very old export files.
+- **Wealth tax simplifications** (deliberate, documented in code): single-person bunnfradrag (no
+  spousal doubling); the forecast splits financial assets into shares-vs-other by *today's* ratio;
+  Pengestrøm (current-month cashflow) shows no wealth-tax line, only the projections do.
+  **Where**: `src/lib/calculations.ts`, `src/lib/forecastProjection.ts`.
 
 ## Job-centric salary tracking — phase 2
 
@@ -281,9 +221,6 @@ data volume. Remaining:
   onto the survivor. Deliberate gap: **amount drift** (tips, forex) isn't matched, so a rare
   pending row lingers until manually removed — safer than fuzzy amount matching in a money app.
   **Where**: `server/bank.js`, `src/lib/bankDedup.ts`, `src/pages/BudgetPage.tsx`.
-- **`out/` + `.cert/` leftovers** from the retired CLI prototype live under
-  `scripts/enable-banking/` (gitignored, `out/` holds a real-data dump). Safe to delete.
-
 - **Multi-bank / multi-account — Tier 1 shipped (2026-07); Tier 2 deferred.** The engine now
   holds *many* bank connections at once (`server/bank.js` `readStore`/`writeStore`,
   `connections[]` in `$DATA_DIR/eb-session.json`, legacy single-session auto-migrated on read),
@@ -373,13 +310,8 @@ Remaining:
 
 ## Audit (2026-07-04) — deferred architecture & data-safety items
 
-Most of the 2026-07-04 app audit is done. These remaining entries are larger refactors, several touching the persistence backbone — deferred because they can't be safely exercised against the user's real data volume without a throwaway `DATA_DIR` and careful diffing.
+Remaining from the 2026-07-04 app audit.
 
-- **§4.1 Memoize the context value + stabilize actions — DONE (2026-07).** All ~40 actions are now `useCallback`-stabilized; the provider is split into three memoized contexts — `FinanceSettingsContext` / `FinanceDataContext` / `FinanceDerivedContext` — with `useFinanceSettings`/`useFinanceData`/`useFinanceDerived` hooks and a memoized `useFinance()` shim (`{...settings,...data,...derived}`) for backward compat. `Layout` migrated to `useFinanceSettings()` (settings-only → no re-render on data edits). `demoMode`/`toggleDemoMode` live in Settings (demo actions read `buildPayload`/`currentMonth` via refs to stay stable). **Not migrated**: `BudgetPage`/`DashboardPage` genuinely read all three slices, so the shim is already optimal for them — splitting their destructures would be churn with no re-render reduction. Migrating any *future* single-slice-heavy component to a granular hook is the way to extend the win.
-- **§4.3 Unify i18n — DONE (2026-07).** The ~1.3k-line table is extracted to `src/i18n/translations.ts` (with `Language`/`Translations` types); FinanceContext imports it. All in-JSX `lang === 'nb' ? … : …` copy ternaries (~150 sites across 8 pages + 8 components) are migrated into table keys: shared `common`/`validation` namespaces plus per-page `dashboardPage`/`salaryPage`/`pensionPage`/`forecastPage`/`assetPage`/`loanPage`/`budgetPage`/`employerCostPage` namespaces. Rich-JSX heroes (`<em>`/`<br>`) and mid-string interpolations were split into keys preserving exact output; verified byte-identical in Docker across Dashboard/Asset/Salary/Loan (0 console errors). **Intentionally left**: `lang` for locale selection only — `Intl.NumberFormat`/`toLocaleString`, date-fns `dateLocale`, the language-toggle active state, and the pure-lib `formatMonths(months, lang)` in `src/lib/debt.ts` (not JSX; would need a lib→i18n dependency to change).
-- **§4.4 Move page-embedded domain logic to `src/lib/` — DONE (2026-07).** `SalaryPage`'s month-key helpers moved to `src/lib/date.ts` (`monthKeyFromDate`/`addMonthsKey`/`monthsBetween`/`yearOf`); `salaryAt`/`hoursAt` to new `src/lib/salary.ts`; `DashboardPage`'s 12-month net-worth interpolation to new `src/lib/netWorth.ts` (`buildNetWorthSeries`). `ForecastPage`'s two duplicated "current salary" blocks now reuse `salaryAt`. New tests: `date.test.ts` (10), `salary.test.ts` (6), `netWorth.test.ts` (5). Verified byte-identical rendering on Dashboard/Salary/Forecast (0 console errors). **Note**: `calcActiveGrossAnnual` stays in `FinanceContext.tsx` — it's a different (multi-job-sum) already-extracted exported function, not page-embedded.
-- **§4.5 Unify the two charting systems — DONE (2026-07).** `DashboardPage`'s 4 bespoke SVG charts (`HeroChart`, `BurnRateChart`, `MonthlyInvestmentBars`, `ProjectionChart`) are now Recharts (`AreaChart`/`BarChart` with `ReferenceLine`/`ReferenceDot`/`Cell`), sharing the common `ChartTooltip` and `CHART` tokens; the private `ChartTip` and the `smoothPath` helper are gone. Trade-off accepted: the old charts used `preserveAspectRatio="none"` (edge-to-edge stretch) + HTML overlays for crisp round dots, which Recharts' true-aspect `ResponsiveContainer` doesn't reproduce, so proportions shifted slightly; the per-hover "estimert" tooltip sub-caption dropped (the hollow/dashed dot & bar still signal estimated). Visually verified in Docker (0 console errors).
-- **§7.2 Self-host fonts + offline read-only data — fonts DONE (2026-07); offline data PENDING a decision.** Fonts are now self-hosted via Fontsource (`src/fonts.ts` imports the `latin` subset at the exact weights: Cormorant 400/500/600 + italic 400/500, IBM Plex Mono 400/500/600, Inter 400/500/600/700). The Google `<link>`s are gone from `index.html`, the CSP dropped `fonts.googleapis.com`/`fonts.gstatic.com` (`styleSrc`/`fontSrc` now `'self'` only), and `woff2` was added to the PWA precache glob (12 files precached). Verified in Docker: fonts render identically, zero requests to Google, 0 console/CSP errors. **Offline-data caching declined (2026-07)**: a NetworkFirst cache for `GET /api/data` was considered and deliberately NOT added — it would persist the full financial blob in the browser's Cache Storage (data-at-rest), which isn't worth it for a single-user loopback app. `/api/data` stays network-only; offline shows the existing load-failed state. Revisit only if a real offline-read need arises.
 - **§5.5 ESLint depth.** Baseline only — no `recommendedTypeChecked`, no `eslint-plugin-jsx-a11y` (would auto-catch icon-button/label regressions), no formatter/pre-commit hooks. `no-unused-vars` is now configured. **Where**: `eslint.config.js`.
 
 ## IMPROVEMENTS §5.6/§5.7 logic-cleanup — deferred data-safety items
@@ -517,10 +449,6 @@ net worth, wealth tax, rentefradrag and the gjeldsgrad headline use the user's s
 - **MCP server clock vs browser clock.** Co-owner `since`/`until`, the term countdown and the
   snapshot month use the local month, so the two can disagree for a few hours at month end.
   **Where**: `currentMonthKey` in `src/lib/date.ts`, its uses in `mcp/derive.ts`.
-- **`updateAsset` type-accepts `coOwners`.** `updateAsset(key: keyof Assets, value: number)` would
-  write a number into the list; no caller does. **Where**: `updateAsset` in
-  `src/context/FinanceContext.tsx`.
-
 ## Sekundærbolig (second-home) tool — deferred items
 
 Shipped (2026-07): the `/loan` page became a **Bolig hub** (`/bolig`, old path redirects) with
@@ -661,23 +589,15 @@ Remaining:
 
 ## Blocked major dependency upgrades (2026-08)
 
-Everything else is on its latest stable release as of the 2026-08 audit; this is the one
+Still blocked as of 2026-10; this is the one
 holdout.
 
-- **`typescript` 6.0.3 → 7.0.2 is blocked upstream.** `typescript-eslint@8.66.0` (the newest
+- **`typescript` 6.0.3 → 7.0.2 is blocked upstream.** `typescript-eslint@8.72.1` (the newest
   release — there is no v9) declares `peer typescript ">=4.8.4 <6.1.0"`, so the resolver cannot
   satisfy TS 7 alongside the current lint stack, and `npm ci` fails outright. Nothing to fix in
   this repo. **What would unblock**: a `typescript-eslint` release widening its peer range to
   TS 7; the bump is mechanical after that. **Where**: `package.json` (`typescript`,
   `typescript-eslint`).
-
-- **Docker base-image majors are bumped by hand.** `.github/dependabot.yml` ignores
-  `version-update:semver-major` for the `node` image so Dependabot cannot drift the Dockerfile
-  off the LTS line (it proposed Node 25, already end-of-life). Digest and minor refreshes still
-  arrive automatically. **What this needs**: move the pin to the next LTS when it ships, in
-  October of even-numbered years — Node 26 in October 2026. **Where**: `Dockerfile` (the shared
-  `base` stage), `node-version` in `.github/workflows/build.yml` and `desktop-build.yml`, and
-  the two "Node 24" mentions in `README.md`.
 
 ## Public demo mode (2026-08) — deferred items
 

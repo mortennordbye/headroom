@@ -43,7 +43,7 @@ cloud and no account to create. Pick one:
 |---|---|---|
 | **[A. Download the app](#a-download-the-app)** | Anyone who just wants to use it | A Mac or Windows PC |
 | **[B. Docker](#b-docker)** | Keeping it always-on, on a laptop, server or NAS | Docker |
-| **[C. Build it yourself](#c-build-it-yourself)** | Changing the code, or preferring not to run a binary someone else built | Node 24 and git |
+| **[C. Build it yourself](#c-build-it-yourself)** | Changing the code, or preferring not to run a binary someone else built | Node 26 and git |
 
 They are the same application. The desktop app runs the same server, the same SQLite database and
 the same backups as the container, only wrapped so it starts on its own.
@@ -138,7 +138,7 @@ cd headroom
 make build              # builds the image and starts it on http://localhost:8080
 ```
 
-**As a Mac or Windows app** (needs [Node 24](https://nodejs.org/)):
+**As a Mac or Windows app** (needs [Node 26](https://nodejs.org/)):
 
 ```bash
 git clone https://github.com/mortennordbye/headroom.git
