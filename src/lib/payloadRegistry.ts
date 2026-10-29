@@ -162,7 +162,11 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
       read: (data) => {
         const a = data.assets;
         return a
-          ? { ...d.assets, ...a, savings: 0, savingsAccounts: migrateSavingsAccounts(a), coOwners: sanitizeCoOwners(a.coOwners) }
+          ? {
+              ...d.assets, ...a, savings: 0, savingsAccounts: migrateSavingsAccounts(a),
+              // Absent stays absent, so loading an older blob doesn't dirty it.
+              ...(a.coOwners !== undefined ? { coOwners: sanitizeCoOwners(a.coOwners) } : {}),
+            }
           : ABSENT;
       },
     },

@@ -80,6 +80,9 @@ export interface ResolvedPosting {
   /** Paydown whose payment can't cover the monthly interest — balance left
    *  unchanged so the debt never grows; the UI surfaces a warning. */
   infeasible?: boolean;
+  /** Nothing moves (a 'myShare' mortgage rule while the user carries none of
+   *  the loan); the months are only stamped as posted, never caught up later. */
+  noChange?: boolean;
 }
 
 /**
@@ -138,6 +141,7 @@ export function computeAutomationPostings(
 
     let newBalance: number;
     let infeasible = false;
+    let noChange = false;
     if (rule.targetKind === 'savingsAccount') {
       if (!rule.savingsAccountId || !(rule.savingsAccountId in savings)) continue;
       newBalance = Math.round(savings[rule.savingsAccountId] + added);
@@ -152,16 +156,19 @@ export function computeAutomationPostings(
       // A 'myShare' amount is the user's part of the joint instalment: the loan
       // receives the whole instalment. A catch-up uses today's share for every
       // month it applies.
-      let payment = rule.amount;
-      if (rule.mortgagePaymentScope === 'myShare') {
-        const share = state.mortgageDebtShare ?? 1;
-        if (!(share > 0)) continue; // carries none of the loan: nothing to gross up
-        payment = rule.amount / share;
+      const share = state.mortgageDebtShare ?? 1;
+      if (rule.mortgagePaymentScope === 'myShare' && !(share > 0)) {
+        // Carries none of the loan, so none of this payment reaches it. Stamp
+        // the months anyway, or they would pile up into one catch-up later.
+        newBalance = Math.round(mortgage);
+        noChange = true;
+      } else {
+        const payment = rule.mortgagePaymentScope === 'myShare' ? rule.amount / share : rule.amount;
+        const res = applyAmortization(mortgage, state.mortgageRate, payment, monthsDue);
+        newBalance = Math.round(res.balance);
+        infeasible = res.infeasible;
+        mortgage = newBalance;
       }
-      const res = applyAmortization(mortgage, state.mortgageRate, payment, monthsDue);
-      newBalance = Math.round(res.balance);
-      infeasible = res.infeasible;
-      mortgage = newBalance;
     } else {
       if (!rule.debtId || !(rule.debtId in debts)) continue;
       const d = debts[rule.debtId];
@@ -180,6 +187,7 @@ export function computeAutomationPostings(
       newBalance,
       newLastPostedMonth: currentMonth,
       infeasible,
+      ...(noChange ? { noChange } : {}),
     });
   }
   return out;

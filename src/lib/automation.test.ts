@@ -218,9 +218,10 @@ describe('computeAutomationPostings — co-owned mortgage scope', () => {
     expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 5000));
   });
 
-  it("skips a 'myShare' rule when the user carries none of the loan", () => {
-    expect(computeAutomationPostings([m({ mortgagePaymentScope: 'myShare' })], state({ mortgageDebtShare: 0 }), '2026-07'))
-      .toHaveLength(0);
+  it("stamps a 'myShare' rule without moving the loan while the user carries none of it", () => {
+    const [p] = computeAutomationPostings(
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-01' })], state({ mortgageDebtShare: 0 }), '2026-07');
+    expect(p).toMatchObject({ noChange: true, newBalance: 1_000_000, newLastPostedMonth: '2026-07' });
   });
 
   it('never grosses up a savings rule aimed at the mortgage (an extra payment)', () => {

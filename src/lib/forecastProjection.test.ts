@@ -23,6 +23,24 @@ const scenario = (over: Partial<EffectiveScenario> = {}): EffectiveScenario => (
   raisePct: 4, savingsPct: 20, returnPct: 6, inflationPct: 3, years: 10, extraMonthly: 0, ...over,
 });
 
+describe('projectForecast — co-owned home', () => {
+  // Year-1 wealth tax is assessed on year 0's ending composition. Only the home,
+  // no shares/other/debt, Norway: half of a 16 MNOK home (8 M share, no growth).
+  const home: ForecastInputs = {
+    ...inputs, region: 'no', startingMortgage: 0, annualMortgagePayment: 0,
+    totalEquity: 8_000_000, startHomeValue: 8_000_000, houseGrowthPct: 0,
+    startShares: 0, startOtherAssets: 0,
+  };
+  const s = scenario({ years: 1, returnPct: 0, savingsPct: 0 });
+  it('applies the 70 % threshold to the whole home when homeOwnShare < 1', () => {
+    const tax = projectForecast({ ...home, homeOwnShare: 0.5 }, s)[1].wealthTax;
+    const solo = projectForecast(home, s)[1].wealthTax;
+    expect(solo).toBe(2_400);          // 8 M as a whole home → valued 2.0 M
+    expect(tax).toBeGreaterThan(solo); // half of 16 M → valued 3.35 M
+    expect(tax).toBeCloseTo((3_350_000 - 1_760_000) * 0.01, -2);
+  });
+});
+
 describe('projectForecast', () => {
   it('returns years+1 rows starting at the current year with no year-0 growth', () => {
     const rows = projectForecast(inputs, scenario({ years: 10 }));

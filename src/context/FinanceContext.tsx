@@ -623,7 +623,6 @@ const DEFAULT_ASSETS: Assets = {
   savingsAccounts: [],
   houseValue: 0,
   houseDebt: 0,
-  coOwners: [],
   crypto: 0,
   cryptoUnrealizedGain: 0,
   cryptoTaxRate: DEFAULT_TAX_RATES.cryptoTaxRate,
@@ -2306,8 +2305,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // forward (see `useBalanceHistory`). One memo so the two can never disagree
   // about which fields make up "the balance state".
   const liveBalanceSnapshot = useMemo<BalanceSnapshot>(() => ({
-    // Snapshot rows carry no since/until: they are the co-owners in force that month.
-    assets: { ...assets, coOwners: snapshotCoOwners(assets.coOwners, currentMonthKey()) },
+    // Snapshot rows carry no since/until: they are the co-owners in force that
+    // month. Left out while the list was never set, so a plain load doesn't
+    // rewrite this month's record.
+    assets: assets.coOwners === undefined
+      ? assets
+      : { ...assets, coOwners: snapshotCoOwners(assets.coOwners, currentMonthKey()) },
     loan, pension, homeowner, transition, housingMode, debts,
     v: 3,
     fixedExpenses,
@@ -2631,6 +2634,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const debtPatch: Record<string, number> = {};
     let hasDebtPatch = false;
     for (const p of postings) {
+      if (p.noChange) continue;
       if (p.targetKind === 'savingsAccount' && p.savingsAccountId) {
         updateSavingsAccount(p.savingsAccountId, { balance: p.newBalance });
       } else if (p.targetKind === 'bufferAccount') {
@@ -2703,7 +2707,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       ? computeAutomationPostings(automationRules, automationState, currentMonth)
       : [];
 
-    const multi = postings.filter(p => p.monthsDue >= 2);
+    // A no-change posting has nothing to confirm: it is stamped with this month's.
+    const multi = postings.filter(p => p.monthsDue >= 2 && !p.noChange);
     const nextPending: PendingCatchup[] = multi.map(p => {
       const base = p.targetKind === 'savingsAccount' ? (automationState.savings[p.savingsAccountId!] ?? 0)
         : p.targetKind === 'mortgage' ? automationState.mortgage
@@ -2720,7 +2725,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
     setPendingCatchups(prev => (stableStringify(prev) === stableStringify(nextPending) ? prev : nextPending));
 
-    const immediate = postings.filter(p => p.monthsDue === 1);
+    const immediate = postings.filter(p => p.monthsDue === 1 || p.noChange);
     if (immediate.length === 0) return;
     // Deliberate: post this month's automations into persisted state. The
     // lastPostedMonth stamp + no-op guard make a re-run converge (monthsDue → 0),

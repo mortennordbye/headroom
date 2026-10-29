@@ -5,12 +5,11 @@ import {
   primaryHomeWealthValueOfShare, myPrimaryHomeWealthValue, validateCoOwners, snapshotCoOwners,
   rewriteSnapshotCoOwners, sanitizeCoOwners, sanitizeSnapshotCoOwners, mySaleProceeds,
 } from './ownership';
-import { calcWealthTax, WEALTH_TAX_PARAMS, TAX_YEAR } from './norwegianTax';
+import { calcWealthTax, WEALTH_TAX_PARAMS } from './norwegianTax';
 import { computeEquityBreakdown } from './equity';
 import { addMonthsKey } from './date';
 
 const co = (over: Partial<CoOwner> = {}): CoOwner => ({ id: 'coo-1', name: 'Medeier 1', ownershipPct: 50, ...over });
-const P = WEALTH_TAX_PARAMS[TAX_YEAR];
 const valued = (v: number) => calcWealthTax({ primaryHomeValue: v, shares: 0, otherAssets: 0, debt: 0 }).valuedAssets;
 
 describe('ownershipShares', () => {
@@ -76,11 +75,12 @@ describe('primaryHomeWealthValue (70 % threshold on the whole home)', () => {
     expect(valued(mine)).toBeCloseTo(valued(v) * 0.5, 4);
   });
 
-  it('matches the Skatteetaten example when the threshold is 10 MNOK', () => {
-    if (P.primaryHomeHighThreshold !== 10_000_000) return;
-    expect(valued(primaryHomeWealthValue(16_000_000, 0.5))).toBeCloseTo(3_350_000, 4);
+  it('matches the Skatteetaten example (Skatte-ABC B-11-2.7.1, 10 MNOK threshold in 2025)', () => {
+    const valued2025 = (v: number) => calcWealthTax({ primaryHomeValue: v, shares: 0, otherAssets: 0, debt: 0 }, 2025).valuedAssets;
+    expect(WEALTH_TAX_PARAMS[2025].primaryHomeHighThreshold).toBe(10_000_000);
+    expect(valued2025(primaryHomeWealthValue(16_000_000, 0.5, 2025))).toBeCloseTo(3_350_000, 4);
     // Valuing the 8 M share alone would under-state it at 2 000 000.
-    expect(valued(8_000_000)).toBe(2_000_000);
+    expect(valued2025(8_000_000)).toBe(2_000_000);
   });
 
   it('below the threshold it is just the share of the value', () => {
@@ -178,6 +178,14 @@ describe('sanitizeCoOwners', () => {
   it('non-array → []', () => {
     expect(sanitizeCoOwners(undefined)).toEqual([]);
     expect(sanitizeCoOwners({})).toEqual([]);
+  });
+  it('gives an id-less row the same id on every load, never a taken one', () => {
+    const raw = [{ id: 'coo-2', name: 'B', ownershipPct: 10 }, { name: 'A', ownershipPct: 10 }];
+    expect(sanitizeCoOwners(raw)[1].id).toBe(sanitizeCoOwners(raw)[1].id);
+    expect(sanitizeCoOwners(raw)[1].id).not.toBe('coo-2');
+  });
+  it('treats a null loan share as following ownership', () => {
+    expect(sanitizeCoOwners([{ id: 'a', name: 'A', ownershipPct: 40, debtSharePct: null }])[0].debtSharePct).toBeUndefined();
   });
   it('coerces numerics, drops bad months, keeps a row without id', () => {
     const [row] = sanitizeCoOwners([{ name: 'A', ownershipPct: '50', debtSharePct: 'x', since: 202401, until: '2025-02' }]);

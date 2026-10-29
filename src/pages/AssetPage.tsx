@@ -373,7 +373,7 @@ const AssetPage: React.FC = () => {
                 badge={hasCoOwners ? <ShareNote label={t.ownership.yourShare} value={formatCurrency(Math.round(myDebt))} /> : undefined}
               />
               <div className="flex justify-between py-3 text-[14px] font-semibold text-[var(--text-1)] border-t border-[var(--border)] mt-1">
-                <span>{t.propertyEquity}</span>
+                <span>{t.propertyEquity}{hasCoOwners ? ` · ${t.ownership.yourShare}` : ''}</span>
                 <span className="font-mono text-[var(--positive)]">{formatCurrency(houseEquity)}</span>
               </div>
             </div>
