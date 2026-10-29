@@ -42,6 +42,19 @@ describe('yearReview', () => {
     expect(r.savingsRate).toBe(74.6);
   });
 
+  it('charges a budgeted bill once when its payment was imported (twice without fixedExpenses)', () => {
+    const input = baseInput({
+      nowMonthKey: '2025-01',
+      totalFixedExpenses: 5000,
+      transactions: [tx({ date: '2025-01-05', amount: 5000, kind: 'expense', description: 'husleie AS' })],
+    });
+    const fixedExpenses = [
+      { id: 'e1', name: 'Husleie', amount: 5000, type: 'fixed' as const, match: 'husleie' },
+    ];
+    expect(yearReview(2025, input).totalSpending).toBe(10000);
+    expect(yearReview(2025, { ...input, fixedExpenses }).totalSpending).toBe(5000);
+  });
+
   it('caps the current year at the current month (no future months)', () => {
     const r = yearReview(2026, baseInput({ nowMonthKey: '2026-07' }));
     expect(r.months).toEqual([
