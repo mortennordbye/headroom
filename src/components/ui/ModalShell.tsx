@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useId, useRef, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import ReactDOM from 'react-dom';
 import { X } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -56,36 +56,40 @@ export function ModalShell({
     };
   }, []);
 
+  const onBackdrop = (e: MouseEvent) => { if (e.target === e.currentTarget && !preventBackdropClose) onClose(); };
+
+  // The overlay scrolls, not the page: a panel taller than the viewport (a long
+  // EditModal form) stays reachable top to bottom instead of being clipped by a
+  // fixed, vertically centred flex box. Short panels still sit centred.
   const content = (
-    <div
-      className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"
-      onClick={(e) => { if (e.target === e.currentTarget && !preventBackdropClose) onClose(); }}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={describedBy}
-        className={`w-full sm:w-auto bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 border border-[var(--border)] ${panelClassName}`}
-      >
-        <div className={`flex items-center shrink-0 ${closeLabel ? 'justify-between' : 'gap-3'}`}>
-          <div className="flex items-center gap-2 min-w-0">
-            {icon}
-            <h3 id={titleId} className="text-[14px] font-semibold text-[var(--text-1)]">{title}</h3>
+    <div className="fixed inset-0 bg-black/60 z-50 overflow-y-auto overscroll-contain" onClick={onBackdrop}>
+      <div className="flex min-h-full items-end sm:items-center justify-center sm:p-4" onClick={onBackdrop}>
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={describedBy}
+          className={`w-full sm:w-auto bg-[var(--bg-card)] rounded-t-[8px] sm:rounded-[8px] p-6 border border-[var(--border)] ${panelClassName}`}
+        >
+          <div className={`flex items-center shrink-0 ${closeLabel ? 'justify-between' : 'gap-3'}`}>
+            <div className="flex items-center gap-2 min-w-0">
+              {icon}
+              <h3 id={titleId} className="text-[14px] font-semibold text-[var(--text-1)]">{title}</h3>
+            </div>
+            {closeLabel && (
+              <button
+                onClick={onClose}
+                aria-label={closeLabel}
+                className="p-1 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
-          {closeLabel && (
-            <button
-              onClick={onClose}
-              aria-label={closeLabel}
-              className="p-1 rounded-md text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-elev)] transition-colors"
-            >
-              <X size={16} />
-            </button>
-          )}
+          {children}
+          {footer}
         </div>
-        {children}
-        {footer}
       </div>
     </div>
   );
