@@ -510,10 +510,12 @@ net worth, wealth tax, rentefradrag and the gjeldsgrad headline use the user's s
   **Where**: `computeAutomationPostings` in `src/lib/automation.ts`, `src/lib/projectBalances.ts`.
 - **Onboarding step for ownership share.** The home topic asks only value and debt. **Where**:
   `src/lib/onboarding.ts` (home topic).
-- **Two mortgage rules stack and each charges a month's interest again** (pre-existing): two fixed
-  expenses aimed at the mortgage each run `applyAmortization`, so interest accrues twice. **What would
-  unblock**: decide whether a month's interest is charged once per balance. **Where**:
-  `computeAutomationPostings` in `src/lib/automation.ts` (mortgage branch).
+- **A declined catch-up counts its skipped months as interest-charged.** Two rules paying the same
+  loan now charge each month's interest once, using the other rules' `lastPostedMonth` stamps as
+  "already charged". Declining a catch-up stamps months it never paid, so a later catch-up by another
+  rule on that loan pays those months as principal only. Fixing it needs per-loan "interest charged
+  through" state rather than inferring from stamps. **Where**: `computeAutomationPostings` in
+  `src/lib/automation.ts`.
 - **MCP server clock vs browser clock.** Co-owner `since`/`until`, the term countdown and the
   snapshot month use the local month, so the two can disagree for a few hours at month end.
   **Where**: `currentMonthKey` in `src/lib/date.ts`, its uses in `mcp/derive.ts`.
