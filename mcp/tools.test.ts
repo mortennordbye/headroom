@@ -379,6 +379,19 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(m.ownership.activeCoOwners.map((c) => c.id)).toEqual(['new']);
   });
 
+  it('rentefradrag: none for a first buyer, the current loan when transitioning', () => {
+    const b = fullFixture();
+    b.loan!.laanebelop = 4000000; // the planned purchase loan
+    b.transition!.currentMortgageBalance = 1800000;
+    b.housingMode = 'first_buyer';
+    expect(derive.salaryAndTax(b, '2026-07').annualMortgageInterestDeduction).toBe(0);
+    expect(derive.forecast(b, {}, MONTH).projection[0].mortgage).toBe(0);
+    b.housingMode = 'transitioning';
+    const interest = calcAmortizationSchedule(1800000, 5.5, 25)[0].interestPaid;
+    expect(derive.salaryAndTax(b, '2026-07').annualMortgageInterestDeduction).toBe(Math.round(interest));
+    expect(derive.forecast(b, {}, MONTH).projection[0].mortgage).toBe(1800000);
+  });
+
   it('co-owners: rentefradrag and wealth tax use the share', () => {
     const b = fullFixture();
     const solo = { s: derive.salaryAndTax(b, '2026-07'), a: derive.assetsAndDebts(b) };
