@@ -7,9 +7,9 @@ import { essentialMonthlyExpenses } from '../src/lib/fixedExpenseTotals';
 import { calcDebtToIncome } from '../src/lib/calculations';
 import { spendByCategory } from '../src/lib/categoryStats';
 import { excludedTransferIds } from '../src/lib/transferRules';
-import { calcAmortizationSchedule, calcMortgageBalanceByYear } from '../src/lib/calculations';
+import { calcAmortizationSchedule, calcMortgageBalanceByYear, calcTransitionNewLoan } from '../src/lib/calculations';
 import { currentMortgage } from '../src/lib/existingMortgage';
-import { myHouseDebt } from '../src/lib/ownership';
+import { myHouseDebt, ownershipShares } from '../src/lib/ownership';
 import { calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../src/lib/norwegianTax';
 import { fullFixture } from './fixture';
 import { prepayVsInvestFor } from '../src/lib/prepayVsInvest';
@@ -553,14 +553,27 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     b.housingMode = 'transitioning';
     b.homeowner = { ...b.homeowner!, rente: 4 };
     const m = derive.mortgage(b, MONTH);
-    // Existing fields still describe the planned loan.
+    // Existing fields still describe the planned loan: the Bolig page's new loan
+    // need after the sale ("Nytt lånebehov"), not the stored laanebelop.
+    const need = calcTransitionNewLoan(b.transition!, b.loan!, ownershipShares(b.assets, MONTH));
+    expect(need.newLoanNeeded).not.toBe(b.loan!.laanebelop);
     expect(m.loanKind).toBe('planned');
-    expect(m.balance).toBe(b.loan!.laanebelop);
+    expect(m.balance).toBe(Math.round(need.newLoanNeeded));
+    expect(m.monthlyPayment).toBe(Math.round(need.newMonthlyPayment));
     const c = currentMortgage('transitioning', b.assets, b.homeowner, b.transition, MONTH);
     expect(m.current).toMatchObject({ balance: 2500000, ratePct: 4, remainingMonths: c.remainingMonths, balanceAsOf: '2026-06' });
-    expect(m.planned).toMatchObject({ balance: b.loan!.laanebelop, ratePct: b.loan!.rente });
+    expect(m.planned).toMatchObject({
+      balance: Math.round(need.newLoanNeeded), ratePct: b.loan!.rente, monthlyPayment: Math.round(need.newMonthlyPayment),
+    });
     b.housingMode = 'homeowner';
     expect(derive.mortgage(b, MONTH)).toMatchObject({ current: null, planned: null });
+  });
+
+  it('mortgage: a planned loan without a rate uses the app default 5.5 %', () => {
+    const b = fullFixture();
+    b.housingMode = 'first_buyer';
+    delete (b.loan as Partial<typeof b.loan>).rente;
+    expect(derive.mortgage(b, MONTH).ratePct).toBe(5.5);
   });
 
   it('housing: manual capacity overrides replace the live inputs', () => {

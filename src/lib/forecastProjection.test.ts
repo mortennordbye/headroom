@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { projectForecast, forecastMortgage, type ForecastInputs, type EffectiveScenario } from './forecastProjection';
-import { currentMortgage } from './existingMortgage';
+import { currentMortgage, annualMortgageInterest } from './existingMortgage';
 import { calcTaxByRegion } from './norwegianTax';
-import { calcHouseEquityByYear, calcMortgageBalanceByYear } from './calculations';
+import { calcAmortizationSchedule, calcHouseEquityByYear, calcMortgageBalanceByYear } from './calculations';
 
 const inputs: ForecastInputs = {
   currentGross: 600000,
@@ -62,12 +62,25 @@ describe('projectForecast', () => {
 
   it('compounds financial assets by return plus the savings contribution', () => {
     const rows = projectForecast(inputs, scenario({ returnPct: 6, savingsPct: 20, raisePct: 0 }));
-    // Year 1 (raise 0 → gross flat): net uses the entering mortgage interest as a
-    // deduction; contribution is 20% of it; only the financial assets compound by
-    // the return.
-    const mortgageInterestY1 = 2000000 * 0.05;
+    // Year 1 (raise 0 → gross flat): net deducts the interest actually paid that
+    // year on the amortising schedule; contribution is 20% of it; only the
+    // financial assets compound by the return.
+    const mortgageInterestY1 = calcAmortizationSchedule(2000000, 5, 25)[1].interestPaid;
     const netY1 = calcTaxByRegion(600000, 'generic', 30, 0, mortgageInterestY1).netAnnual;
     expect(rows[1].financial).toBe(Math.round(800000 * 1.06 + netY1 * 0.2));
+  });
+
+  it("year 0's rentefradrag is the app's year-one interest, so its net equals the Salary/Budget net", () => {
+    const m = currentMortgage('homeowner', { houseDebt: 2_000_000 }, {
+      currentMortgageBalance: 2_000_000, rente: 5, nedbetalingstid: 25,
+      nedbetalingstidAsOf: '2026-01', currentMortgageBalanceAsOf: '2026-01',
+    }, undefined, '2026-10');
+    const rows = projectForecast({ ...inputs, region: 'no', mortgage: forecastMortgage(m) }, scenario());
+    const appNet = calcTaxByRegion(600000, 'no', 30, 0, annualMortgageInterest(m)).netAnnual;
+    expect(rows[0].net).toBe(Math.round(appNet));
+    // Later years deduct less as the loan amortises.
+    const y2 = projectForecast({ ...inputs, region: 'no', mortgage: forecastMortgage(m) }, scenario({ raisePct: 0 }));
+    expect(y2[2].net).toBeLessThan(y2[1].net);
   });
 
   it('grows home equity like calcHouseEquityByYear, not at the investment return', () => {
@@ -156,10 +169,10 @@ describe('projectForecast — one mortgage series', () => {
     expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(2_000_000, 5, 25, 25));
   });
 
-  it('deducts the interest on the balance entering the year', () => {
+  it('deducts the interest actually paid in the year on the amortising schedule', () => {
     const rows = projectForecast(inputs, scenario({ years: 2, raisePct: 0 }));
-    const debt = calcMortgageBalanceByYear(2_000_000, 5, 25, 2);
-    expect(rows[2].net).toBe(Math.round(calcTaxByRegion(600000, 'generic', 30, 0, debt[1] * 0.05).netAnnual));
+    const interest = calcAmortizationSchedule(2_000_000, 5, 25)[2].interestPaid;
+    expect(rows[2].net).toBe(Math.round(calcTaxByRegion(600000, 'generic', 30, 0, interest).netAnnual));
   });
 
   it('a first buyer\'s Assets debt is held flat, with no tile and no deduction', () => {

@@ -48,8 +48,7 @@ import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import {
   calcAmortizationSchedule,
   calcHomeownerMortgageStatus,
-  calcNetSaleProceeds,
-  calcBridgeLoanCost,
+  calcTransitionNewLoan,
   calcMonthlyPayment,
   calcBorrowingCapacity,
 } from '../lib/calculations';
@@ -58,7 +57,7 @@ import type { CapacityOverrides } from '../lib/capacityOverrides';
 import { RENTEFRADRAG_RATE_PCT } from '../lib/norwegianTax';
 import { extraPaymentSavings, formatMonths } from '../lib/debt';
 import { loanTimeline, currentResidence, residenceMetrics } from '../lib/property';
-import { activeCoOwners, ownershipShares, myHouseValue, myHouseDebt, mySaleProceeds, validateCoOwners } from '../lib/ownership';
+import { activeCoOwners, ownershipShares, myHouseValue, myHouseDebt, validateCoOwners } from '../lib/ownership';
 import { makeId } from '../lib/savingsMigration';
 import { currentMonthKey } from '../lib/date';
 import {
@@ -399,36 +398,10 @@ const BoligPage: React.FC = () => {
   );
   const homeownerChartData = homeownerAmortization.filter((_, i) => i % Math.ceil(homeownerAmortization.length / 15) === 0 || i === homeownerAmortization.length - 1);
 
-  // Transitioning calculations
-  const saleProceeds = useMemo(
-    () => calcNetSaleProceeds(
-      transition.currentHouseValue,
-      transition.currentMortgageBalance,
-      transition.agentFeePercent,
-      transition.documentFee,
-      transition.otherSaleCosts,
-    ),
-    [transition]
-  );
-
-  const bridgeCost = useMemo(
-    () => calcBridgeLoanCost(transition.currentMortgageBalance, transition.bridgeLoanRate, transition.bridgeMonths),
-    [transition.currentMortgageBalance, transition.bridgeLoanRate, transition.bridgeMonths]
-  );
-
-  // The user's part of the sale (proceeds split by ownership, loan by debt share).
-  const mySale = useMemo(
-    () => mySaleProceeds(saleProceeds.netProceeds, transition.currentMortgageBalance, shares),
-    [saleProceeds.netProceeds, transition.currentMortgageBalance, shares],
-  );
-  const transitionNewLoan = useMemo(() => {
-    const equityFromSale = Math.max(0, mySale);
-    const totalEquityNew = equityFromSale + loan.egenkapital;
-    const newLoanNeeded = Math.max(0, loan.kjoepesum - totalEquityNew);
-    const newMonthlyPayment = calcMonthlyPayment(newLoanNeeded, loan.rente, loan.nedbetalingstid) + loan.termingebyr;
-    const totalTransactionCosts = saleProceeds.agentCost + transition.documentFee + transition.otherSaleCosts + bridgeCost;
-    return { equityFromSale, totalEquityNew, newLoanNeeded, newMonthlyPayment, totalTransactionCosts };
-  }, [saleProceeds, mySale, bridgeCost, loan, transition.documentFee, transition.otherSaleCosts]);
+  // Transitioning calculations. `mySale` is the user's part of the sale
+  // (proceeds split by ownership, loan by debt share).
+  const transitionNewLoan = useMemo(() => calcTransitionNewLoan(transition, loan, shares), [transition, loan, shares]);
+  const { saleProceeds, bridgeCost, mySale } = transitionNewLoan;
 
   const fmtNum = (n: number) => formatCurrency(Math.round(n));
   const fmtPct = (n: number) => `${n.toFixed(2)}%`;

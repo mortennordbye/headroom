@@ -24,6 +24,7 @@ import {
   calcAmortizationSchedule,
   calcBorrowingCapacity,
   calcMonthlyPayment,
+  calcTransitionNewLoan,
 } from '../src/lib/calculations';
 import { planPayoff, extraPaymentSavings, sumDebtByType, lendingDebtTotal, type PayoffStrategy } from '../src/lib/debt';
 import { essentialMonthlyExpenses, fixedExpenseTotalsByType } from '../src/lib/fixedExpenseTotals';
@@ -782,16 +783,26 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
  * The mortgage the active housing mode shows (the planned loan outside homeowner
  * mode), for the mortgage tool. `termYears`
  * prices the payment (homeowner: the term as of the balance's month);
- * `remainingMonths` is the term left at `monthKey` (loanTerm.ts).
+ * `remainingMonths` is the term left at `monthKey` (loanTerm.ts). In
+ * transitioning the planned loan is the Bolig page's new loan need after the
+ * sale (`calcTransitionNewLoan`), not the stored `laanebelop`.
  */
 function activeMortgage(blob: ExportPayload, monthKey: string) {
-  const homeowner = (blob.housingMode ?? 'first_buyer') === 'homeowner';
+  const mode = blob.housingMode ?? 'first_buyer';
+  const homeowner = mode === 'homeowner';
   const h = blob.homeowner;
+  const loanRate = blob.loan?.rente ?? 5.5;
   const loanTerm = blob.loan?.nedbetalingstid ?? 25;
   const hasTerm = h?.nedbetalingstid != null;
+  const plannedBalance = mode === 'transitioning' && blob.transition
+    ? calcTransitionNewLoan(blob.transition, {
+        kjoepesum: blob.loan?.kjoepesum ?? 0, egenkapital: blob.loan?.egenkapital ?? 0,
+        rente: loanRate, nedbetalingstid: loanTerm, termingebyr: blob.loan?.termingebyr ?? 0,
+      }, ownershipShares(blob.assets, monthKey)).newLoanNeeded
+    : blob.loan?.laanebelop;
   return {
-    balance: (homeowner ? h?.currentMortgageBalance : blob.loan?.laanebelop) ?? 0,
-    ratePct: (homeowner ? h?.rente : blob.loan?.rente) ?? 5,
+    balance: (homeowner ? h?.currentMortgageBalance : plannedBalance) ?? 0,
+    ratePct: homeowner ? h?.rente ?? 5.5 : loanRate,
     termYears: homeowner ? (hasTerm ? paymentTermMonths(h) / 12 : 25) : loanTerm,
     remainingMonths: homeowner ? (hasTerm ? effectiveRemainingMonths(h, monthKey) : 300) : termMonthsFromYears(loanTerm),
   };
@@ -973,7 +984,7 @@ export function housing(blob: ExportPayload, monthKey = currentMonthKey()) {
     grossAnnualIncome: o?.arslonn ?? gross,
     existingDebt: o?.gjeld ?? capacityDebt,
     equity: o?.egenkapital ?? liquidEquity,
-    ratePct: blob.loan?.rente ?? 5,
+    ratePct: blob.loan?.rente ?? 5.5,
     termYears: blob.loan?.nedbetalingstid ?? 25,
     overridden: { income: o?.arslonn != null, debt: o?.gjeld != null, equity: o?.egenkapital != null },
   };
