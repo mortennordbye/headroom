@@ -492,12 +492,14 @@ const SalaryPage: React.FC = () => {
           });
         }
         // A new current job usually means you left the previous one — end any
-        // earlier still-current job at the new start (opt-out via the checkbox
-        // so genuinely concurrent jobs remain possible).
+        // earlier still-current job the month before the new start, since the
+        // end date is the last month worked (opt-out via the checkbox so
+        // genuinely concurrent jobs remain possible).
         if (vals.endPrevJob === 'true' && payload.endDate == null) {
+          const prevEnd = addMonthsKey(payload.startDate, -1);
           jobs
             .filter(j => !j.endDate && j.startDate < payload.startDate)
-            .forEach(j => updateJob(j.id, { endDate: payload.startDate }));
+            .forEach(j => updateJob(j.id, { endDate: prevEnd }));
         }
         closeModal();
       },
