@@ -55,7 +55,8 @@ import { restskattEstimate } from '../src/lib/restskatt';
 import { cardNetForMonth } from '../src/lib/forskuddstrekk';
 import { feriepengerSurplus } from '../src/lib/feriepenger';
 import { projectPensionWealth } from '../src/lib/pension';
-import { inTodaysKroner, DEFAULT_INFLATION_PCT } from '../src/lib/inflation';
+import { DEFAULT_INFLATION_PCT } from '../src/lib/inflation';
+import { retirementIncomeInTodaysKroner } from '../src/lib/retirementIncome';
 import { estimateBeholdning, projectBeholdning, annualFolketrygdPension } from '../src/lib/folketrygd';
 import { estimateAfpGrunnlag, annualAfp } from '../src/lib/afp';
 import { projectForecast } from '../src/lib/forecastProjection';
@@ -706,8 +707,14 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
     ? calcPensionIncomeTax(grossPensionAnnual, TAX_YEAR)
     : calcTaxByRegion(grossPensionAnnual, region, customRate);
   const currentNetAnnual = calcTaxByRegion(pensionableIncome, region, customRate, ipsAnnualContribution, 0).netAnnual;
-  const grossTodayAnnual = folketrygd.annual + afpAnnualAmount
-    + inTodaysKroner(otpAnnualPayout + ipsAnnualPayout, yearsToRetire, inflationPct);
+  const grossTodayAnnual = retirementIncomeInTodaysKroner({
+    folketrygdAnnual: folketrygd.annual,
+    afpAnnual: afpAnnualAmount,
+    otpAnnualPayout,
+    ipsAnnualPayout,
+    yearsToRetire,
+    inflationPct,
+  }).gross;
   const netTodayAnnual = (region === 'no'
     ? calcPensionIncomeTax(grossTodayAnnual, TAX_YEAR)
     : calcTaxByRegion(grossTodayAnnual, region, customRate)).netAnnual;

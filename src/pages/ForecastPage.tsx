@@ -23,6 +23,7 @@ import { sumSavings } from '../lib/equity';
 import { myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
 import { latestInflationPct } from '../lib/inflation';
+import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { formatAxisInt } from '../lib/format';
 import { paymentTermMonths } from '../lib/loanTerm';
 
@@ -78,7 +79,16 @@ const ForecastPage: React.FC = () => {
           retirementAge: pension.retirementAge,
         })
       : 0;
-    const grossPensionAnnual = ft.annual + afpAnnual + otpAtRetire / payoutYears + ipsAtRetire / payoutYears;
+    // In today's kroner, as on the Pension page: folketrygd/AFP are at today's G,
+    // OTP/IPS payouts are discounted from the retirement year by current CPI.
+    const grossPensionAnnual = retirementIncomeInTodaysKroner({
+      folketrygdAnnual: ft.annual,
+      afpAnnual,
+      otpAnnualPayout: otpAtRetire / payoutYears,
+      ipsAnnualPayout: ipsAtRetire / payoutYears,
+      yearsToRetire,
+      inflationPct: latestInflationPct(inflation),
+    }).gross;
     const netPensionAnnual = region === 'no'
       ? calcPensionIncomeTax(grossPensionAnnual, TAX_YEAR).netAnnual
       : calcTaxByRegion(grossPensionAnnual, region, customTaxRatePct).netAnnual;
@@ -94,7 +104,7 @@ const ForecastPage: React.FC = () => {
       folketrygdAnnual: ft.annual,
       netPensionMonthly: netPensionAnnual / 12,
     };
-  }, [pension, currentGross, region, customTaxRatePct]);
+  }, [pension, currentGross, region, customTaxRatePct, inflation]);
 
   // Seeds from the user's real data — the sliders start from these instead of
   // magic numbers, and follow the data until the user overrides a slider.
