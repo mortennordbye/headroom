@@ -27,6 +27,18 @@ describe('grossFromNetAnnual', () => {
     expect(grossFromNetAnnual(480000, 'no', 30)).toBeGreaterThan(600000);
   });
 
+  it('gives 0 when no gross can reach the net (a 100 % flat rate)', () => {
+    expect(grossFromNetAnnual(480000, 'generic', 100)).toBe(0);
+    expect(grossFromNetAnnual(480000, 'generic', 150)).toBe(0);
+    // With an interest deduction the net is stuck at that deduction.
+    expect(grossFromNetAnnual(480000, 'generic', 100, 0, 100000)).toBe(0);
+  });
+
+  it('still inverts a very high but possible rate', () => {
+    const net = calcTaxByRegion(2_000_000, 'generic', 99).netAnnual;
+    expect(Math.abs(grossFromNetAnnual(net, 'generic', 99) - 2_000_000)).toBeLessThanOrEqual(100);
+  });
+
   it('zero, negative and non-finite net give 0, never NaN', () => {
     expect(grossFromNetAnnual(0, 'no', 30)).toBe(0);
     expect(grossFromNetAnnual(-10000, 'no', 30)).toBe(0);

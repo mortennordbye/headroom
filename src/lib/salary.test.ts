@@ -181,6 +181,25 @@ describe('activeJobBreakdown', () => {
     expect(activeJobBreakdown(salaries, jobs, '2026-02').map(c => c.gross)).toEqual([600_000]);
   });
 
+  it('keeps a one-month gig that ends the month a new job starts', () => {
+    const salaries = [sal('s1', '2026-03', 50_000, 'gig'), sal('s2', '2026-03', 700_000, 'new')];
+    const jobs = [j('gig', '2026-03', '2026-03'), j('new', '2026-03', null)];
+    expect(activeJobBreakdown(salaries, jobs, '2026-03').map(c => c.jobId)).toEqual(['gig', 'new']);
+  });
+
+  it('counts two jobs that both start and end in the same month', () => {
+    const salaries = [sal('s1', '2026-03', 50_000, 'a'), sal('s2', '2026-03', 60_000, 'b')];
+    const jobs = [j('a', '2026-03', '2026-03'), j('b', '2026-03', '2026-03')];
+    expect(activeJobBreakdown(salaries, jobs, '2026-03').map(c => c.gross)).toEqual([50_000, 60_000]);
+  });
+
+  it('keeps an ending job when the job starting that month ends then too', () => {
+    // Not a successor: a one-month job alongside the old one's last month.
+    const salaries = [sal('s1', '2023-08', 600_000, 'old'), sal('s2', '2026-03', 50_000, 'gig')];
+    const jobs = [j('old', '2023-08', '2026-03'), j('gig', '2026-03', '2026-03')];
+    expect(activeJobBreakdown(salaries, jobs, '2026-03').map(c => c.jobId)).toEqual(['old', 'gig']);
+  });
+
   it('keeps the old job through its end month when the new one starts the month after', () => {
     const salaries = [sal('s1', '2023-08', 600_000, 'old'), sal('s2', '2026-03', 700_000, 'new')];
     const jobs = [j('old', '2023-08', '2026-02'), j('new', '2026-03', null)];
