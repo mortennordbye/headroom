@@ -44,10 +44,11 @@ export interface ActiveJobContribution {
  * A salary whose `jobId` has no job record still counts (there is no end date to
  * disqualify it), matching the long-standing behaviour.
  *
- * `endDate` is inclusive: the last month the job is worked. When another job
- * starts in the very month an earlier one ends, that is a job change, not two
- * jobs at once, so only the new job counts that month. (Older saved data ended
- * the old job in the new job's start month.)
+ * `endDate` is inclusive: the last month the job is worked. When a job that
+ * started earlier ends in the very month a successor starts (one that does not
+ * itself end that month), that is a job change, not two jobs at once, so only
+ * the new job counts that month. (Older saved data ended the old job in the new
+ * job's start month.) Jobs that start and end within the month all count.
  */
 export function activeJobBreakdown(
   salaries: SalaryEntry[],
@@ -66,7 +67,8 @@ export function activeJobBreakdown(
   }
   return out.filter(c => !(
     c.job?.endDate === monthKey &&
-    out.some(o => o !== c && o.job?.startDate === monthKey)
+    c.job.startDate < monthKey &&
+    out.some(o => o !== c && o.job?.startDate === monthKey && o.job.endDate !== monthKey)
   ));
 }
 

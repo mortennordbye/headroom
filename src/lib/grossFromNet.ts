@@ -4,7 +4,8 @@ import { calcTaxByRegion, type Region } from './norwegianTax';
  * The gross annual income whose `calcTaxByRegion` net equals `netAnnual`, with
  * the same deductions. Inverts the tax calculation by bisection: net never
  * falls as gross rises (no marginal rate reaches 100%), and gross is never
- * below net. Non-positive or non-finite input gives 0.
+ * below net. Non-positive or non-finite input gives 0, and so does a net no
+ * gross can reach (a flat rate of 100 %).
  */
 export function grossFromNetAnnual(
   netAnnual: number,
@@ -21,6 +22,7 @@ export function grossFromNetAnnual(
   let hi = netAnnual * 2;
   // A flat 100% rate never reaches the target; stop at a finite bound.
   for (let i = 0; i < 40 && net(hi) < netAnnual; i++) hi *= 2;
+  if (net(hi) < netAnnual) return 0;
   for (let i = 0; i < 60 && hi - lo > 0.5; i++) {
     const mid = (lo + hi) / 2;
     if (net(mid) < netAnnual) lo = mid;
