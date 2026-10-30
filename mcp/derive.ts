@@ -42,7 +42,7 @@ import { withoutOneOffs } from '../src/lib/segments';
 import { yearReview, availableReportYears } from '../src/lib/yearReview';
 import { currentMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
 import { effectiveRemainingMonths, paymentTermMonths, splitTermMonths, termMonthsFromYears } from '../src/lib/loanTerm';
-import { existingMortgage, annualMortgageInterest as yearOneMortgageInterest } from '../src/lib/existingMortgage';
+import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest } from '../src/lib/existingMortgage';
 import {
   calcTaxByRegion,
   calcMarginalTaxRate,
@@ -61,7 +61,7 @@ import { DEFAULT_INFLATION_PCT } from '../src/lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../src/lib/retirementIncome';
 import { estimateBeholdning, projectBeholdning, annualFolketrygdPension } from '../src/lib/folketrygd';
 import { estimateAfpGrunnlag, annualAfp } from '../src/lib/afp';
-import { projectForecast } from '../src/lib/forecastProjection';
+import { projectForecast, forecastMortgage } from '../src/lib/forecastProjection';
 import { netWorthFromSnapshot } from '../src/lib/netWorth';
 import { paydownVsPlan } from '../src/lib/paydown';
 import { currentResidence, residenceMetrics, loanTimeline } from '../src/lib/property';
@@ -123,9 +123,15 @@ export function grossAnnualIncome(blob: ExportPayload, monthKey: string): number
   );
 }
 
-/** The mortgage owed today, as the user's share. Mirrors FinanceContext `existingMortgageNow`. */
-function mortgageOwed(blob: ExportPayload, monthKey?: string) {
-  return existingMortgage(blob.housingMode, blob.homeowner, blob.transition, ownershipShares(blob.assets, monthKey).debt);
+/**
+ * The current home's mortgage at `monthKey`. Mirrors FinanceContext
+ * `currentMortgageNow`, with the app's defaults (5.5 %, 25 years) for a rate or
+ * term an old blob lacks, as the app's load merges them in.
+ */
+function mortgageOwed(blob: ExportPayload, monthKey = currentMonthKey()) {
+  const h = blob.homeowner;
+  const homeowner = { ...h, rente: h?.rente ?? 5.5, nedbetalingstid: h?.nedbetalingstid ?? 25 };
+  return currentMortgage(blob.housingMode, blob.assets, homeowner, blob.transition, monthKey);
 }
 
 /** Year-one mortgage interest on the loan owed today. Mirrors FinanceContext `annualMortgageInterest`. */
@@ -287,13 +293,15 @@ export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
   const myDebt = myHouseDebt(blob.assets, monthKey);
   const dti = calcDebtToIncome(myDebt + lendingDebtTotal(blob.debts ?? []), gross);
   const dtiFullLoan = calcDebtToIncome(blob.assets.houseDebt + lendingDebtTotal(blob.debts ?? []), gross);
-  const hasMortgage = blob.assets.houseDebt > 0;
-  const mortgageStatus = hasMortgage
+  // The current loan in the owner modes. A first buyer's Assets debt is held
+  // flat with no rate or term, so it has no payment status.
+  const m = mortgageOwed(blob, monthKey);
+  const mortgageStatus = m.amortises && m.fullBalance > 0
     ? calcHomeownerMortgageStatus(
-        blob.homeowner?.currentMortgageBalance ?? blob.assets.houseDebt,
-        blob.homeowner?.originalLoanAmount ?? blob.assets.houseDebt,
-        blob.homeowner?.rente ?? blob.loan?.rente ?? 0,
-        blob.homeowner ? paymentTermMonths(blob.homeowner) / 12 : blob.loan?.nedbetalingstid ?? 0,
+        m.fullBalance,
+        blob.homeowner?.originalLoanAmount ?? m.fullBalance,
+        m.ratePct,
+        m.paymentTermMonths / 12,
         RENTEFRADRAG_RATE_PCT,
       )
     : null;
@@ -572,8 +580,7 @@ export function recommendations(blob: ExportPayload, monthKey = currentMonthKey(
 /** The settings the Forecast page passes to prepayVsInvestFor, read from the blob. */
 export function prepayVsInvestSettings(blob: ExportPayload): PrepayVsInvestSettings {
   return {
-    housingMode: blob.housingMode ?? 'first_buyer',
-    homeownerRatePct: blob.homeowner?.rente,
+    mortgage: mortgageOwed(blob),
     loanRatePct: blob.loan?.rente,
     region: blob.region ?? 'no',
     customTaxRatePct: customTaxRate(blob),
@@ -790,23 +797,6 @@ function activeMortgage(blob: ExportPayload, monthKey: string) {
   };
 }
 
-/**
- * The rate and remaining term the Dashboard and Assets page amortise the home's
- * mortgage on. Mirrors FinanceContext `mortgageRate` / `mortgageTermYears`: the
- * homeowner loan in homeowner mode, the Loan page's loan otherwise, with the
- * app's defaults (5.5 %, 25 years) for fields an old blob lacks.
- */
-function homeDebtProjection(blob: ExportPayload, monthKey: string) {
-  if ((blob.housingMode ?? 'first_buyer') === 'homeowner') {
-    const h = blob.homeowner;
-    return {
-      ratePct: h?.rente ?? 5.5,
-      termYears: effectiveRemainingMonths({ ...h, nedbetalingstid: h?.nedbetalingstid ?? 25 }, monthKey) / 12,
-    };
-  }
-  return { ratePct: blob.loan?.rente ?? 5.5, termYears: blob.loan?.nedbetalingstid ?? 25 };
-}
-
 export interface ForecastOverrides {
   years?: number;
   raisePct?: number;
@@ -849,26 +839,18 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
     years: overrides.years ?? a?.years ?? 15,
     extraMonthly: a?.extraMonthly ?? 5000,
   };
-  // Mirrors ForecastPage: the user's share of the mortgage owed today and of the home.
-  const m = mortgageOwed(blob, monthKey);
+  // Mirrors ForecastPage: the user's share of the mortgage and of the home.
   const eq = computeEquityBreakdown(blob.assets, monthKey);
   const shares = ownershipShares(blob.assets, monthKey);
-  const startingMortgage = m.balance;
-  const homeDebt = homeDebtProjection(blob, monthKey);
   const rows = projectForecast(
     {
       currentGross,
-      startingMortgage,
-      mortgageRatePct: m.ratePct,
-      annualMortgagePayment: calcMonthlyPayment(startingMortgage, m.ratePct, m.termYears) * 12,
+      mortgage: forecastMortgage(mortgageOwed(blob, monthKey)),
       region: blob.region ?? 'no',
       customTaxRatePct: customTaxRate(blob),
       ipsAnnualContribution: blob.pension?.ipsAnnualContribution ?? 0,
       startYear: yearOf(monthKey),
       startHomeValue: myHouseValue(blob.assets, monthKey),
-      startHomeDebt: myHouseDebt(blob.assets, monthKey),
-      homeDebtRatePct: homeDebt.ratePct,
-      homeDebtTermYears: homeDebt.termYears,
       homeOwnShare: shares.own,
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,

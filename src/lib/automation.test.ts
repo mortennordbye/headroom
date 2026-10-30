@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeAutomationPostings, applyAmortization, type AutomationRule, type AutomationState } from './automation';
+import { computeAutomationPostings, applyAmortization, automationMortgage, type AutomationRule, type AutomationState } from './automation';
+import { currentMortgage } from './existingMortgage';
 
 const rule = (over: Partial<AutomationRule> = {}): AutomationRule => ({
   id: 'a1',
@@ -188,6 +189,22 @@ describe('computeAutomationPostings — amortization-aware paydown', () => {
     const s = state({ housingMode: 'first_buyer' });
     const m = rule({ id: 'm1', targetKind: 'mortgage', savingsAccountId: undefined, amount: 5000, lastPostedMonth: '2026-06' });
     expect(computeAutomationPostings([m], s, '2026-07')).toHaveLength(0);
+  });
+
+  it('transitioning: a mortgage payment accrues interest at the current loan\'s rate', () => {
+    const m = currentMortgage(
+      'transitioning',
+      { houseDebt: 2_000_000 },
+      { currentMortgageBalance: 2_000_000, rente: 4, nedbetalingstid: 20, nedbetalingstidAsOf: '2026-01', currentMortgageBalanceAsOf: '2026-01' },
+      { currentMortgageBalance: 2_000_000 },
+      '2026-07',
+    );
+    const s = state({ housingMode: 'transitioning', ...automationMortgage(m) });
+    expect(s.mortgageRate).toBe(4);
+    const rule1 = rule({ id: 'm1', targetKind: 'mortgage', savingsAccountId: undefined, amount: 12_000, lastPostedMonth: '2026-06' });
+    const [p] = computeAutomationPostings([rule1], s, '2026-07');
+    // Interest at 4 % (not a planned loan's rate): 2 000 000 × 4 % / 12.
+    expect(p.newBalance).toBe(Math.round(2_000_000 - (12_000 - 2_000_000 * 0.04 / 12)));
   });
 
   it('skips (without stamping) a debt rule whose debt was deleted', () => {

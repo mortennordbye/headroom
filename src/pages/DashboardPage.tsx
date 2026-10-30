@@ -96,8 +96,7 @@ const DashboardPage: React.FC = () => {
     formatCurrency,
     formatCurrencyShort,
     dailyBudget,
-    mortgageRate,
-    mortgageTermYears,
+    currentMortgage: mortgage,
     grossAnnualIncome,
     region,
     assumptionsNudgeDismissed,
@@ -207,7 +206,11 @@ const DashboardPage: React.FC = () => {
   const projectionStart = { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity };
   const myValue = myHouseValue(assets);
   const ownShare = ownershipShares(assets).own;
-  const houseByYear = calcHouseEquityByYear(myValue, myDebt, houseGrowthRate, mortgageRate, mortgageTermYears, 15);
+  // The home's mortgage amortises from today over its term as of the balance
+  // date (a first buyer's Assets debt has term 0: held flat). Same inputs as the
+  // Forecast and Assets pages, via `currentMortgage`.
+  const mortgageTermYears = mortgage.paymentTermMonths / 12;
+  const houseByYear = calcHouseEquityByYear(myValue, mortgage.balance, houseGrowthRate, mortgage.ratePct, mortgageTermYears, 15);
 
   // ─── Assets ───
   const assetRows = useMemo(() => [
@@ -293,10 +296,10 @@ const DashboardPage: React.FC = () => {
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
     const debtByYear = calcDebtBalanceByYear(debts, 15, currentMonthKey());
-    const mortgageByYear = calcMortgageBalanceByYear(myDebt, mortgageRate, mortgageTermYears, 15);
+    const mortgageByYear = calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, mortgageTermYears, 15);
     return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear, debtByYear, { mortgageByYear, region, ownShare });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, myDebt, ownShare, mortgageRate, mortgageTermYears, debts, region]);
+  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, ownShare, mortgage.balance, mortgage.ratePct, mortgageTermYears, debts, region]);
 
   const projectionEndYear = projection15y[projection15y.length - 1]?.year;
   const projectionEndValue = projection15y[projection15y.length - 1]?.total ?? 0;

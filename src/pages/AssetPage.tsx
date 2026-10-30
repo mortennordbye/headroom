@@ -46,9 +46,10 @@ import { currentMonthKey } from '../lib/date';
 import { bsuStatus, calcBsuTaxCredit } from '../lib/bsu';
 import { parseLocaleNumber } from '../lib/validators';
 import { formatAxisInt } from '../lib/format';
-import { effectiveRemainingMonths } from '../lib/loanTerm';
+import { currentMortgage } from '../lib/existingMortgage';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { FitText } from '../components/ui/FitText';
 
@@ -89,13 +90,13 @@ const AssetPage: React.FC = () => {
     planMonthlySaving,
     pension: livePension,
     updatePension,
-    mortgageRate,
-    mortgageTermYears,
+    currentMortgage: liveMortgage,
     restoreAssetTaxDefaults,
     restoreGrowthRateDefaults,
     balanceSnapshots,
     region,
     housingMode,
+    setHousingMode,
   } = useFinance();
   const reduced = useReducedMotion();
 
@@ -114,14 +115,15 @@ const AssetPage: React.FC = () => {
   const snapAssumptions = hist.snapshot?.assumptions;
   const projGrowthReturn = snapAssumptions?.growthReturnRate ?? growthReturnRate;
   const projHouseGrowth = snapAssumptions?.houseGrowthRate ?? houseGrowthRate;
-  const projMortgageRate = hist.snapshot
-    ? (hist.snapshot.housingMode === 'homeowner' ? hist.snapshot.homeowner?.rente : hist.snapshot.loan?.rente) ?? mortgageRate
-    : mortgageRate;
-  const projMortgageTerm = hist.snapshot
-    ? (hist.snapshot.housingMode === 'homeowner'
-      ? (hist.snapshot.homeowner ? effectiveRemainingMonths(hist.snapshot.homeowner, hist.activeKey) / 12 : undefined)
-      : hist.snapshot.loan?.nedbetalingstid) ?? mortgageTermYears
-    : mortgageTermYears;
+  // The mortgage the projections amortise: the viewed month's, read the same
+  // way as today's (`currentMortgage`), so a past month uses the loan it had then.
+  const mortgage = useMemo(
+    () => (hist.snapshot
+      ? currentMortgage(hist.snapshot.housingMode, hist.snapshot.assets, hist.snapshot.homeowner, hist.snapshot.transition, hist.activeKey)
+      : liveMortgage),
+    [hist.snapshot, hist.activeKey, liveMortgage],
+  );
+  const projMortgageTerm = mortgage.paymentTermMonths / 12;
   const totalDebt = debts.reduce((s, d) => s + Math.max(0, d.balance), 0);
   const studentDebt = sumDebtByType(debts, 'student');
   const { taxOnGain, shieldingUsed, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto, totalEquity } = useMemo(
@@ -236,13 +238,13 @@ const AssetPage: React.FC = () => {
   // Projected on the user's share: amortization is linear in the principal, so
   // scaling the inputs is exact.
   const houseByYear = useMemo(
-    () => calcHouseEquityByYear(myValue, myDebt, projHouseGrowth, projMortgageRate, projMortgageTerm, 15),
-    [myValue, myDebt, projHouseGrowth, projMortgageRate, projMortgageTerm]
+    () => calcHouseEquityByYear(myValue, mortgage.balance, projHouseGrowth, mortgage.ratePct, projMortgageTerm, 15),
+    [myValue, mortgage.balance, projHouseGrowth, mortgage.ratePct, projMortgageTerm]
   );
   const debtByYear = useMemo(() => calcDebtBalanceByYear(debts, 15, currentMonthKey()), [debts]);
   const mortgageBalances = useMemo(
-    () => calcMortgageBalanceByYear(myDebt, projMortgageRate, projMortgageTerm, 15),
-    [myDebt, projMortgageRate, projMortgageTerm],
+    () => calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, projMortgageTerm, 15),
+    [mortgage.balance, mortgage.ratePct, projMortgageTerm],
   );
   const projectionData = useMemo(
     () => calcNetWorthProjectionByBucket(
@@ -294,6 +296,28 @@ const AssetPage: React.FC = () => {
           {t.assetPage.heroSummaryEquity}{formatCurrency(netWorth)}{t.assetPage.heroSummaryInvestment}{formatCurrency(netInvestment)}{t.assetPage.heroSummaryProperty}{formatCurrency(houseEquity)}{t.assetPage.heroSummaryCash}{formatCurrency(cashTotal)}.
         </p>
       </header>
+
+      {/* A first buyer with a home on this page: it counts in net worth, but its
+          debt is held flat (a first buyer has no current loan to amortise).
+          Homeowner mode projects it on the loan's own rate and term. */}
+      {hist.isLive && housingMode === 'first_buyer' && (liveAssets.houseValue > 0 || liveAssets.houseDebt > 0) && (
+        <Card padding="md" className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <span className="flex items-start gap-3 min-w-0 flex-1">
+            <span
+              className="shrink-0 grid place-items-center w-8 h-8 rounded-full"
+              style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}
+            >
+              <Home size={16} />
+            </span>
+            <p className="text-[14px] leading-snug [overflow-wrap:anywhere]" style={{ color: 'var(--text-1)' }}>
+              {t.assetPage.firstBuyerHomeNudge}
+            </p>
+          </span>
+          <Button size="sm" variant="secondary" className="shrink-0" onClick={() => setHousingMode('homeowner')}>
+            {t.assetPage.switchToHomeowner}
+          </Button>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Left column */}
