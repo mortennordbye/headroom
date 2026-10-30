@@ -35,6 +35,20 @@ describe('currentMortgage', () => {
     expect(currentMortgage(undefined, { houseDebt: 1_500_000 }, HOMEOWNER, TRANSITION, NOW).amortises).toBe(false);
   });
 
+  it('an unknown mode reads as first_buyer', () => {
+    const unknown = 'renter' as unknown as Parameters<typeof currentMortgage>[0];
+    expect(currentMortgage(unknown, { houseDebt: 1_500_000 }, HOMEOWNER, TRANSITION, NOW)).toEqual(
+      currentMortgage('first_buyer', { houseDebt: 1_500_000 }, HOMEOWNER, TRANSITION, NOW),
+    );
+  });
+
+  it('a stamped placeholder never hides the real Assets debt', () => {
+    const h = { ...HOMEOWNER, currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE };
+    const t = { currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE };
+    expect(currentMortgage('transitioning', { houseDebt: 2_500_000 }, h, t, NOW).fullBalance).toBe(2_500_000);
+    expect(currentMortgage('homeowner', { houseDebt: 2_500_000 }, h, t, NOW).fullBalance).toBe(2_500_000);
+  });
+
   it('drifted slices: the active mode wins, as on load', () => {
     const assets = { houseDebt: 3_400_000 };
     const h = { ...HOMEOWNER, currentMortgageBalance: 3_200_000 };

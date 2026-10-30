@@ -37,7 +37,7 @@ import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { stampLegacyTerm } from '../lib/loanTerm';
-import { reconcileMortgageSlices, PLACEHOLDER_MORTGAGE_BALANCE } from '../lib/mortgageSlices';
+import { reconcileMortgageSlices, reconcileImportedMortgage, PLACEHOLDER_MORTGAGE_BALANCE } from '../lib/mortgageSlices';
 import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest, type CurrentMortgage } from '../lib/existingMortgage';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
@@ -1443,7 +1443,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // between the two callers: on load (resetMissing=true) an absent Group-A field
   // resets to its default (state is fresh); on import/demo (false) it's left as
   // the current value. Group-B fields apply only when present in both paths.
-  const applyPayload = useCallback((raw: Partial<ExportPayload> | null, resetMissing: boolean) => {
+  const applyPayload = useCallback((
+    raw: Partial<ExportPayload> | null,
+    resetMissing: boolean,
+    // Import only: the state the payload overlays, for the mortgage reconcile.
+    current?: Pick<ExportPayload, 'housingMode' | 'assets' | 'homeowner' | 'transition'>,
+  ) => {
     if (raw == null) return; // first-run (null DB) / no snapshot → keep current state
     const sanitized = sanitizePayload(raw, {
       assets: DEFAULT_ASSETS, loan: DEFAULT_LOAN, pension: DEFAULT_PENSION,
@@ -1485,11 +1490,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       transferHintDismissed: setTransferHintDismissed, automationEnabled: setAutomationEnabled,
       projectionIncludeGrowth: setProjectionIncludeGrowth,
     };
-    // Load path only, so registry reads stay clock-free; stored snapshots are left
-    // alone (a missing stamp there means "as recorded"). First bring the three
-    // mortgage slices to one balance (mortgageSlices.ts), before the legacy stamp
-    // below would make an untouched placeholder look written.
-    const data = resetMissing ? reconcileMortgageSlices(sanitized, currentMonthKey()) : sanitized;
+    // Load and import only, so registry reads stay clock-free; stored snapshots are
+    // left alone (a missing stamp there means "as recorded"). First bring the three
+    // mortgage slices to one balance (mortgageSlices.ts). An import reconciles over
+    // the current state with the imported slices taking precedence; a slice it
+    // changes but did not carry is added to the overlay.
+    let data = sanitized;
+    if (resetMissing) data = reconcileMortgageSlices(sanitized, currentMonthKey());
+    else if (current) {
+      const r = reconcileImportedMortgage(current, sanitized, currentMonthKey());
+      data = { ...sanitized };
+      for (const key of ['assets', 'homeowner', 'transition'] as const) {
+        if (sanitized[key] !== undefined || r[key] !== current[key]) Object.assign(data, { [key]: r[key] });
+      }
+    }
     // A term saved before the countdown existed counts down from now.
     if (resetMissing && data.homeowner) data.homeowner = stampLegacyTerm(data.homeowner, currentMonthKey());
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
@@ -2970,13 +2984,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setDailyTransactionsTracked(evictSupersededPending(dedupeBankTransactions(txs)));
   }, [setDailyTransactionsTracked]);
 
-  // Import / demo-restore: overlay the present fields, leaving absent ones as the
-  // current value (resetMissing=false). Shares the single apply path with load.
-  const importAll = useCallback((data: Partial<ExportPayload>) => {
-    saveSourceRef.current = 'import';
-    applyPayload(data, false);
-  }, [applyPayload]);
-
   // --- Demo mode: swap real data for a fictional dataset, then restore it ---
   // The real data is held in `demoSnapshot` (memory) and the auto-save effect is
   // suspended while demoMode is true, so the backend keeps the real data intact.
@@ -2991,6 +2998,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     currentMonthRef.current = currentMonth;
   });
 
+  // Import / demo-restore: overlay the present fields, leaving absent ones as the
+  // current value (resetMissing=false). Shares the single apply path with load;
+  // the current state is passed so the mortgage slices reconcile over it.
+  const importAll = useCallback((data: Partial<ExportPayload>) => {
+    saveSourceRef.current = 'import';
+    applyPayload(data, false, buildPayloadRef.current());
+  }, [applyPayload]);
+
   const enableDemoMode = useCallback(() => {
     if (demoMode) return;
     demoSnapshot.current = { ...buildPayloadRef.current(), currentMonth: format(currentMonthRef.current, 'yyyy-MM') };
@@ -3004,7 +3019,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (!demoMode) return;
     const snapshot = demoSnapshot.current;
     setDemoMode(false);
-    if (snapshot) applyPayload(snapshot, false);
+    if (snapshot) applyPayload(snapshot, false, buildPayloadRef.current());
     demoSnapshot.current = null;
   }, [demoMode, applyPayload]);
 

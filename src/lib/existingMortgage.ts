@@ -1,7 +1,7 @@
 import type { CoOwner } from '../context/FinanceContext';
 import { calcAmortizationSchedule } from './calculations';
 import { effectiveRemainingMonths, paymentTermMonths, type TermFields } from './loanTerm';
-import { reconcileMortgageSlices } from './mortgageSlices';
+import { reconcileMortgageSlices, validHousingMode } from './mortgageSlices';
 import { ownershipShares } from './ownership';
 
 export type MortgageHousingMode = 'first_buyer' | 'homeowner' | 'transitioning';
@@ -63,7 +63,7 @@ export function currentMortgage(
   transition: { currentMortgageBalance?: number } | null | undefined,
   monthKey: string,
 ): CurrentMortgage {
-  const housingMode = mode ?? 'first_buyer';
+  const housingMode = validHousingMode(mode) ?? 'first_buyer';
   const r = reconcileMortgageSlices({
     housingMode,
     assets: assets ?? undefined,

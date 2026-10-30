@@ -174,7 +174,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     loan: { group: 'reset', demo: 'personal', read: whenTruthy('loan'), default: d.loan },
     pension: { group: 'reset', demo: 'personal', read: mergedWith('pension', d.pension), default: d.pension },
     recurringTemplates: { group: 'reset', demo: 'personal', read: whenDefined('recurringTemplates'), default: [] },
-    housingMode: { group: 'reset', demo: 'personal', read: whenDefined('housingMode'), default: 'first_buyer' },
+    housingMode: { group: 'reset', demo: 'personal', read: whenOneOf('housingMode', ['first_buyer', 'homeowner', 'transitioning']), default: 'first_buyer' },
     homeowner: { group: 'reset', demo: 'personal', read: mergedWith('homeowner', d.homeowner), default: d.homeowner },
     transition: { group: 'reset', demo: 'personal', read: mergedWith('transition', d.transition), default: d.transition },
     employerCostConfig: {
