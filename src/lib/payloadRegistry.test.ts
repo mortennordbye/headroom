@@ -340,6 +340,12 @@ describe('payloadRegistry — special-case reads preserved', () => {
     expect('region' in roundTrip({ region: 'xx' as 'no' }, false)).toBe(false);
   });
 
+  it('housingMode only accepts the known modes (an unknown one loads as first_buyer)', () => {
+    expect(roundTrip({ housingMode: 'transitioning' }, false).housingMode).toBe('transitioning');
+    expect('housingMode' in roundTrip({ housingMode: 'renter' as 'homeowner' }, false)).toBe(false);
+    expect(roundTrip({ housingMode: 'renter' as 'homeowner' }, true).housingMode).toBe('first_buyer');
+  });
+
   // HISTORY_PLAN §7 downgrade safety: snapshots are stored/re-applied as whole
   // objects (never field-projected), so a field a *newer* client added survives a
   // round-trip through an older reader. Simulate that with an unknown future field.
