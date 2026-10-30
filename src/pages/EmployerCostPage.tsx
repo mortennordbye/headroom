@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Calculator, Layers, SlidersHorizontal } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import {
-  calcEmployerCost, calcBillingRate, calcBillableHours, calcBilledRate, calcFairGross,
+  calcEmployerCost, holidayPayPct, calcBillingRate, calcBillableHours, calcBilledRate, calcFairGross,
   DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG, type SolveFor,
 } from '../lib/employerCost';
 import { Card } from '../components/ui/Card';
@@ -47,9 +47,9 @@ const EmployerCostPage: React.FC = () => {
 
   const hours = calcBillableHours(billingConfig);
   const gross = solveFor === 'salary'
-    ? calcFairGross(storedRate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct)
+    ? calcFairGross(storedRate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct, isNo)
     : storedGross;
-  const cost = calcEmployerCost(gross, otpPct, employerCostConfig);
+  const cost = calcEmployerCost(gross, otpPct, employerCostConfig, isNo);
   const billing = calcBillingRate(cost.totalEmployerCost, billingConfig);
   const rate = solveFor === 'rate' ? billing.targetHourly : storedRate;
   const result = calcBilledRate(rate, hours, cost.totalEmployerCost);
@@ -58,7 +58,7 @@ const EmployerCostPage: React.FC = () => {
   const markupPct = billing.breakEvenHourly > 0 ? (rate / billing.breakEvenHourly - 1) * 100 : 0;
   // From the margin angle, also say what a fair salary would be at the target margin.
   const fairGross = solveFor === 'margin'
-    ? calcFairGross(rate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct)
+    ? calcFairGross(rate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct, isNo)
     : null;
 
   // Freeze the value that was being solved for into stored state, so switching
@@ -303,7 +303,11 @@ const EmployerCostPage: React.FC = () => {
           </div>
           <div className="mt-4">
             <BreakdownRow label={ec.gross} value={formatCurrency(cost.gross)} />
-            <BreakdownRow label={feriepengerLabel} value={`+ ${formatCurrency(cost.feriepenger)}`} sub={`${employerCostConfig.feriepengesatsPct}%`} />
+            <BreakdownRow
+              label={isNo ? ec.feriepengerAboveSalary : feriepengerLabel}
+              value={`+ ${formatCurrency(cost.feriepenger)}`}
+              sub={`${Math.round(holidayPayPct(employerCostConfig.feriepengesatsPct, isNo) * 10) / 10}%`}
+            />
             <BreakdownRow label={pensionLabel} value={`+ ${formatCurrency(cost.employerPension)}`} sub={`${otpPct}%`} />
             <BreakdownRow label={ec.payrollTaxBase} value={formatCurrency(cost.payrollTaxBase)} muted />
             <BreakdownRow label={payrollLabel} value={`+ ${formatCurrency(cost.payrollTax)}`} sub={`${employerCostConfig.payrollTaxPct}%`} />

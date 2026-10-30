@@ -941,11 +941,12 @@ export function employerCost(blob: ExportPayload, monthKey = currentMonthKey()) 
   const storedGross = blob.employerSalaryOverride ?? derivedGross;
   const storedRate = billing.billedHourly ?? 0;
   const otpPct = blob.pension?.otpEmployerPct ?? 5;
+  const isNo = (blob.region ?? 'no') === 'no';
   const hours = calcBillableHours(billing);
   const gross = billing.solveFor === 'salary'
-    ? calcFairGross(storedRate, hours, otpPct, costConfig, billing.targetMarginPct)
+    ? calcFairGross(storedRate, hours, otpPct, costConfig, billing.targetMarginPct, isNo)
     : storedGross;
-  const cost = calcEmployerCost(gross, otpPct, costConfig);
+  const cost = calcEmployerCost(gross, otpPct, costConfig, isNo);
   const breakEven = calcBillingRate(cost.totalEmployerCost, billing);
   const rate = billing.solveFor === 'rate' ? breakEven.targetHourly : storedRate;
   const result = calcBilledRate(rate, hours, cost.totalEmployerCost);
@@ -960,7 +961,7 @@ export function employerCost(blob: ExportPayload, monthKey = currentMonthKey()) 
     marginPct: billing.solveFor === 'margin' ? result.marginPct : billing.targetMarginPct,
     markupOverBreakEvenPct: breakEven.breakEvenHourly > 0 ? (rate / breakEven.breakEvenHourly - 1) * 100 : 0,
     fairGrossAtTargetMargin: billing.solveFor === 'margin'
-      ? Math.round(calcFairGross(rate, hours, otpPct, costConfig, billing.targetMarginPct))
+      ? Math.round(calcFairGross(rate, hours, otpPct, costConfig, billing.targetMarginPct, isNo))
       : null,
     employerCost: cost,
     billing: breakEven,
