@@ -109,8 +109,9 @@ export function snapshotBalances(
  * snapshot can never show a mortgage/house figure that contradicts itself — the
  * same invariant the live `updateAsset`/`updateHomeowner` mirror keeps. Loan
  * params, fixed expenses and category budgets carry over from `base` untouched.
+ * `monthKey` is the snapshot's month: the mortgage balance is stamped as of it.
  */
-export function buildManualSnapshot(base: BalanceSnapshot, b: SnapshotBalances, coOwners?: CoOwner[]): BalanceSnapshot {
+export function buildManualSnapshot(base: BalanceSnapshot, b: SnapshotBalances, monthKey: string, coOwners?: CoOwner[]): BalanceSnapshot {
   return {
     ...base,
     assets: {
@@ -127,7 +128,8 @@ export function buildManualSnapshot(base: BalanceSnapshot, b: SnapshotBalances, 
       houseValue: b.houseValue,
       houseDebt: b.houseDebt,
     },
-    homeowner: { ...base.homeowner, currentMortgageBalance: b.houseDebt },
+    // The balance is as of the snapshot's month, whatever date `base` carried.
+    homeowner: { ...base.homeowner, currentMortgageBalance: b.houseDebt, currentMortgageBalanceAsOf: monthKey },
     transition: { ...base.transition, currentMortgageBalance: b.houseDebt, currentHouseValue: b.houseValue },
     pension: { ...base.pension, otpBalance: b.otpBalance, ipsBalance: b.ipsBalance },
     debts: b.debts,

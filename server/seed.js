@@ -137,7 +137,8 @@ const assets = {
   unrealizedGain: 95_000,
   taxRate: 37.84,
   houseValue: 4_800_000,
-  houseDebt: 3_400_000,
+  // The whole mortgage, the same balance as homeowner/transition below.
+  houseDebt: 3_200_000,
   bsu: 150_000,
   savings: 0, // legacy scalar — superseded by savingsAccounts
   savingsAccounts: [
@@ -260,7 +261,8 @@ const payload = {
   recurringTemplates,
   assets,
   loan,
-  housingMode: 'first_buyer',
+  // A homeowner, so the house on Assets is the mortgage the Bolig page shows.
+  housingMode: 'homeowner',
   homeowner,
   transition,
   savingsTargetPercent: 30,

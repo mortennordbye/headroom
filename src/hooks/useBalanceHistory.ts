@@ -72,6 +72,7 @@ export function useBalanceHistory(): BalanceHistory {
     return buildManualSnapshot(
       liveBalanceSnapshot,
       projectSnapshotBalances(base, automationRules, automationState, activeKey, nowKey, rates),
+      activeKey,
       snapshotCoOwners(assets.coOwners, activeKey),
     );
   }, [mode, liveBalanceSnapshot, automationRules, automationState, activeKey, nowKey, rates, assets.coOwners,

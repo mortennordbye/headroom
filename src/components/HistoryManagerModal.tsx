@@ -102,13 +102,14 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
     const coOwners = snapshotCoOwners(assets.coOwners, editing);
     return (
       <SnapshotEditor
+        monthKey={editing}
         monthTitle={monthLabel(editing)}
         initial={snapshotBalances(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate })}
         base={base}
         coOwners={coOwners}
         onCancel={done}
         onSave={(balances) => {
-          setManualSnapshot(editing, buildManualSnapshot(base, balances, coOwners));
+          setManualSnapshot(editing, buildManualSnapshot(base, balances, editing, coOwners));
           done();
         }}
       />
@@ -227,8 +228,9 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
 // ── The per-month balances editor ────────────────────────────────────────────
 
 function SnapshotEditor({
-  monthTitle, initial, base, coOwners, onCancel, onSave,
+  monthKey, monthTitle, initial, base, coOwners, onCancel, onSave,
 }: {
+  monthKey: string;
   monthTitle: string;
   initial: SnapshotBalances;
   base: BalanceSnapshot;
@@ -248,7 +250,7 @@ function SnapshotEditor({
   const setDebt = (id: string, balance: number) =>
     set({ debts: b.debts.map(d => (d.id === id ? { ...d, balance } : d)) });
 
-  const preview = netWorthFromSnapshot(buildManualSnapshot(base, b, coOwners));
+  const preview = netWorthFromSnapshot(buildManualSnapshot(base, b, monthKey, coOwners));
 
   return (
     <ModalShell

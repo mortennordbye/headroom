@@ -364,3 +364,34 @@ describe('deleting a bank-imported transaction', () => {
     expect(after.deletedBankIds).toContain(id);
   });
 });
+
+describe('reading reconciles the mortgage slices, without writing them back', () => {
+  async function storeDrifted() {
+    const drifted = fullFixture();
+    drifted.assets.houseDebt = 2_700_000; // homeowner + transition hold 2 500 000
+    await fetch(`${BASE}/api/data`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-data-rev': String(await currentRev()) },
+      body: JSON.stringify(drifted),
+    });
+  }
+
+  it("getData shows the active mode's balance in every slice", async () => {
+    await storeDrifted();
+    const { blob } = await client.getData();
+    expect(blob.assets.houseDebt).toBe(2_500_000);
+    expect(blob.homeowner?.currentMortgageBalance).toBe(2_500_000);
+    expect(blob.transition?.currentMortgageBalance).toBe(2_500_000);
+    // The read stored nothing.
+    expect((await getBlob()).assets.houseDebt).toBe(2_700_000);
+  });
+
+  it('a write changes only what it touches, not the reconciled view', async () => {
+    await storeDrifted();
+    await client.applyMutation((b) => {
+      setCategoryBudget(b, { category: 'transport', amount: 1800 });
+      return b;
+    });
+    expect((await getBlob()).assets.houseDebt).toBe(2_700_000);
+  });
+});
