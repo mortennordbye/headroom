@@ -258,10 +258,11 @@ export const PENSION_TAX_PARAMS: Record<number, PensionTaxParams> = {
     minstefradragRate: 0.40,
     minstefradragMax: 75_400,
     trygdeavgiftRate: 0.051,
-    skattefradragMax: 37_100,
-    skattefradragT1From: 284_950,
-    skattefradragT1Rate: 0.167,
-    skattefradragT2From: 436_050,
+    // Revised budget (Innst. 459 L 2025-2026), per skatteetaten.no/satser.
+    skattefradragMax: 39_100,
+    skattefradragT1From: 294_200,
+    skattefradragT1Rate: 0.191,
+    skattefradragT2From: 437_100,
     skattefradragT2Rate: 0.060,
   },
 };
