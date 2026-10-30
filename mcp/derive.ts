@@ -42,6 +42,7 @@ import { withoutOneOffs } from '../src/lib/segments';
 import { yearReview, availableReportYears } from '../src/lib/yearReview';
 import { currentMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
 import { effectiveRemainingMonths, paymentTermMonths, splitTermMonths, termMonthsFromYears } from '../src/lib/loanTerm';
+import { existingMortgage, annualMortgageInterest as yearOneMortgageInterest } from '../src/lib/existingMortgage';
 import {
   calcTaxByRegion,
   calcMarginalTaxRate,
@@ -113,16 +114,14 @@ export function grossAnnualIncome(blob: ExportPayload, monthKey: string): number
   return (blob.income ?? 0) * 12; // known approximation: monthly-net annualised
 }
 
-/** Year-one mortgage interest for the active housing mode. Mirrors FinanceContext `annualMortgageInterest`. */
+/** The mortgage owed today, as the user's share. Mirrors FinanceContext `existingMortgageNow`. */
+function mortgageOwed(blob: ExportPayload, monthKey?: string) {
+  return existingMortgage(blob.housingMode, blob.homeowner, blob.transition, ownershipShares(blob.assets, monthKey).debt);
+}
+
+/** Year-one mortgage interest on the loan owed today. Mirrors FinanceContext `annualMortgageInterest`. */
 export function annualMortgageInterest(blob: ExportPayload): number {
-  const homeowner = (blob.housingMode ?? 'first_buyer') === 'homeowner';
-  const balance = homeowner ? blob.homeowner?.currentMortgageBalance : blob.loan?.laanebelop;
-  const rate = homeowner ? blob.homeowner?.rente : blob.loan?.rente;
-  const term = homeowner ? paymentTermMonths(blob.homeowner) / 12 : blob.loan?.nedbetalingstid;
-  if (!(balance! > 0) || !(rate! > 0) || !(term! > 0)) return 0;
-  const interest = calcAmortizationSchedule(balance!, rate!, term!)[0]?.interestPaid ?? 0;
-  // Rentefradrag follows the user's share of a joint loan (homeowner only).
-  return homeowner ? interest * ownershipShares(blob.assets).debt : interest;
+  return yearOneMortgageInterest(mortgageOwed(blob));
 }
 
 /** BSU tax credit for the year. Mirrors the credit inside FinanceContext `derivedNetMonthlyFor`. */
@@ -756,7 +755,8 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
 }
 
 /**
- * The mortgage the active housing mode follows. Mirrors ForecastPage. `termYears`
+ * The mortgage the active housing mode shows (the planned loan outside homeowner
+ * mode), for the mortgage tool. `termYears`
  * prices the payment (homeowner: the term as of the balance's month);
  * `remainingMonths` is the term left at `monthKey` (loanTerm.ts).
  */
@@ -815,15 +815,14 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
     years: overrides.years ?? a?.years ?? 15,
     extraMonthly: a?.extraMonthly ?? 5000,
   };
-  const m = activeMortgage(blob, monthKey);
+  // Mirrors ForecastPage: the user's share of the mortgage owed today and of the home.
+  const m = mortgageOwed(blob, monthKey);
   const eq = computeEquityBreakdown(blob.assets, monthKey);
-  // Mirrors ForecastPage: the user's share of a joint mortgage (homeowner) and home.
   const shares = ownershipShares(blob.assets, monthKey);
-  const startingMortgage = (blob.housingMode ?? 'first_buyer') === 'homeowner' ? m.balance * shares.debt : m.balance;
+  const startingMortgage = m.balance;
   const rows = projectForecast(
     {
       currentGross,
-      totalEquity: eq.totalEquity,
       startingMortgage,
       mortgageRatePct: m.ratePct,
       annualMortgagePayment: calcMonthlyPayment(startingMortgage, m.ratePct, m.termYears) * 12,
@@ -832,11 +831,14 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       ipsAnnualContribution: blob.pension?.ipsAnnualContribution ?? 0,
       startYear: yearOf(monthKey),
       startHomeValue: myHouseValue(blob.assets, monthKey),
+      startHomeDebt: myHouseDebt(blob.assets, monthKey),
+      homeDebtTermYears: activeMortgage(blob, monthKey).remainingMonths / 12,
       homeOwnShare: shares.own,
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,
       startOtherAssets: eq.netCrypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
-      nonMortgageDebt: totalNonMortgageDebt(blob),
+      debts: blob.debts ?? [],
+      monthKey,
     },
     scenario,
   );
@@ -952,11 +954,12 @@ export function employerCost(blob: ExportPayload, monthKey = currentMonthKey()) 
   const storedGross = blob.employerSalaryOverride ?? derivedGross;
   const storedRate = billing.billedHourly ?? 0;
   const otpPct = blob.pension?.otpEmployerPct ?? 5;
+  const isNo = (blob.region ?? 'no') === 'no';
   const hours = calcBillableHours(billing);
   const gross = billing.solveFor === 'salary'
-    ? calcFairGross(storedRate, hours, otpPct, costConfig, billing.targetMarginPct)
+    ? calcFairGross(storedRate, hours, otpPct, costConfig, billing.targetMarginPct, isNo)
     : storedGross;
-  const cost = calcEmployerCost(gross, otpPct, costConfig);
+  const cost = calcEmployerCost(gross, otpPct, costConfig, isNo);
   const breakEven = calcBillingRate(cost.totalEmployerCost, billing);
   const rate = billing.solveFor === 'rate' ? breakEven.targetHourly : storedRate;
   const result = calcBilledRate(rate, hours, cost.totalEmployerCost);
@@ -971,7 +974,7 @@ export function employerCost(blob: ExportPayload, monthKey = currentMonthKey()) 
     marginPct: billing.solveFor === 'margin' ? result.marginPct : billing.targetMarginPct,
     markupOverBreakEvenPct: breakEven.breakEvenHourly > 0 ? (rate / breakEven.breakEvenHourly - 1) * 100 : 0,
     fairGrossAtTargetMargin: billing.solveFor === 'margin'
-      ? Math.round(calcFairGross(rate, hours, otpPct, costConfig, billing.targetMarginPct))
+      ? Math.round(calcFairGross(rate, hours, otpPct, costConfig, billing.targetMarginPct, isNo))
       : null,
     employerCost: cost,
     billing: breakEven,

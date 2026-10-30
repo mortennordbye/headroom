@@ -8,6 +8,11 @@
 // This treats all growth as contribution — BSU interest is small relative to the
 // 27 500 kr cap, so the approximation is close enough for a nudge. The age-34
 // eligibility cutoff is not modeled (no birthdate is tied to the account).
+//
+// The 300 000 kr lifetime cap applies to deposits, not the balance, but only the
+// balance is stored (no deposit history, no BSU rate). The balance includes
+// interest, so it is an upper bound on deposits and `lifetimeRoomLeft` is a
+// lower bound on the real room. The UI says so rather than guessing a rate.
 
 /** Finite-or-0 guard against a hand-edited undefined/NaN balance. */
 const finite = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0);
@@ -43,7 +48,7 @@ export interface BsuStatus {
   annualCap: number;
   lifetimeCap: number;
   annualRoomLeft: number;   // clamped ≥ 0
-  lifetimeRoomLeft: number; // clamped ≥ 0
+  lifetimeRoomLeft: number; // clamped ≥ 0; at least this much (balance includes interest)
   atAnnualCap: boolean;
   atLifetimeCap: boolean;
 }

@@ -43,6 +43,11 @@ export interface ActiveJobContribution {
  *
  * A salary whose `jobId` has no job record still counts (there is no end date to
  * disqualify it), matching the long-standing behaviour.
+ *
+ * `endDate` is inclusive: the last month the job is worked. When another job
+ * starts in the very month an earlier one ends, that is a job change, not two
+ * jobs at once, so only the new job counts that month. (Older saved data ended
+ * the old job in the new job's start month.)
  */
 export function activeJobBreakdown(
   salaries: SalaryEntry[],
@@ -59,7 +64,10 @@ export function activeJobBreakdown(
     const onCall = job?.onCallAnnual ?? 0;
     out.push({ jobId, job, base, onCall, gross: base + onCall });
   }
-  return out;
+  return out.filter(c => !(
+    c.job?.endDate === monthKey &&
+    out.some(o => o !== c && o.job?.startDate === monthKey)
+  ));
 }
 
 /** How a salary-change amount is entered when recording a raise/adjustment. */
