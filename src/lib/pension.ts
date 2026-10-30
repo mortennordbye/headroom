@@ -3,6 +3,20 @@
 // END of each year and then grow; the closed form matches the iterative
 // year-by-year recurrence `next = prev * (1 + r) + contribution`.
 
+import { folketrygdParamsFor } from './folketrygd';
+
+/** OTP contributions are calculated on pay up to 12G (innskuddspensjonsloven § 5-2). */
+export const OTP_CONTRIBUTION_CAP_G = 12;
+
+/**
+ * Annual OTP contribution (employer + employee) at `totalPct` percent of
+ * pensionable income, with the base capped at 12G for `year`.
+ */
+export function otpAnnualContribution(pensionableIncome: number, totalPct: number, year: number): number {
+  const base = Math.min(Math.max(0, pensionableIncome), OTP_CONTRIBUTION_CAP_G * folketrygdParamsFor(year).grunnbelop);
+  return base * totalPct / 100;
+}
+
 /**
  * Balance after `years` full years of annual growth at `ratePct` percent with a
  * fixed end-of-year contribution. `years <= 0` returns `start`; a ~0% rate

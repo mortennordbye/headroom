@@ -8,16 +8,19 @@
  * temporary extra 5% AGA over ~850k was abolished from 2025, so a single
  * configurable rate is correct for 2026.
  *
- * The math is country-agnostic: the only difference between Norway and a
- * "generic" international setup is the default rates and the labels shown in the
- * UI. So there is deliberately NO `region` parameter here (unlike
- * `calcTaxByRegion`, whose math actually branches) — the page passes whichever
- * percentages apply. Do not "fix" this by adding a region switch.
+ * The math is country-agnostic apart from one flag: in Norway monthly-paid
+ * staff keep their salary through the holiday weeks and ferietrekk takes those
+ * weeks back, so only the holiday pay above that is extra cost
+ * (`holidayPayInSalary`, see `feriepengerSurplus`). Otherwise the difference
+ * between Norway and a "generic" setup is the default rates and the labels, and
+ * the page passes whichever percentages apply.
  *
  * Estimate, not payroll: feriepenger are accrued on this year's salary and paid
  * the following year, and AGA varies by geographic zone — both are folded into
  * a steady-state annual figure here.
  */
+
+import { feriepengerSurplus } from './feriepenger';
 
 // Norwegian defaults (2026, zone I).
 export const FERIEPENGER_DEFAULT_PCT = 12; // 5-week (avtalefestet); 10.2% is the 4-week minimum
@@ -43,7 +46,7 @@ export interface EmployerCostConfig {
 
 export interface EmployerCostBreakdown {
   gross: number;
-  feriepenger: number;       // gross * feriepengesats
+  feriepenger: number;       // holiday pay on top of salary (see holidayPayPct)
   employerPension: number;   // gross * employerPensionPct (passed in from Pension)
   payrollTaxBase: number;    // gross + feriepenger + employerPension
   payrollTax: number;        // payrollTaxBase * payrollTax
@@ -53,16 +56,29 @@ export interface EmployerCostBreakdown {
 }
 
 /**
+ * Holiday pay as a % of gross that comes on top of 12 months' salary. With
+ * `holidayPayInSalary` (Norwegian monthly pay) that is the sats minus the
+ * ferietrekk for the holiday weeks, at a steady salary: about 2.4% on the 12%
+ * rate. Otherwise the whole sats.
+ */
+export function holidayPayPct(satsPct: number, holidayPayInSalary: boolean): number {
+  if (!holidayPayInSalary) return Math.max(0, satsPct);
+  return Math.max(0, feriepengerSurplus(0, () => 1, satsPct) * 100);
+}
+
+/**
  * @param grossAnnual       annual gross salary
  * @param employerPensionPct employer pension % of gross (Norway: pension.otpEmployerPct)
+ * @param holidayPayInSalary true for Norwegian monthly pay (ferietrekk applies)
  */
 export function calcEmployerCost(
   grossAnnual: number,
   employerPensionPct: number,
   config: EmployerCostConfig,
+  holidayPayInSalary = false,
 ): EmployerCostBreakdown {
   const gross = Math.max(0, grossAnnual);
-  const feriepenger = gross * (Math.max(0, config.feriepengesatsPct) / 100);
+  const feriepenger = gross * (holidayPayPct(config.feriepengesatsPct, holidayPayInSalary) / 100);
   const employerPension = gross * (Math.max(0, employerPensionPct) / 100);
   const payrollTaxBase = gross + feriepenger + employerPension;
   const payrollTax = payrollTaxBase * (Math.max(0, config.payrollTaxPct) / 100);
@@ -173,7 +189,8 @@ export function calcBilledRate(
 /**
  * The gross salary at which the employer keeps exactly `targetMarginPct` of the
  * revenue from `billedHourly`. Total cost is linear in gross:
- * gross * k + overheadAnnual, with k = (1 + ferie + otp) * (1 + aga) + overheadPct,
+ * gross * k + overheadAnnual, with k = (1 + ferie + otp) * (1 + aga) + overheadPct
+ * (ferie from `holidayPayPct`),
  * so this solves gross * k + overheadAnnual = revenue * (1 - margin).
  */
 export function calcFairGross(
@@ -182,11 +199,12 @@ export function calcFairGross(
   employerPensionPct: number,
   costConfig: EmployerCostConfig,
   targetMarginPct: number,
+  holidayPayInSalary = false,
 ): number {
   const revenue = Math.max(0, billedHourly) * Math.max(0, billableHoursPerYear);
   const margin = Math.min(0.95, Math.max(0, targetMarginPct / 100));
   const pct = (v: number) => Math.max(0, v) / 100;
-  const k = (1 + pct(costConfig.feriepengesatsPct) + pct(employerPensionPct)) * (1 + pct(costConfig.payrollTaxPct))
+  const k = (1 + pct(holidayPayPct(costConfig.feriepengesatsPct, holidayPayInSalary)) + pct(employerPensionPct)) * (1 + pct(costConfig.payrollTaxPct))
     + pct(costConfig.overheadPct);
   return Math.max(0, (revenue * (1 - margin) - Math.max(0, costConfig.overheadAnnual)) / k);
 }

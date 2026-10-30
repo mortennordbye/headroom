@@ -18,7 +18,7 @@ import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
 import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
-import { projectPensionWealth } from '../lib/pension';
+import { otpAnnualContribution as otpContribution, projectPensionWealth } from '../lib/pension';
 import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { currentMonthKey } from '../lib/date';
@@ -96,7 +96,7 @@ const PensionPage: React.FC = () => {
     [salaries, jobs, asOfMonth],
   );
 
-  const otpAnnualContribution = pensionableIncome * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
+  const otpAnnualContribution = otpContribution(pensionableIncome, pension.otpEmployerPct + pension.otpEmployeePct, TAX_YEAR);
   const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
   // IPS lowers alminnelig inntekt, taxed at 22% in Norway. Under the generic
   // region there's no fixed rate, so the saving is the user's own marginal rate.

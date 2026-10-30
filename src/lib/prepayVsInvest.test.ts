@@ -1,5 +1,32 @@
 import { describe, it, expect } from 'vitest';
-import { prepayVsInvest } from './prepayVsInvest';
+import { prepayVsInvest, prepayVsInvestFor } from './prepayVsInvest';
+
+describe('prepayVsInvestFor', () => {
+  const settings = {
+    housingMode: 'homeowner' as const,
+    homeownerRatePct: 5,
+    loanRatePct: 6,
+    region: 'no',
+    customTaxRatePct: 30,
+    investGainsTaxPct: 37.84,
+  };
+
+  it('taxes the investment side at the gains rate', () => {
+    const r = prepayVsInvestFor(settings, 5000, 7, 15);
+    expect(r.afterTaxReturnPct).toBeCloseTo(7 * (1 - 0.3784), 6);
+    expect(r.afterTaxMortgageRatePct).toBeCloseTo(3.9, 6);
+  });
+
+  it('uses the current mortgage rate for a homeowner and the planned loan otherwise', () => {
+    expect(prepayVsInvestFor({ ...settings, housingMode: 'first_buyer' }, 5000, 7, 15).afterTaxMortgageRatePct)
+      .toBeCloseTo(6 * 0.78, 6);
+  });
+
+  it('uses the flat rate as the deduction in generic mode', () => {
+    const r = prepayVsInvestFor({ ...settings, region: 'generic' }, 5000, 7, 15);
+    expect(r.afterTaxMortgageRatePct).toBeCloseTo(5 * 0.7, 6);
+  });
+});
 
 describe('prepayVsInvest', () => {
   it('applies the interest deduction to the mortgage rate', () => {

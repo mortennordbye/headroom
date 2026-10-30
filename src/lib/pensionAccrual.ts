@@ -15,6 +15,7 @@
 // Growth stays where it belongs: in the projection on the Pension page.
 import { addMonthsKey } from './date';
 import type { AutomationRule } from './automation';
+import { otpAnnualContribution } from './pension';
 
 export const PENSION_OTP_RULE_ID = 'pension:otp';
 export const PENSION_IPS_RULE_ID = 'pension:ips';
@@ -63,7 +64,11 @@ export function pensionAccrualRules(
   const startMonth = addMonthsKey(input.currentMonth, 1);
   const rules: AutomationRule[] = [];
 
-  const otpMonthly = input.pensionableIncome * (input.otpEmployerPct + input.otpEmployeePct) / 100 / 12;
+  const otpMonthly = otpAnnualContribution(
+    input.pensionableIncome,
+    input.otpEmployerPct + input.otpEmployeePct,
+    Number(input.currentMonth.slice(0, 4)),
+  ) / 12;
   if (input.otpAutoPost && otpMonthly > 0) {
     rules.push({
       id: PENSION_OTP_RULE_ID,

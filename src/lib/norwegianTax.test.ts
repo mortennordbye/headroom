@@ -270,8 +270,17 @@ describe('calcPensionIncomeTax', () => {
     const r = calcPensionIncomeTax(400_000, 2026);
     // minstefradrag 75 400 → alminnelig 324 600 → grunnlag 210 060 → 22% = 46 213.2
     // trinn: (318 300−226 100)·1.7% + (400 000−318 300)·4.0% = 1 567.4 + 3 268 = 4 835.4
-    // trygde 5.1% = 20 400 ; credit = 37 100 − (400 000−284 950)·16.7% = 17 886.65
-    expect(r.totalTax).toBeCloseTo(46_213.2 + 4_835.4 + 20_400 - 17_886.65, 1);
+    // trygde 5.1% = 20 400 ; credit = 39 100 − (400 000−294 200)·19.1% = 18 892.2
+    expect(r.totalTax).toBeCloseTo(46_213.2 + 4_835.4 + 20_400 - 18_892.2, 1);
+  });
+
+  it('uses the revised 2026 pension credit (Innst. 459 L)', () => {
+    // Skatteetaten 2026: max 39 100, −19.1% from 294 200, −6.0% from 437 100.
+    const r = calcPensionIncomeTax(300_000, 2026);
+    // minstefradrag 75 400 → alminnelig 224 600 → grunnlag 110 060 → 22% = 24 213.2
+    // trinn: (300 000−226 100)·1.7% = 1 256.3 ; trygde 5.1% = 15 300
+    // credit = 39 100 − (300 000−294 200)·19.1% = 37 992.2
+    expect(r.totalTax).toBeCloseTo(24_213.2 + 1_256.3 + 15_300 - 37_992.2, 1);
   });
 
   it('phases the credit out entirely at high pensions', () => {
