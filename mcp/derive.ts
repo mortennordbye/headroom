@@ -866,6 +866,31 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
   return { monthKey, scenario, projection: rows, netWorthHistory: history };
 }
 
+/** Both loans of a transitioning user; null for the other modes. */
+function transitionLoans(blob: ExportPayload, monthKey: string) {
+  if (blob.housingMode !== 'transitioning') return { current: null, planned: null };
+  const c = mortgageOwed(blob, monthKey);
+  const remaining = splitTermMonths(c.remainingMonths);
+  const p = activeMortgage(blob, monthKey);
+  return {
+    current: {
+      balance: Math.round(c.fullBalance),
+      myBalance: Math.round(c.balance),
+      balanceAsOf: c.balanceAsOf,
+      ratePct: c.ratePct,
+      remainingMonths: c.remainingMonths,
+      remainingTerm: { years: remaining.years, months: remaining.months },
+      monthlyPayment: Math.round(calcMonthlyPayment(c.fullBalance, c.ratePct, c.paymentTermMonths / 12) + (blob.homeowner?.termingebyr ?? 0)),
+    },
+    planned: {
+      balance: Math.round(p.balance),
+      ratePct: p.ratePct,
+      termYears: p.termYears,
+      monthlyPayment: Math.round(calcMonthlyPayment(p.balance, p.ratePct, p.termYears) + (blob.loan?.termingebyr ?? 0)),
+    },
+  };
+}
+
 /** Mortgage details: amortization, payoff timeline, paydown vs plan. Mirrors BoligPage (homeowner). */
 export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
   const housingMode = blob.housingMode ?? 'first_buyer';
@@ -923,6 +948,10 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
     residence: housingMode === 'homeowner'
       ? residenceMetrics(currentResidence(blob.residences ?? []), houseValue, monthKey)
       : null,
+    // Transitioning: the loan owed until the sale (`current`, the same resolver
+    // the app's projections use) next to the purchase loan (`planned`, which is
+    // what the top-level fields above describe in this mode).
+    ...transitionLoans(blob, monthKey),
     paydownVsPlan: paydownVsPlan(blob.balanceSnapshots ?? {}),
     totalInterestRemaining: Math.round(schedule.reduce((s, y) => s + y.interestPaid, 0)),
     amortizationByYear: schedule,

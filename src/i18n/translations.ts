@@ -1819,6 +1819,8 @@ export const translations = {
       termExpired: 'Løpetiden er utløpt, oppdater gjenstående løpetid',
       notifiedRate: 'Varslet nominell rente',
       notifiedRateFrom: 'Gjelder fra',
+      balanceAsOf: 'Saldo per',
+      currentLoanNote: 'Lånet du har nå, til boligen er solgt',
       // Property card + residence history
       propertyTitle: 'Bolig',
       propertyAddress: 'Adresse',
@@ -3824,6 +3826,8 @@ export const translations = {
       termExpired: 'The term has run out, update the remaining term',
       notifiedRate: 'Notified nominal rate',
       notifiedRateFrom: 'Effective from',
+      balanceAsOf: 'Balance as of',
+      currentLoanNote: 'The loan you have now, until the home is sold',
       // Property card + residence history
       propertyTitle: 'Property',
       propertyAddress: 'Address',

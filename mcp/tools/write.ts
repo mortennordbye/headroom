@@ -428,7 +428,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update the current mortgage',
       description:
-        'Change the mortgage the user already has (the `homeowner` slice). Only provided fields change. The remaining term is given as termYears + termMonths (both together) and counts down from the current month. balance also updates assets.houseDebt. For a planned purchase loan use update_loan.',
+        'Change the mortgage the user already has (the `homeowner` slice): a homeowner\'s loan, and while transitioning the current home\'s loan owed until the sale (its rate and term drive the projections until the mode is switched). Only provided fields change. The remaining term is given as termYears + termMonths (both together) and counts down from the current month. balance also updates assets.houseDebt and the transition balance. For the planned purchase loan use update_loan.',
       inputSchema: {
         rente: z.number().min(0).optional().describe('Nominal interest rate %.'),
         termingebyr: kr.optional().describe('Fee per instalment in kr.'),

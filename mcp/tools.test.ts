@@ -548,6 +548,21 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(m.residence).toBeNull();
   });
 
+  it('mortgage: transitioning returns the current loan and the planned one side by side', () => {
+    const b = fullFixture();
+    b.housingMode = 'transitioning';
+    b.homeowner = { ...b.homeowner!, rente: 4 };
+    const m = derive.mortgage(b, MONTH);
+    // Existing fields still describe the planned loan.
+    expect(m.loanKind).toBe('planned');
+    expect(m.balance).toBe(b.loan!.laanebelop);
+    const c = currentMortgage('transitioning', b.assets, b.homeowner, b.transition, MONTH);
+    expect(m.current).toMatchObject({ balance: 2500000, ratePct: 4, remainingMonths: c.remainingMonths, balanceAsOf: '2026-06' });
+    expect(m.planned).toMatchObject({ balance: b.loan!.laanebelop, ratePct: b.loan!.rente });
+    b.housingMode = 'homeowner';
+    expect(derive.mortgage(b, MONTH)).toMatchObject({ current: null, planned: null });
+  });
+
   it('housing: manual capacity overrides replace the live inputs', () => {
     const b = fullFixture();
     b.capacityOverrides = { arslonn: 900000, gjeld: null, egenkapital: 1000000 };

@@ -274,7 +274,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Mortgage',
       description:
-        'The mortgage the housing mode follows: loanKind "current" is a homeowner\'s real mortgage, "planned" is the loan being planned for a purchase (first-buyer / transitioning). Balance, rate, term, monthly payment, remaining interest and yearly amortization; for homeowners also payoff timeline, loan-to-value and purchase-vs-value metrics. Includes actual paydown vs plan from recorded snapshots.',
+        'The mortgage the housing mode follows: loanKind "current" is a homeowner\'s real mortgage, "planned" is the loan being planned for a purchase (first-buyer / transitioning). Balance, rate, term, monthly payment, remaining interest and yearly amortization; for homeowners also payoff timeline, loan-to-value and purchase-vs-value metrics. Includes actual paydown vs plan from recorded snapshots. When transitioning, `current` is the loan still owed on the home being sold (balance, rate, remaining term, payment) and `planned` the purchase loan; both are null in the other modes.',
       inputSchema: {},
       annotations: { title: 'Mortgage', ...readOnly },
     },
