@@ -20,7 +20,7 @@ import { projectForecast, type EffectiveScenario, type ForecastScenario, type Fo
 import { calcMonthlyPayment } from '../lib/calculations';
 import { pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
-import { myHouseValue, ownershipShares } from '../lib/ownership';
+import { myHouseDebt, myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
 import { latestInflationPct } from '../lib/inflation';
 import { formatAxisInt } from '../lib/format';
@@ -28,10 +28,11 @@ import { paymentTermMonths } from '../lib/loanTerm';
 
 const ForecastPage: React.FC = () => {
   const {
-    t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
+    t, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
     formatCurrency, region, customTaxRatePct, pension,
     planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest,
-    assets, houseGrowthRate, netInvestment, netCrypto, totalDebt,
+    assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
+    mortgageTermYears: homeMortgageTermYears,
     forecastAssumptions: fa, setForecastAssumptions,
   } = useFinance();
   const reduced = useReducedMotion();
@@ -166,18 +167,22 @@ const ForecastPage: React.FC = () => {
 
   // Non-assumption inputs shared by both scenarios (the user's real position).
   const inputs = useMemo<ForecastInputs>(() => ({
-    currentGross, totalEquity, startingMortgage, mortgageRatePct,
+    currentGross, startingMortgage, mortgageRatePct,
     annualMortgagePayment, region, customTaxRatePct,
     ipsAnnualContribution: pension.ipsAnnualContribution,
     startYear: new Date().getFullYear(),
-    // Composition — used only to estimate the yearly wealth-tax drag.
+    // Balance sheet, split as the Dashboard's net worth: the home (and its
+    // mortgage, on the Dashboard's rate and term), financial assets, other debt.
     startHomeValue: myHouseValue(assets),
+    startHomeDebt: myHouseDebt(assets),
+    homeDebtTermYears: homeMortgageTermYears,
     homeOwnShare: shares.own,
     houseGrowthPct: houseGrowthRate,
     startShares: netInvestment,
     startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
-    nonMortgageDebt: totalDebt,
-  }), [currentGross, totalEquity, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, totalDebt]);
+    debts,
+    monthKey: today,
+  }), [currentGross, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution, assets, homeMortgageTermYears, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),
@@ -199,19 +204,23 @@ const ForecastPage: React.FC = () => {
   }, [projection, projectionB]);
 
   // Bear/base/bull bands (return ±3pp) so the projection doesn't read as a
-  // single certain line. The per-year contribution net of that year's wealth-tax
-  // charge is held the same across scenarios (it depends on income/savings/tax,
-  // not the return), so the band base still equals the netWorth line and only the
-  // growth rate varies.
+  // single certain line. The return only applies to the financial assets, so the
+  // bands vary that part and add back the year's home equity minus debt. The
+  // per-year contribution net of that year's wealth-tax charge is held the same
+  // across scenarios (it depends on income/savings/tax, not the return), so the
+  // band base still equals the netWorth line and only the growth rate varies.
   const BAND_DELTA_PP = 3;
   const chartData = useMemo(() => {
-    const bands = netWorthBands(totalEquity, projection.map(p => p.contribution - p.wealthTax), returnPct, BAND_DELTA_PP, years);
-    return projection.map((p, i) => ({
-      ...p,
-      band: [bands[i]?.bear ?? p.netWorth, bands[i]?.bull ?? p.netWorth] as [number, number],
-      netWorthB: projectionB ? (projectionB[i]?.netWorth ?? null) : null,
-    }));
-  }, [projection, projectionB, totalEquity, returnPct, years]);
+    const bands = netWorthBands(projection[0]?.financial ?? 0, projection.map(p => p.contribution - p.wealthTax), returnPct, BAND_DELTA_PP, years);
+    return projection.map((p, i) => {
+      const nonFinancial = p.netWorth - p.financial;
+      return {
+        ...p,
+        band: [(bands[i]?.bear ?? p.financial) + nonFinancial, (bands[i]?.bull ?? p.financial) + nonFinancial] as [number, number],
+        netWorthB: projectionB ? (projectionB[i]?.netWorth ?? null) : null,
+      };
+    });
+  }, [projection, projectionB, returnPct, years]);
 
   // Financial independence (4% rule): FI number = 25× annual essential spend.
   // The FI year is the first projected year whose real (today's-kroner) net worth
@@ -229,7 +238,8 @@ const ForecastPage: React.FC = () => {
     const annualEssential = Math.max(0, totalFixedExpenses - savingsContributions) * 12;
     const fiNumber = 25 * annualEssential;
     if (fiNumber <= 0) return null;
-    const progressPct = Math.max(0, Math.min(100, (totalEquity / fiNumber) * 100));
+    // Net worth (debt included), the same basis as the projection the FI year reads.
+    const progressPct = Math.max(0, Math.min(100, (netWorth / fiNumber) * 100));
     const hit = projection.find((p) => p.netWorthReal >= fiNumber);
     return {
       annualEssential,
@@ -238,7 +248,7 @@ const ForecastPage: React.FC = () => {
       fiYear: hit ? hit.yearLabel : null,
       yearsToFi: hit ? hit.yearIndex : null,
     };
-  }, [totalFixedExpenses, savingsContributions, totalEquity, projection]);
+  }, [totalFixedExpenses, savingsContributions, netWorth, projection]);
 
   // Prepay mortgage vs invest: the extra krone earns the after-tax mortgage rate
   // if it pays down deductible debt, or the expected return if invested. The
@@ -384,7 +394,7 @@ const ForecastPage: React.FC = () => {
             <FireStat
               label={t.forecast.fireProgress}
               value={`${fire.progressPct.toFixed(0)}%`}
-              sub={formatCurrency(Math.round(totalEquity))}
+              sub={formatCurrency(Math.round(netWorth))}
               color="var(--accent)"
             />
             <FireStat
