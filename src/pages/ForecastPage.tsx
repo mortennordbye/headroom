@@ -27,7 +27,7 @@ import { formatAxisInt } from '../lib/format';
 
 const ForecastPage: React.FC = () => {
   const {
-    t, totalFixedExpenses, salaries, jobs, income,
+    t, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
     formatCurrency, region, customTaxRatePct, pension,
     planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, existingMortgage,
     assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
