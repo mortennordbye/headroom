@@ -46,13 +46,18 @@ months.forEach((k, i) => {
 });
 
 // ── Net worth history: gentle growth + monthly volatility ────────
+// Built backwards from today's net worth, which is what the app computes from
+// the assets below (post-tax equity, no other debts); seed.test.js checks the
+// two agree, so update this when the seeded assets change.
+const NET_WORTH_NOW = 2_439_412;
+const netWorthSeries = [];
+let nw = NET_WORTH_NOW;
+for (let i = months.length - 1; i >= 0; i--) {
+  netWorthSeries[i] = Math.round(nw);
+  nw = nw / (1 + 0.008 + (rand() - 0.5) * 0.012);
+}
 const netWorthHistory = {};
-let nw = 1_950_000;
-months.forEach((k, i) => {
-  nw = nw * (1 + 0.008 + (rand() - 0.5) * 0.012);
-  netWorthHistory[k] = Math.round(nw);
-  if (i === months.length - 1) netWorthHistory[k] = 2_142_667; // pin
-});
+months.forEach((k, i) => { netWorthHistory[k] = netWorthSeries[i]; });
 
 // ── Fixed expenses (Norwegian household) ─────────────────────────
 const fixedExpenses = [
@@ -308,5 +313,5 @@ console.log(`  · ${months.length} months of income & net-worth history`);
 console.log(`  · ${fixedExpenses.length} fixed expenses`);
 console.log(`  · ${savings.length} savings`);
 console.log(`  · ${dailyTransactions.length} transactions in ${currentMonthKey}`);
-console.log(`  · current net equity: NOK ${netWorthHistory[currentMonthKey].toLocaleString('no-NO')}`);
+console.log(`  · current net worth: NOK ${NET_WORTH_NOW.toLocaleString('no-NO')}`);
 console.log(`  · ${jobs.length} jobs, ${salaries.length} salary changes, ${bonuses.length} bonuses, ${overtime.length} overtime, ${hoursSnapshots.length} hours snapshots`);
