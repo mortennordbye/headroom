@@ -10,6 +10,7 @@ import { excludedTransferIds } from '../src/lib/transferRules';
 import { calcAmortizationSchedule } from '../src/lib/calculations';
 import { calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../src/lib/norwegianTax';
 import { fullFixture } from './fixture';
+import { prepayVsInvestFor } from '../src/lib/prepayVsInvest';
 
 const MONTH = '2026-06';
 
@@ -152,6 +153,30 @@ describe('derive (pure, no server)', () => {
   it('what_if prepay_vs_invest returns a winner', () => {
     const r = derive.whatIfPrepayVsInvest(blob, 5000, 15, 7);
     expect(['invest', 'prepay', 'tie']).toContain(r.winner);
+  });
+
+  it('what_if prepay_vs_invest gives the Forecast page answer', () => {
+    // A first-time buyer in generic mode: the page uses the planned loan's rate,
+    // the flat rate as the deduction, and taxes gains at assets.taxRate.
+    const b: ExportPayload = {
+      ...blob,
+      housingMode: 'first_buyer',
+      region: 'generic',
+      customTaxRatePct: 30,
+      homeowner: { ...blob.homeowner!, rente: 4 },
+      loan: { ...blob.loan!, rente: 6 },
+      assets: { ...blob.assets, taxRate: 37.84 },
+    };
+    const page = prepayVsInvestFor({
+      housingMode: 'first_buyer',
+      homeownerRatePct: 4,
+      loanRatePct: 6,
+      region: 'generic',
+      customTaxRatePct: 30,
+      investGainsTaxPct: 37.84,
+    }, 5000, 7, 15);
+    expect(derive.whatIfPrepayVsInvest(b, 5000, 15, 7)).toEqual(page);
+    expect(page.afterTaxMortgageRatePct).toBeCloseTo(6 * 0.7, 6);
   });
 });
 
