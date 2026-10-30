@@ -53,6 +53,7 @@ import {
   TAX_YEAR,
 } from '../src/lib/norwegianTax';
 import { restskattEstimate } from '../src/lib/restskatt';
+import { grossFromNetAnnual } from '../src/lib/grossFromNet';
 import { cardNetForMonth } from '../src/lib/forskuddstrekk';
 import { feriepengerSurplus } from '../src/lib/feriepenger';
 import { otpAnnualContribution as otpContribution, projectPensionWealth } from '../src/lib/pension';
@@ -107,12 +108,19 @@ export function activeGrossAnnual(blob: ExportPayload, monthKey: string): number
 
 /**
  * Gross annual income. Mirrors FinanceContext `grossAnnualIncome`: active jobs'
- * salary + on-call, else the monthly-net `income` * 12.
+ * salary + on-call, else the gross that nets the monthly-net `income` * 12.
  */
 export function grossAnnualIncome(blob: ExportPayload, monthKey: string): number {
   const fromSalaries = activeGrossAnnual(blob, monthKey);
   if (fromSalaries > 0) return fromSalaries;
-  return (blob.income ?? 0) * 12; // known approximation: monthly-net annualised
+  return grossFromNetAnnual(
+    (blob.income ?? 0) * 12,
+    blob.region ?? 'no',
+    customTaxRate(blob),
+    blob.pension?.ipsAnnualContribution ?? 0,
+    annualMortgageInterest(blob),
+    bsuCredit(blob),
+  );
 }
 
 /** The mortgage owed today, as the user's share. Mirrors FinanceContext `existingMortgageNow`. */

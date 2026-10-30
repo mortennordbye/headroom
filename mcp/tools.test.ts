@@ -69,11 +69,19 @@ describe('derive (pure, no server)', () => {
     expect(o.debt.mortgage).toBe(2500000);
   });
 
-  it('overview: debt-to-income includes the mortgage, gross falls back to income*12', () => {
+  it('overview: debt-to-income includes the mortgage, gross falls back to the gross of income*12', () => {
     const o = derive.overview(blob, MONTH);
-    expect(o.grossAnnualIncome).toBe(720000);
-    const dti = calcDebtToIncome(2500000 + 240000, 720000);
+    // No salaries: the gross whose net is 60,000 * 12.
+    expect(o.grossAnnualIncome).toBe(1048264);
+    const dti = calcDebtToIncome(2500000 + 240000, 1048264);
     expect(o.debt.debtToIncome.ratio).toBeCloseTo(dti.ratio, 6);
+  });
+
+  it('without salaries, gross is the gross that nets the monthly income, not net * 12', () => {
+    const b = { ...fixture(), salaries: [], jobs: [], income: 40000 };
+    const gross = derive.grossAnnualIncome(b, MONTH);
+    expect(gross).toBeGreaterThan(480000);
+    expect(derive.taxFor(b, gross).netAnnual).toBeCloseTo(480000, -1);
   });
 
   it('overview: surfaces the profile and a compact goals summary with live progress', () => {
