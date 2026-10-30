@@ -13,6 +13,7 @@ import { myHouseDebt } from '../src/lib/ownership';
 import { calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../src/lib/norwegianTax';
 import { fullFixture } from './fixture';
 import { prepayVsInvestFor } from '../src/lib/prepayVsInvest';
+import { retirementIncomeInTodaysKroner } from '../src/lib/retirementIncome';
 
 const MONTH = '2026-06';
 
@@ -326,13 +327,40 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(p.otpAnnualContribution).toBe(36000); // 720000 * 5% default employer share
   });
 
-  it('pension: today\'s kroner discounts OTP/IPS, and equals the mixed figure at 0% inflation', () => {
+  it('pension: headline income is in today\'s kroner and equals the inTodaysKroner block', () => {
     const real = derive.pensionSummary(blob, MONTH, 3);
     const flat = derive.pensionSummary(blob, MONTH, 0);
     if (!real.configured || !flat.configured) throw new Error('expected a configured pension');
-    expect(real.inTodaysKroner.netMonthly).toBeLessThan(real.netPensionMonthly);
-    expect(real.inTodaysKroner.replacementRatePct).toBeLessThan(real.replacementRatePct);
-    expect(flat.inTodaysKroner.grossAnnual).toBe(flat.retirementIncomeAnnual.gross);
+    expect(real.netPensionMonthly).toBe(real.inTodaysKroner.netMonthly);
+    expect(real.replacementRatePct).toBe(real.inTodaysKroner.replacementRatePct);
+    expect(real.retirementIncomeAnnual.gross).toBe(real.inTodaysKroner.grossAnnual);
+    // Inflation discounts the OTP/IPS payouts, so the headline falls with it.
+    expect(real.netPensionMonthly).toBeLessThan(flat.netPensionMonthly);
+  });
+
+  it('pension: headline income matches the Pension page for the same blob', () => {
+    // The page's pipeline (PensionPage.tsx): the nominal OTP/IPS payout from the
+    // projected balance, through retirementIncomeInTodaysKroner, taxed as pension income.
+    const inflationPct = 3;
+    const b = fullFixture();
+    const p = derive.pensionSummary(b, MONTH, inflationPct);
+    if (!p.configured) throw new Error('expected a configured pension');
+    const last = p.projection[p.projection.length - 1];
+    const payoutYears = Math.max(1, p.settings.pensionPayoutYears || 10);
+    const income = retirementIncomeInTodaysKroner({
+      folketrygdAnnual: p.retirementIncomeAnnual.folketrygd,
+      afpAnnual: p.retirementIncomeAnnual.afp,
+      otpAnnualPayout: last.otp / payoutYears,
+      ipsAnnualPayout: last.ips / payoutYears,
+      yearsToRetire: p.yearsToRetire,
+      inflationPct,
+    });
+    const net = calcPensionIncomeTax(income.gross, TAX_YEAR).netAnnual;
+    const currentNet = calcTaxByRegion(p.pensionableIncome, 'no', 30, p.ipsAnnualContribution, 0).netAnnual;
+    expect(Math.abs(p.retirementIncomeAnnual.otp - income.otp)).toBeLessThanOrEqual(1);
+    expect(Math.abs(p.retirementIncomeAnnual.gross - income.gross)).toBeLessThanOrEqual(2);
+    expect(Math.abs(p.netPensionMonthly - net / 12)).toBeLessThanOrEqual(1);
+    expect(Math.abs(p.replacementRatePct - (net / currentNet) * 100)).toBeLessThanOrEqual(0.1);
   });
 
   it('pension: projects to retirement and taxes the payout as pension income', () => {

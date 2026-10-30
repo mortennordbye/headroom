@@ -672,9 +672,12 @@ const DEFAULT_PENSION: Pension = {
 };
 
 /**
- * Pension projection and retirement income. Mirrors PensionPage, including the
- * today's-kroner view: OTP/IPS payouts discounted by `inflationPct` (the app's
- * current CPI rate) over the years to retirement; folketrygd/AFP are already at today's G.
+ * Pension projection and retirement income. Mirrors PensionPage. All retirement
+ * income (`retirementIncomeAnnual`, `netPensionMonthly`, `replacementRatePct`, and
+ * the equal `inTodaysKroner` block) is in today's kroner: OTP/IPS payouts are
+ * discounted by `inflationPct` (the app's current CPI rate) over the years to
+ * retirement; folketrygd/AFP are already at today's G. Balances and `projection`
+ * stay nominal (kroner of each year).
  */
 export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey(), inflationPct = DEFAULT_INFLATION_PCT) {
   if (!blob.pension) return { configured: false as const };
@@ -720,22 +723,21 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
         retirementAge: p.retirementAge,
       })
     : 0;
-  const grossPensionAnnual = folketrygd.annual + afpAnnualAmount + otpAnnualPayout + ipsAnnualPayout;
-  const pensionTax = region === 'no'
-    ? calcPensionIncomeTax(grossPensionAnnual, TAX_YEAR)
-    : calcTaxByRegion(grossPensionAnnual, region, customRate);
-  const currentNetAnnual = calcTaxByRegion(pensionableIncome, region, customRate, ipsAnnualContribution, 0).netAnnual;
-  const grossTodayAnnual = retirementIncomeInTodaysKroner({
+  // Everything in today's kroner, as the Pension page: folketrygd and AFP are at
+  // today's G, and the OTP/IPS payouts are discounted by inflation to retirement.
+  const income = retirementIncomeInTodaysKroner({
     folketrygdAnnual: folketrygd.annual,
     afpAnnual: afpAnnualAmount,
     otpAnnualPayout,
     ipsAnnualPayout,
     yearsToRetire,
     inflationPct,
-  }).gross;
-  const netTodayAnnual = (region === 'no'
-    ? calcPensionIncomeTax(grossTodayAnnual, TAX_YEAR)
-    : calcTaxByRegion(grossTodayAnnual, region, customRate)).netAnnual;
+  });
+  const pensionTax = region === 'no'
+    ? calcPensionIncomeTax(income.gross, TAX_YEAR)
+    : calcTaxByRegion(income.gross, region, customRate);
+  const currentNetAnnual = calcTaxByRegion(pensionableIncome, region, customRate, ipsAnnualContribution, 0).netAnnual;
+  const replacementRatePct = currentNetAnnual > 0 ? Math.round((pensionTax.netAnnual / currentNetAnnual) * 1000) / 10 : 0;
   return {
     configured: true as const,
     settings: p,
@@ -748,23 +750,23 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
     balanceNow: Math.round(p.otpBalance + p.ipsBalance),
     balanceAtRetirement: Math.round(atRetirement?.total ?? p.otpBalance + p.ipsBalance),
     projection,
+    // Retirement income in today's kroner (OTP/IPS discounted at `inflationPct`).
     retirementIncomeAnnual: {
-      folketrygd: Math.round(folketrygd.annual),
-      afp: Math.round(afpAnnualAmount),
-      otp: Math.round(otpAnnualPayout),
-      ips: Math.round(ipsAnnualPayout),
-      gross: Math.round(grossPensionAnnual),
+      folketrygd: Math.round(income.folketrygd),
+      afp: Math.round(income.afp),
+      otp: Math.round(income.otp),
+      ips: Math.round(income.ips),
+      gross: Math.round(income.gross),
       net: Math.round(pensionTax.netAnnual),
     },
-    // Folketrygd/AFP in today's kroner, OTP/IPS in kroner of the retirement year.
     netPensionMonthly: Math.round(pensionTax.netAnnual / 12),
-    replacementRatePct: currentNetAnnual > 0 ? Math.round((pensionTax.netAnnual / currentNetAnnual) * 1000) / 10 : 0,
-    // Everything in today's kroner: the fair comparison with today's salary.
+    replacementRatePct,
+    // Kept for existing consumers: the same today's-kroner figures as above.
     inTodaysKroner: {
       inflationPct,
-      grossAnnual: Math.round(grossTodayAnnual),
-      netMonthly: Math.round(netTodayAnnual / 12),
-      replacementRatePct: currentNetAnnual > 0 ? Math.round((netTodayAnnual / currentNetAnnual) * 1000) / 10 : 0,
+      grossAnnual: Math.round(income.gross),
+      netMonthly: Math.round(pensionTax.netAnnual / 12),
+      replacementRatePct,
     },
   };
 }
