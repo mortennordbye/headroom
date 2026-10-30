@@ -5,7 +5,7 @@
 import type { Debt } from '../context/FinanceContext';
 import { calcTaxByRegion, calcWealthTax, type Region } from './norwegianTax';
 import { primaryHomeWealthValueOfShare } from './ownership';
-import { calcMortgageBalanceByYear } from './calculations';
+import { calcAmortizationSchedule, calcMortgageBalanceByYear } from './calculations';
 import { calcDebtBalanceByYear } from './debt';
 import type { CurrentMortgage } from './existingMortgage';
 
@@ -132,7 +132,11 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
     region, customTaxRatePct, ipsAnnualContribution, startYear,
     startHomeValue, houseGrowthPct, startShares, startOtherAssets,
     debts, monthKey, homeOwnShare = 1 } = inputs;
-  const mortgageRate = m.amortises ? m.ratePct / 100 : 0;
+  // The interest actually paid each year on the amortising schedule: the
+  // rentefradrag base, so year 0 matches the app's `annualMortgageInterest`.
+  const interestByYear = m.amortises && m.balance > 0 && m.ratePct > 0 && m.termYears > 0
+    ? calcAmortizationSchedule(m.balance, m.ratePct, m.termYears).map(y => y.interestPaid)
+    : [];
   const financialBase = Math.max(0, startShares + startOtherAssets);
   const sharesRatio = financialBase > 0 ? Math.max(0, startShares) / financialBase : 0;
   const homeDebtByYear = calcMortgageBalanceByYear(m.balance, m.ratePct, m.amortises ? m.termYears : 0, s.years);
@@ -147,9 +151,8 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
 
   for (let y = 0; y <= s.years; y++) {
     const homeDebt = homeDebtByYear[y] ?? 0;
-    // Interest on the balance entering this year — the year's rentefradrag base,
-    // which declines as the mortgage amortizes.
-    const mortgageInterest = (homeDebtByYear[Math.max(0, y - 1)] ?? 0) * mortgageRate;
+    // This year's rentefradrag base, declining as the mortgage amortizes.
+    const mortgageInterest = interestByYear[y] ?? 0;
     if (y > 0) {
       gross = gross * (1 + s.raisePct / 100);
       homeValue = homeValue * (1 + houseGrowthPct / 100);

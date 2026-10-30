@@ -1,5 +1,6 @@
 import { calcWealthTax, type Region } from './norwegianTax';
-import { primaryHomeWealthValueOfShare } from './ownership';
+import type { LoanData, TransitionData } from '../context/FinanceContext';
+import { mySaleProceeds, primaryHomeWealthValueOfShare } from './ownership';
 
 export function calcMonthlyPayment(principal: number, annualRate: number, years: number): number {
   const monthlyRate = annualRate / 100 / 12;
@@ -300,6 +301,34 @@ export function calcBridgeLoanCost(
   bridgeMonths: number
 ): number {
   return bridgeAmount * (bridgeLoanRate / 100 / 12) * bridgeMonths;
+}
+
+/**
+ * A transitioning user's sale and next purchase: the user's share of the sale
+ * plus the equity set aside, and the new loan the purchase still needs ("Nytt
+ * lånebehov" on the Bolig page; also the MCP's planned loan in this mode).
+ */
+export function calcTransitionNewLoan(
+  transition: Pick<TransitionData, 'currentHouseValue' | 'currentMortgageBalance' | 'agentFeePercent'
+    | 'documentFee' | 'otherSaleCosts' | 'bridgeLoanRate' | 'bridgeMonths'>,
+  loan: Pick<LoanData, 'kjoepesum' | 'egenkapital' | 'rente' | 'nedbetalingstid' | 'termingebyr'>,
+  shares: { own: number; debt: number },
+) {
+  const saleProceeds = calcNetSaleProceeds(
+    transition.currentHouseValue,
+    transition.currentMortgageBalance,
+    transition.agentFeePercent,
+    transition.documentFee,
+    transition.otherSaleCosts,
+  );
+  const bridgeCost = calcBridgeLoanCost(transition.currentMortgageBalance, transition.bridgeLoanRate, transition.bridgeMonths);
+  const mySale = mySaleProceeds(saleProceeds.netProceeds, transition.currentMortgageBalance, shares);
+  const equityFromSale = Math.max(0, mySale);
+  const totalEquityNew = equityFromSale + loan.egenkapital;
+  const newLoanNeeded = Math.max(0, loan.kjoepesum - totalEquityNew);
+  const newMonthlyPayment = calcMonthlyPayment(newLoanNeeded, loan.rente, loan.nedbetalingstid) + loan.termingebyr;
+  const totalTransactionCosts = saleProceeds.agentCost + transition.documentFee + transition.otherSaleCosts + bridgeCost;
+  return { saleProceeds, bridgeCost, mySale, equityFromSale, totalEquityNew, newLoanNeeded, newMonthlyPayment, totalTransactionCosts };
 }
 
 export interface HomeownerStatus {
