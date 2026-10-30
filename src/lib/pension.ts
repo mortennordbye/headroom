@@ -8,12 +8,17 @@ import { folketrygdParamsFor } from './folketrygd';
 /** OTP contributions are calculated on pay up to 12G (innskuddspensjonsloven § 5-2). */
 export const OTP_CONTRIBUTION_CAP_G = 12;
 
+/** The pay (kr) above which no OTP contribution is due: 12G for `year`. */
+export function otpContributionCap(year: number): number {
+  return OTP_CONTRIBUTION_CAP_G * folketrygdParamsFor(year).grunnbelop;
+}
+
 /**
  * Annual OTP contribution (employer + employee) at `totalPct` percent of
  * pensionable income, with the base capped at 12G for `year`.
  */
 export function otpAnnualContribution(pensionableIncome: number, totalPct: number, year: number): number {
-  const base = Math.min(Math.max(0, pensionableIncome), OTP_CONTRIBUTION_CAP_G * folketrygdParamsFor(year).grunnbelop);
+  const base = Math.min(Math.max(0, pensionableIncome), otpContributionCap(year));
   return base * totalPct / 100;
 }
 
