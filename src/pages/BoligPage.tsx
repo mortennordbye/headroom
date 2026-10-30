@@ -931,8 +931,20 @@ const BoligPage: React.FC = () => {
                   value={fmtNum(transition.currentHouseValue)}
                   onEdit={() => editTransition(t.currentHouseValue, 'currentHouseValue', transition.currentHouseValue)} />
                 <LoanRow label={t.currentMortgageBalance}
+                  notes={lp.currentLoanNote}
                   value={fmtNum(transition.currentMortgageBalance)}
                   onEdit={() => editTransition(t.currentMortgageBalance, 'currentMortgageBalance', transition.currentMortgageBalance)} />
+                {/* The current loan's rate, term and balance date (the homeowner
+                    slice): projections pay it down until the mode is switched. */}
+                <LoanRow label={lp.nominalRate}
+                  value={fmtPct(homeowner.rente)}
+                  onEdit={() => editHomeowner(lp.rateEditTitle, 'rente', homeowner.rente)} />
+                <LoanRow label={t.yearsRemaining}
+                  value={termValue}
+                  onEdit={editHomeownerTerm} />
+                <LoanRow label={lp.balanceAsOf}
+                  value={homeowner.currentMortgageBalanceAsOf ? fmtMonthKey(homeowner.currentMortgageBalanceAsOf) : '–'}
+                  onEdit={() => editHomeownerMonth(lp.balanceAsOf, 'currentMortgageBalanceAsOf', homeowner.currentMortgageBalanceAsOf ?? '')} />
                 <LoanRow label={t.agentFeePercent}
                   value={fmtPct(transition.agentFeePercent)}
                   onEdit={() => editTransition(t.agentFeePercent, 'agentFeePercent', transition.agentFeePercent)} />
