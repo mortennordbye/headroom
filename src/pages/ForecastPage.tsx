@@ -441,7 +441,7 @@ const ForecastPage: React.FC = () => {
             <Scale size={14} strokeWidth={2} className="text-[var(--text-2)]" />
             <SectionLabel>{t.forecast.prepayTitle}</SectionLabel>
           </div>
-          <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.prepayDesc}</p>
+          <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>{t.forecast.prepayDesc.replace('{rate}', String(Math.round(prepay.interestDeductionRatePct * 10) / 10))}</p>
           <div className="max-w-xs">
             <SliderInput label={t.forecast.prepayExtra} value={extraMonthly} onChange={(v) => setA({ extraMonthly: v })} min={0} max={20000} step={500} suffix=" kr" />
           </div>
@@ -455,7 +455,7 @@ const ForecastPage: React.FC = () => {
             <FireStat
               label={t.forecast.prepayLegInvest}
               value={formatCurrency(Math.round(prepay.investFutureValue))}
-              sub={`${prepay.afterTaxReturnPct.toFixed(1)}% · ${t.forecast.prepayReturnSub}`}
+              sub={`${prepay.investReturnPct.toFixed(1)}% · ${t.forecast.prepayReturnSub}`}
               color={prepay.winner === 'invest' ? 'var(--accent)' : undefined}
             />
           </div>
