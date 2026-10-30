@@ -228,7 +228,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Pension',
       description:
-        'OTP/IPS balances and contributions, year-by-year projection to retirement, and estimated retirement income (folketrygd, AFP, OTP, IPS) gross and after tax, with the replacement rate vs today\'s net salary. The top-level income mixes today\'s kroner (folketrygd, AFP) with retirement-year kroner (OTP/IPS), as the Pension page does; inTodaysKroner discounts OTP/IPS by the current CPI rate and is the fair comparison with today\'s salary.',
+        'OTP/IPS balances and contributions, year-by-year projection to retirement, and estimated retirement income (folketrygd, AFP, OTP, IPS) gross and after tax, with the replacement rate vs today\'s net salary. All retirement income (retirementIncomeAnnual, netPensionMonthly, replacementRatePct) is in today\'s kroner, as the Pension page shows it: OTP/IPS payouts are discounted by the current CPI rate, folketrygd and AFP are at today\'s G. inTodaysKroner repeats the same figures. Balances and the projection are nominal.',
       inputSchema: {},
       annotations: { title: 'Pension', ...readOnly },
     },
