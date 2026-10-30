@@ -25,12 +25,13 @@ import { currentMonthKey } from '../lib/date';
 import { latestInflationPct } from '../lib/inflation';
 import { formatAxisInt } from '../lib/format';
 import { paymentTermMonths } from '../lib/loanTerm';
+import { grossFromNetAnnual } from '../lib/grossFromNet';
 
 const ForecastPage: React.FC = () => {
   const {
     t, totalEquity, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
     formatCurrency, region, customTaxRatePct, pension,
-    planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest,
+    planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, bsuTaxCredit,
     assets, houseGrowthRate, netInvestment, netCrypto, totalDebt,
     forecastAssumptions: fa, setForecastAssumptions,
   } = useFinance();
@@ -41,10 +42,11 @@ const ForecastPage: React.FC = () => {
   const today = currentMonthKey();
   // Total current gross = base + on-call across all active jobs — the same
   // figure the Salary and Budget pages use, not just one job's base salary.
+  // Without salaries, the gross that nets the monthly-net `income` (as the context).
   const currentGross = useMemo(() => {
     const active = calcActiveGrossAnnual(salaries, jobs, today);
-    return active > 0 ? active : income * 12;
-  }, [salaries, jobs, income, today]);
+    return active > 0 ? active : grossFromNetAnnual(income * 12, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit);
+  }, [salaries, jobs, income, today, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit]);
 
   // Retirement readiness: years to retirement + projected pension wealth.
   const retirement = useMemo(() => {

@@ -37,6 +37,7 @@ import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { effectiveRemainingMonths, paymentTermMonths, stampLegacyTerm } from '../lib/loanTerm';
+import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
   computeAutomationPostings,
   type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
@@ -1983,13 +1984,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [derivedNetMonthlyFor, monthKey],
   );
 
-  // Gross annual employment income active this month (before tax) — falls back to
-  // the legacy static `income` annualised when no salaries have been entered.
+  // Gross annual employment income active this month (before tax). Without
+  // salaries, the gross whose net (same deductions) is the static monthly-net
+  // `income` annualised.
   const grossAnnualIncome = useMemo(() => {
     const fromSalaries = calcActiveGrossAnnual(salaries, jobs, monthKey);
     if (fromSalaries > 0) return fromSalaries;
-    return income * 12;
-  }, [salaries, jobs, monthKey, income]);
+    return grossFromNetAnnual(income * 12, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit);
+  }, [salaries, jobs, monthKey, income, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit]);
 
   const isMonthlyIncomeOverridden = monthlyIncomes[monthKey] !== undefined;
 
