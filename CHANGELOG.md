@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.8.2](https://github.com/mortennordbye/headroom/compare/v3.8.1...v3.8.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* anchor the mortgage paydown plan at the first owner-mode month ([#261](https://github.com/mortennordbye/headroom/issues/261)) ([529e211](https://github.com/mortennordbye/headroom/commit/529e2117edc337b93ff4178d5312f49daffa630a))
+* **bsu:** say that lifetime room is measured against the balance ([#247](https://github.com/mortennordbye/headroom/issues/247)) ([c656495](https://github.com/mortennordbye/headroom/commit/c6564959628da98616728a4f951365f541556ebd))
+* **employer-cost:** cap the employer pension at 12G ([#253](https://github.com/mortennordbye/headroom/issues/253)) ([3fe0b4d](https://github.com/mortennordbye/headroom/commit/3fe0b4db844328886e66b5ebac4f2764210f1100))
+* **employer-cost:** count only holiday pay above ferietrekk as extra cost ([#243](https://github.com/mortennordbye/headroom/issues/243)) ([51c5a6c](https://github.com/mortennordbye/headroom/commit/51c5a6cc575566113c2d07080befd2d322468b34))
+* end the seed's net-worth history at the computed net worth ([#263](https://github.com/mortennordbye/headroom/issues/263)) ([91398c2](https://github.com/mortennordbye/headroom/commit/91398c280963ae25c34f409eb847bac1d22e28db))
+* **forecast:** amortise home debt at the Dashboard's rate and term ([#251](https://github.com/mortennordbye/headroom/issues/251)) ([f395d1d](https://github.com/mortennordbye/headroom/commit/f395d1d80bc5d4e49e94b0670cfdbdc3e4af1070))
+* **forecast:** make prepay vs invest agree between the page and MCP ([#248](https://github.com/mortennordbye/headroom/issues/248)) ([13f4a4d](https://github.com/mortennordbye/headroom/commit/13f4a4ded25fc6cc1c2a5125b7bc1171fb4e1914))
+* **forecast:** project home equity and non-mortgage debt like the dashboard ([#245](https://github.com/mortennordbye/headroom/issues/245)) ([e96487d](https://github.com/mortennordbye/headroom/commit/e96487da059e84e0a0cd6fdff1deb86024d54e70))
+* **forecast:** tax prepay-vs-invest gains once on sale, not yearly ([#252](https://github.com/mortennordbye/headroom/issues/252)) ([a68cb4f](https://github.com/mortennordbye/headroom/commit/a68cb4fe7826d5b95bf28d5c074a733b1b9a835f))
+* **income:** derive gross from net income when there are no salaries ([#246](https://github.com/mortennordbye/headroom/issues/246)) ([1e76da1](https://github.com/mortennordbye/headroom/commit/1e76da1c451909267e3d74b7ad59083e6d1d42ee))
+* **mcp:** report pension income in today's kroner, as the Pension page ([#255](https://github.com/mortennordbye/headroom/issues/255)) ([bf6be7f](https://github.com/mortennordbye/headroom/commit/bf6be7f08c20d71e1c3ecd677f18774df5ff672b))
+* never let the mortgage placeholder overwrite a real balance ([#260](https://github.com/mortennordbye/headroom/issues/260)) ([8af59ce](https://github.com/mortennordbye/headroom/commit/8af59ce0d5a7000554173807ef9562f2f9ccb737))
+* one transition loan need and one rentefradrag base across app and MCP ([#262](https://github.com/mortennordbye/headroom/issues/262)) ([4ddf11e](https://github.com/mortennordbye/headroom/commit/4ddf11e7ca8ed2ae239ad123619b4c6b60fe3dcd))
+* **pension:** cap the OTP contribution base at 12G ([#240](https://github.com/mortennordbye/headroom/issues/240)) ([9bd72e3](https://github.com/mortennordbye/headroom/commit/9bd72e32d8177fe89bdf8914cec5139602a5554b))
+* **pension:** show retirement income in today's kroner throughout ([#244](https://github.com/mortennordbye/headroom/issues/244)) ([b7addee](https://github.com/mortennordbye/headroom/commit/b7addee54c9c5ccbe074736c587653e61917aca8))
+* read the current mortgage through one resolver in every projection ([#258](https://github.com/mortennordbye/headroom/issues/258)) ([a3901b6](https://github.com/mortennordbye/headroom/commit/a3901b61e6ae170288e05d3011a5cbde420d8315))
+* reconcile the three mortgage balances on load and on a mode switch ([#257](https://github.com/mortennordbye/headroom/issues/257)) ([24ce1f7](https://github.com/mortennordbye/headroom/commit/24ce1f7c85b2e4561f6c19a0a36d2daa6f3a7ca2))
+* **salary:** narrow the job-change rule and guard gross-from-net at 100 % ([#254](https://github.com/mortennordbye/headroom/issues/254)) ([49e3f2c](https://github.com/mortennordbye/headroom/commit/49e3f2c038ff5205399755716621a144bcfd23e8))
+* **salary:** stop counting both jobs in the month of a job change ([#239](https://github.com/mortennordbye/headroom/issues/239)) ([9f3969c](https://github.com/mortennordbye/headroom/commit/9f3969ce62636e169fd681c38a30f813fd9d9b4a))
+* show and edit the current loan's rate and term while transitioning ([#259](https://github.com/mortennordbye/headroom/issues/259)) ([231fad5](https://github.com/mortennordbye/headroom/commit/231fad53dffa6b5c9976578d06a8b7d6e80c5f08))
+* **tax:** deduct mortgage interest only on a loan the user owes ([#242](https://github.com/mortennordbye/headroom/issues/242)) ([0e86eb5](https://github.com/mortennordbye/headroom/commit/0e86eb529e54d5c63aba6da147809a2d3a49ff98))
+* **tax:** use the revised 2026 pension income tax credit ([#241](https://github.com/mortennordbye/headroom/issues/241)) ([7b5cc8e](https://github.com/mortennordbye/headroom/commit/7b5cc8e998115c2c9696012e96053c6919e4a8dc))
+
 ## [3.8.1](https://github.com/mortennordbye/headroom/compare/v3.8.0...v3.8.1) (2026-10-29)
 
 
