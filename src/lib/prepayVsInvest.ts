@@ -14,6 +14,9 @@
 // rate vs expected return), not a full cash-flow model: it ignores mortgage
 // payoff timing and assumes the extra is put to work for the whole horizon.
 
+import type { HousingMode } from '../context/FinanceContext';
+import { RENTEFRADRAG_RATE_PCT } from './norwegianTax';
+
 export interface PrepayVsInvest {
   extraMonthly: number;
   months: number;
@@ -72,4 +75,48 @@ export function prepayVsInvest(
     advantage: Math.abs(diff),
     winner,
   };
+}
+
+/** The mortgage rate for the housing mode: the current mortgage for a
+ * homeowner, the planned loan otherwise. */
+function mortgageRatePctFor(
+  housingMode: HousingMode,
+  homeownerRatePct: number | undefined,
+  loanRatePct: number | undefined,
+): number {
+  return (housingMode === 'homeowner' ? homeownerRatePct : loanRatePct) ?? 5;
+}
+
+export interface PrepayVsInvestSettings {
+  housingMode: HousingMode;
+  homeownerRatePct: number | undefined;
+  loanRatePct: number | undefined;
+  region: string;
+  /** Flat rate used for the interest deduction when region is 'generic'. */
+  customTaxRatePct: number;
+  /** Tax on investment gains (assets.taxRate). */
+  investGainsTaxPct: number;
+}
+
+/**
+ * Prepay vs invest from the user's settings, shared by the Forecast page and
+ * the MCP what-if tool so both give the same answer. The interest deduction is
+ * 22% in Norway or the flat rate in generic mode, and the investment side is
+ * taxed at the gains rate so both legs are compared after tax.
+ */
+export function prepayVsInvestFor(
+  s: PrepayVsInvestSettings,
+  extraMonthly: number,
+  investReturnPct: number,
+  years: number,
+): PrepayVsInvest {
+  const deductionRatePct = s.region === 'no' ? RENTEFRADRAG_RATE_PCT : s.customTaxRatePct;
+  return prepayVsInvest(
+    extraMonthly,
+    mortgageRatePctFor(s.housingMode, s.homeownerRatePct, s.loanRatePct),
+    investReturnPct,
+    years,
+    deductionRatePct,
+    s.investGainsTaxPct,
+  );
 }

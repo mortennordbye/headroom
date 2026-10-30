@@ -14,7 +14,7 @@ import { AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcPensionIncomeTax, IPS_MAX_DEDUCTION, TAX_YEAR } from '../lib/norwegianTax';
 import { projectBeholdning, estimateBeholdning, annualFolketrygdPension } from '../lib/folketrygd';
 import { estimateAfpGrunnlag, annualAfp } from '../lib/afp';
-import { prepayVsInvest } from '../lib/prepayVsInvest';
+import { prepayVsInvestFor } from '../lib/prepayVsInvest';
 import { netWorthBands } from '../lib/scenarioBands';
 import { projectForecast, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
 import { calcMonthlyPayment } from '../lib/calculations';
@@ -27,7 +27,7 @@ import { formatAxisInt } from '../lib/format';
 
 const ForecastPage: React.FC = () => {
   const {
-    t, totalFixedExpenses, salaries, jobs, income,
+    t, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
     formatCurrency, region, customTaxRatePct, pension,
     planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, existingMortgage,
     assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
@@ -246,14 +246,20 @@ const ForecastPage: React.FC = () => {
   }, [totalFixedExpenses, savingsContributions, netWorth, projection]);
 
   // Prepay mortgage vs invest: the extra krone earns the after-tax mortgage rate
-  // if it pays down deductible debt, or the expected return if invested. The
-  // deduction rate is 22% (alminnelig inntekt) in Norway, or the user's flat
-  // rate in generic mode. Only shown when there's actually a mortgage to prepay.
+  // if it pays down deductible debt, or the after-tax expected return if
+  // invested. Shared with the MCP what-if tool. Only shown when there's
+  // actually a mortgage to prepay.
   const prepay = useMemo(() => {
     if (startingMortgage <= 0) return null;
-    const deductionRate = region === 'no' ? 22 : customTaxRatePct;
-    return prepayVsInvest(extraMonthly, mortgageRatePct, returnPct, years, deductionRate);
-  }, [startingMortgage, region, customTaxRatePct, extraMonthly, mortgageRatePct, returnPct, years]);
+    return prepayVsInvestFor({
+      housingMode,
+      homeownerRatePct: homeowner.rente,
+      loanRatePct: loan.rente,
+      region,
+      customTaxRatePct,
+      investGainsTaxPct: assets.taxRate,
+    }, extraMonthly, returnPct, years);
+  }, [startingMortgage, housingMode, homeowner.rente, loan.rente, region, customTaxRatePct, assets.taxRate, extraMonthly, returnPct, years]);
 
   return (
     <div className="space-y-6 md:space-y-7">
@@ -436,7 +442,7 @@ const ForecastPage: React.FC = () => {
             <FireStat
               label={t.forecast.prepayLegInvest}
               value={formatCurrency(Math.round(prepay.investFutureValue))}
-              sub={`${returnPct}% · ${t.forecast.prepayReturnSub}`}
+              sub={`${prepay.afterTaxReturnPct.toFixed(1)}% · ${t.forecast.prepayReturnSub}`}
               color={prepay.winner === 'invest' ? 'var(--accent)' : undefined}
             />
           </div>

@@ -32,7 +32,7 @@ import { savingsRateStatus } from '../src/lib/savingsRate';
 import { spendByCategory, categoryMoM, budgetProgress } from '../src/lib/categoryStats';
 import { topSpendInsight } from '../src/lib/insights';
 import { detectRecurring } from '../src/lib/recurring';
-import { prepayVsInvest } from '../src/lib/prepayVsInvest';
+import { prepayVsInvestFor, type PrepayVsInvestSettings } from '../src/lib/prepayVsInvest';
 import { computeHistoryInsights } from '../src/lib/historyInsights';
 import { goalPace } from '../src/lib/goalPace';
 import { activeJobBreakdown } from '../src/lib/salary';
@@ -560,15 +560,26 @@ export function recommendations(blob: ExportPayload, monthKey = currentMonthKey(
 
 // ---- what-if scenarios ----------------------------------------------------
 
+/** The settings the Forecast page passes to prepayVsInvestFor, read from the blob. */
+export function prepayVsInvestSettings(blob: ExportPayload): PrepayVsInvestSettings {
+  return {
+    housingMode: blob.housingMode ?? 'first_buyer',
+    homeownerRatePct: blob.homeowner?.rente,
+    loanRatePct: blob.loan?.rente,
+    region: blob.region ?? 'no',
+    customTaxRatePct: customTaxRate(blob),
+    investGainsTaxPct: blob.assets.taxRate ?? 0,
+  };
+}
+
 export function whatIfPrepayVsInvest(
   blob: ExportPayload,
   extraMonthly: number,
   years: number,
   investReturnPct?: number,
 ) {
-  const mortgageRate = blob.homeowner?.rente ?? blob.loan?.rente ?? 0;
   const returnPct = investReturnPct ?? blob.growthReturnRate ?? 7;
-  return prepayVsInvest(extraMonthly, mortgageRate, returnPct, years, RENTEFRADRAG_RATE_PCT, blob.assets.taxRate ?? 0);
+  return prepayVsInvestFor(prepayVsInvestSettings(blob), extraMonthly, returnPct, years);
 }
 
 export function whatIfExtraDebtPayment(
