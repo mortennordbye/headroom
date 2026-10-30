@@ -117,7 +117,7 @@ describe('buildManualSnapshot', () => {
   };
 
   it('overlays balances and mirrors the house across all three slices', () => {
-    const s = buildManualSnapshot(base, balances);
+    const s = buildManualSnapshot(base, balances, '2026-03');
     expect(s.assets.houseDebt).toBe(2800000);
     expect(s.homeowner.currentMortgageBalance).toBe(2800000);
     expect(s.transition.currentMortgageBalance).toBe(2800000);
@@ -130,19 +130,24 @@ describe('buildManualSnapshot', () => {
 
   it("writes the month's co-owners when given, else keeps base's", () => {
     const rows = [{ id: 'c', name: 'C', ownershipPct: 50 }];
-    expect(buildManualSnapshot(base, balances, rows).assets.coOwners).toEqual(rows);
-    expect(buildManualSnapshot({ ...base, assets: { ...base.assets, coOwners: rows } }, balances).assets.coOwners).toEqual(rows);
-    expect(buildManualSnapshot(base, balances).assets.coOwners).toBeUndefined();
+    expect(buildManualSnapshot(base, balances, '2026-03', rows).assets.coOwners).toEqual(rows);
+    expect(buildManualSnapshot({ ...base, assets: { ...base.assets, coOwners: rows } }, balances, '2026-03').assets.coOwners).toEqual(rows);
+    expect(buildManualSnapshot(base, balances, '2026-03').assets.coOwners).toBeUndefined();
+  });
+
+  it('stamps the mortgage balance as of the snapshot month', () => {
+    const s = buildManualSnapshot({ ...base, homeowner: { ...base.homeowner, currentMortgageBalanceAsOf: '2026-09' } }, balances, '2026-03');
+    expect(s.homeowner.currentMortgageBalanceAsOf).toBe('2026-03');
   });
 
   it('carries loan params and fixed expenses over from base untouched', () => {
-    const s = buildManualSnapshot(base, balances);
+    const s = buildManualSnapshot(base, balances, '2026-03');
     expect(s.loan).toEqual(base.loan);
     expect(s.fixedExpenses).toEqual(base.fixedExpenses);
   });
 
   it('produces a snapshot whose net worth matches the entered balances', () => {
-    const s = buildManualSnapshot(base, balances);
+    const s = buildManualSnapshot(base, balances, '2026-03');
     // equity: portfolio 300000 + crypto 40000 + bsu 1000 + savings 5000 + buffer 2000
     //         + (house 4000000 − debt 2800000) = 1548000; minus debt 12000
     expect(netWorthFromSnapshot(s)).toBe(1548000 - 12000);

@@ -8,6 +8,8 @@
 
 import type { ExportPayload, InflationPoint } from '../src/context/FinanceContext';
 import { partitionSavings, mergeStoredSavings } from '../src/lib/savingsMigration';
+import { reconcileMortgageSlices } from '../src/lib/mortgageSlices';
+import { currentMonthKey } from '../src/lib/date';
 
 const BASE_URL = (process.env.HEADROOM_URL || 'http://localhost:8080').replace(/\/$/, '');
 const PASSWORD = process.env.HEADROOM_PASSWORD || '';
@@ -53,12 +55,22 @@ export interface DataSnapshot {
   rev: number;
 }
 
-/** GET the whole finance blob plus its current rev. Logs in once if auth is on. */
-export async function getData(retryOnAuth = true): Promise<DataSnapshot> {
+/**
+ * The whole finance blob plus its current rev, for reading: the mortgage slices
+ * are reconciled as the app does on load (mortgageSlices.ts), so every tool sees
+ * the balance the app shows. Read-only: the reconciled copy is never written back.
+ */
+export async function getData(): Promise<DataSnapshot> {
+  const { blob, rev } = await fetchData();
+  return { blob: reconcileMortgageSlices(blob, currentMonthKey()), rev };
+}
+
+/** GET the stored blob plus its current rev. Logs in once if auth is on. */
+async function fetchData(retryOnAuth = true): Promise<DataSnapshot> {
   const res = await fetch(`${BASE_URL}/api/data`, { headers: authHeaders() });
   if (res.status === 401 && retryOnAuth) {
     await login();
-    return getData(false);
+    return fetchData(false);
   }
   if (!res.ok) throw new Error(`GET /api/data failed (${res.status})`);
   const rev = Number(res.headers.get('x-data-rev') ?? 0);
@@ -215,7 +227,9 @@ export async function applyMutation(
   label: () => string = () => 'mcp write',
 ): Promise<{ rev: number; unchanged?: boolean }> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { blob, rev } = await getData();
+    // The stored blob, not getData's reconciled view: a write changes only what
+    // the mutation touches.
+    const { blob, rev } = await fetchData();
     const next = mutate(structuredClone(blob));
     // Nothing changed (e.g. the value was already set): skip the save, so a
     // repeated write doesn't add an empty revision to the history.

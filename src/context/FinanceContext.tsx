@@ -37,6 +37,7 @@ import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { effectiveRemainingMonths, stampLegacyTerm } from '../lib/loanTerm';
+import { reconcileMortgageSlices, PLACEHOLDER_MORTGAGE_BALANCE } from '../lib/mortgageSlices';
 import { existingMortgage, annualMortgageInterest as yearOneMortgageInterest, type ExistingMortgage } from '../lib/existingMortgage';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
@@ -644,7 +645,7 @@ const DEFAULT_ASSETS: Assets = {
 };
 
 const DEFAULT_HOMEOWNER: HomeownerData = {
-  currentMortgageBalance: 3000000,
+  currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE,
   originalLoanAmount: 3500000,
   rente: 5.5,
   nedbetalingstid: 25,
@@ -653,7 +654,7 @@ const DEFAULT_HOMEOWNER: HomeownerData = {
 
 const DEFAULT_TRANSITION: TransitionData = {
   currentHouseValue: 4500000,
-  currentMortgageBalance: 3000000,
+  currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE,
   agentFeePercent: 3,
   documentFee: 7500,
   otherSaleCosts: 0,
@@ -1444,7 +1445,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // the current value. Group-B fields apply only when present in both paths.
   const applyPayload = useCallback((raw: Partial<ExportPayload> | null, resetMissing: boolean) => {
     if (raw == null) return; // first-run (null DB) / no snapshot → keep current state
-    const data = sanitizePayload(raw, {
+    const sanitized = sanitizePayload(raw, {
       assets: DEFAULT_ASSETS, loan: DEFAULT_LOAN, pension: DEFAULT_PENSION,
       homeowner: DEFAULT_HOMEOWNER, transition: DEFAULT_TRANSITION,
       employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG, billingConfig: DEFAULT_BILLING_CONFIG,
@@ -1484,8 +1485,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       transferHintDismissed: setTransferHintDismissed, automationEnabled: setAutomationEnabled,
       projectionIncludeGrowth: setProjectionIncludeGrowth,
     };
-    // A term saved before the countdown existed counts down from now. Load path only, so registry reads stay clock-free; stored
-    // snapshots are left alone (a missing stamp there means "as recorded").
+    // Load path only, so registry reads stay clock-free; stored snapshots are left
+    // alone (a missing stamp there means "as recorded"). First bring the three
+    // mortgage slices to one balance (mortgageSlices.ts), before the legacy stamp
+    // below would make an untouched placeholder look written.
+    const data = resetMissing ? reconcileMortgageSlices(sanitized, currentMonthKey()) : sanitized;
+    // A term saved before the countdown existed counts down from now.
     if (resetMissing && data.homeowner) data.homeowner = stampLegacyTerm(data.homeowner, currentMonthKey());
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
@@ -2510,16 +2515,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // User-facing housing-mode switch. Entering homeowner mode reconciles any
-  // pre-existing drift by treating currentMortgageBalance (the actively-
-  // maintained real mortgage) as canonical for net worth. Internal load paths
+  // User-facing housing-mode switch. Brings the three mortgage slices to one
+  // balance under the new mode, as a load does: an owner slice that was written
+  // wins, while one still holding the untouched placeholder takes houseDebt
+  // instead (no phantom 3 MNOK for a first buyer switching). Internal load paths
   // use the raw setHousingMode so they don't trigger this side effect.
   const changeHousingMode = useCallback((mode: HousingMode) => {
     setHousingMode(mode);
-    if (mode === 'homeowner') {
-      setAssets(prev => ({ ...prev, houseDebt: homeowner.currentMortgageBalance }));
-    }
-  }, [homeowner]);
+    const next = reconcileMortgageSlices({ housingMode: mode, assets, homeowner, transition }, currentMonthKey());
+    if (next.assets !== assets) setAssets(next.assets);
+    if (next.homeowner !== homeowner) setHomeowner(next.homeowner);
+    if (next.transition !== transition) setTransition(next.transition);
+  }, [assets, homeowner, transition]);
 
   // useState setters are stable, so each CRUD bundle is built once.
   const jobsCrud = useMemo(() => makeCrud<JobEntry>(setJobs, 'job'), []);
