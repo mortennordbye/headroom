@@ -788,6 +788,23 @@ function activeMortgage(blob: ExportPayload, monthKey: string) {
   };
 }
 
+/**
+ * The rate and remaining term the Dashboard and Assets page amortise the home's
+ * mortgage on. Mirrors FinanceContext `mortgageRate` / `mortgageTermYears`: the
+ * homeowner loan in homeowner mode, the Loan page's loan otherwise, with the
+ * app's defaults (5.5 %, 25 years) for fields an old blob lacks.
+ */
+function homeDebtProjection(blob: ExportPayload, monthKey: string) {
+  if ((blob.housingMode ?? 'first_buyer') === 'homeowner') {
+    const h = blob.homeowner;
+    return {
+      ratePct: h?.rente ?? 5.5,
+      termYears: effectiveRemainingMonths({ ...h, nedbetalingstid: h?.nedbetalingstid ?? 25 }, monthKey) / 12,
+    };
+  }
+  return { ratePct: blob.loan?.rente ?? 5.5, termYears: blob.loan?.nedbetalingstid ?? 25 };
+}
+
 export interface ForecastOverrides {
   years?: number;
   raisePct?: number;
@@ -835,6 +852,7 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
   const eq = computeEquityBreakdown(blob.assets, monthKey);
   const shares = ownershipShares(blob.assets, monthKey);
   const startingMortgage = m.balance;
+  const homeDebt = homeDebtProjection(blob, monthKey);
   const rows = projectForecast(
     {
       currentGross,
@@ -847,7 +865,8 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       startYear: yearOf(monthKey),
       startHomeValue: myHouseValue(blob.assets, monthKey),
       startHomeDebt: myHouseDebt(blob.assets, monthKey),
-      homeDebtTermYears: activeMortgage(blob, monthKey).remainingMonths / 12,
+      homeDebtRatePct: homeDebt.ratePct,
+      homeDebtTermYears: homeDebt.termYears,
       homeOwnShare: shares.own,
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,

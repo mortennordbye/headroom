@@ -33,7 +33,7 @@ const ForecastPage: React.FC = () => {
     formatCurrency, region, customTaxRatePct, pension,
     planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, existingMortgage, bsuTaxCredit,
     assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
-    mortgageTermYears: homeMortgageTermYears,
+    mortgageRate: homeMortgageRatePct, mortgageTermYears: homeMortgageTermYears,
     forecastAssumptions: fa, setForecastAssumptions,
   } = useFinance();
   const reduced = useReducedMotion();
@@ -182,6 +182,7 @@ const ForecastPage: React.FC = () => {
     // mortgage, on the Dashboard's rate and term), financial assets, other debt.
     startHomeValue: myHouseValue(assets),
     startHomeDebt: myHouseDebt(assets),
+    homeDebtRatePct: homeMortgageRatePct,
     homeDebtTermYears: homeMortgageTermYears,
     homeOwnShare: shares.own,
     houseGrowthPct: houseGrowthRate,
@@ -189,7 +190,7 @@ const ForecastPage: React.FC = () => {
     startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
     debts,
     monthKey: today,
-  }), [currentGross, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution, assets, homeMortgageTermYears, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
+  }), [currentGross, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution, assets, homeMortgageRatePct, homeMortgageTermYears, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),

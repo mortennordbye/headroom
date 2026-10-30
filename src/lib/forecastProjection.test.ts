@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { projectForecast, type ForecastInputs, type EffectiveScenario } from './forecastProjection';
 import { calcTaxByRegion } from './norwegianTax';
-import { calcHouseEquityByYear } from './calculations';
+import { calcHouseEquityByYear, calcMortgageBalanceByYear } from './calculations';
 
 const inputs: ForecastInputs = {
   currentGross: 600000,
@@ -14,6 +14,7 @@ const inputs: ForecastInputs = {
   startYear: 2026,
   startHomeValue: 3000000,
   startHomeDebt: 2000000,
+  homeDebtRatePct: 5,
   homeDebtTermYears: 25,
   houseGrowthPct: 2,
   startShares: 500000,
@@ -146,5 +147,20 @@ describe('projectForecast', () => {
       const rows = projectForecast({ ...noInputs, startShares: 1000000 }, noTaxDrift);
       expect(rows.every(r => r.wealthTax === 0)).toBe(true);
     });
+  });
+});
+
+describe('projectForecast — home debt rate', () => {
+  it('amortises the home debt at its own rate, not the rentefradrag loan rate', () => {
+    // A first buyer: a house and mortgage on the Assets page, but no rentefradrag
+    // loan (mortgageRatePct 0). The debt follows the Dashboard's 5.65 % / 25 y.
+    const firstBuyer: ForecastInputs = {
+      ...inputs, startingMortgage: 0, mortgageRatePct: 0, annualMortgagePayment: 0,
+      startHomeValue: 4_800_000, startHomeDebt: 3_400_000,
+      homeDebtRatePct: 5.65, homeDebtTermYears: 25,
+    };
+    const rows = projectForecast(firstBuyer, scenario({ years: 10 }));
+    expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(3_400_000, 5.65, 25, 10));
+    expect(rows[10].homeDebt).toBe(2_567_632); // not 2,040,000 (linear at 0 %)
   });
 });
