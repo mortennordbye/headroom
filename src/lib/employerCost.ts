@@ -21,6 +21,8 @@
  */
 
 import { feriepengerSurplus } from './feriepenger';
+import { otpAnnualContribution, otpContributionCap } from './pension';
+import { TAX_YEAR } from './norwegianTax';
 
 // Norwegian defaults (2026, zone I).
 export const FERIEPENGER_DEFAULT_PCT = 12; // 5-week (avtalefestet); 10.2% is the 4-week minimum
@@ -47,7 +49,7 @@ export interface EmployerCostConfig {
 export interface EmployerCostBreakdown {
   gross: number;
   feriepenger: number;       // holiday pay on top of salary (see holidayPayPct)
-  employerPension: number;   // gross * employerPensionPct (passed in from Pension)
+  employerPension: number;   // employerPensionPct of gross, on pay up to 12G (OTP cap)
   payrollTaxBase: number;    // gross + feriepenger + employerPension
   payrollTax: number;        // payrollTaxBase * payrollTax
   overhead: number;          // overheadAnnual + gross * overheadPct
@@ -68,7 +70,8 @@ export function holidayPayPct(satsPct: number, holidayPayInSalary: boolean): num
 
 /**
  * @param grossAnnual       annual gross salary
- * @param employerPensionPct employer pension % of gross (Norway: pension.otpEmployerPct)
+ * @param employerPensionPct employer pension % of gross (Norway: pension.otpEmployerPct),
+ *                           paid on pay up to 12G for `year`
  * @param holidayPayInSalary true for Norwegian monthly pay (ferietrekk applies)
  */
 export function calcEmployerCost(
@@ -76,10 +79,11 @@ export function calcEmployerCost(
   employerPensionPct: number,
   config: EmployerCostConfig,
   holidayPayInSalary = false,
+  year = TAX_YEAR,
 ): EmployerCostBreakdown {
   const gross = Math.max(0, grossAnnual);
   const feriepenger = gross * (holidayPayPct(config.feriepengesatsPct, holidayPayInSalary) / 100);
-  const employerPension = gross * (Math.max(0, employerPensionPct) / 100);
+  const employerPension = otpAnnualContribution(gross, Math.max(0, employerPensionPct), year);
   const payrollTaxBase = gross + feriepenger + employerPension;
   const payrollTax = payrollTaxBase * (Math.max(0, config.payrollTaxPct) / 100);
   const overhead = Math.max(0, config.overheadAnnual) + gross * (Math.max(0, config.overheadPct) / 100);
@@ -188,10 +192,13 @@ export function calcBilledRate(
 
 /**
  * The gross salary at which the employer keeps exactly `targetMarginPct` of the
- * revenue from `billedHourly`. Total cost is linear in gross:
- * gross * k + overheadAnnual, with k = (1 + ferie + otp) * (1 + aga) + overheadPct
- * (ferie from `holidayPayPct`),
- * so this solves gross * k + overheadAnnual = revenue * (1 - margin).
+ * revenue from `billedHourly`. Total cost is piecewise linear in gross, as the
+ * pension stops at the 12G cap:
+ *   up to the cap: gross * k + overheadAnnual,
+ *     k = (1 + ferie + otp) * (1 + aga) + overheadPct (ferie from `holidayPayPct`)
+ *   above it:      gross * k0 + cap * otp * (1 + aga) + overheadAnnual,
+ *     k0 = k without the otp term,
+ * so this solves cost = revenue * (1 - margin) on whichever piece the answer lands.
  */
 export function calcFairGross(
   billedHourly: number,
@@ -200,13 +207,19 @@ export function calcFairGross(
   costConfig: EmployerCostConfig,
   targetMarginPct: number,
   holidayPayInSalary = false,
+  year = TAX_YEAR,
 ): number {
   const revenue = Math.max(0, billedHourly) * Math.max(0, billableHoursPerYear);
   const margin = Math.min(0.95, Math.max(0, targetMarginPct / 100));
   const pct = (v: number) => Math.max(0, v) / 100;
-  const k = (1 + pct(holidayPayPct(costConfig.feriepengesatsPct, holidayPayInSalary)) + pct(employerPensionPct)) * (1 + pct(costConfig.payrollTaxPct))
-    + pct(costConfig.overheadPct);
-  return Math.max(0, (revenue * (1 - margin) - Math.max(0, costConfig.overheadAnnual)) / k);
+  const aga = 1 + pct(costConfig.payrollTaxPct);
+  const otp = pct(employerPensionPct);
+  const k0 = (1 + pct(holidayPayPct(costConfig.feriepengesatsPct, holidayPayInSalary))) * aga + pct(costConfig.overheadPct);
+  const budget = revenue * (1 - margin) - Math.max(0, costConfig.overheadAnnual);
+  const cap = otpContributionCap(year);
+  const belowCap = budget / (k0 + otp * aga);
+  const gross = belowCap <= cap ? belowCap : (budget - cap * otp * aga) / k0;
+  return Math.max(0, gross);
 }
 
 export const DEFAULT_EMPLOYER_COST_CONFIG: EmployerCostConfig = {
