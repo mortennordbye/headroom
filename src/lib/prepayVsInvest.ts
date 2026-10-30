@@ -7,7 +7,9 @@
 //   - Prepaying earns a guaranteed return equal to the mortgage's *after-tax*
 //     rate: every krone of interest you avoid would have been deductible at
 //     `interestDeductionRatePct`, so the real saving is rate × (1 − deduction).
-//   - Investing earns the expected return, optionally net of a gains tax.
+//   - Investing compounds at the expected return, and the gain is taxed once
+//     when it is realised at the horizon (Norwegian shares and ASK are taxed on
+//     sale, not yearly), at `investGainsTaxPct`.
 //
 // Comparing the two future values answers "where does the extra krone grow
 // faster". This is the standard Norwegian rule of thumb (after-tax mortgage
@@ -21,10 +23,12 @@ export interface PrepayVsInvest {
   extraMonthly: number;
   months: number;
   contributions: number;            // extraMonthly × months (what you put in)
+  interestDeductionRatePct: number; // the rentefradrag rate applied to the mortgage
   afterTaxMortgageRatePct: number;  // mortgageRate × (1 − deduction)
-  afterTaxReturnPct: number;        // investReturn × (1 − gainsTax)
+  investReturnPct: number;          // expected return, compounded before tax
+  investGainsTax: number;           // tax on the gain, paid once at the horizon
   prepayFutureValue: number;        // FV of the extra at the after-tax mortgage rate
-  investFutureValue: number;        // FV of the extra at the after-tax return
+  investFutureValue: number;        // FV of the extra at the return, less investGainsTax
   prepayGain: number;               // prepayFutureValue − contributions
   investGain: number;               // investFutureValue − contributions
   advantage: number;                // |investFV − prepayFV|
@@ -52,11 +56,13 @@ export function prepayVsInvest(
   const gainsTax = Math.min(100, Math.max(0, investGainsTaxPct)) / 100;
 
   const afterTaxMortgageRatePct = mortgageRatePct * (1 - deduction);
-  const afterTaxReturnPct = investReturnPct * (1 - gainsTax);
 
-  const prepayFutureValue = futureValueAnnuity(monthly, afterTaxMortgageRatePct, months);
-  const investFutureValue = futureValueAnnuity(monthly, afterTaxReturnPct, months);
   const contributions = monthly * months;
+  const prepayFutureValue = futureValueAnnuity(monthly, afterTaxMortgageRatePct, months);
+  // Gains compound untaxed and are taxed once on sale; a loss gets no refund.
+  const investGrossValue = futureValueAnnuity(monthly, investReturnPct, months);
+  const investGainsTax = Math.max(0, investGrossValue - contributions) * gainsTax;
+  const investFutureValue = investGrossValue - investGainsTax;
 
   const diff = investFutureValue - prepayFutureValue;
   const EPS = 1; // sub-krone differences read as a tie
@@ -66,8 +72,10 @@ export function prepayVsInvest(
     extraMonthly: monthly,
     months,
     contributions,
+    interestDeductionRatePct: deduction * 100,
     afterTaxMortgageRatePct,
-    afterTaxReturnPct,
+    investReturnPct,
+    investGainsTax,
     prepayFutureValue,
     investFutureValue,
     prepayGain: prepayFutureValue - contributions,
@@ -101,8 +109,8 @@ export interface PrepayVsInvestSettings {
 /**
  * Prepay vs invest from the user's settings, shared by the Forecast page and
  * the MCP what-if tool so both give the same answer. The interest deduction is
- * 22% in Norway or the flat rate in generic mode, and the investment side is
- * taxed at the gains rate so both legs are compared after tax.
+ * 22% in Norway or the flat rate in generic mode, and the investment gain is
+ * taxed at the gains rate on sale so both legs are compared after tax.
  */
 export function prepayVsInvestFor(
   s: PrepayVsInvestSettings,

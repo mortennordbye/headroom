@@ -11,10 +11,25 @@ describe('prepayVsInvestFor', () => {
     investGainsTaxPct: 37.84,
   };
 
-  it('taxes the investment side at the gains rate', () => {
+  it('taxes the investment gain once, at the horizon', () => {
     const r = prepayVsInvestFor(settings, 5000, 7, 15);
-    expect(r.afterTaxReturnPct).toBeCloseTo(7 * (1 - 0.3784), 6);
+    expect(r.investReturnPct).toBe(7);
     expect(r.afterTaxMortgageRatePct).toBeCloseTo(3.9, 6);
+  });
+
+  it('compounds the investment gross and beats a 5.65 % mortgage', () => {
+    // 5,000/month for 15 y at 7 %: 1,584,811 gross on 900,000 paid in, so the
+    // 684,811 gain is taxed 37.84 % on sale. Taxing the return yearly gave
+    // 1,266,431, losing to prepaying (1,272,268).
+    const r = prepayVsInvestFor({ ...settings, homeownerRatePct: 5.65 }, 5000, 7, 15);
+    expect(r.investFutureValue).toBeCloseTo(1_325_679, 0);
+    expect(r.investGainsTax).toBeCloseTo((r.investFutureValue + r.investGainsTax - 900_000) * 0.3784, 6);
+    expect(r.winner).toBe('invest');
+  });
+
+  it('reports the deduction rate it used', () => {
+    expect(prepayVsInvestFor(settings, 5000, 7, 15).interestDeductionRatePct).toBe(22);
+    expect(prepayVsInvestFor({ ...settings, region: 'generic' }, 5000, 7, 15).interestDeductionRatePct).toBe(30);
   });
 
   it('uses the current mortgage rate for a homeowner and the planned loan otherwise', () => {
@@ -33,8 +48,8 @@ describe('prepayVsInvest', () => {
     const r = prepayVsInvest(5000, 5, 7, 10, 22);
     // 5% mortgage after a 22% deduction is really 3.9%.
     expect(r.afterTaxMortgageRatePct).toBeCloseTo(3.9, 5);
-    // No gains tax passed → expected return is untouched.
-    expect(r.afterTaxReturnPct).toBeCloseTo(7, 5);
+    // No gains tax passed → nothing is taken from the investment.
+    expect(r.investGainsTax).toBe(0);
   });
 
   it('picks invest when the expected return beats the after-tax mortgage rate', () => {
@@ -74,8 +89,10 @@ describe('prepayVsInvest', () => {
   });
 
   it('applies a gains tax to the investment leg when given', () => {
+    const untaxed = prepayVsInvest(5000, 5, 8, 10, 22);
     const r = prepayVsInvest(5000, 5, 8, 10, 22, 37.84);
-    // 8% taxed at 37.84% ≈ 4.97% after tax.
-    expect(r.afterTaxReturnPct).toBeCloseTo(8 * (1 - 0.3784), 5);
+    // Only the gain is taxed, once: the contributions come back in full.
+    expect(r.investGainsTax).toBeCloseTo(untaxed.investGain * 0.3784, 5);
+    expect(r.investFutureValue).toBeCloseTo(r.contributions + untaxed.investGain * (1 - 0.3784), 5);
   });
 });
