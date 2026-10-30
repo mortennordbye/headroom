@@ -3,7 +3,7 @@ import { calcMonthlyPayment } from './calculations';
 import { currentMortgage } from './existingMortgage';
 
 // Mortgage plan-vs-actual (HISTORY_PLAN §6.3). The plan curve is anchored at the
-// earliest recorded mortgage balance using that month's rate/term; the actual
+// earliest recorded owner-mode mortgage balance using that month's rate/term; the actual
 // curve is each recorded month's mortgage balance. All computed from snapshots so
 // nothing is stored twice.
 
@@ -62,7 +62,11 @@ function planBalanceAfter(principal: number, monthlyRate: number, payment: numbe
 
 export function paydownVsPlan(snapshots: Record<string, BalanceSnapshot>): PaydownVsPlan {
   const months = Object.keys(snapshots).sort();
-  const anchorMonth = months.find(m => mortgageBalance(snapshots[m], m) > 0) ?? null;
+  // Anchor at the first owner-mode month: a first-buyer month before it has no
+  // rate or term, so a plan from there would hold flat and make every later
+  // month look ahead. Only when no month is owner-mode is the flat debt used.
+  const anchorMonth = months.find(m => { const o = snapshotMortgage(snapshots[m], m); return o.fullBalance > 0 && o.amortises; })
+    ?? months.find(m => mortgageBalance(snapshots[m], m) > 0) ?? null;
   if (!anchorMonth) return EMPTY;
 
   const anchor = snapshotMortgage(snapshots[anchorMonth], anchorMonth);

@@ -101,4 +101,20 @@ describe('paydownVsPlan', () => {
     } as unknown as BalanceSnapshot;
     expect(paydownVsPlan({ '2026-01': snap, '2026-02': snap }).anchorMonth).toBeNull();
   });
+
+  it('a first-buyer month before the purchase does not anchor a flat plan', () => {
+    const firstBuyer = { housingMode: 'first_buyer', assets: { houseDebt: 3_400_000 } } as unknown as BalanceSnapshot;
+    const r = paydownVsPlan({ '2026-01': firstBuyer, '2026-02': mk(3_190_000), '2026-05': mk(3_180_000) });
+    expect(r.anchorMonth).toBe('2026-02');
+    expect(r.monthlyPayment).toBeCloseTo(calcMonthlyPayment(3_190_000, 5, 25), 2);
+    expect(r.points.map(p => p.monthKey)).toEqual(['2026-02', '2026-05']);
+    expect(r.points[1].plan).toBeLessThan(3_190_000);
+  });
+
+  it('only first-buyer months: the Assets debt holds flat', () => {
+    const firstBuyer = (b: number) => ({ housingMode: 'first_buyer', assets: { houseDebt: b } } as unknown as BalanceSnapshot);
+    const r = paydownVsPlan({ '2026-01': firstBuyer(1_000_000), '2026-02': firstBuyer(1_000_000) });
+    expect(r.anchorMonth).toBe('2026-01');
+    expect(r.points.map(p => p.plan)).toEqual([1_000_000, 1_000_000]);
+  });
 });
