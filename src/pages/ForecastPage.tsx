@@ -18,7 +18,7 @@ import { prepayVsInvest } from '../lib/prepayVsInvest';
 import { netWorthBands } from '../lib/scenarioBands';
 import { projectForecast, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
 import { calcMonthlyPayment } from '../lib/calculations';
-import { pensionFutureValue } from '../lib/pension';
+import { otpAnnualContribution, pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
 import { myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
@@ -53,7 +53,7 @@ const ForecastPage: React.FC = () => {
     const yearsToRetire = hasBirthYear
       ? Math.max(0, pension.retirementAge - (currentYear - pension.birthYear))
       : 0;
-    const otpAnnual = currentGross * (pension.otpEmployerPct + pension.otpEmployeePct) / 100;
+    const otpAnnual = otpAnnualContribution(currentGross, pension.otpEmployerPct + pension.otpEmployeePct, TAX_YEAR);
     const ipsAnnual = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
     const otpAtRetire = pensionFutureValue(pension.otpBalance, otpAnnual, pension.otpGrowthRate, yearsToRetire);
     const ipsAtRetire = pensionFutureValue(pension.ipsBalance, ipsAnnual, pension.ipsGrowthRate, yearsToRetire);

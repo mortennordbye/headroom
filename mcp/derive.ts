@@ -54,7 +54,7 @@ import {
 import { restskattEstimate } from '../src/lib/restskatt';
 import { cardNetForMonth } from '../src/lib/forskuddstrekk';
 import { feriepengerSurplus } from '../src/lib/feriepenger';
-import { projectPensionWealth } from '../src/lib/pension';
+import { otpAnnualContribution as otpContribution, projectPensionWealth } from '../src/lib/pension';
 import { inTodaysKroner, DEFAULT_INFLATION_PCT } from '../src/lib/inflation';
 import { estimateBeholdning, projectBeholdning, annualFolketrygdPension } from '../src/lib/folketrygd';
 import { estimateAfpGrunnlag, annualAfp } from '../src/lib/afp';
@@ -666,7 +666,7 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
   const hasBirthYear = p.birthYear > 1900;
   const yearsToRetire = hasBirthYear ? Math.max(0, p.retirementAge - (currentYear - p.birthYear)) : 0;
   const pensionableIncome = activeGrossAnnual(blob, monthKey);
-  const otpAnnualContribution = pensionableIncome * (p.otpEmployerPct + p.otpEmployeePct) / 100;
+  const otpAnnualContribution = otpContribution(pensionableIncome, p.otpEmployerPct + p.otpEmployeePct, TAX_YEAR);
   const ipsAnnualContribution = Math.min(p.ipsAnnualContribution, IPS_MAX_DEDUCTION);
   const ipsDeductionRate = region === 'generic' ? customRate / 100 : 0.22;
   const projection = projectPensionWealth({
