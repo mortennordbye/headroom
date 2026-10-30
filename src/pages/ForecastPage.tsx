@@ -24,13 +24,12 @@ import { myHouseDebt, myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
 import { latestInflationPct } from '../lib/inflation';
 import { formatAxisInt } from '../lib/format';
-import { paymentTermMonths } from '../lib/loanTerm';
 
 const ForecastPage: React.FC = () => {
   const {
-    t, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
+    t, totalFixedExpenses, salaries, jobs, income,
     formatCurrency, region, customTaxRatePct, pension,
-    planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest,
+    planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, existingMortgage,
     assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
     mortgageTermYears: homeMortgageTermYears,
     forecastAssumptions: fa, setForecastAssumptions,
@@ -147,17 +146,13 @@ const ForecastPage: React.FC = () => {
   // Scenario A drives every existing tile/chart/memo below under the original names.
   const { returnPct, years, extraMonthly } = effA;
 
-  // Select the real mortgage by housing mode, exactly as the context does for
-  // net-worth projections: homeowner uses the `homeowner` inputs; first-buyer &
-  // transitioning use the `loan` planning inputs. Otherwise a homeowner's tile
-  // would forecast a hypothetical first-buyer loan instead of their actual one.
-  const isHomeowner = housingMode === 'homeowner';
-  // A personal forecast: the user's share of a joint mortgage and home. The
-  // planned loan (other modes) stays full until co-buyers are modelled.
+  // The mortgage owed today (the user's share), as the context uses for
+  // rentefradrag: none for a first buyer, whose Loan-page loan is only a plan.
+  // A personal forecast: the user's share of a joint home, too.
   const shares = ownershipShares(assets);
-  const startingMortgage = (isHomeowner ? homeowner.currentMortgageBalance * shares.debt : loan.laanebelop) ?? 0;
-  const mortgageRatePct = (isHomeowner ? homeowner.rente : loan.rente) ?? 5;
-  const mortgageTermYears = (isHomeowner ? paymentTermMonths(homeowner) / 12 : loan.nedbetalingstid) ?? 25;
+  const startingMortgage = existingMortgage.balance;
+  const mortgageRatePct = existingMortgage.ratePct;
+  const mortgageTermYears = existingMortgage.termYears;
   // Annual mortgage payment = 12 × the shared monthly annuity, so the forecast
   // uses the same payment as the Loan page rather than re-deriving it annually.
   const annualMortgagePayment = useMemo(
