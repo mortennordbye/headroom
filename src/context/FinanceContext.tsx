@@ -8,7 +8,7 @@ import {
   format,
   subMonths
 } from 'date-fns';
-import { calcRecommendations, calcAmortizationSchedule } from '../lib/calculations';
+import { calcRecommendations } from '../lib/calculations';
 import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, capSavingsToTotal } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
@@ -36,7 +36,8 @@ import { isOneOff, withoutOneOffs, type TransactionSegment } from '../lib/segmen
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
-import { effectiveRemainingMonths, paymentTermMonths, stampLegacyTerm } from '../lib/loanTerm';
+import { effectiveRemainingMonths, stampLegacyTerm } from '../lib/loanTerm';
+import { existingMortgage, annualMortgageInterest as yearOneMortgageInterest, type ExistingMortgage } from '../lib/existingMortgage';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
   computeAutomationPostings,
@@ -1050,6 +1051,8 @@ interface FinanceDerivedContextType {
   studentDebt: number;
   mortgageRate: number;
   mortgageTermYears: number;
+  /** The mortgage owed today (user's share): none for a first buyer. */
+  existingMortgage: ExistingMortgage;
   annualMortgageInterest: number;
   /** The year's BSU tax credit (10%, under-34, non-homeowner); 0 when not eligible. */
   bsuTaxCredit: number;
@@ -1926,19 +1929,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const prevMonthIncome = monthlyIncomes[prevMonthKey] ?? 0;
 
 
+  // The mortgage owed today, as the user's share: none for a first buyer (the
+  // Loan page's loan is a plan), the current home's loan otherwise.
+  const existingMortgageNow = useMemo(
+    () => existingMortgage(housingMode, homeowner, transition, ownershipShares({ coOwners: assets.coOwners }).debt),
+    [housingMode, homeowner, transition, assets.coOwners],
+  );
+
   // Year-one mortgage interest (rentefradrag): reduces alminnelig inntekt at 22%,
-  // so it's fed into every income-tax calc as an interest deduction. Balance/rate/
-  // term follow the active housing mode, matching `mortgageRate`/`mortgageTermYears`.
-  const annualMortgageInterest = useMemo(() => {
-    const balance = housingMode === 'homeowner' ? homeowner.currentMortgageBalance : loan.laanebelop;
-    const rate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
-    const term = housingMode === 'homeowner' ? paymentTermMonths(homeowner) / 12 : loan.nedbetalingstid;
-    if (!(balance > 0) || !(rate > 0) || !(term > 0)) return 0;
-    const interest = calcAmortizationSchedule(balance, rate, term)[0]?.interestPaid ?? 0;
-    // Rentefradrag follows the user's share of a joint loan. The planned loan
-    // (non-homeowner modes) stays full until co-buyers are modelled.
-    return housingMode === 'homeowner' ? interest * ownershipShares({ coOwners: assets.coOwners }).debt : interest;
-  }, [housingMode, homeowner, loan.laanebelop, loan.rente, loan.nedbetalingstid, assets.coOwners]);
+  // so it's fed into every income-tax calc as an interest deduction.
+  const annualMortgageInterest = useMemo(
+    () => yearOneMortgageInterest(existingMortgageNow),
+    [existingMortgageNow],
+  );
 
   // BSU tax credit (10%, under-34, non-homeowner) reduces the year's tax.
   const bsuTaxCredit = useMemo(() => calcBsuTaxCredit(assets.bsuAnnualContribution, {
@@ -3303,7 +3306,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, existingMortgage: existingMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
@@ -3313,7 +3316,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
+    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, existingMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,

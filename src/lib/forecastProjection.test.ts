@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { projectForecast, type ForecastInputs, type EffectiveScenario } from './forecastProjection';
 import { calcTaxByRegion } from './norwegianTax';
+import { calcHouseEquityByYear } from './calculations';
 
 const inputs: ForecastInputs = {
   currentGross: 600000,
-  totalEquity: 1000000,
   startingMortgage: 2000000,
   mortgageRatePct: 5,
   annualMortgagePayment: 140000,
@@ -13,10 +13,12 @@ const inputs: ForecastInputs = {
   ipsAnnualContribution: 0,
   startYear: 2026,
   startHomeValue: 3000000,
+  startHomeDebt: 2000000,
+  homeDebtTermYears: 25,
   houseGrowthPct: 2,
   startShares: 500000,
   startOtherAssets: 300000,
-  nonMortgageDebt: 0,
+  debts: [],
 };
 
 const scenario = (over: Partial<EffectiveScenario> = {}): EffectiveScenario => ({
@@ -28,7 +30,7 @@ describe('projectForecast — co-owned home', () => {
   // no shares/other/debt, Norway: half of a 16 MNOK home (8 M share, no growth).
   const home: ForecastInputs = {
     ...inputs, region: 'no', startingMortgage: 0, annualMortgagePayment: 0,
-    totalEquity: 8_000_000, startHomeValue: 8_000_000, houseGrowthPct: 0,
+    startHomeValue: 8_000_000, startHomeDebt: 0, houseGrowthPct: 0,
     startShares: 0, startOtherAssets: 0,
   };
   const s = scenario({ years: 1, returnPct: 0, savingsPct: 0 });
@@ -47,8 +49,9 @@ describe('projectForecast', () => {
     expect(rows).toHaveLength(11);
     expect(rows[0].yearLabel).toBe(2026);
     expect(rows[10].yearLabel).toBe(2036);
-    // Year 0: net worth is unchanged from equity, salary unchanged from gross.
-    expect(rows[0].netWorth).toBe(1000000);
+    // Year 0: net worth is today's (0.8M financial + 3M home − 2M mortgage),
+    // salary unchanged from gross.
+    expect(rows[0].netWorth).toBe(1800000);
     expect(rows[0].gross).toBe(600000);
   });
 
@@ -58,13 +61,42 @@ describe('projectForecast', () => {
     expect(rows[2].gross).toBe(Math.round(600000 * 1.04 * 1.04));
   });
 
-  it('compounds net worth by return plus the savings contribution', () => {
+  it('compounds financial assets by return plus the savings contribution', () => {
     const rows = projectForecast(inputs, scenario({ returnPct: 6, savingsPct: 20, raisePct: 0 }));
     // Year 1 (raise 0 → gross flat): net uses the entering mortgage interest as a
-    // deduction; contribution is 20% of it; net worth compounds by the return.
+    // deduction; contribution is 20% of it; only the financial assets compound by
+    // the return.
     const mortgageInterestY1 = 2000000 * 0.05;
     const netY1 = calcTaxByRegion(600000, 'generic', 30, 0, mortgageInterestY1).netAnnual;
-    expect(rows[1].netWorth).toBe(Math.round(1000000 * 1.06 + netY1 * 0.2));
+    expect(rows[1].financial).toBe(Math.round(800000 * 1.06 + netY1 * 0.2));
+  });
+
+  it('grows home equity like calcHouseEquityByYear, not at the investment return', () => {
+    // Home 5M, mortgage 3M at 5 % over 25 years, house growth 3 %, nothing else.
+    const home: ForecastInputs = {
+      ...inputs, region: 'no', startingMortgage: 3_000_000,
+      startHomeValue: 5_000_000, startHomeDebt: 3_000_000, homeDebtTermYears: 25,
+      houseGrowthPct: 3, startShares: 0, startOtherAssets: 0,
+    };
+    const rows = projectForecast(home, scenario({ returnPct: 0, savingsPct: 0, years: 10 }));
+    const equity = calcHouseEquityByYear(5_000_000, 3_000_000, 3, 5, 25, 10);
+    expect(rows[0].netWorth).toBe(2_000_000);
+    expect(Math.abs(rows[10].netWorth - equity[10])).toBeLessThanOrEqual(1);
+  });
+
+  it('nets non-mortgage debt out of net worth and the wealth-tax base', () => {
+    // 4M listed shares and a 1M student loan: today's net worth is 3M, and the
+    // year-1 wealth tax is on 4M × 80 % − 1M = 2.2M, 0.3M above the bunnfradrag.
+    const withDebt: ForecastInputs = {
+      ...inputs, region: 'no', startingMortgage: 0, annualMortgagePayment: 0,
+      startHomeValue: 0, startHomeDebt: 0, startShares: 4_000_000, startOtherAssets: 0,
+      debts: [{ id: 's', name: 'Student loan', type: 'student', balance: 1_000_000, rate: 4, minPayment: 6_000 }],
+    };
+    const rows = projectForecast(withDebt, scenario({ returnPct: 0, savingsPct: 0, years: 2 }));
+    expect(rows[0].netWorth).toBe(3_000_000);
+    expect(rows[1].wealthTax).toBe(3_000);
+    // The loan is paid down at its minimums, so net worth rises net of the tax.
+    expect(rows[1].netWorth).toBeGreaterThan(rows[0].netWorth - 3_000);
   });
 
   it('pays the mortgage down toward zero and never below', () => {
@@ -91,8 +123,8 @@ describe('projectForecast', () => {
     // 0.5M above the 2026 1.9M bunnfradrag → 5 000/yr at the first bracket.
     const noTaxDrift: EffectiveScenario = { raisePct: 0, savingsPct: 0, returnPct: 0, inflationPct: 0, years: 2, extraMonthly: 0 };
     const noInputs: ForecastInputs = {
-      ...inputs, region: 'no', totalEquity: 3000000, startingMortgage: 0,
-      startHomeValue: 0, startShares: 3000000, startOtherAssets: 0, nonMortgageDebt: 0,
+      ...inputs, region: 'no', startingMortgage: 0,
+      startHomeValue: 0, startHomeDebt: 0, startShares: 3000000, startOtherAssets: 0, debts: [],
     };
 
     it('charges no tax at year 0 and reduces net worth from year 1 on', () => {
@@ -111,7 +143,7 @@ describe('projectForecast', () => {
     });
 
     it('leaves a below-bunnfradrag household untaxed', () => {
-      const rows = projectForecast({ ...noInputs, totalEquity: 1000000, startShares: 1000000 }, noTaxDrift);
+      const rows = projectForecast({ ...noInputs, startShares: 1000000 }, noTaxDrift);
       expect(rows.every(r => r.wealthTax === 0)).toBe(true);
     });
   });

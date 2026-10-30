@@ -172,6 +172,22 @@ describe('activeJobBreakdown', () => {
     expect(b.reduce((t, c) => t + c.gross, 0)).toBe(1_835_000);
   });
 
+  it('counts only the new job in the month a job change happens', () => {
+    // Saved data from before the fix ended the old job IN the new job's start
+    // month. The new job takes over that month instead of both being counted.
+    const salaries = [sal('s1', '2023-08', 600_000, 'old'), sal('s2', '2026-03', 700_000, 'new')];
+    const jobs = [j('old', '2023-08', '2026-03'), j('new', '2026-03', null)];
+    expect(activeJobBreakdown(salaries, jobs, '2026-03').map(c => c.gross)).toEqual([700_000]);
+    expect(activeJobBreakdown(salaries, jobs, '2026-02').map(c => c.gross)).toEqual([600_000]);
+  });
+
+  it('keeps the old job through its end month when the new one starts the month after', () => {
+    const salaries = [sal('s1', '2023-08', 600_000, 'old'), sal('s2', '2026-03', 700_000, 'new')];
+    const jobs = [j('old', '2023-08', '2026-02'), j('new', '2026-03', null)];
+    expect(activeJobBreakdown(salaries, jobs, '2026-02').map(c => c.gross)).toEqual([600_000]);
+    expect(activeJobBreakdown(salaries, jobs, '2026-03').map(c => c.gross)).toEqual([700_000]);
+  });
+
   it('skips a job whose salary has not taken effect yet', () => {
     const b = activeJobBreakdown([sal('s1', '2027-01', 900_000, 'future')], [j('future', '2027-01', null)], '2026-07');
     expect(b).toEqual([]);

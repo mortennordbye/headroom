@@ -10,6 +10,7 @@ import { excludedTransferIds } from '../src/lib/transferRules';
 import { calcAmortizationSchedule } from '../src/lib/calculations';
 import { calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../src/lib/norwegianTax';
 import { fullFixture } from './fixture';
+import { prepayVsInvestFor } from '../src/lib/prepayVsInvest';
 
 const MONTH = '2026-06';
 
@@ -160,6 +161,30 @@ describe('derive (pure, no server)', () => {
   it('what_if prepay_vs_invest returns a winner', () => {
     const r = derive.whatIfPrepayVsInvest(blob, 5000, 15, 7);
     expect(['invest', 'prepay', 'tie']).toContain(r.winner);
+  });
+
+  it('what_if prepay_vs_invest gives the Forecast page answer', () => {
+    // A first-time buyer in generic mode: the page uses the planned loan's rate,
+    // the flat rate as the deduction, and taxes gains at assets.taxRate.
+    const b: ExportPayload = {
+      ...blob,
+      housingMode: 'first_buyer',
+      region: 'generic',
+      customTaxRatePct: 30,
+      homeowner: { ...blob.homeowner!, rente: 4 },
+      loan: { ...blob.loan!, rente: 6 },
+      assets: { ...blob.assets, taxRate: 37.84 },
+    };
+    const page = prepayVsInvestFor({
+      housingMode: 'first_buyer',
+      homeownerRatePct: 4,
+      loanRatePct: 6,
+      region: 'generic',
+      customTaxRatePct: 30,
+      investGainsTaxPct: 37.84,
+    }, 5000, 7, 15);
+    expect(derive.whatIfPrepayVsInvest(b, 5000, 15, 7)).toEqual(page);
+    expect(page.afterTaxMortgageRatePct).toBeCloseTo(6 * 0.7, 6);
   });
 });
 
@@ -385,6 +410,19 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const m = derive.mortgage(b, MONTH);
     expect(m.ownership.coOwners.map((c) => c.id)).toEqual(['old', 'new']);
     expect(m.ownership.activeCoOwners.map((c) => c.id)).toEqual(['new']);
+  });
+
+  it('rentefradrag: none for a first buyer, the current loan when transitioning', () => {
+    const b = fullFixture();
+    b.loan!.laanebelop = 4000000; // the planned purchase loan
+    b.transition!.currentMortgageBalance = 1800000;
+    b.housingMode = 'first_buyer';
+    expect(derive.salaryAndTax(b, '2026-07').annualMortgageInterestDeduction).toBe(0);
+    expect(derive.forecast(b, {}, MONTH).projection[0].mortgage).toBe(0);
+    b.housingMode = 'transitioning';
+    const interest = calcAmortizationSchedule(1800000, 5.5, 25)[0].interestPaid;
+    expect(derive.salaryAndTax(b, '2026-07').annualMortgageInterestDeduction).toBe(Math.round(interest));
+    expect(derive.forecast(b, {}, MONTH).projection[0].mortgage).toBe(1800000);
   });
 
   it('co-owners: rentefradrag and wealth tax use the share', () => {

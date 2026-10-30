@@ -23,6 +23,15 @@ describe('pensionAccrualRules', () => {
     expect(otp.id).toBe('pension:otp');
   });
 
+  it('caps the OTP base at 12G', () => {
+    const [otp] = pensionAccrualRules(
+      input({ ipsAutoPost: false, pensionableIncome: 2_000_000, otpEmployerPct: 5, otpEmployeePct: 0 }),
+      LABELS,
+    );
+    // 12 × 136 549 × 5% = 81 929.4/yr
+    expect(otp.amount).toBeCloseTo(81_929.4 / 12, 6);
+  });
+
   it('derives the IPS monthly amount from the yearly contribution', () => {
     const [ips] = pensionAccrualRules(input({ otpAutoPost: false }), LABELS);
     expect(ips.amount).toBe(1250);            // 15 000 / 12

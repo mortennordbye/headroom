@@ -23,6 +23,17 @@ describe('calcEmployerCost', () => {
     expect(b.loadingPct).toBeCloseTo(42.497, 3);
   });
 
+  it('counts only holiday pay above ferietrekk for monthly-paid staff (Norway)', () => {
+    // 800 000 gross on the 12% rate: feriepenger 96 000, but the 5 holiday weeks
+    // (800 000 × 5/52 = 76 923) are already in the 12 monthly salaries and taken
+    // back as ferietrekk. Only 19 077 is extra, and AGA is levied on that.
+    const b = calcEmployerCost(800_000, 5, DEFAULT_EMPLOYER_COST_CONFIG, true);
+    const extra = 800_000 * (0.12 - 5 / 52);
+    expect(b.feriepenger).toBeCloseTo(extra, 6);
+    expect(b.payrollTaxBase).toBeCloseTo(800_000 + extra + 40_000, 6);
+    expect(b.totalEmployerCost).toBeCloseTo((800_000 + extra + 40_000) * 1.141 + 90_000, 4);
+  });
+
   it('adds percentage overhead on top of the flat amount', () => {
     const b = calcEmployerCost(1_000_000, 0, { ...DEFAULT_EMPLOYER_COST_CONFIG, overheadPct: 5 });
     expect(b.overhead).toBe(90_000 + 50_000);
@@ -126,6 +137,11 @@ describe('calcFairGross', () => {
     const cost = calcEmployerCost(924_000, 5, DEFAULT_EMPLOYER_COST_CONFIG);
     const rate = calcBillingRate(cost.totalEmployerCost, DEFAULT_BILLING_CONFIG).targetHourly;
     expect(calcFairGross(rate, 1560, 5, DEFAULT_EMPLOYER_COST_CONFIG, 30)).toBeCloseTo(924_000, 4);
+  });
+
+  it('round-trips when holiday pay is netted against ferietrekk', () => {
+    const g = calcFairGross(1200, 1560, 5, DEFAULT_EMPLOYER_COST_CONFIG, 30, true);
+    expect(calcEmployerCost(g, 5, DEFAULT_EMPLOYER_COST_CONFIG, true).totalEmployerCost).toBeCloseTo(1_872_000 * 0.7, 4);
   });
 
   it('floors at zero when the rate cannot cover the fixed overhead', () => {
