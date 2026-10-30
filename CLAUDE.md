@@ -220,7 +220,7 @@ What an unattended maintainer run (a verksted stage) is told about this repo. It
 - `tier:auto` (may merge without me once CI is green and the gate approves): dependency bumps dependabot does not cover (`server/`, `mcp/`, `desktop/`), lint or type fixes with no behaviour change, added tests, docs, CI and workflow tidying, dead code that `tsc` proves unused.
 - `tier:review` (opens a PR and waits for me): anything that changes a number a user sees, the shape of persisted data, a UI, an API response, or a default. When in doubt, `tier:review`.
 
-**No-go.** Never `tier:auto`, and never touched at all without an issue I filed myself:
+**Guarded.** Never `tier:auto`. Don't refactor or "improve" these on your own, but a bug is not a reason to leave them alone: when a calculation here is wrong, fix it as `tier:review`, with a test that fails before the fix and passes after it, and the reasoning or source (Skatteetaten, NAV, regjeringen.no) in the PR body:
 
 - The money maths in `src/lib/`: `norwegianTax.ts`, `folketrygd.ts`, `afp.ts`, `feriepenger.ts`, `employerCost.ts`, `pension.ts`, `pensionAccrual.ts`, `restskatt.ts`, `bsu.ts`, `salary.ts`.
 - `src/context/FinanceContext.tsx` where state is persisted, applied or imported (payload shape).
