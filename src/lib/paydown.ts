@@ -1,6 +1,6 @@
 import type { BalanceSnapshot } from '../context/FinanceContext';
 import { calcMonthlyPayment } from './calculations';
-import { paymentTermMonths } from './loanTerm';
+import { currentMortgage } from './existingMortgage';
 
 // Mortgage plan-vs-actual (HISTORY_PLAN §6.3). The plan curve is anchored at the
 // earliest recorded mortgage balance using that month's rate/term; the actual
@@ -41,28 +41,13 @@ const monthIndex = (key: string): number => {
   return y * 12 + (m - 1);
 };
 
-/** A finite number or 0 — guards undefined/NaN out of the money math (CLAUDE.md's
- *  worst bug class) before it can reach the chart. */
-const finite = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0);
-
-/** The month's mortgage balance. Homeowner mode carries it on `homeowner`; the
- *  three-slice mirror keeps `assets.houseDebt` in lockstep, so it's the fallback. */
-function mortgageBalance(snap: BalanceSnapshot): number {
-  const hb = finite(snap.homeowner?.currentMortgageBalance);
-  if (hb > 0) return hb;
-  return Math.max(0, finite(snap.assets?.houseDebt));
+/** The month's mortgage as recorded, read like today's (`currentMortgage`):
+ *  the whole loan, with the current loan's rate and term in the owner modes. A
+ *  first buyer's Assets debt has neither, so its plan holds flat. */
+function snapshotMortgage(snap: BalanceSnapshot, month: string) {
+  return currentMortgage(snap.housingMode, snap.assets, snap.homeowner, snap.transition, month);
 }
-
-function mortgageRate(snap: BalanceSnapshot): number {
-  return finite(snap.housingMode === 'homeowner' ? snap.homeowner?.rente : snap.loan?.rente);
-}
-/** Term in years the anchor balance is priced over; the homeowner term is read
- *  as of the balance's month (loanTerm.ts), the planned loan term raw. */
-function mortgageTerm(snap: BalanceSnapshot): number {
-  return snap.housingMode === 'homeowner'
-    ? paymentTermMonths(snap.homeowner) / 12
-    : finite(snap.loan?.nedbetalingstid);
-}
+const mortgageBalance = (snap: BalanceSnapshot, month: string): number => snapshotMortgage(snap, month).fullBalance;
 
 /** Plan balance after `k` monthly payments of `payment` at `monthlyRate`. */
 function planBalanceAfter(principal: number, monthlyRate: number, payment: number, k: number): number {
@@ -77,13 +62,13 @@ function planBalanceAfter(principal: number, monthlyRate: number, payment: numbe
 
 export function paydownVsPlan(snapshots: Record<string, BalanceSnapshot>): PaydownVsPlan {
   const months = Object.keys(snapshots).sort();
-  const anchorMonth = months.find(m => mortgageBalance(snapshots[m]) > 0) ?? null;
+  const anchorMonth = months.find(m => mortgageBalance(snapshots[m], m) > 0) ?? null;
   if (!anchorMonth) return EMPTY;
 
-  const anchor = snapshots[anchorMonth];
-  const anchorBalance = mortgageBalance(anchor);
-  const rate = mortgageRate(anchor);
-  const term = mortgageTerm(anchor);
+  const anchor = snapshotMortgage(snapshots[anchorMonth], anchorMonth);
+  const anchorBalance = anchor.fullBalance;
+  const rate = anchor.ratePct;
+  const term = anchor.paymentTermMonths / 12;
   const monthlyRate = rate / 100 / 12;
   const monthlyPayment = calcMonthlyPayment(anchorBalance, rate, term);
   const anchorIdx = monthIndex(anchorMonth);
@@ -92,7 +77,7 @@ export function paydownVsPlan(snapshots: Record<string, BalanceSnapshot>): Paydo
     .filter(m => monthIndex(m) >= anchorIdx)
     .map(m => ({
       monthKey: m,
-      actual: mortgageBalance(snapshots[m]),
+      actual: mortgageBalance(snapshots[m], m),
       plan: planBalanceAfter(anchorBalance, monthlyRate, monthlyPayment, monthIndex(m) - anchorIdx),
     }));
 

@@ -16,11 +16,10 @@ import { projectBeholdning, estimateBeholdning, annualFolketrygdPension } from '
 import { estimateAfpGrunnlag, annualAfp } from '../lib/afp';
 import { prepayVsInvestFor } from '../lib/prepayVsInvest';
 import { netWorthBands } from '../lib/scenarioBands';
-import { projectForecast, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
-import { calcMonthlyPayment } from '../lib/calculations';
+import { projectForecast, forecastMortgage, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
 import { otpAnnualContribution, pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
-import { myHouseDebt, myHouseValue, ownershipShares } from '../lib/ownership';
+import { myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
 import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
@@ -29,11 +28,10 @@ import { grossFromNetAnnual } from '../lib/grossFromNet';
 
 const ForecastPage: React.FC = () => {
   const {
-    t, totalFixedExpenses, salaries, jobs, loan, income, housingMode, homeowner,
+    t, totalFixedExpenses, salaries, jobs, loan, income,
     formatCurrency, region, customTaxRatePct, pension,
-    planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, existingMortgage, bsuTaxCredit,
+    planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, currentMortgage, bsuTaxCredit,
     assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
-    mortgageRate: homeMortgageRatePct, mortgageTermYears: homeMortgageTermYears,
     forecastAssumptions: fa, setForecastAssumptions,
   } = useFinance();
   const reduced = useReducedMotion();
@@ -158,39 +156,29 @@ const ForecastPage: React.FC = () => {
   // Scenario A drives every existing tile/chart/memo below under the original names.
   const { returnPct, years, extraMonthly } = effA;
 
-  // The mortgage owed today (the user's share), as the context uses for
-  // rentefradrag: none for a first buyer, whose Loan-page loan is only a plan.
-  // A personal forecast: the user's share of a joint home, too.
+  // The home's mortgage (the user's share) from the shared resolver: one series
+  // drives both the mortgage tile and net worth's home debt. In the owner modes
+  // it is the current loan, which also carries the rentefradrag; a first buyer's
+  // Assets debt is held flat and is no deductible mortgage (no tile).
   const shares = ownershipShares(assets);
-  const startingMortgage = existingMortgage.balance;
-  const mortgageRatePct = existingMortgage.ratePct;
-  const mortgageTermYears = existingMortgage.termYears;
-  // Annual mortgage payment = 12 × the shared monthly annuity, so the forecast
-  // uses the same payment as the Loan page rather than re-deriving it annually.
-  const annualMortgagePayment = useMemo(
-    () => calcMonthlyPayment(startingMortgage, mortgageRatePct, mortgageTermYears) * 12,
-    [startingMortgage, mortgageRatePct, mortgageTermYears],
-  );
+  const mortgage = useMemo(() => forecastMortgage(currentMortgage), [currentMortgage]);
+  const startingMortgage = mortgage.amortises ? mortgage.balance : 0;
 
   // Non-assumption inputs shared by both scenarios (the user's real position).
   const inputs = useMemo<ForecastInputs>(() => ({
-    currentGross, startingMortgage, mortgageRatePct,
-    annualMortgagePayment, region, customTaxRatePct,
+    currentGross, mortgage, region, customTaxRatePct,
     ipsAnnualContribution: pension.ipsAnnualContribution,
     startYear: new Date().getFullYear(),
     // Balance sheet, split as the Dashboard's net worth: the home (and its
-    // mortgage, on the Dashboard's rate and term), financial assets, other debt.
+    // mortgage, as the Dashboard projects it), financial assets, other debt.
     startHomeValue: myHouseValue(assets),
-    startHomeDebt: myHouseDebt(assets),
-    homeDebtRatePct: homeMortgageRatePct,
-    homeDebtTermYears: homeMortgageTermYears,
     homeOwnShare: shares.own,
     houseGrowthPct: houseGrowthRate,
     startShares: netInvestment,
     startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
     debts,
     monthKey: today,
-  }), [currentGross, startingMortgage, mortgageRatePct, annualMortgagePayment, region, customTaxRatePct, pension.ipsAnnualContribution, assets, homeMortgageRatePct, homeMortgageTermYears, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
+  }), [currentGross, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),
@@ -265,14 +253,13 @@ const ForecastPage: React.FC = () => {
   const prepay = useMemo(() => {
     if (startingMortgage <= 0) return null;
     return prepayVsInvestFor({
-      housingMode,
-      homeownerRatePct: homeowner.rente,
+      mortgage,
       loanRatePct: loan.rente,
       region,
       customTaxRatePct,
       investGainsTaxPct: assets.taxRate,
     }, extraMonthly, returnPct, years);
-  }, [startingMortgage, housingMode, homeowner.rente, loan.rente, region, customTaxRatePct, assets.taxRate, extraMonthly, returnPct, years]);
+  }, [startingMortgage, mortgage, loan.rente, region, customTaxRatePct, assets.taxRate, extraMonthly, returnPct, years]);
 
   return (
     <div className="space-y-6 md:space-y-7">

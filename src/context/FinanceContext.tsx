@@ -36,13 +36,13 @@ import { isOneOff, withoutOneOffs, type TransactionSegment } from '../lib/segmen
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
-import { effectiveRemainingMonths, stampLegacyTerm } from '../lib/loanTerm';
+import { stampLegacyTerm } from '../lib/loanTerm';
 import { reconcileMortgageSlices, PLACEHOLDER_MORTGAGE_BALANCE } from '../lib/mortgageSlices';
-import { existingMortgage, annualMortgageInterest as yearOneMortgageInterest, type ExistingMortgage } from '../lib/existingMortgage';
+import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest, type CurrentMortgage } from '../lib/existingMortgage';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
   computeAutomationPostings,
-  type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
+  automationMortgage, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
 import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
@@ -1050,10 +1050,10 @@ interface FinanceDerivedContextType {
   capacityDebt: number;
   netWorth: number;
   studentDebt: number;
-  mortgageRate: number;
-  mortgageTermYears: number;
-  /** The mortgage owed today (user's share): none for a first buyer. */
-  existingMortgage: ExistingMortgage;
+  /** The current home's mortgage today (`currentMortgage`): the one source of
+   *  its balance, rate and term for every projection. A first buyer's Assets
+   *  debt is held flat (`amortises: false`). */
+  currentMortgage: CurrentMortgage;
   annualMortgageInterest: number;
   /** The year's BSU tax credit (10%, under-34, non-homeowner); 0 when not eligible. */
   bsuTaxCredit: number;
@@ -1934,18 +1934,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const prevMonthIncome = monthlyIncomes[prevMonthKey] ?? 0;
 
 
-  // The mortgage owed today, as the user's share: none for a first buyer (the
-  // Loan page's loan is a plan), the current home's loan otherwise.
-  const existingMortgageNow = useMemo(
-    () => existingMortgage(housingMode, homeowner, transition, ownershipShares({ coOwners: assets.coOwners }).debt),
-    [housingMode, homeowner, transition, assets.coOwners],
+  // The current home's mortgage today: the current loan in the owner modes
+  // (homeowner rate and term, also while transitioning), a first buyer's Assets
+  // debt held flat. Every projection and the rentefradrag read it.
+  const currentMortgageNow = useMemo(
+    () => currentMortgage(housingMode, assets, homeowner, transition, currentMonthKey()),
+    [housingMode, assets, homeowner, transition],
   );
 
   // Year-one mortgage interest (rentefradrag): reduces alminnelig inntekt at 22%,
   // so it's fed into every income-tax calc as an interest deduction.
   const annualMortgageInterest = useMemo(
-    () => yearOneMortgageInterest(existingMortgageNow),
-    [existingMortgageNow],
+    () => yearOneMortgageInterest(currentMortgageNow),
+    [currentMortgageNow],
   );
 
   // BSU tax credit (10%, under-34, non-homeowner) reduces the year's tax.
@@ -2329,12 +2330,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // studielån doesn't make the headline equity read poorer than it feels; it
   // still counts fully in totalDebt (so gjeldsgrad/låneevne are unaffected).
   const studentDebt = sumDebtByType(debts, 'student');
-  // Single source of truth for the mortgage rate/term used by net-worth projections,
-  // selected by the active housing mode (first-buyer & transitioning use the `loan`
-  // inputs; homeowner uses the `homeowner` inputs).
-  const mortgageRate = housingMode === 'homeowner' ? homeowner.rente : loan.rente;
-  // Display/projection term: the homeowner term counts down from its entry month.
-  const mortgageTermYears = housingMode === 'homeowner' ? effectiveRemainingMonths(homeowner) / 12 : loan.nedbetalingstid;
 
   // Snapshot current month's net worth (equity − non-mortgage debt, matching the
   // Dashboard headline) whenever it changes (only for the current real month)
@@ -2673,13 +2668,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       pensionOtp: pension.otpBalance,
       pensionIps: pension.ipsBalance,
     },
-    mortgage: assets.houseDebt,
-    mortgageRate: housingMode === 'homeowner' ? homeowner.rente : loan.rente,
+    // The current loan in both owner modes (first_buyer posts nothing).
+    ...automationMortgage(currentMortgageNow),
     mortgageDebtShare: ownershipShares({ coOwners: assets.coOwners }).debt,
     debts: Object.fromEntries(debts.map(d => [d.id, { balance: d.balance, rate: d.rate }])),
     housingMode,
-  }), [assets.savingsAccounts, assets.bufferAccount, assets.portfolio, assets.bsu, assets.houseDebt, assets.coOwners,
-      pension.otpBalance, pension.ipsBalance, housingMode, homeowner.rente, loan.rente, debts]);
+  }), [assets.savingsAccounts, assets.bufferAccount, assets.portfolio, assets.bsu, assets.coOwners,
+      pension.otpBalance, pension.ipsBalance, housingMode, currentMortgageNow, debts]);
 
   // Apply a resolved posting's absolute new balance to the right slice. Debt
   // writes are batched by the caller (a single setDebts) to avoid stale-closure
@@ -3313,7 +3308,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, existingMortgage: existingMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
+    totalDebt, capacityDebt, netWorth, studentDebt, currentMortgage: currentMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
@@ -3323,7 +3318,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedNetMonthlyFor,
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
-    totalDebt, capacityDebt, netWorth, studentDebt, mortgageRate, mortgageTermYears, existingMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
+    totalDebt, capacityDebt, netWorth, studentDebt, currentMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,

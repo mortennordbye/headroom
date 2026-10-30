@@ -3,8 +3,7 @@ import { prepayVsInvest, prepayVsInvestFor } from './prepayVsInvest';
 
 describe('prepayVsInvestFor', () => {
   const settings = {
-    housingMode: 'homeowner' as const,
-    homeownerRatePct: 5,
+    mortgage: { amortises: true, ratePct: 5 },
     loanRatePct: 6,
     region: 'no',
     customTaxRatePct: 30,
@@ -21,7 +20,7 @@ describe('prepayVsInvestFor', () => {
     // 5,000/month for 15 y at 7 %: 1,584,811 gross on 900,000 paid in, so the
     // 684,811 gain is taxed 37.84 % on sale. Taxing the return yearly gave
     // 1,266,431, losing to prepaying (1,272,268).
-    const r = prepayVsInvestFor({ ...settings, homeownerRatePct: 5.65 }, 5000, 7, 15);
+    const r = prepayVsInvestFor({ ...settings, mortgage: { amortises: true, ratePct: 5.65 } }, 5000, 7, 15);
     expect(r.investFutureValue).toBeCloseTo(1_325_679, 0);
     expect(r.investGainsTax).toBeCloseTo((r.investFutureValue + r.investGainsTax - 900_000) * 0.3784, 6);
     expect(r.winner).toBe('invest');
@@ -32,8 +31,9 @@ describe('prepayVsInvestFor', () => {
     expect(prepayVsInvestFor({ ...settings, region: 'generic' }, 5000, 7, 15).interestDeductionRatePct).toBe(30);
   });
 
-  it('uses the current mortgage rate for a homeowner and the planned loan otherwise', () => {
-    expect(prepayVsInvestFor({ ...settings, housingMode: 'first_buyer' }, 5000, 7, 15).afterTaxMortgageRatePct)
+  it('uses the current loan in the owner modes and the planned loan for a first buyer', () => {
+    expect(prepayVsInvestFor(settings, 5000, 7, 15).afterTaxMortgageRatePct).toBeCloseTo(5 * 0.78, 6);
+    expect(prepayVsInvestFor({ ...settings, mortgage: { amortises: false, ratePct: 0 } }, 5000, 7, 15).afterTaxMortgageRatePct)
       .toBeCloseTo(6 * 0.78, 6);
   });
 

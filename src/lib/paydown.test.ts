@@ -79,4 +79,26 @@ describe('paydownVsPlan', () => {
     expect(r.points.every(p => Number.isFinite(p.plan) && Number.isFinite(p.actual))).toBe(true);
     expect(Number.isFinite(r.aheadBy) && Number.isFinite(r.interestPaid)).toBe(true);
   });
+
+  it('transitioning: the plan prices the current loan, not the planned purchase loan', () => {
+    const snap = (b: number): BalanceSnapshot => ({
+      ...mk(b, 4, 20),
+      housingMode: 'transitioning',
+      transition: { currentMortgageBalance: b },
+      loan: { rente: 6, nedbetalingstid: 30 },
+    } as unknown as BalanceSnapshot);
+    const r = paydownVsPlan({ '2026-01': snap(2_000_000), '2026-02': snap(1_990_000) });
+    expect(r.monthlyPayment).toBeCloseTo(calcMonthlyPayment(2_000_000, 4, 20), 2);
+  });
+
+  it('first_buyer: the untouched homeowner placeholder is no mortgage', () => {
+    const snap = {
+      housingMode: 'first_buyer',
+      homeowner: { currentMortgageBalance: 3_000_000, rente: 5.5, nedbetalingstid: 25 },
+      transition: { currentMortgageBalance: 3_000_000 },
+      assets: { houseDebt: 0 },
+      loan: { rente: 5.5, nedbetalingstid: 25 },
+    } as unknown as BalanceSnapshot;
+    expect(paydownVsPlan({ '2026-01': snap, '2026-02': snap }).anchorMonth).toBeNull();
+  });
 });

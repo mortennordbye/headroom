@@ -8,7 +8,7 @@ import { calcDebtToIncome } from '../src/lib/calculations';
 import { spendByCategory } from '../src/lib/categoryStats';
 import { excludedTransferIds } from '../src/lib/transferRules';
 import { calcAmortizationSchedule, calcMortgageBalanceByYear } from '../src/lib/calculations';
-import { effectiveRemainingMonths } from '../src/lib/loanTerm';
+import { currentMortgage } from '../src/lib/existingMortgage';
 import { myHouseDebt } from '../src/lib/ownership';
 import { calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../src/lib/norwegianTax';
 import { fullFixture } from './fixture';
@@ -179,8 +179,7 @@ describe('derive (pure, no server)', () => {
       assets: { ...blob.assets, taxRate: 37.84 },
     };
     const page = prepayVsInvestFor({
-      housingMode: 'first_buyer',
-      homeownerRatePct: 4,
+      mortgage: { amortises: false, ratePct: 0 },
       loanRatePct: 6,
       region: 'generic',
       customTaxRatePct: 30,
@@ -455,50 +454,59 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(derive.forecast(b, {}, MONTH).projection[0].mortgage).toBe(1800000);
   });
 
-  // The Dashboard / Assets page project the home's mortgage on FinanceContext
-  // `mortgageRate` / `mortgageTermYears`: the homeowner loan in homeowner mode,
-  // the Loan page's loan otherwise, defaulting to 5.5 % / 25 y when missing.
-  const dashboardHomeDebt = (b: ExportPayload, years: number) => {
-    const homeowner = b.housingMode === 'homeowner';
-    const rate = (homeowner ? b.homeowner?.rente : b.loan?.rente) ?? 5.5;
-    const term = homeowner
-      ? effectiveRemainingMonths({ ...b.homeowner, nedbetalingstid: b.homeowner?.nedbetalingstid ?? 25 }, MONTH) / 12
-      : b.loan?.nedbetalingstid ?? 25;
-    return calcMortgageBalanceByYear(myHouseDebt(b.assets, MONTH), rate, term, years);
+  // The Dashboard / Assets / Forecast pages project the home's mortgage from
+  // FinanceContext `currentMortgage`: the current loan in the owner modes,
+  // a first buyer's Assets debt held flat.
+  const pageHomeDebt = (b: ExportPayload, years: number) => {
+    const h = b.homeowner;
+    const m = currentMortgage(b.housingMode, b.assets, { ...h, rente: h?.rente ?? 5.5, nedbetalingstid: h?.nedbetalingstid ?? 25 }, b.transition, MONTH);
+    return calcMortgageBalanceByYear(m.balance, m.ratePct, m.paymentTermMonths / 12, years);
   };
 
-  it('forecast: a first buyer\'s home debt amortises at the Loan page rate and term', () => {
+  it('forecast: a first buyer\'s Assets debt is held flat, not amortised on the planned loan', () => {
     const b = fullFixture();
     b.housingMode = 'first_buyer';
     b.assets = { ...b.assets, houseValue: 4800000, houseDebt: 3400000, coOwners: [] };
     b.loan = { ...b.loan!, rente: 5.65, nedbetalingstid: 25 };
     const rows = derive.forecast(b, { years: 10 }, MONTH).projection;
-    expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(3400000, 5.65, 25, 10));
-    expect(rows[10].homeDebt).toBe(2567632); // not 2,040,000 (linear at 0 %)
+    expect(rows.every((r) => r.homeDebt === 3400000)).toBe(true);
+    expect(rows.every((r) => r.mortgage === 0)).toBe(true);
   });
 
-  it('forecast: transitioning home debt uses the loan rate with the loan term, as the Dashboard', () => {
+  it('forecast: transitioning projects the current loan at its own rate and term, not the planned loan', () => {
     const b = fullFixture();
     b.housingMode = 'transitioning';
     b.homeowner = { ...b.homeowner!, rente: 4 };
     b.loan = { ...b.loan!, rente: 5.65, nedbetalingstid: 20 };
     const rows = derive.forecast(b, { years: 10 }, MONTH).projection;
-    expect(rows.map((r) => r.homeDebt)).toEqual(dashboardHomeDebt(b, 10));
-    expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(myHouseDebt(b.assets, MONTH), 5.65, 20, 10));
+    expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(2500000, 4, 25, 10));
+    // The mortgage tile is the same series.
+    expect(rows.map((r) => r.mortgage)).toEqual(rows.map((r) => r.homeDebt));
   });
 
-  it('forecast: home debt matches the Dashboard projection in every mode, also without a stored term', () => {
+  it('forecast: home debt matches the page inputs in every mode, also without a stored term', () => {
     for (const mode of ['first_buyer', 'homeowner', 'transitioning'] as const) {
       const b = fullFixture();
       b.housingMode = mode;
       const rows = derive.forecast(b, { years: 15 }, MONTH).projection;
-      expect(rows.map((r) => r.homeDebt)).toEqual(dashboardHomeDebt(b, 15));
+      expect(rows.map((r) => r.homeDebt)).toEqual(pageHomeDebt(b, 15));
     }
     const old = fullFixture();
     old.housingMode = 'homeowner';
     old.homeowner = { ...old.homeowner!, nedbetalingstid: undefined as unknown as number, nedbetalingstidAsOf: undefined };
     const rows = derive.forecast(old, { years: 15 }, MONTH).projection;
     expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(myHouseDebt(old.assets, MONTH), 5.5, 25, 15));
+  });
+
+  it('forecast: the mortgage tile and the net-worth home debt agree, at the user\'s share', () => {
+    for (const mode of ['homeowner', 'transitioning'] as const) {
+      const b = fullFixture();
+      b.housingMode = mode;
+      b.assets.coOwners = [{ id: 'c', name: 'Samboer', ownershipPct: 50, since: '2020-01' }];
+      const rows = derive.forecast(b, { years: 15 }, MONTH).projection;
+      expect(rows.map((r) => r.mortgage)).toEqual(rows.map((r) => r.homeDebt));
+      expect(rows[0].homeDebt).toBe(1250000);
+    }
   });
 
   it('co-owners: rentefradrag and wealth tax use the share', () => {

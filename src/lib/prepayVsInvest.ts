@@ -16,7 +16,7 @@
 // rate vs expected return), not a full cash-flow model: it ignores mortgage
 // payoff timing and assumes the extra is put to work for the whole horizon.
 
-import type { HousingMode } from '../context/FinanceContext';
+import type { CurrentMortgage } from './existingMortgage';
 import { RENTEFRADRAG_RATE_PCT } from './norwegianTax';
 
 export interface PrepayVsInvest {
@@ -85,19 +85,17 @@ export function prepayVsInvest(
   };
 }
 
-/** The mortgage rate for the housing mode: the current mortgage for a
- * homeowner, the planned loan otherwise. */
-function mortgageRatePctFor(
-  housingMode: HousingMode,
-  homeownerRatePct: number | undefined,
-  loanRatePct: number | undefined,
-): number {
-  return (housingMode === 'homeowner' ? homeownerRatePct : loanRatePct) ?? 5;
+/** The rate an extra krone would pay down: the current loan in the owner modes
+ * (homeowner and transitioning alike), the planned loan for a first buyer, who
+ * has no mortgage to prepay yet. */
+function mortgageRatePctFor(s: PrepayVsInvestSettings): number {
+  return s.mortgage.amortises ? s.mortgage.ratePct : s.loanRatePct ?? 5;
 }
 
 export interface PrepayVsInvestSettings {
-  housingMode: HousingMode;
-  homeownerRatePct: number | undefined;
+  /** The current home's mortgage (`currentMortgage`). */
+  mortgage: Pick<CurrentMortgage, 'amortises' | 'ratePct'>;
+  /** The planned loan's rate (the Loan page). */
   loanRatePct: number | undefined;
   region: string;
   /** Flat rate used for the interest deduction when region is 'generic'. */
@@ -121,7 +119,7 @@ export function prepayVsInvestFor(
   const deductionRatePct = s.region === 'no' ? RENTEFRADRAG_RATE_PCT : s.customTaxRatePct;
   return prepayVsInvest(
     extraMonthly,
-    mortgageRatePctFor(s.housingMode, s.homeownerRatePct, s.loanRatePct),
+    mortgageRatePctFor(s),
     investReturnPct,
     years,
     deductionRatePct,

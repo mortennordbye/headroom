@@ -12,6 +12,7 @@
 // floor-at-0 and amortization need the live balance + rate, the runner takes a
 // balance/rate snapshot and returns resolved absolute new balances.
 import { addMonthsKey, monthsBetween } from './date';
+import type { CurrentMortgage } from './existingMortgage';
 
 /**
  * Targets that are one plain scalar balance grown by the monthly amount. They
@@ -61,12 +62,19 @@ export interface AutomationState {
   savings: Record<string, number>;                       // by savingsAccountId
   /** The single-scalar balances, keyed by the target kind that writes them. */
   scalars: Record<ScalarTargetKind, number>;
-  mortgage: number;                                      // assets.houseDebt (the mirrored balance)
-  mortgageRate: number;                                  // annual %, homeowner.rente | loan.rente by mode
+  mortgage: number;                                      // the whole loan (automationMortgage)
+  mortgageRate: number;                                  // annual %, the current loan's (automationMortgage)
   /** The user's share (0..1) of the joint mortgage; absent = 1. */
   mortgageDebtShare?: number;
   debts: Record<string, { balance: number; rate: number }>; // by debtId; rate is annual %
   housingMode: HousingMode;
+}
+
+/** The runner's mortgage balance and rate, from the shared resolver: the whole
+ *  loan, at the current loan's rate in both owner modes (the planned purchase
+ *  loan is never paid). */
+export function automationMortgage(m: CurrentMortgage): Pick<AutomationState, 'mortgage' | 'mortgageRate'> {
+  return { mortgage: m.fullBalance, mortgageRate: m.ratePct };
 }
 
 export interface ResolvedPosting {

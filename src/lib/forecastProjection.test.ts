@@ -1,26 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { projectForecast, type ForecastInputs, type EffectiveScenario } from './forecastProjection';
+import { projectForecast, forecastMortgage, type ForecastInputs, type EffectiveScenario } from './forecastProjection';
+import { currentMortgage } from './existingMortgage';
 import { calcTaxByRegion } from './norwegianTax';
 import { calcHouseEquityByYear, calcMortgageBalanceByYear } from './calculations';
 
 const inputs: ForecastInputs = {
   currentGross: 600000,
-  startingMortgage: 2000000,
-  mortgageRatePct: 5,
-  annualMortgagePayment: 140000,
+  mortgage: { balance: 2000000, ratePct: 5, termYears: 25, amortises: true },
   region: 'generic',
   customTaxRatePct: 30, // flat 30% net → net = 70% of gross in generic mode
   ipsAnnualContribution: 0,
   startYear: 2026,
   startHomeValue: 3000000,
-  startHomeDebt: 2000000,
-  homeDebtRatePct: 5,
-  homeDebtTermYears: 25,
   houseGrowthPct: 2,
   startShares: 500000,
   startOtherAssets: 300000,
   debts: [],
 };
+
+const NO_MORTGAGE = { balance: 0, ratePct: 0, termYears: 0, amortises: false };
 
 const scenario = (over: Partial<EffectiveScenario> = {}): EffectiveScenario => ({
   raisePct: 4, savingsPct: 20, returnPct: 6, inflationPct: 3, years: 10, extraMonthly: 0, ...over,
@@ -30,8 +28,8 @@ describe('projectForecast — co-owned home', () => {
   // Year-1 wealth tax is assessed on year 0's ending composition. Only the home,
   // no shares/other/debt, Norway: half of a 16 MNOK home (8 M share, no growth).
   const home: ForecastInputs = {
-    ...inputs, region: 'no', startingMortgage: 0, annualMortgagePayment: 0,
-    startHomeValue: 8_000_000, startHomeDebt: 0, houseGrowthPct: 0,
+    ...inputs, region: 'no', mortgage: NO_MORTGAGE,
+    startHomeValue: 8_000_000, houseGrowthPct: 0,
     startShares: 0, startOtherAssets: 0,
   };
   const s = scenario({ years: 1, returnPct: 0, savingsPct: 0 });
@@ -75,8 +73,8 @@ describe('projectForecast', () => {
   it('grows home equity like calcHouseEquityByYear, not at the investment return', () => {
     // Home 5M, mortgage 3M at 5 % over 25 years, house growth 3 %, nothing else.
     const home: ForecastInputs = {
-      ...inputs, region: 'no', startingMortgage: 3_000_000,
-      startHomeValue: 5_000_000, startHomeDebt: 3_000_000, homeDebtTermYears: 25,
+      ...inputs, region: 'no', mortgage: { balance: 3_000_000, ratePct: 5, termYears: 25, amortises: true },
+      startHomeValue: 5_000_000,
       houseGrowthPct: 3, startShares: 0, startOtherAssets: 0,
     };
     const rows = projectForecast(home, scenario({ returnPct: 0, savingsPct: 0, years: 10 }));
@@ -89,8 +87,8 @@ describe('projectForecast', () => {
     // 4M listed shares and a 1M student loan: today's net worth is 3M, and the
     // year-1 wealth tax is on 4M × 80 % − 1M = 2.2M, 0.3M above the bunnfradrag.
     const withDebt: ForecastInputs = {
-      ...inputs, region: 'no', startingMortgage: 0, annualMortgagePayment: 0,
-      startHomeValue: 0, startHomeDebt: 0, startShares: 4_000_000, startOtherAssets: 0,
+      ...inputs, region: 'no', mortgage: NO_MORTGAGE,
+      startHomeValue: 0, startShares: 4_000_000, startOtherAssets: 0,
       debts: [{ id: 's', name: 'Student loan', type: 'student', balance: 1_000_000, rate: 4, minPayment: 6_000 }],
     };
     const rows = projectForecast(withDebt, scenario({ returnPct: 0, savingsPct: 0, years: 2 }));
@@ -109,7 +107,8 @@ describe('projectForecast', () => {
   it('deflates real net worth by the inflation assumption', () => {
     const rows = projectForecast(inputs, scenario({ inflationPct: 3, years: 5 }));
     const y5 = rows[5];
-    expect(y5.netWorthReal).toBe(Math.round(y5.netWorth / Math.pow(1.03, 5)));
+    // Within a krone: netWorthReal deflates the unrounded net worth.
+    expect(Math.abs(y5.netWorthReal - y5.netWorth / Math.pow(1.03, 5))).toBeLessThanOrEqual(1);
     expect(y5.netWorthReal).toBeLessThan(y5.netWorth);
   });
 
@@ -124,8 +123,8 @@ describe('projectForecast', () => {
     // 0.5M above the 2026 1.9M bunnfradrag → 5 000/yr at the first bracket.
     const noTaxDrift: EffectiveScenario = { raisePct: 0, savingsPct: 0, returnPct: 0, inflationPct: 0, years: 2, extraMonthly: 0 };
     const noInputs: ForecastInputs = {
-      ...inputs, region: 'no', startingMortgage: 0,
-      startHomeValue: 0, startHomeDebt: 0, startShares: 3000000, startOtherAssets: 0, debts: [],
+      ...inputs, region: 'no', mortgage: NO_MORTGAGE,
+      startHomeValue: 0, startShares: 3000000, startOtherAssets: 0, debts: [],
     };
 
     it('charges no tax at year 0 and reduces net worth from year 1 on', () => {
@@ -150,17 +149,49 @@ describe('projectForecast', () => {
   });
 });
 
-describe('projectForecast — home debt rate', () => {
-  it('amortises the home debt at its own rate, not the rentefradrag loan rate', () => {
-    // A first buyer: a house and mortgage on the Assets page, but no rentefradrag
-    // loan (mortgageRatePct 0). The debt follows the Dashboard's 5.65 % / 25 y.
+describe('projectForecast — one mortgage series', () => {
+  it('the mortgage tile and the net-worth home debt are the same series in the owner modes', () => {
+    const rows = projectForecast(inputs, scenario({ years: 25 }));
+    expect(rows.map((r) => r.mortgage)).toEqual(rows.map((r) => r.homeDebt));
+    expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(2_000_000, 5, 25, 25));
+  });
+
+  it('deducts the interest on the balance entering the year', () => {
+    const rows = projectForecast(inputs, scenario({ years: 2, raisePct: 0 }));
+    const debt = calcMortgageBalanceByYear(2_000_000, 5, 25, 2);
+    expect(rows[2].net).toBe(Math.round(calcTaxByRegion(600000, 'generic', 30, 0, debt[1] * 0.05).netAnnual));
+  });
+
+  it('a first buyer\'s Assets debt is held flat, with no tile and no deduction', () => {
     const firstBuyer: ForecastInputs = {
-      ...inputs, startingMortgage: 0, mortgageRatePct: 0, annualMortgagePayment: 0,
-      startHomeValue: 4_800_000, startHomeDebt: 3_400_000,
-      homeDebtRatePct: 5.65, homeDebtTermYears: 25,
+      ...inputs, mortgage: { balance: 3_400_000, ratePct: 0, termYears: 0, amortises: false },
+      startHomeValue: 4_800_000,
     };
-    const rows = projectForecast(firstBuyer, scenario({ years: 10 }));
-    expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(3_400_000, 5.65, 25, 10));
-    expect(rows[10].homeDebt).toBe(2_567_632); // not 2,040,000 (linear at 0 %)
+    const rows = projectForecast(firstBuyer, scenario({ years: 10, raisePct: 0 }));
+    expect(rows.every((r) => r.homeDebt === 3_400_000)).toBe(true);
+    expect(rows.every((r) => r.mortgage === 0)).toBe(true);
+    expect(rows[1].net).toBe(Math.round(calcTaxByRegion(600000, 'generic', 30, 0, 0).netAnnual));
   });
 });
+
+describe('Dashboard and Forecast project the same home equity', () => {
+  // The Dashboard: calcHouseEquityByYear on `currentMortgage`. The Forecast:
+  // projectForecast with only the home (no financial assets, no savings, no
+  // other debt, generic region), so its net worth is the home equity.
+  const assets = { houseDebt: 3_000_000, coOwners: [{ id: 'c', name: 'S', ownershipPct: 50, since: '2020-01' }] };
+  const homeowner = {
+    currentMortgageBalance: 3_000_000, rente: 4.5, nedbetalingstid: 22,
+    nedbetalingstidAsOf: '2025-10', currentMortgageBalanceAsOf: '2025-10',
+  };
+  it.each(['homeowner', 'transitioning', 'first_buyer'] as const)('%s', (mode) => {
+    const m = currentMortgage(mode, assets, homeowner, { currentMortgageBalance: 3_000_000 }, '2026-10');
+    const myValue = 5_000_000 * 0.5;
+    const dashboard = calcHouseEquityByYear(myValue, m.balance, 3, m.ratePct, m.paymentTermMonths / 12, 15);
+    const rows = projectForecast({
+      ...inputs, mortgage: forecastMortgage(m), startHomeValue: myValue, houseGrowthPct: 3,
+      startShares: 0, startOtherAssets: 0, debts: [], homeOwnShare: 0.5,
+    }, scenario({ years: 15, savingsPct: 0, returnPct: 0 }));
+    rows.forEach((r, y) => expect(Math.abs(r.netWorth - dashboard[y])).toBeLessThanOrEqual(1));
+  });
+});
+
