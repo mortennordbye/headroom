@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pensionFutureValue, projectPensionWealth } from './pension';
+import { otpAnnualContribution, pensionFutureValue, projectPensionWealth } from './pension';
 
 describe('pensionFutureValue', () => {
   it('returns the starting balance for zero or negative years', () => {
@@ -53,5 +53,20 @@ describe('projectPensionWealth', () => {
     const series = projectPensionWealth({ ...params, yearsToRetire: 0 });
     expect(series).toHaveLength(1);
     expect(series[0].total).toBe(350000);
+  });
+});
+
+describe('otpAnnualContribution', () => {
+  it('takes the percentage of pay below 12G', () => {
+    expect(otpAnnualContribution(600_000, 5, 2026)).toBeCloseTo(30_000, 6);
+  });
+
+  it('caps the contribution base at 12G', () => {
+    // 12 × 136,549 = 1,638,588; 5% of that, not of 2M.
+    expect(otpAnnualContribution(2_000_000, 5, 2026)).toBeCloseTo(81_929.4, 6);
+  });
+
+  it('returns 0 for non-positive income', () => {
+    expect(otpAnnualContribution(-1, 5, 2026)).toBe(0);
   });
 });
