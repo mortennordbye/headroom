@@ -72,7 +72,10 @@ export interface ForecastInputs {
   startHomeValue: number;
   /** The user's share of the mortgage on the home (`myHouseDebt`). */
   startHomeDebt: number;
-  /** Remaining term (years) that `startHomeDebt` amortises over at `mortgageRatePct`. */
+  /** Rate (%) `startHomeDebt` amortises at: the Dashboard's `mortgageRate`, which
+   *  for a first buyer is the Loan page's rate, not `mortgageRatePct` (0 then). */
+  homeDebtRatePct: number;
+  /** Remaining term (years) `startHomeDebt` amortises over: the Dashboard's `mortgageTermYears`. */
   homeDebtTermYears: number;
   /** The user's ownership share (0..1) when `startHomeValue` / `startHomeDebt`
    *  are their share of a co-owned home, so the wealth-tax threshold applies to
@@ -98,6 +101,9 @@ export interface ForecastRow {
   financial: number;
   netWorthReal: number;
   mortgage: number;
+  /** The home's mortgage (the user's share) still owed this year: the debt side
+   *  of the home in `netWorth`. */
+  homeDebt: number;
   /** Estimated formuesskatt charged this year (paid out of net worth). 0 at year
    *  0 and whenever the household is under the bunnfradrag or region ≠ 'no'. */
   wealthTax: number;
@@ -112,12 +118,12 @@ export interface ForecastRow {
 export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): ForecastRow[] {
   const { currentGross, startingMortgage, mortgageRatePct, annualMortgagePayment,
     region, customTaxRatePct, ipsAnnualContribution, startYear,
-    startHomeValue, startHomeDebt, homeDebtTermYears, houseGrowthPct, startShares, startOtherAssets,
+    startHomeValue, startHomeDebt, homeDebtRatePct, homeDebtTermYears, houseGrowthPct, startShares, startOtherAssets,
     debts, monthKey, homeOwnShare = 1 } = inputs;
   const mortgageRate = mortgageRatePct / 100;
   const financialBase = Math.max(0, startShares + startOtherAssets);
   const sharesRatio = financialBase > 0 ? Math.max(0, startShares) / financialBase : 0;
-  const homeDebtByYear = calcMortgageBalanceByYear(startHomeDebt, mortgageRatePct, homeDebtTermYears, s.years);
+  const homeDebtByYear = calcMortgageBalanceByYear(startHomeDebt, homeDebtRatePct, homeDebtTermYears, s.years);
   const otherDebtByYear = calcDebtBalanceByYear(debts, s.years, monthKey);
   const out: ForecastRow[] = [];
   let gross = currentGross;
@@ -157,6 +163,7 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
       financial: Math.round(financial),
       netWorthReal: Math.round(netWorth / realDeflator),
       mortgage: Math.round(mortgage),
+      homeDebt: Math.round(homeDebt),
       wealthTax: Math.round(wealthTaxDue),
     });
     // Assess next year's wealth tax on this year's ending composition, with the
