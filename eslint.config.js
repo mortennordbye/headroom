@@ -36,6 +36,7 @@ export default defineConfig([
     ignores: ['**/*.test.js'],
     extends: [js.configs.recommended],
     languageOptions: { ecmaVersion: 2022, sourceType: 'commonjs', globals: globals.node },
+    rules: { 'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }] },
   },
   {
     // cleanLabel strips control characters on purpose.
