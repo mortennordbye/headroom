@@ -164,9 +164,6 @@ in git and the CHANGELOG, not here.
   history, Entur transit distance; then market stats and a wait-or-switch Forecast scenario.
   **Unblock**: phase 1 accepted. **Where**: `mcp/tools/market.ts`, `server/market.js`,
   `src/pages/bolig/MarketPanel.tsx`.
-- **Market freshness.** Show when sales and listings were last imported on the Marked tab. The hook
-  already returns `lastSalesImport`/`lastListingSeen`. **Where**: `src/pages/bolig/MarketPanel.tsx`,
-  `src/hooks/useMarketData.ts`.
 
 ## Pension
 
