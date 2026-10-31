@@ -1,4 +1,5 @@
 import type { HousingMode } from '../context/FinanceContext';
+import { coerceNumber } from './sanitizePayload';
 
 // The current home's mortgage is stored once, in `assets.houseDebt`; the
 // homeowner slice keeps only the month it was written
@@ -33,9 +34,13 @@ export function validHousingMode(v: unknown): HousingMode | undefined {
 /** Only a 'YYYY-MM' month counts as a balance date. */
 const isMonthKey = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
 
-/** A stored balance: finite, negatives clamped to 0; anything else is absent. */
-const balanceOf = (v: unknown): number | undefined =>
-  typeof v === 'number' && Number.isFinite(v) ? Math.max(0, v) : undefined;
+/** A stored balance: finite, negatives clamped to 0; anything else is absent.
+ *  A numeric string ("1 900 000") is read the way the load's sanitizer reads
+ *  number fields, since the old copies are no longer in its schema. */
+const balanceOf = (v: unknown): number | undefined => {
+  const n = coerceNumber(v);
+  return n !== undefined && Number.isFinite(n) ? Math.max(0, n) : undefined;
+};
 
 /** A balance only a user could have entered: positive and not the placeholder. */
 const isReal = (b: number | undefined): b is number => b !== undefined && b > 0 && b !== PLACEHOLDER_MORTGAGE_BALANCE;

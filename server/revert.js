@@ -115,11 +115,22 @@ function revertChange(currentBlob, afterBlob, beforeBlob, keys) {
   // older revision must not report the missing copy as a conflict. Those older
   // revisions changed houseDebt along with the copies, so their undo restores
   // the balance through assets.
+  // A revision that changed a copy while houseDebt stayed put (drifted old
+  // data) can't be undone through assets, so it is refused rather than
+  // reported as undone with the balance left as it is.
   const after = { ...afterBlob };
   const before = { ...beforeBlob };
+  const unrepresentable = [];
+  const debtOf = (b) => (isObj(b.assets) ? b.assets.houseDebt : undefined);
   for (const slice of ['homeowner', 'transition']) {
     const cur = currentBlob[slice];
     if (!isObj(cur) || 'currentMortgageBalance' in cur) continue;
+    const a = isObj(after[slice]) ? after[slice] : undefined;
+    const bf = isObj(before[slice]) ? before[slice] : undefined;
+    if (a && bf && 'currentMortgageBalance' in a && 'currentMortgageBalance' in bf
+      && !deepEqual(a.currentMortgageBalance, bf.currentMortgageBalance) && deepEqual(debtOf(after), debtOf(before))) {
+      unrepresentable.push(`${slice}.currentMortgageBalance`);
+    }
     for (const side of [after, before]) {
       if (isObj(side[slice]) && 'currentMortgageBalance' in side[slice]) {
         const { currentMortgageBalance: _legacy, ...rest } = side[slice];
@@ -127,6 +138,7 @@ function revertChange(currentBlob, afterBlob, beforeBlob, keys) {
       }
     }
   }
+  if (unrepresentable.length) return { conflicts: unrepresentable };
   const out = { ...currentBlob };
   const conflicts = [];
   for (const k of keys) {

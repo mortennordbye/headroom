@@ -160,6 +160,12 @@ describe('migrateMortgageBalance: malformed input', () => {
     expect(out.homeowner?.currentMortgageBalanceAsOf).toBe(NOW);
   });
 
+  it('a balance stored as text is read as a number', () => {
+    const d = { housingMode: 'homeowner' as const, assets: { houseDebt: 0 },
+      homeowner: { currentMortgageBalance: '1 900 000' }, transition: { currentMortgageBalance: '1 900 000' } } as unknown as MortgageSliceFields;
+    expectMigrated(migrateMortgageBalance(d, NOW), 1_900_000);
+  });
+
   it('an unknown housing mode reads as first_buyer', () => {
     const d = { ...legacy('first_buyer', 1_000_000, 2_000_000, 2_000_000), housingMode: 'renter' as unknown as HousingMode };
     const out = migrateMortgageBalance(d, NOW);

@@ -184,6 +184,22 @@ describe('revertChange (property)', () => {
     }), RUNS);
   });
 
+  it('undoing an old-app balance edit on top of the migrated state restores the earlier balance', () => {
+    // The old app moved all three copies together, so the revision is in sync.
+    fc.assert(fc.property(inSyncLegacyBlob, fc.integer({ min: 1, max: 6_000_000 }), (x, edited) => {
+      fc.pre(edited !== houseDebtOf(x) && edited !== 3_000_000);
+      const y = structuredClone(x);
+      (y.assets as Blob).houseDebt = edited;
+      (y.homeowner as Blob).currentMortgageBalance = edited;
+      (y.transition as Blob).currentMortgageBalance = edited;
+      const current = loadAndSave(y);
+      const r = revertChange(current, y, x, changedKeys(x, y));
+      expect(r.conflicts).toBeUndefined();
+      expect(hasLegacyCopies(r.blob!)).toBe(false);
+      expect(shownBalance(loadAndSave(r.blob!))).toBe(shownBalance(loadAndSave(x)));
+    }), RUNS);
+  });
+
   it('undoing the migration save of an in-sync legacy blob keeps the balance shown', () => {
     fc.assert(fc.property(inSyncLegacyBlob, (legacy) => {
       const migrated = loadAndSave(legacy);

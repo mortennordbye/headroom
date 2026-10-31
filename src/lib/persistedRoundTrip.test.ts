@@ -182,9 +182,9 @@ const same = (a: unknown, b: unknown) => changedPaths({ v: a } as Blob, { v: b }
 const DRIFTED = 'homeowner, drifted copies';
 const PLACEHOLDER = 'homeowner, untouched placeholder until a balance is entered on Assets';
 const KNOWN_BUGS: Record<string, string> = {
-  // A legacy edit that changed only the homeowner copy: its undo is clean but
-  // the balance stays, only the balance date goes back.
-  [`${DRIFTED}|undo 2`]: 'undo of a homeowner-copy-only balance edit leaves the balance unchanged',
+  // A legacy edit that changed only the homeowner copy: houseDebt did not move,
+  // so the undo can't restore it through assets and is refused (a conflict).
+  [`${DRIFTED}|undo 2`]: 'undo of a homeowner-copy-only balance edit is refused',
   // An edit to the Assets copy the homeowner mode did not show: the load moved
   // houseDebt to the shown balance, so the undo reports a conflict nobody made.
   [`${DRIFTED}|undo 4`]: 'undo of a hidden assets.houseDebt edit conflicts with the migration',

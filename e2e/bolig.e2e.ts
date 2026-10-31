@@ -35,11 +35,12 @@ test('editing the mortgage balance persists across a reload', async ({ page, req
   await expect(currentLoanCard(page)).toContainText(balance('2 950 000'));
 });
 
-test('a legacy blob with the balance in three places loads and converges on assets.houseDebt', async ({ page, request }) => {
+test('a legacy blob with drifted copies loads the homeowner copy and converges on assets.houseDebt', async ({ page, request }) => {
+  // Homeowner mode: the old rules show the homeowner copy, not Assets or transition.
   const legacy = seedBlob();
-  legacy.assets.houseDebt = 2_750_000;
+  legacy.assets.houseDebt = 2_800_000;
   legacy.homeowner = { ...legacy.homeowner, currentMortgageBalance: 2_750_000 };
-  legacy.transition = { ...legacy.transition, currentMortgageBalance: 2_750_000 };
+  legacy.transition = { ...legacy.transition, currentMortgageBalance: 2_700_000 };
   await putBlob(request, legacy);
   const before = (await getBlob(request)).rev;
 

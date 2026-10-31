@@ -674,6 +674,19 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(after.totalFixedExpenses).toBe(before.totalFixedExpenses);
   });
 
+  it('a fixed expense paying a revolving card adds nothing to the savings rate', () => {
+    const b = fullFixture();
+    b.monthlyIncomes = {};
+    b.debts = [{ id: 'card', name: 'Card', type: 'credit_card', balance: 15000, rate: 0, minPayment: 0, revolving: true }];
+    b.fixedExpenses = [...b.fixedExpenses!, { id: 'fc', name: 'Card', amount: 15000 }];
+    const plain = derive.budgetSummary(b, MONTH).savingsRateTargetOfIncomePct;
+    b.fixedExpenses = b.fixedExpenses.map((e) => (e.id === 'fc' ? { ...e, destinationKind: 'debt' as const, debtId: 'card' } : e));
+    expect(derive.budgetSummary(b, MONTH).savingsRateTargetOfIncomePct).toBe(plain);
+    // The same card without the flag is paid down, so the target moves.
+    b.debts = [{ ...b.debts[0], revolving: false }];
+    expect(derive.budgetSummary(b, MONTH).savingsRateTargetOfIncomePct).toBeGreaterThan(plain);
+  });
+
   it('region generic taxes at the default 30% flat rate when none is stored', () => {
     const b = fullFixture();
     b.region = 'generic';
