@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.9.1](https://github.com/mortennordbye/headroom/compare/v3.9.0...v3.9.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* correct labels, axes and defaults found in the calculation review ([#277](https://github.com/mortennordbye/headroom/issues/277)) ([a32ff86](https://github.com/mortennordbye/headroom/commit/a32ff86f80bbb2383c0a20e31df76a4afd456623))
+* count holiday pay above salary in the Forecast, money flow and pension figures ([#274](https://github.com/mortennordbye/headroom/issues/274)) ([574f46f](https://github.com/mortennordbye/headroom/commit/574f46ff63c20985443d631d3cae2ca75e874630))
+* skip overlap rows re-imported after a re-link changes the reference format ([#273](https://github.com/mortennordbye/headroom/issues/273)) ([cfca20a](https://github.com/mortennordbye/headroom/commit/cfca20ad974e3d921c9f4b0a38b74688c18c8579))
+* warn about job overlaps in any month and when every salaried job has ended ([#275](https://github.com/mortennordbye/headroom/issues/275)) ([b1eaaca](https://github.com/mortennordbye/headroom/commit/b1eaacaa79f854651b1969cabd93a28a11e0d6fa))
+
 ## [3.9.0](https://github.com/mortennordbye/headroom/compare/v3.8.2...v3.9.0) (2026-10-31)
 
 
