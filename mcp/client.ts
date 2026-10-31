@@ -226,8 +226,8 @@ export async function applyMutation(
   label: () => string = () => 'mcp write',
 ): Promise<{ rev: number; unchanged?: boolean }> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    // The stored blob, not getData's reconciled view: a write changes only what
-    // the mutation touches.
+    // The stored blob, migrated as on load (fetchData), so the write saves the
+    // current shape plus what the mutation touches.
     const { blob, rev } = await fetchData();
     const next = mutate(structuredClone(blob));
     // Nothing changed (e.g. the value was already set): skip the save, so a
