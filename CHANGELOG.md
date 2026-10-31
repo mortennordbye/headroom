@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.10.0](https://github.com/mortennordbye/headroom/compare/v3.9.1...v3.10.0) (2026-10-31)
+
+
+### Features
+
+* show when market data was last imported on the Marked tab ([#282](https://github.com/mortennordbye/headroom/issues/282)) ([195f5e6](https://github.com/mortennordbye/headroom/commit/195f5e6c197dcc113588eaf3bedf5f69c55aa068))
+
+
+### Bug Fixes
+
+* count the principal part of loan payments as kept in the savings rate ([#284](https://github.com/mortennordbye/headroom/issues/284)) ([bf7cb44](https://github.com/mortennordbye/headroom/commit/bf7cb4416c3e1edaa886020da1bf1d1818def389))
+* store the mortgage balance once, in assets.houseDebt ([#280](https://github.com/mortennordbye/headroom/issues/280)) ([ab6e9dc](https://github.com/mortennordbye/headroom/commit/ab6e9dce3125b133a88ca50ccf71434892b2b2c8)), closes [#279](https://github.com/mortennordbye/headroom/issues/279)
+
 ## [3.9.1](https://github.com/mortennordbye/headroom/compare/v3.9.0...v3.9.1) (2026-10-31)
 
 
