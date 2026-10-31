@@ -30,3 +30,4 @@ BACKLOG.md
 **/*.test.ts
 **/*.test.tsx
 **/*.test.js
+**/*.testHelpers.ts
