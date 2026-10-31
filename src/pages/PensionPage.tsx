@@ -1,7 +1,8 @@
 import React, { useMemo, lazy, Suspense } from 'react';
 import {
-  Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import { ResponsiveContainer } from '../components/charts/ResponsiveContainer';
 import { Briefcase, TrendingUp, Lock, Calculator, Landmark } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual, DEFAULT_PENSION, type Pension } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';

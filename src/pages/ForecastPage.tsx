@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import {
-  AreaChart, Area, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
+  AreaChart, Area, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine,
 } from 'recharts';
+import { ResponsiveContainer } from '../components/charts/ResponsiveContainer';
 import { TrendingUp, Wallet, Activity, Flame, Scale, GitCompare } from 'lucide-react';
 import { useFinance, calcActiveGrossAnnual } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';

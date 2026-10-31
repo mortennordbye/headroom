@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Sankey, Tooltip, ResponsiveContainer, Layer, Rectangle } from 'recharts';
+import { Sankey, Tooltip, Layer, Rectangle } from 'recharts';
+import { ResponsiveContainer } from './ResponsiveContainer';
 import { useFinance, calcActiveGrossAnnual } from '../../context/FinanceContext';
 import { monthKeyFromDate } from '../../lib/date';
 import { calcTaxByRegion } from '../../lib/norwegianTax';

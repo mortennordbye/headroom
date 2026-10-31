@@ -38,7 +38,9 @@ export function FitText({
     const fit = () => {
       // Measure at the inherited size first, so the scale is always derived
       // from the natural width rather than compounding the previous scale.
-      text.style.fontSize = '';
+      // Only write when scaled: an unconditional write invalidates layout, so
+      // every FitText on a page forced its own reflow on mount.
+      if (text.style.fontSize) text.style.fontSize = '';
       const scale = fitFontScale(box.clientWidth, Math.ceil(text.getBoundingClientRect().width), min);
       text.style.fontSize = scale < 1 ? `${scale * 100}%` : '';
     };

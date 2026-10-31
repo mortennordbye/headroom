@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Home, Hammer, ArrowRight, Info, Layers, AlertTriangle, LineChart } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
+import { ResponsiveContainer } from '../../components/charts/ResponsiveContainer';
 import { useFinance } from '../../context/FinanceContext';
 import { computeEquityBreakdown, sumSavings } from '../../lib/equity';
 import { calcDebtToIncome, calcMonthlyPayment } from '../../lib/calculations';

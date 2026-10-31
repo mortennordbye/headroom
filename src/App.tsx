@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { FinanceProvider, useFinance, useFinanceSettings } from './context/FinanceContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -10,16 +10,39 @@ import Layout from './components/Layout';
 import { Skeleton } from './components/ui/Skeleton';
 
 // Code-split per route: each page bundle is fetched only when navigated to.
-const BudgetPage = lazy(() => import('./pages/BudgetPage'));
-const AssetPage = lazy(() => import('./pages/AssetPage'));
-const BoligPage = lazy(() => import('./pages/BoligPage'));
-const DashboardPage = lazy(() => import('./pages/DashboardPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const SalaryPage = lazy(() => import('./pages/SalaryPage'));
-const ForecastPage = lazy(() => import('./pages/ForecastPage'));
-const PensionPage = lazy(() => import('./pages/PensionPage'));
-const EmployerCostPage = lazy(() => import('./pages/EmployerCostPage'));
-const YearReviewPage = lazy(() => import('./pages/YearReviewPage'));
+const pageImports = [
+  () => import('./pages/DashboardPage'),
+  () => import('./pages/BudgetPage'),
+  () => import('./pages/AssetPage'),
+  () => import('./pages/SalaryPage'),
+  () => import('./pages/BoligPage'),
+  () => import('./pages/ForecastPage'),
+  () => import('./pages/PensionPage'),
+  () => import('./pages/EmployerCostPage'),
+  () => import('./pages/YearReviewPage'),
+  () => import('./pages/SettingsPage'),
+] as const;
+const [DashboardPage, BudgetPage, AssetPage, SalaryPage, BoligPage, ForecastPage, PensionPage, EmployerCostPage, YearReviewPage, SettingsPage] =
+  pageImports.map(load => lazy(load));
+
+// Warm every route once the app is idle, one chunk per idle slot, so the first
+// visit to a tab doesn't pay for fetching and evaluating its bundle. The service
+// worker already caches the files; this also gets them parsed and run ahead of time.
+function usePreloadRoutes() {
+  useEffect(() => {
+    const idle = (cb: () => void) =>
+      typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback(cb, { timeout: 3000 }) : setTimeout(cb, 1000);
+    let cancelled = false;
+    const queue = [...pageImports];
+    const next = () => {
+      const load = queue.shift();
+      if (cancelled || !load) return;
+      load().catch(() => {}).finally(() => idle(next));
+    };
+    idle(next);
+    return () => { cancelled = true; };
+  }, []);
+}
 
 function RouteFallback() {
   const { t } = useFinance();
@@ -48,6 +71,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  usePreloadRoutes();
   return (
     <FinanceProvider>
       <AuthGate>

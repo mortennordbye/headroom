@@ -1,8 +1,9 @@
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
   usePlotArea, useChartWidth,
   type TooltipContentProps,
 } from 'recharts';
+import { ResponsiveContainer } from './charts/ResponsiveContainer';
 import type { FixedExpense } from '../context/FinanceContext';
 import { CHART, GRID_PROPS } from '../lib/chartColors';
 import ChartTooltip from './ChartTooltip';

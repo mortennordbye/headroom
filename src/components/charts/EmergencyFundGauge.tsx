@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { RadialBarChart, RadialBar, PolarAngleAxis, ResponsiveContainer } from 'recharts';
+import { RadialBarChart, RadialBar, PolarAngleAxis } from 'recharts';
+import { ResponsiveContainer } from './ResponsiveContainer';
 import { useFinance } from '../../context/FinanceContext';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { calcEmergencyFundStatus } from '../../lib/calculations';
