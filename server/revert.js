@@ -107,10 +107,30 @@ function revertValue(path, current, after, before) {
  * (paths changed since) without touching anything.
  */
 function revertChange(currentBlob, afterBlob, beforeBlob, keys) {
+  // The mortgage balance is stored once, in assets.houseDebt; the homeowner and
+  // transition copies older saves held are dropped on load. Once the current
+  // blob has dropped a copy, the copy is left out of the merge on both sides of
+  // the revision: undoing the save that dropped it must not bring back a stale
+  // balance (which would win over houseDebt on the next load), and undoing an
+  // older revision must not report the missing copy as a conflict. Those older
+  // revisions changed houseDebt along with the copies, so their undo restores
+  // the balance through assets.
+  const after = { ...afterBlob };
+  const before = { ...beforeBlob };
+  for (const slice of ['homeowner', 'transition']) {
+    const cur = currentBlob[slice];
+    if (!isObj(cur) || 'currentMortgageBalance' in cur) continue;
+    for (const side of [after, before]) {
+      if (isObj(side[slice]) && 'currentMortgageBalance' in side[slice]) {
+        const { currentMortgageBalance: _legacy, ...rest } = side[slice];
+        side[slice] = rest;
+      }
+    }
+  }
   const out = { ...currentBlob };
   const conflicts = [];
   for (const k of keys) {
-    const r = revertValue(k, currentBlob[k], afterBlob[k], beforeBlob[k]);
+    const r = revertValue(k, currentBlob[k], after[k], before[k]);
     if (r.conflicts.length) {
       conflicts.push(...r.conflicts);
       continue;
@@ -118,22 +138,7 @@ function revertChange(currentBlob, afterBlob, beforeBlob, keys) {
     if (r.absent) delete out[k];
     else out[k] = r.value;
   }
-  if (conflicts.length) return { conflicts };
-  // The mortgage balance is stored once, in assets.houseDebt; the homeowner and
-  // transition copies older saves held are dropped on load. Never bring a copy
-  // back into a blob that has already dropped it: undoing the save that dropped
-  // it would otherwise restore a stale balance that wins over houseDebt on the
-  // next load. Older revisions changed houseDebt along with the copies, so their
-  // undo still restores the balance through assets.
-  for (const slice of ['homeowner', 'transition']) {
-    const cur = currentBlob[slice];
-    const next = out[slice];
-    if (isObj(cur) && isObj(next) && !('currentMortgageBalance' in cur) && 'currentMortgageBalance' in next) {
-      const { currentMortgageBalance: _legacy, ...rest } = next;
-      out[slice] = rest;
-    }
-  }
-  return { blob: out };
+  return conflicts.length ? { conflicts } : { blob: out };
 }
 
 module.exports = { deepEqual, changedKeys, revertChange };

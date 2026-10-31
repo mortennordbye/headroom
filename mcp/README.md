@@ -127,11 +127,12 @@ Notes on a few of them:
 - `delete_transaction` on a bank-imported row (`eb-` id) also adds the id to
   `deletedBankIds`, as the app does, so the server's bank reconcile does not bring
   the row back.
-- `update_asset` mirrors `houseValue`/`houseDebt` into the `homeowner` and
-  `transition` slices, as the app does, so the same home never shows two numbers.
+- `update_asset`: `houseDebt` is the one stored mortgage balance and stamps its
+  month on the `homeowner` slice; `houseValue` is mirrored into the `transition`
+  slice, as the app does.
 - `update_current_mortgage` edits the mortgage the user has (rate, fee, start
   month, balance, remaining term as `termYears` + `termMonths`). The term counts
-  down from the month it was set; `balance` mirrors like `update_asset houseDebt`.
+  down from the month it was set; `balance` is written to `assets.houseDebt`.
   `update_loan` is the planned purchase loan in first-buyer / buy-and-sell modes.
 - `set_co_owners` replaces the whole co-owner list of the current home (the shares
   must validate together). Home value and loan stay the full amounts; the user's

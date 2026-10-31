@@ -46,6 +46,21 @@ describe('revertChange', () => {
     expect(r.blob).toEqual(current);
   });
 
+  it('undoes a balance edit saved before the copies were dropped, through assets', () => {
+    const before = { assets: { houseDebt: 2_500_000 }, homeowner: { currentMortgageBalance: 2_500_000, rente: 5 }, transition: { currentMortgageBalance: 2_500_000 } };
+    const after = { assets: { houseDebt: 2_400_000 }, homeowner: { currentMortgageBalance: 2_400_000, rente: 5 }, transition: { currentMortgageBalance: 2_400_000 } };
+    const current = { assets: { houseDebt: 2_400_000 }, homeowner: { rente: 5 }, transition: {} };
+    const r = revertChange(current, after, before, changedKeys(before, after));
+    expect(r.blob).toEqual({ assets: { houseDebt: 2_500_000 }, homeowner: { rente: 5 }, transition: {} });
+  });
+
+  it('still refuses when the balance changed again since an old edit', () => {
+    const before = { assets: { houseDebt: 2_500_000 }, homeowner: { currentMortgageBalance: 2_500_000 } };
+    const after = { assets: { houseDebt: 2_400_000 }, homeowner: { currentMortgageBalance: 2_400_000 } };
+    const current = { assets: { houseDebt: 2_300_000 }, homeowner: {} };
+    expect(revertChange(current, after, before, changedKeys(before, after)).conflicts).toEqual(['assets.houseDebt']);
+  });
+
   it('still restores the copies in a blob that was never migrated', () => {
     const before = { homeowner: { currentMortgageBalance: 1 } };
     const after = { homeowner: { currentMortgageBalance: 2 } };
