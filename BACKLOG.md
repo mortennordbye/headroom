@@ -183,6 +183,12 @@ in git and the CHANGELOG, not here.
   with `trust proxy` scoped to the gateway. **Where**: `server/index.js` (`globalKey`,
   `apiLimiter`). A stale SW predating `DEMO_MODE` would boot the old client; only matters if the
   demo URL is repointed.
+- **SPA fallback 404s under a dot-directory.** `res.sendFile(path.join(DIST, 'index.html'))` is
+  refused by `send`'s dotfile rule when the install path has a `.`-prefixed segment (a checkout in
+  `.claude/worktrees`), so every client route 404s; Docker and CI paths are fine. The e2e setup
+  works around it by running the server from a temp copy. **Why deferred**: test-only PR, no server
+  changes. **Unblock**: `res.sendFile('index.html', { root: DIST })`, then drop the copy in
+  `e2e/global-setup.ts`. **Where**: `server/index.js` (SPA fallback), `e2e/global-setup.ts`.
 
 ## Desktop app
 
