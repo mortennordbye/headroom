@@ -128,7 +128,7 @@ async function fetchCpi(fromMonth, toMonth) {
       });
       return parseCpiJsonStat2(data, toMonth);
     } catch (v1Err) {
-      throw new Error(`v2: ${v2Err.message}; v1: ${v1Err.message}`);
+      throw new Error(`v2: ${v2Err.message}; v1: ${v1Err.message}`, { cause: v1Err });
     }
   }
 }
