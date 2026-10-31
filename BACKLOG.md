@@ -19,7 +19,7 @@ in git and the CHANGELOG, not here.
   `src/lib/paydown.ts`, `src/lib/mortgageSlices.ts`, `mcp/derive.ts` (`activeMortgage`).
 - **Undo misreads drifted legacy mortgage history.** With an old blob whose Assets copy of the
   balance differed from the homeowner/transition copy, undo of the migration save shows the stale
-  Assets value; undo of a legacy edit to only the homeowner copy leaves the balance unchanged; undo
+  Assets value; undo of a legacy edit to only the homeowner copy is refused as a conflict; undo
   of an edit to the hidden Assets copy, and undo of a restore whose load migrated or stamped the
   balance, report conflicts nobody made. **Why deferred**: found by tests only; the fix in
   `revertChange` needs a decision on how undo treats values the load migration rewrote.

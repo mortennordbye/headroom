@@ -61,6 +61,14 @@ describe('revertChange', () => {
     expect(revertChange(current, after, before, changedKeys(before, after)).conflicts).toEqual(['assets.houseDebt']);
   });
 
+  it('refuses an old edit to a balance copy that left houseDebt unchanged', () => {
+    // Drifted old data: only the homeowner copy changed, so undo can't restore it through assets.
+    const before = { assets: { houseDebt: 2_310_000 }, homeowner: { currentMortgageBalance: 2_270_000, currentMortgageBalanceAsOf: '2026-01' } };
+    const after = { assets: { houseDebt: 2_310_000 }, homeowner: { currentMortgageBalance: 2_250_000, currentMortgageBalanceAsOf: '2026-04' } };
+    const current = { assets: { houseDebt: 2_250_000 }, homeowner: { currentMortgageBalanceAsOf: '2026-04' } };
+    expect(revertChange(current, after, before, changedKeys(before, after)).conflicts).toEqual(['homeowner.currentMortgageBalance']);
+  });
+
   it('still restores the copies in a blob that was never migrated', () => {
     const before = { homeowner: { currentMortgageBalance: 1 } };
     const after = { homeowner: { currentMortgageBalance: 2 } };

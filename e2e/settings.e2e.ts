@@ -14,7 +14,7 @@ async function quietBlob(request: APIRequestContext): Promise<Blob> {
   return (await getBlob(request)).blob;
 }
 
-test('export then import round-trips without changing the stored blob', async ({ page, request }) => {
+test('importing an export brings the exported state back', async ({ page, request }) => {
   await putBlob(request, seedBlob());
   await page.goto('/settings');
   const main = page.getByRole('main');
@@ -28,6 +28,15 @@ test('export then import round-trips without changing the stored blob', async ({
   const exported = JSON.parse(file.toString('utf8'));
   expect(exported._version).toEqual(expect.any(Number));
   expect(exported.assets).toEqual(before.assets);
+
+  // Change the data after the export, so the import has something to undo.
+  const changed = seedBlob();
+  changed.assets.houseDebt = 1_234_000;
+  changed.income = 12_345;
+  await putBlob(request, changed);
+  await page.reload();
+  await expect(main.getByRole('heading', { level: 1 })).toBeVisible();
+  expect((await quietBlob(request)).assets.houseDebt).toBe(1_234_000);
 
   await main.getByLabel('Slipp JSON-filen her').setInputFiles({
     name: download.suggestedFilename(), mimeType: 'application/json', buffer: file,
