@@ -54,16 +54,21 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # Arm auto-merge on the release PR. It merges only once the required
-      # checks pass, the same gate every other PR goes through.
-      # The PR comes through as raw JSON and is parsed in the shell: step env
-      # is evaluated even when `if` is false, so fromJSON() on an empty output
-      # here would fail the job (and with it the desktop build) on every push.
+      # Arm auto-merge on the open release PR. It merges only once the required
+      # checks pass, the same gate every other PR goes through. The PR is found
+      # by release-please's own label rather than its `pr` output, which is
+      # empty on runs where the PR didn't change, so a release PR opened
+      # before this ran (or left alone by this run) still gets armed.
       - name: Auto-merge the release PR
-        if: env.HAS_APP == 'true' && steps.release.outputs.pr != ''
-        run: gh pr merge --auto --squash "$(jq -r .number <<<"$PR_JSON")"
+        if: env.HAS_APP == 'true' && steps.release.outputs.release_created != 'true'
+        run: |
+          pr=$(gh pr list --state open --label "autorelease: pending" --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            echo "No open release PR."
+            exit 0
+          fi
+          gh pr merge --auto --squash "$pr"
         env:
-          PR_JSON: ${{ steps.release.outputs.pr }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
 
