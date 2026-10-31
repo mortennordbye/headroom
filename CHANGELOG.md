@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.10.3](https://github.com/mortennordbye/headroom/compare/v3.10.2...v3.10.3) (2026-10-31)
+
+
+### Bug Fixes
+
+* make the whole mobile tab bar tappable and its icons brass ([#293](https://github.com/mortennordbye/headroom/issues/293)) ([aed7bee](https://github.com/mortennordbye/headroom/commit/aed7bee781443c779468e115e2485a32f4362d21))
+
 ## [3.10.2](https://github.com/mortennordbye/headroom/compare/v3.10.1...v3.10.2) (2026-10-31)
 
 
