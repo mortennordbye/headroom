@@ -109,7 +109,7 @@ make backup    # copy the SQLite DB out to ./backups/
 
 A pure-local path also exists (see README "Local development"): `node server/index.js` + `npm run dev` (Vite proxies `/api` → `:3001`).
 
-Tests: `npm test` (Vitest, run once), `npm run test:watch`, or a single file `npx vitest run src/lib/debt.test.ts`. Lint: `npm run lint`.
+Tests: `npm test` (Vitest, run once), `npm run test:watch`, or a single file `npx vitest run src/lib/debt.test.ts`. Browser smoke tests: `npm run test:e2e` (Playwright, `e2e/`, throwaway server and `DATA_DIR`). Lint: `npm run lint`.
 
 ## Before reporting a task complete
 
