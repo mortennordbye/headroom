@@ -80,6 +80,13 @@ in git and the CHANGELOG, not here.
 
 ## Bank import
 
+- **A row deleted before a re-link can come back.** The first sync after a re-link drops overlap
+  rows whose reference changed format by matching them against stored rows (`dropRelinkFormatTwins`).
+  A row the user had deleted is no longer stored, and `deletedBankIds` holds its old id, so its
+  new-format twin is imported again. **Unblock**: keep date, amount, account and description with
+  each deleted id so the re-link match can check against them too. **Where**:
+  `dropRelinkFormatTwins` / `mergeTransactions` in `server/bank.js`, `deletedBankIds` in
+  `src/context/FinanceContext.tsx`.
 - **`deletedBankIds` grows unbounded.** No prune is provably safe without knowing the bank's sync
   window. **Unblock**: a server-side retention rule keyed to that window, or drop ids when their
   connection is removed. **Where**: `src/context/FinanceContext.tsx`, `mergeTransactions` in
