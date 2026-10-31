@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'server/dist', 'desktop/server', 'desktop/release']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -28,5 +28,23 @@ export default defineConfig([
         ignoreRestSiblings: true,
       }],
     },
+  },
+  // The Node side: the server and the desktop shell are CommonJS, their tests
+  // (run by Vitest) are ES modules, and this file is one too.
+  {
+    files: ['server/**/*.js', 'desktop/**/*.js'],
+    ignores: ['**/*.test.js'],
+    extends: [js.configs.recommended],
+    languageOptions: { ecmaVersion: 2022, sourceType: 'commonjs', globals: globals.node },
+  },
+  {
+    // cleanLabel strips control characters on purpose.
+    files: ['server/index.js'],
+    rules: { 'no-control-regex': 'off' },
+  },
+  {
+    files: ['server/**/*.test.js', 'desktop/**/*.test.js', 'eslint.config.js'],
+    extends: [js.configs.recommended],
+    languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: globals.node },
   },
 ])

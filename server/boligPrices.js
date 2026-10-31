@@ -147,7 +147,7 @@ async function fetchKvmpris(region, boligtype, topCount = 8) {
       });
       return parseBolig14310JsonStat2(data);
     } catch (v1Err) {
-      throw new Error(`v2: ${v2Err.message}; v1: ${v1Err.message}`);
+      throw new Error(`v2: ${v2Err.message}; v1: ${v1Err.message}`, { cause: v1Err });
     }
   }
 }
