@@ -1,21 +1,26 @@
 import type { HousingMode } from '../context/FinanceContext';
 
-// The current home's mortgage is one real balance stored in three slices:
-// `assets.houseDebt` (net worth), `homeowner.currentMortgageBalance` (payment,
-// LTV) and `transition.currentMortgageBalance` (sale maths). All hold the whole
-// loan. The writers keep them in lockstep; this repairs a blob where they drifted
-// (old saves, the placeholder defaults) so every reader sees one balance.
+// The current home's mortgage is stored once, in `assets.houseDebt`; the
+// homeowner slice keeps only the month it was written
+// (`currentMortgageBalanceAsOf`). Older saves held the same balance in
+// `homeowner.currentMortgageBalance` and `transition.currentMortgageBalance`
+// too, with a 3 000 000 placeholder default. This file reads those once, picks
+// the balance the app showed, writes it to `assets.houseDebt` and drops the old
+// fields (migrateMortgageBalance / migrateImportedMortgage).
 
-/** The balance the homeowner and transition slices start with before anyone
- *  enters a mortgage. Untouched, it means "not set", not a real 3 MNOK loan. */
-export const PLACEHOLDER_MORTGAGE_BALANCE = 3_000_000;
+/** The balance the old homeowner and transition slices started with before
+ *  anyone entered a mortgage. Untouched, it meant "not set". Only legacy data
+ *  is read against it. */
+const PLACEHOLDER_MORTGAGE_BALANCE = 3_000_000;
 
-/** The fields read and written here. Loose: old or imported blobs may lack any. */
+/** The fields read and written here. Loose: old or imported blobs may lack any,
+ *  and the two `currentMortgageBalance` fields exist only in legacy data. */
 export interface MortgageSliceFields {
   housingMode?: HousingMode;
   assets?: { houseDebt?: number };
   homeowner?: { currentMortgageBalance?: number; currentMortgageBalanceAsOf?: string };
-  transition?: { currentMortgageBalance?: number };
+  // currentHouseValue is never read; it names a field every transition slice has.
+  transition?: { currentMortgageBalance?: number; currentHouseValue?: number };
 }
 
 const HOUSING_MODES: readonly HousingMode[] = ['first_buyer', 'homeowner', 'transitioning'];
@@ -36,7 +41,8 @@ const balanceOf = (v: unknown): number | undefined =>
 const isReal = (b: number | undefined): b is number => b !== undefined && b > 0 && b !== PLACEHOLDER_MORTGAGE_BALANCE;
 
 /**
- * Bring the three slices to one balance. Unknown modes read as first_buyer.
+ * Legacy data only: bring the three old slices to one balance, as the app did
+ * before the balance was stored once. Unknown modes read as first_buyer.
  *  • first_buyer: assets.houseDebt wins.
  *  • homeowner / transitioning: the active owner slice (homeowner →
  *    homeowner, transitioning → transition) wins unless it holds exactly the
@@ -49,10 +55,9 @@ const isReal = (b: number | undefined): b is number => b !== undefined && b > 0 
  *    A missing or malformed balance date is stamped `monthKey`.
  * Negative balances clamp to 0. Slices absent from `data` are left absent.
  *
- * Idempotent, and returns `data` itself when nothing needs changing, so a plain
- * load does not dirty the blob.
+ * Returns `data` itself when nothing needs changing.
  */
-export function reconcileMortgageSlices<T extends MortgageSliceFields>(data: T, monthKey: string): T {
+function reconcileLegacy<T extends MortgageSliceFields>(data: T, monthKey: string): T {
   const mode = validHousingMode(data.housingMode) ?? 'first_buyer';
   const { assets: a, homeowner: h, transition: tr } = data;
   const stamped = isMonthKey(h?.currentMortgageBalanceAsOf);
@@ -88,22 +93,72 @@ export function reconcileMortgageSlices<T extends MortgageSliceFields>(data: T, 
   };
 }
 
+const isOwnerMode = (m: HousingMode | undefined) => m === 'homeowner' || m === 'transitioning';
+
+/** True when a blob still carries the old duplicate balance fields. */
+const hasLegacyFields = (d: MortgageSliceFields) =>
+  (d.homeowner != null && 'currentMortgageBalance' in d.homeowner)
+  || (d.transition != null && 'currentMortgageBalance' in d.transition);
+
+/** Drop the old duplicate balance fields. Returns `data` itself when absent. */
+function dropLegacyFields<T extends MortgageSliceFields>(data: T): T {
+  if (!hasLegacyFields(data)) return data;
+  const out = { ...data };
+  if (data.homeowner != null && 'currentMortgageBalance' in data.homeowner) {
+    const { currentMortgageBalance: _h, ...rest } = data.homeowner;
+    out.homeowner = rest;
+  }
+  if (data.transition != null && 'currentMortgageBalance' in data.transition) {
+    const { currentMortgageBalance: _t, ...rest } = data.transition;
+    out.transition = rest;
+  }
+  return out;
+}
+
+/** In an owner mode the balance carries the month it was written; a missing
+ *  or malformed date is stamped `monthKey`. */
+function stampBalanceDate<T extends MortgageSliceFields>(data: T, monthKey: string): T {
+  const h = data.homeowner;
+  if (h == null || !isOwnerMode(validHousingMode(data.housingMode)) || isMonthKey(h.currentMortgageBalanceAsOf)) return data;
+  return { ...data, homeowner: { ...h, currentMortgageBalanceAsOf: monthKey } };
+}
+
 /**
- * Reconcile after an import overlays `imported` on `current` (fields absent from
- * the import keep their current value). The imported mortgage takes precedence:
- * when the import carries some of the three slices, its balance is copied into
- * the ones it lacks before reconciling, so importing only Assets does not lose
- * to the stored homeowner slice. An imported untouched placeholder (unstamped
- * 3 000 000 and nothing else) carries no balance and is not copied. An unknown
- * imported mode keeps the current mode.
+ * Bring a loaded blob or stored snapshot to the one-field shape. A legacy blob
+ * is reconciled once (reconcileLegacy) and its balance written to
+ * `assets.houseDebt`; an owner-mode balance with no `assets` creates it. The
+ * old fields are then dropped. In an owner mode a missing balance date is
+ * stamped `monthKey`.
+ *
+ * Idempotent, and returns `data` itself when nothing needs changing, so a plain
+ * load does not dirty the blob.
  */
-export function reconcileImportedMortgage<T extends MortgageSliceFields>(
+export function migrateMortgageBalance<T extends MortgageSliceFields>(data: T, monthKey: string): T {
+  if (!hasLegacyFields(data)) return stampBalanceDate(data, monthKey);
+  let r = reconcileLegacy(data, monthKey);
+  if (r.assets == null && isOwnerMode(validHousingMode(r.housingMode))) {
+    const b = balanceOf(r.homeowner?.currentMortgageBalance) ?? balanceOf(r.transition?.currentMortgageBalance);
+    if (b !== undefined && b > 0) r = { ...r, assets: { houseDebt: b } };
+  }
+  return stampBalanceDate(dropLegacyFields(r), monthKey);
+}
+
+/**
+ * The state after an import overlays `imported` on `current` (fields absent
+ * from the import keep their current value; `current` is already migrated).
+ * When the import carries a balance, in `assets.houseDebt` or in the legacy
+ * fields, the balance the import alone settles on is written to the resulting
+ * `assets.houseDebt`, so importing only an old homeowner slice still moves the
+ * balance. An imported untouched placeholder (unstamped 3 000 000 and nothing
+ * else) carries no balance. An unknown imported mode keeps the current mode.
+ */
+export function migrateImportedMortgage<T extends MortgageSliceFields>(
   current: T,
   imported: MortgageSliceFields,
   monthKey: string,
 ): T {
   const housingMode = validHousingMode(imported.housingMode) ?? current.housingMode;
-  const merged: T = {
+  let merged: T = {
     ...current,
     housingMode,
     assets: imported.assets ?? current.assets,
@@ -114,28 +169,26 @@ export function reconcileImportedMortgage<T extends MortgageSliceFields>(
   const ia = balanceOf(imported.assets?.houseDebt);
   const ih = balanceOf(imported.homeowner?.currentMortgageBalance);
   const it = balanceOf(imported.transition?.currentMortgageBalance);
-  const carried = [ia, ih, it].filter(b => b !== undefined);
-  const meaningful = ia !== undefined || isReal(ih) || isReal(it)
-    || (ih !== undefined && isMonthKey(imported.homeowner?.currentMortgageBalanceAsOf));
-  if (carried.length === 0 || carried.length === 3 || !meaningful) return reconcileMortgageSlices(merged, monthKey);
-
-  // The balance the import alone settles on (its own reconcile, so an imported
-  // placeholder beside a real imported value still loses).
-  const own = reconcileMortgageSlices({
-    housingMode,
-    ...(ia !== undefined ? { assets: imported.assets } : {}),
-    ...(ih !== undefined ? { homeowner: imported.homeowner } : {}),
-    ...(it !== undefined ? { transition: imported.transition } : {}),
-  }, monthKey);
-  const b = balanceOf(own.assets?.houseDebt) ?? balanceOf(own.homeowner?.currentMortgageBalance)
-    ?? balanceOf(own.transition?.currentMortgageBalance) ?? 0;
-
-  return reconcileMortgageSlices({
-    ...merged,
-    ...(ia === undefined && merged.assets ? { assets: { ...merged.assets, houseDebt: b } } : {}),
-    ...(ih === undefined && merged.homeowner
-      ? { homeowner: { ...merged.homeowner, currentMortgageBalance: b, currentMortgageBalanceAsOf: monthKey } }
-      : {}),
-    ...(it === undefined && merged.transition ? { transition: { ...merged.transition, currentMortgageBalance: b } } : {}),
-  }, monthKey);
+  const importedAsOf = imported.homeowner?.currentMortgageBalanceAsOf;
+  const meaningful = ia !== undefined || isReal(ih) || isReal(it) || (ih !== undefined && isMonthKey(importedAsOf));
+  if (meaningful) {
+    // The balance the import alone settles on (its own reconcile, so an imported
+    // placeholder beside a real imported value still loses).
+    const own = reconcileLegacy({
+      housingMode,
+      ...(ia !== undefined ? { assets: imported.assets } : {}),
+      ...(ih !== undefined ? { homeowner: imported.homeowner } : {}),
+      ...(it !== undefined ? { transition: imported.transition } : {}),
+    }, monthKey);
+    const b = balanceOf(own.assets?.houseDebt) ?? balanceOf(own.homeowner?.currentMortgageBalance)
+      ?? balanceOf(own.transition?.currentMortgageBalance) ?? 0;
+    const asOf = isMonthKey(own.homeowner?.currentMortgageBalanceAsOf) ? own.homeowner.currentMortgageBalanceAsOf
+      : isMonthKey(importedAsOf) ? importedAsOf : monthKey;
+    merged = {
+      ...merged,
+      assets: { ...merged.assets, houseDebt: b },
+      ...(merged.homeowner ? { homeowner: { ...merged.homeowner, currentMortgageBalanceAsOf: asOf } } : {}),
+    };
+  }
+  return stampBalanceDate(dropLegacyFields(merged), monthKey);
 }

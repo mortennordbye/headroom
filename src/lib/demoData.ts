@@ -50,7 +50,6 @@ export function getDemoData(): Partial<ExportPayload> {
     bufferAccount: 60000,
   };
   const demoHomeowner = {
-    currentMortgageBalance: 2950000,
     originalLoanAmount: 3400000,
     rente: 5.5,
     nedbetalingstid: 25,
@@ -62,7 +61,6 @@ export function getDemoData(): Partial<ExportPayload> {
   };
   const demoTransition = {
     currentHouseValue: 4200000,
-    currentMortgageBalance: 2950000,
     agentFeePercent: 3,
     documentFee: 7500,
     otherSaleCosts: 0,
@@ -234,7 +232,6 @@ export function getDemoData(): Partial<ExportPayload> {
     // Each month records the term left then, so the time machine counts down to today's.
     homeowner: {
       ...demoHomeowner,
-      currentMortgageBalance: demoHomeowner.currentMortgageBalance + 8000 * k,
       nedbetalingstid: demoHomeowner.nedbetalingstid + k / 12,
       nedbetalingstidAsOf: monthsAgo(k),
       currentMortgageBalanceAsOf: monthsAgo(k),

@@ -37,7 +37,7 @@ import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { stampLegacyTerm } from '../lib/loanTerm';
-import { reconcileMortgageSlices, reconcileImportedMortgage, PLACEHOLDER_MORTGAGE_BALANCE } from '../lib/mortgageSlices';
+import { migrateMortgageBalance, migrateImportedMortgage } from '../lib/mortgageSlices';
 import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest, type CurrentMortgage } from '../lib/existingMortgage';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
@@ -410,7 +410,6 @@ export type Region = 'no' | 'generic';
 export type HousingMode = 'first_buyer' | 'homeowner' | 'transitioning';
 
 export interface HomeownerData {
-  currentMortgageBalance: number;
   originalLoanAmount: number;
   rente: number;
   /** Remaining term in years as of `nedbetalingstidAsOf`; a multiple of 1/12
@@ -419,7 +418,8 @@ export interface HomeownerData {
   termingebyr: number;
   /** Month 'YYYY-MM' the term was entered; the remaining term counts down from it. */
   nedbetalingstidAsOf?: string;
-  /** Month 'YYYY-MM' the balance was last written; prices the payment. */
+  /** Month 'YYYY-MM' the mortgage balance (`assets.houseDebt`) was last
+   *  written; prices the payment. */
   currentMortgageBalanceAsOf?: string;
   /** Bank account name for the loan, e.g. "Boliglån ung" (free text). */
   accountLabel?: string;
@@ -459,7 +459,6 @@ export interface Residence {
 
 export interface TransitionData {
   currentHouseValue: number;
-  currentMortgageBalance: number;
   agentFeePercent: number;
   documentFee: number;
   otherSaleCosts: number;
@@ -645,7 +644,6 @@ const DEFAULT_ASSETS: Assets = {
 };
 
 const DEFAULT_HOMEOWNER: HomeownerData = {
-  currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE,
   originalLoanAmount: 3500000,
   rente: 5.5,
   nedbetalingstid: 25,
@@ -654,7 +652,6 @@ const DEFAULT_HOMEOWNER: HomeownerData = {
 
 const DEFAULT_TRANSITION: TransitionData = {
   currentHouseValue: 4500000,
-  currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE,
   agentFeePercent: 3,
   documentFee: 7500,
   otherSaleCosts: 0,
@@ -1491,14 +1488,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       projectionIncludeGrowth: setProjectionIncludeGrowth,
     };
     // Load and import only, so registry reads stay clock-free; stored snapshots are
-    // left alone (a missing stamp there means "as recorded"). First bring the three
-    // mortgage slices to one balance (mortgageSlices.ts). An import reconciles over
-    // the current state with the imported slices taking precedence; a slice it
-    // changes but did not carry is added to the overlay.
+    // left alone (a missing stamp there means "as recorded"; readers migrate them).
+    // First move a legacy mortgage balance onto assets.houseDebt
+    // (mortgageSlices.ts). An import overlays the current state with the imported
+    // balance taking precedence; a slice it changes but did not carry is added to
+    // the overlay.
     let data = sanitized;
-    if (resetMissing) data = reconcileMortgageSlices(sanitized, currentMonthKey());
+    if (resetMissing) data = migrateMortgageBalance(sanitized, currentMonthKey());
     else if (current) {
-      const r = reconcileImportedMortgage(current, sanitized, currentMonthKey());
+      const r = migrateImportedMortgage(current, sanitized, currentMonthKey());
       data = { ...sanitized };
       for (const key of ['assets', 'homeowner', 'transition'] as const) {
         if (sanitized[key] !== undefined || r[key] !== current[key]) Object.assign(data, { [key]: r[key] });
@@ -2400,17 +2398,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     ));
   }, [liveBalanceSnapshot]);
 
-  // The current home's value and mortgage are one real quantity stored in three
-  // slices (assets drives net worth; homeowner drives LTV/payment; transition
-  // drives the sale math). Keep them in lockstep no matter which page edits, so
-  // the pages can never show contradictory numbers. (Previously only
-  // assets↔homeowner were mirrored, and only in homeowner mode — the transition
-  // slice drifted, and demo data seeded all three independently.)
+  // The mortgage balance is stored once, in assets.houseDebt; writing it stamps
+  // the month on the homeowner slice. The house value is still held twice
+  // (assets.houseValue and transition.currentHouseValue) and mirrored here.
   const updateAsset = useCallback((key: NumericAssetKey, value: number) => {
     setAssets(prev => ({ ...prev, [key]: value }));
     if (key === 'houseDebt') {
-      setHomeowner(prev => ({ ...prev, currentMortgageBalance: value, currentMortgageBalanceAsOf: currentMonthKey() }));
-      setTransition(prev => ({ ...prev, currentMortgageBalance: value }));
+      setHomeowner(prev => ({ ...prev, currentMortgageBalanceAsOf: currentMonthKey() }));
     }
     if (key === 'houseValue') {
       setTransition(prev => ({ ...prev, currentHouseValue: value }));
@@ -2497,45 +2491,27 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateHomeowner = useCallback((key: keyof HomeownerData, value: number | string) => {
-    // The term and the balance carry the month they were written (see loanTerm.ts).
-    const stamp = key === 'nedbetalingstid' ? { nedbetalingstidAsOf: currentMonthKey() }
-      : key === 'currentMortgageBalance' ? { currentMortgageBalanceAsOf: currentMonthKey() }
-        : {};
+    // The term carries the month it was written (see loanTerm.ts).
+    const stamp = key === 'nedbetalingstid' ? { nedbetalingstidAsOf: currentMonthKey() } : {};
     setHomeowner(prev => ({ ...prev, [key]: value, ...stamp }));
-    // Mirror the mortgage balance across the slices that hold the same real debt.
-    // Only the numeric mortgage-balance key mirrors; text fields (accountLabel,
-    // startDate) never hit this branch.
-    if (key === 'currentMortgageBalance' && typeof value === 'number') {
-      setAssets(prev => ({ ...prev, houseDebt: value }));
-      setTransition(prev => ({ ...prev, currentMortgageBalance: value }));
-    }
   }, []);
 
   const updateTransition = useCallback((key: keyof TransitionData, value: number) => {
     setTransition(prev => ({ ...prev, [key]: value }));
-    // The transition slice describes the same current home as assets/homeowner —
-    // mirror its value and mortgage so all three stay in lockstep.
-    if (key === 'currentMortgageBalance') {
-      setAssets(prev => ({ ...prev, houseDebt: value }));
-      setHomeowner(prev => ({ ...prev, currentMortgageBalance: value, currentMortgageBalanceAsOf: currentMonthKey() }));
-    }
+    // The transition slice describes the same current home as assets: mirror its value.
     if (key === 'currentHouseValue') {
       setAssets(prev => ({ ...prev, houseValue: value }));
     }
   }, []);
 
-  // User-facing housing-mode switch. Brings the three mortgage slices to one
-  // balance under the new mode, as a load does: an owner slice that was written
-  // wins, while one still holding the untouched placeholder takes houseDebt
-  // instead (no phantom 3 MNOK for a first buyer switching). Internal load paths
-  // use the raw setHousingMode so they don't trigger this side effect.
+  // User-facing housing-mode switch. The balance stays assets.houseDebt; an
+  // owner mode stamps its date if it has none, as a load does. Internal load
+  // paths use the raw setHousingMode so they don't trigger this side effect.
   const changeHousingMode = useCallback((mode: HousingMode) => {
     setHousingMode(mode);
-    const next = reconcileMortgageSlices({ housingMode: mode, assets, homeowner, transition }, currentMonthKey());
-    if (next.assets !== assets) setAssets(next.assets);
+    const next = migrateMortgageBalance({ housingMode: mode, homeowner }, currentMonthKey());
     if (next.homeowner !== homeowner) setHomeowner(next.homeowner);
-    if (next.transition !== transition) setTransition(next.transition);
-  }, [assets, homeowner, transition]);
+  }, [homeowner]);
 
   // useState setters are stable, so each CRUD bundle is built once.
   const jobsCrud = useMemo(() => makeCrud<JobEntry>(setJobs, 'job'), []);
@@ -2719,15 +2695,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       } else if (p.targetKind === 'pensionIps') {
         updatePension('ipsBalance', p.newBalance);
       } else if (p.targetKind === 'mortgage') {
-        // updateHomeowner mirrors the balance into assets.houseDebt + transition.
-        updateHomeowner('currentMortgageBalance', p.newBalance);
+        // updateAsset stamps the balance date on the homeowner slice.
+        updateAsset('houseDebt', p.newBalance);
       } else if (p.targetKind === 'debt' && p.debtId) {
         debtPatch[p.debtId] = p.newBalance;
         hasDebtPatch = true;
       }
     }
     if (hasDebtPatch) setDebts(debts.map(d => (d.id in debtPatch ? { ...d, balance: debtPatch[d.id] } : d)));
-  }, [updateSavingsAccount, updateAsset, updatePension, updateHomeowner, debts]);
+  }, [updateSavingsAccount, updateAsset, updatePension, debts]);
 
   // Stamp lastPostedMonth on the posted rules. Savings and fixed expenses each
   // carry their own stamp; the two synthesized pension rules stamp onto the
@@ -3066,11 +3042,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       betingetLaan: 0, kjoepesum: 0, gyldigTil: '',
     });
     setHomeowner({
-      currentMortgageBalance: 0, originalLoanAmount: 0,
+      originalLoanAmount: 0,
       rente: 0, nedbetalingstid: 0, termingebyr: 0,
     });
     setTransition({
-      currentHouseValue: 0, currentMortgageBalance: 0,
+      currentHouseValue: 0,
       agentFeePercent: 0, documentFee: 0, otherSaleCosts: 0,
       bridgeMonths: 0, bridgeLoanRate: 0,
     });

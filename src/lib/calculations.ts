@@ -309,20 +309,22 @@ export function calcBridgeLoanCost(
  * lånebehov" on the Bolig page; also the MCP's planned loan in this mode).
  */
 export function calcTransitionNewLoan(
-  transition: Pick<TransitionData, 'currentHouseValue' | 'currentMortgageBalance' | 'agentFeePercent'
+  transition: Pick<TransitionData, 'currentHouseValue' | 'agentFeePercent'
     | 'documentFee' | 'otherSaleCosts' | 'bridgeLoanRate' | 'bridgeMonths'>,
+  /** The whole mortgage on the home being sold (`assets.houseDebt`). */
+  mortgageBalance: number,
   loan: Pick<LoanData, 'kjoepesum' | 'egenkapital' | 'rente' | 'nedbetalingstid' | 'termingebyr'>,
   shares: { own: number; debt: number },
 ) {
   const saleProceeds = calcNetSaleProceeds(
     transition.currentHouseValue,
-    transition.currentMortgageBalance,
+    mortgageBalance,
     transition.agentFeePercent,
     transition.documentFee,
     transition.otherSaleCosts,
   );
-  const bridgeCost = calcBridgeLoanCost(transition.currentMortgageBalance, transition.bridgeLoanRate, transition.bridgeMonths);
-  const mySale = mySaleProceeds(saleProceeds.netProceeds, transition.currentMortgageBalance, shares);
+  const bridgeCost = calcBridgeLoanCost(mortgageBalance, transition.bridgeLoanRate, transition.bridgeMonths);
+  const mySale = mySaleProceeds(saleProceeds.netProceeds, mortgageBalance, shares);
   const equityFromSale = Math.max(0, mySale);
   const totalEquityNew = equityFromSale + loan.egenkapital;
   const newLoanNeeded = Math.max(0, loan.kjoepesum - totalEquityNew);

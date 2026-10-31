@@ -48,10 +48,10 @@ const defPension: Pension = {
   otpAutoPost: false, ipsAutoPost: false,
 };
 const defHomeowner: HomeownerData = {
-  currentMortgageBalance: 9, originalLoanAmount: 9, rente: 9, nedbetalingstid: 9, termingebyr: 9,
+  originalLoanAmount: 9, rente: 9, nedbetalingstid: 9, termingebyr: 9,
 };
 const defTransition: TransitionData = {
-  currentHouseValue: 9, currentMortgageBalance: 9, agentFeePercent: 9, documentFee: 9,
+  currentHouseValue: 9, agentFeePercent: 9, documentFee: 9,
   otherSaleCosts: 9, bridgeMonths: 9, bridgeLoanRate: 9,
 };
 const defFixed: FixedExpense[] = [{ id: 'def-fx', name: 'Def', amount: 9, type: 'fixed' }];
@@ -85,10 +85,10 @@ const canonicalPension: Pension = {
   otpAutoPost: true, ipsAutoPost: true,
 };
 const canonicalHomeowner: HomeownerData = {
-  currentMortgageBalance: 2000000, originalLoanAmount: 2600000, rente: 5, nedbetalingstid: 22, termingebyr: 55,
+  originalLoanAmount: 2600000, rente: 5, nedbetalingstid: 22, termingebyr: 55,
 };
 const canonicalTransition: TransitionData = {
-  currentHouseValue: 5000000, currentMortgageBalance: 2000000, agentFeePercent: 2.5, documentFee: 8000,
+  currentHouseValue: 5000000, agentFeePercent: 2.5, documentFee: 8000,
   otherSaleCosts: 100, bridgeMonths: 3, bridgeLoanRate: 6,
 };
 const canonicalSnapshot: BalanceSnapshot = {

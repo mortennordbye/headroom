@@ -39,14 +39,14 @@ const LOAN: LoanData = {
 };
 
 const HOMEOWNER: HomeownerData = {
-  currentMortgageBalance: 2500000, originalLoanAmount: 3000000, rente: 5.5,
+  originalLoanAmount: 3000000, rente: 5.5,
   nedbetalingstid: 25, termingebyr: 65, accountLabel: 'Boliglån',
   nedbetalingstidAsOf: '2026-06', currentMortgageBalanceAsOf: '2026-06',
   startDate: '2020-01', notifiedRate: 5.7, notifiedRateFrom: '2026-08',
 };
 
 const TRANSITION: TransitionData = {
-  currentHouseValue: 4000000, currentMortgageBalance: 2500000, agentFeePercent: 1.5,
+  currentHouseValue: 4000000, agentFeePercent: 1.5,
   documentFee: 12000, otherSaleCosts: 20000, bridgeMonths: 3, bridgeLoanRate: 6.5,
 };
 

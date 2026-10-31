@@ -1,6 +1,5 @@
 import { monthDiff } from './property';
 import { currentMonthKey } from './date';
-import { PLACEHOLDER_MORTGAGE_BALANCE } from './mortgageSlices';
 
 // Remaining mortgage term (homeowner). The stored `nedbetalingstid` is in years
 // (a multiple of 1/12 once months are entered) and holds the term as of
@@ -72,16 +71,13 @@ export function isValidTermParts(years: number, months: number): boolean {
 }
 
 /** A term saved before the countdown existed has no entry month: treat it as
- *  entered at `monthKey` (and the balance too, unless it has its own stamp or is
- *  the untouched placeholder, which a stamp would make look entered).
- *  Returns the input unchanged when nothing needs stamping. */
-export function stampLegacyTerm<T extends {
-  nedbetalingstid: number; nedbetalingstidAsOf?: string; currentMortgageBalance?: number; currentMortgageBalanceAsOf?: string;
-}>(
+ *  entered at `monthKey`. (The balance date is stamped by
+ *  migrateMortgageBalance.) Returns the input unchanged when nothing needs
+ *  stamping. */
+export function stampLegacyTerm<T extends { nedbetalingstid: number; nedbetalingstidAsOf?: string }>(
   h: T,
   monthKey: string,
 ): T {
   if (!(h.nedbetalingstid > 0) || h.nedbetalingstidAsOf) return h;
-  const stampBalance = !h.currentMortgageBalanceAsOf && h.currentMortgageBalance !== PLACEHOLDER_MORTGAGE_BALANCE;
-  return { ...h, nedbetalingstidAsOf: monthKey, ...(stampBalance ? { currentMortgageBalanceAsOf: monthKey } : {}) };
+  return { ...h, nedbetalingstidAsOf: monthKey };
 }

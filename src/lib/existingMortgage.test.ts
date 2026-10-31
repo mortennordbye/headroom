@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { currentMortgage, annualMortgageInterest } from './existingMortgage';
 import { calcAmortizationSchedule } from './calculations';
-import { PLACEHOLDER_MORTGAGE_BALANCE } from './mortgageSlices';
 
 const NOW = '2026-10';
+// The old homeowner/transition default, read only in legacy data.
+const PLACEHOLDER_MORTGAGE_BALANCE = 3_000_000;
 const ASSETS = { houseDebt: 2_000_000 };
 const HOMEOWNER = {
   currentMortgageBalance: 2_000_000, rente: 5, nedbetalingstid: 25,
@@ -42,14 +43,21 @@ describe('currentMortgage', () => {
     );
   });
 
-  it('a stamped placeholder never hides the real Assets debt', () => {
+  it('the stored balance is assets.houseDebt, a loan of exactly 3 000 000 included', () => {
+    const h = { rente: 5, nedbetalingstid: 25, nedbetalingstidAsOf: '2026-01', currentMortgageBalanceAsOf: '2026-01' };
+    for (const mode of ['homeowner', 'transitioning'] as const) {
+      expect(currentMortgage(mode, { houseDebt: 3_000_000 }, h, { currentHouseValue: 4_000_000 }, NOW).fullBalance).toBe(3_000_000);
+    }
+  });
+
+  it('legacy data: a stamped placeholder never hides the real Assets debt', () => {
     const h = { ...HOMEOWNER, currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE };
     const t = { currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE };
     expect(currentMortgage('transitioning', { houseDebt: 2_500_000 }, h, t, NOW).fullBalance).toBe(2_500_000);
     expect(currentMortgage('homeowner', { houseDebt: 2_500_000 }, h, t, NOW).fullBalance).toBe(2_500_000);
   });
 
-  it('drifted slices: the active mode wins, as on load', () => {
+  it('legacy data: drifted slices, the active mode wins, as on load', () => {
     const assets = { houseDebt: 3_400_000 };
     const h = { ...HOMEOWNER, currentMortgageBalance: 3_200_000 };
     const tr = { currentMortgageBalance: 3_100_000 };
@@ -58,7 +66,7 @@ describe('currentMortgage', () => {
     expect(currentMortgage('first_buyer', assets, h, tr, NOW).fullBalance).toBe(3_400_000);
   });
 
-  it('placeholder defaults never win over the Assets debt', () => {
+  it('legacy data: placeholder defaults never win over the Assets debt', () => {
     const h = { currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE, rente: 5.5, nedbetalingstid: 25 };
     const tr = { currentMortgageBalance: PLACEHOLDER_MORTGAGE_BALANCE };
     expect(currentMortgage('homeowner', { houseDebt: 0 }, h, tr, NOW).fullBalance).toBe(0);

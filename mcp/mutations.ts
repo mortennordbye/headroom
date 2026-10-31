@@ -9,9 +9,9 @@
 // Two documented exceptions, both mirroring what the app itself does:
 // - deleteTransaction on a bank-imported (`eb-`) row also appends the id to
 //   `deletedBankIds`, or the server's reconcileBankTransactions re-adds it.
-// - updateAsset on houseValue/houseDebt also mirrors the value into `homeowner`
-//   and `transition` (when present), as FinanceContext.updateAsset does, so the
-//   three slices that describe the same home never disagree.
+// - updateAsset on houseValue also mirrors it into `transition`, and houseDebt
+//   stamps its month on `homeowner` (when present), as FinanceContext.updateAsset
+//   does.
 // - setCoOwners also rewrites the co-owners stored in `balanceSnapshots`, as
 //   FinanceContext.setCoOwners does, so history shows the share in force each month.
 
@@ -356,9 +356,9 @@ export const ASSET_KEYS = [
 export type AssetKey = (typeof ASSET_KEYS)[number];
 
 /**
- * Update numeric asset fields. houseValue/houseDebt are mirrored into the
- * `homeowner`/`transition` slices (when present) exactly as the app's own
- * updateAsset does, so the same home never shows two different numbers.
+ * Update numeric asset fields as the app's own updateAsset does: houseValue is
+ * mirrored into the `transition` slice, and houseDebt (the one stored mortgage
+ * balance) stamps the month on the `homeowner` slice.
  */
 export function updateAsset(
   blob: ExportPayload,
@@ -376,15 +376,9 @@ export function updateAsset(
   if (changes.length === 0) throw new Error('no asset fields provided');
   blob.assets = after;
   const { houseDebt, houseValue } = fields;
-  if (houseDebt !== undefined) {
-    if (blob.homeowner) {
-      changes.push(diff('homeowner.currentMortgageBalance', blob.homeowner.currentMortgageBalance, houseDebt));
-      blob.homeowner = { ...blob.homeowner, currentMortgageBalance: houseDebt, currentMortgageBalanceAsOf: monthKey };
-    }
-    if (blob.transition) {
-      changes.push(diff('transition.currentMortgageBalance', blob.transition.currentMortgageBalance, houseDebt));
-      blob.transition = { ...blob.transition, currentMortgageBalance: houseDebt };
-    }
+  if (houseDebt !== undefined && blob.homeowner) {
+    changes.push(diff('homeowner.currentMortgageBalanceAsOf', blob.homeowner.currentMortgageBalanceAsOf, monthKey));
+    blob.homeowner = { ...blob.homeowner, currentMortgageBalanceAsOf: monthKey };
   }
   if (houseValue !== undefined && blob.transition) {
     changes.push(diff('transition.currentHouseValue', blob.transition.currentHouseValue, houseValue));
@@ -498,8 +492,8 @@ export interface CurrentMortgageFields {
 /**
  * Update the current mortgage (the `homeowner` slice). The remaining term is
  * years + months and stamps the month it was entered, so it counts down; the
- * balance stamps its month and mirrors into assets/transition as the app's
- * updateHomeowner does.
+ * balance is written to assets.houseDebt and stamps its month, as the app's
+ * updateAsset does.
  */
 export function updateCurrentMortgage(
   blob: ExportPayload,
@@ -530,8 +524,7 @@ export function updateCurrentMortgage(
     after.nedbetalingstidAsOf = monthKey;
   }
   if (balance !== undefined) {
-    changes.push(diff('homeowner.currentMortgageBalance', before.currentMortgageBalance, balance));
-    after.currentMortgageBalance = balance;
+    changes.push(diff('homeowner.currentMortgageBalanceAsOf', before.currentMortgageBalanceAsOf, monthKey));
     after.currentMortgageBalanceAsOf = monthKey;
   }
   if (changes.length === 0) throw new Error('no mortgage fields provided');
@@ -539,10 +532,6 @@ export function updateCurrentMortgage(
   if (balance !== undefined) {
     changes.push(diff('assets.houseDebt', blob.assets.houseDebt, balance));
     blob.assets = { ...blob.assets, houseDebt: balance };
-    if (blob.transition) {
-      changes.push(diff('transition.currentMortgageBalance', blob.transition.currentMortgageBalance, balance));
-      blob.transition = { ...blob.transition, currentMortgageBalance: balance };
-    }
   }
   return changes;
 }

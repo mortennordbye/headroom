@@ -365,10 +365,13 @@ describe('deleting a bank-imported transaction', () => {
   });
 });
 
-describe('reading reconciles the mortgage slices, without writing them back', () => {
+describe('a legacy mortgage balance is migrated on read, and saved only by a write', () => {
   async function storeDrifted() {
     const drifted = fullFixture();
-    drifted.assets.houseDebt = 2_700_000; // homeowner + transition hold 2 500 000
+    drifted.assets.houseDebt = 2_700_000;
+    // An old save: homeowner + transition hold their own copy, 2 500 000.
+    Object.assign(drifted.homeowner!, { currentMortgageBalance: 2_500_000 });
+    Object.assign(drifted.transition!, { currentMortgageBalance: 2_500_000 });
     await fetch(`${BASE}/api/data`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-data-rev': String(await currentRev()) },
@@ -376,22 +379,25 @@ describe('reading reconciles the mortgage slices, without writing them back', ()
     });
   }
 
-  it("getData shows the active mode's balance in every slice", async () => {
+  it("getData shows the active mode's balance on assets.houseDebt", async () => {
     await storeDrifted();
     const { blob } = await client.getData();
     expect(blob.assets.houseDebt).toBe(2_500_000);
-    expect(blob.homeowner?.currentMortgageBalance).toBe(2_500_000);
-    expect(blob.transition?.currentMortgageBalance).toBe(2_500_000);
+    expect(blob.homeowner).not.toHaveProperty('currentMortgageBalance');
+    expect(blob.transition).not.toHaveProperty('currentMortgageBalance');
     // The read stored nothing.
     expect((await getBlob()).assets.houseDebt).toBe(2_700_000);
   });
 
-  it('a write changes only what it touches, not the reconciled view', async () => {
+  it('a write saves the migrated shape, as the app does on its next save', async () => {
     await storeDrifted();
     await client.applyMutation((b) => {
       setCategoryBudget(b, { category: 'transport', amount: 1800 });
       return b;
     });
-    expect((await getBlob()).assets.houseDebt).toBe(2_700_000);
+    const stored = await getBlob();
+    expect(stored.assets.houseDebt).toBe(2_500_000);
+    expect(stored.homeowner).not.toHaveProperty('currentMortgageBalance');
+    expect(stored.transition).not.toHaveProperty('currentMortgageBalance');
   });
 });

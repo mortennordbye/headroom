@@ -16,21 +16,11 @@ in git and the CHANGELOG, not here.
   part of a loan payment builds equity, but a `FixedExpense` holds the gross payment. Needs the
   amortization split `src/lib/automation.ts` already computes. **Where**:
   `savingsContributionTotal` in `src/lib/savingsRate.ts`, `src/lib/automation.ts`.
-- **The mortgage balance is stored three times.** `assets.houseDebt`,
-  `homeowner.currentMortgageBalance` and `transition.currentMortgageBalance` are reconciled
-  (`reconcileMortgageSlices`) so they no longer disagree, but they're still three persisted fields,
-  and the 3 000 000 placeholder in `DEFAULT_HOMEOWNER`/`DEFAULT_TRANSITION` is recognised by value
-  (a real loan of exactly 3 000 000 loses to a slice that disagrees). **Why deferred**: deriving it
-  changes the persisted shape. **Unblock**: an issue agreeing to drop
-  `transition.currentMortgageBalance` from the payload. **Where**: `src/lib/mortgageSlices.ts`,
-  `src/lib/existingMortgage.ts`, `src/context/FinanceContext.tsx`, `mcp/mutations.ts`.
-- **Mortgage edge cases only reachable with hand-made or partial files.** A partial import with a
-  dated 3 000 000 homeowner balance beats a real balance; a partial import resets the balance date;
-  a blob with no `assets` key loses an undated 3 000 000 loan; MCP `get_mortgage` treats missing
-  sale-cost fields as zero proceeds; the paydown plan can anchor on a dated placeholder snapshot,
-  shows "months ahead" after a sale, and grows when the term is 0. **Why deferred**: the app's own
-  saves never produce these. **Where**: `src/lib/mortgageSlices.ts`, `src/lib/paydown.ts`,
-  `mcp/derive.ts` (`activeMortgage`).
+- **Mortgage edge cases only reachable with hand-made or old data.** MCP `get_mortgage` treats
+  missing sale-cost fields as zero proceeds; the paydown plan can anchor on a stored snapshot whose
+  old copy of the balance was a dated 3 000 000 placeholder, shows "months ahead" after a sale, and
+  grows when the term is 0. **Why deferred**: the app's own saves never produce these. **Where**:
+  `src/lib/paydown.ts`, `src/lib/mortgageSlices.ts`, `mcp/derive.ts` (`activeMortgage`).
 - **BSU lifetime room is measured against the balance.** The 300k cap counts deposits, but only the
   balance (with interest) is stored, so the room shown is a floor. **Unblock**: agree a persisted
   "total deposited" field and its backfill. **Where**: `src/lib/bsu.ts`, payload sites in

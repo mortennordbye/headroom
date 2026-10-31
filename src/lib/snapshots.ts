@@ -104,13 +104,21 @@ export function snapshotBalances(
 
 /**
  * Assemble a manual snapshot from a `base` (nearest recorded month, or the live
- * state) with the user-entered balances overlaid. Crucially it re-applies the
- * house three-slice mirror (assets ↔ homeowner ↔ transition) so the stored
- * snapshot can never show a mortgage/house figure that contradicts itself — the
- * same invariant the live `updateAsset`/`updateHomeowner` mirror keeps. Loan
+ * state) with the user-entered balances overlaid. It re-applies the house value
+ * mirror (assets ↔ transition) and drops any older copies of the mortgage
+ * balance `base` still carries, so the stored snapshot can never show a
+ * mortgage/house figure that contradicts itself, the same invariant the live
+ * `updateAsset` keeps. Loan
  * params, fixed expenses and category budgets carry over from `base` untouched.
  * `monthKey` is the snapshot's month: the mortgage balance is stamped as of it.
  */
+/** A snapshot slice without the mortgage balance copy older snapshots held. */
+function withoutLegacyBalance<T extends object>(slice: T): T {
+  if (!('currentMortgageBalance' in slice)) return slice;
+  const { currentMortgageBalance: _legacy, ...rest } = slice as T & { currentMortgageBalance?: number };
+  return rest as T;
+}
+
 export function buildManualSnapshot(base: BalanceSnapshot, b: SnapshotBalances, monthKey: string, coOwners?: CoOwner[]): BalanceSnapshot {
   return {
     ...base,
@@ -129,8 +137,8 @@ export function buildManualSnapshot(base: BalanceSnapshot, b: SnapshotBalances, 
       houseDebt: b.houseDebt,
     },
     // The balance is as of the snapshot's month, whatever date `base` carried.
-    homeowner: { ...base.homeowner, currentMortgageBalance: b.houseDebt, currentMortgageBalanceAsOf: monthKey },
-    transition: { ...base.transition, currentMortgageBalance: b.houseDebt, currentHouseValue: b.houseValue },
+    homeowner: { ...withoutLegacyBalance(base.homeowner), currentMortgageBalanceAsOf: monthKey },
+    transition: { ...withoutLegacyBalance(base.transition), currentHouseValue: b.houseValue },
     pension: { ...base.pension, otpBalance: b.otpBalance, ipsBalance: b.ipsBalance },
     debts: b.debts,
     assumptions: b.assumptions ?? base.assumptions,

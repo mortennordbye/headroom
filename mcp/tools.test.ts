@@ -466,7 +466,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
   it('rentefradrag: none for a first buyer, the current loan when transitioning', () => {
     const b = fullFixture();
     b.loan!.laanebelop = 4000000; // the planned purchase loan
-    b.transition!.currentMortgageBalance = 1800000;
+    b.assets.houseDebt = 1800000;
     b.housingMode = 'first_buyer';
     expect(derive.salaryAndTax(b, '2026-07').annualMortgageInterestDeduction).toBe(0);
     expect(derive.forecast(b, {}, MONTH).projection[0].mortgage).toBe(0);
@@ -577,7 +577,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const m = derive.mortgage(b, MONTH);
     // Existing fields still describe the planned loan: the Bolig page's new loan
     // need after the sale ("Nytt lånebehov"), not the stored laanebelop.
-    const need = calcTransitionNewLoan(b.transition!, b.loan!, ownershipShares(b.assets, MONTH));
+    const need = calcTransitionNewLoan(b.transition!, b.assets.houseDebt, b.loan!, ownershipShares(b.assets, MONTH));
     expect(need.newLoanNeeded).not.toBe(b.loan!.laanebelop);
     expect(m.loanKind).toBe('planned');
     expect(m.balance).toBe(Math.round(need.newLoanNeeded));

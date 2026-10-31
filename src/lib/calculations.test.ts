@@ -359,13 +359,13 @@ describe('calcBridgeLoanCost', () => {
 describe('calcTransitionNewLoan', () => {
   // The demo seed's transition and loan.
   const transition = {
-    currentHouseValue: 4_800_000, currentMortgageBalance: 3_200_000, agentFeePercent: 1.8,
+    currentHouseValue: 4_800_000, agentFeePercent: 1.8,
     documentFee: 25_000, otherSaleCosts: 15_000, bridgeLoanRate: 7.0, bridgeMonths: 3,
   };
   const loan = { kjoepesum: 4_000_000, egenkapital: 500_000, rente: 5.65, nedbetalingstid: 25, termingebyr: 50 };
 
   it('is the purchase price less the sale equity and the equity set aside', () => {
-    const r = calcTransitionNewLoan(transition, loan, { own: 1, debt: 1 });
+    const r = calcTransitionNewLoan(transition, 3_200_000, loan, { own: 1, debt: 1 });
     expect(r.saleProceeds.netProceeds).toBeCloseTo(1_473_600, 6);
     expect(r.equityFromSale).toBeCloseTo(1_473_600, 6);
     expect(r.newLoanNeeded).toBeCloseTo(2_026_400, 6);
@@ -374,9 +374,9 @@ describe('calcTransitionNewLoan', () => {
   });
 
   it('uses only the user\'s share of the sale and never goes below 0', () => {
-    const half = calcTransitionNewLoan(transition, loan, { own: 0.5, debt: 0.5 });
+    const half = calcTransitionNewLoan(transition, 3_200_000, loan, { own: 0.5, debt: 0.5 });
     expect(half.newLoanNeeded).toBeCloseTo(4_000_000 - 1_473_600 / 2 - 500_000, 6);
-    expect(calcTransitionNewLoan(transition, { ...loan, kjoepesum: 1_000_000 }, { own: 1, debt: 1 }).newLoanNeeded).toBe(0);
+    expect(calcTransitionNewLoan(transition, 3_200_000, { ...loan, kjoepesum: 1_000_000 }, { own: 1, debt: 1 }).newLoanNeeded).toBe(0);
   });
 });
 

@@ -103,16 +103,9 @@ describe('isValidTermParts', () => {
 });
 
 describe('stampLegacyTerm', () => {
-  const base = { currentMortgageBalance: 2_800_000, nedbetalingstid: 25 };
-  it('stamps both months on a term saved before the countdown', () => {
-    expect(stampLegacyTerm(base, '2026-11')).toEqual({ ...base, nedbetalingstidAsOf: '2026-11', currentMortgageBalanceAsOf: '2026-11' });
-  });
-  it('never stamps the untouched placeholder balance, so it keeps reading as unset', () => {
-    const placeholder = { ...base, currentMortgageBalance: 3_000_000 };
-    expect(stampLegacyTerm(placeholder, '2026-11')).toEqual({ ...placeholder, nedbetalingstidAsOf: '2026-11' });
-  });
-  it("keeps the balance's own stamp", () => {
-    expect(stampLegacyTerm({ ...base, currentMortgageBalanceAsOf: '2026-02' }, '2026-11').currentMortgageBalanceAsOf).toBe('2026-02');
+  const base = { nedbetalingstid: 25, currentMortgageBalanceAsOf: '2026-02' };
+  it('stamps the term saved before the countdown, and nothing else', () => {
+    expect(stampLegacyTerm(base, '2026-11')).toEqual({ ...base, nedbetalingstidAsOf: '2026-11' });
   });
   it('leaves stamped, zero and missing terms alone', () => {
     const stamped = { ...base, nedbetalingstidAsOf: '2026-01' };

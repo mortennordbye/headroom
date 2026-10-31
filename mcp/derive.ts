@@ -802,13 +802,13 @@ function activeMortgage(blob: ExportPayload, monthKey: string) {
   const loanTerm = blob.loan?.nedbetalingstid ?? 25;
   const hasTerm = h?.nedbetalingstid != null;
   const plannedBalance = mode === 'transitioning' && blob.transition
-    ? calcTransitionNewLoan(blob.transition, {
+    ? calcTransitionNewLoan(blob.transition, mortgageOwed(blob, monthKey).fullBalance, {
         kjoepesum: blob.loan?.kjoepesum ?? 0, egenkapital: blob.loan?.egenkapital ?? 0,
         rente: loanRate, nedbetalingstid: loanTerm, termingebyr: blob.loan?.termingebyr ?? 0,
       }, ownershipShares(blob.assets, monthKey)).newLoanNeeded
     : blob.loan?.laanebelop;
   return {
-    balance: (homeowner ? h?.currentMortgageBalance : plannedBalance) ?? 0,
+    balance: (homeowner ? mortgageOwed(blob, monthKey).fullBalance : plannedBalance) ?? 0,
     ratePct: homeowner ? h?.rente ?? 5.5 : loanRate,
     termYears: homeowner ? (hasTerm ? paymentTermMonths(h) / 12 : 25) : loanTerm,
     remainingMonths: homeowner ? (hasTerm ? effectiveRemainingMonths(h, monthKey) : 300) : termMonthsFromYears(loanTerm),
@@ -930,7 +930,7 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
   const shares = ownershipShares(blob.assets, monthKey);
   const status = housingMode === 'homeowner' && blob.homeowner
     ? calcHomeownerMortgageStatus(
-        blob.homeowner.currentMortgageBalance,
+        mortgageOwed(blob, monthKey).fullBalance,
         blob.homeowner.originalLoanAmount,
         blob.homeowner.rente,
         paymentTermMonths(blob.homeowner) / 12,
