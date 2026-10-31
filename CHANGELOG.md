@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.1](https://github.com/mortennordbye/headroom/compare/v3.10.0...v3.10.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* close gaps found in review of the mortgage and savings-rate changes ([#285](https://github.com/mortennordbye/headroom/issues/285)) ([f38805b](https://github.com/mortennordbye/headroom/commit/f38805bc8251ad7becf58099f3cde2b4c9273b2f))
+* let undo work on mortgage edits saved before the balance moved to assets ([#287](https://github.com/mortennordbye/headroom/issues/287)) ([8352bc8](https://github.com/mortennordbye/headroom/commit/8352bc83f5404c24721632c7cd83da37e8fa0899))
+
 ## [3.10.0](https://github.com/mortennordbye/headroom/compare/v3.9.1...v3.10.0) (2026-10-31)
 
 
