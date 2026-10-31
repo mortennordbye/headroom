@@ -524,10 +524,65 @@ function evictSupersededPending(txs) {
     });
 }
 
+// The shape of a bank reference, coarse enough that two refs from the same
+// scheme compare equal: a scheme tag like `enc!!`, an all-digits-and-dashes ref
+// (`2026-08-03-0`), our own date|amount|description fallback, or anything else.
+function refFormat(ref) {
+  const tag = /^[A-Za-z]+!!/.exec(ref);
+  if (tag) return tag[0];
+  if (/^[\d-]+$/.test(ref)) return 'numeric';
+  if (ref.includes('|')) return 'fallback';
+  return 'opaque';
+}
+
+// A bank can switch reference formats between consents (Handelsbanken went from
+// `2026-08-03-0` to `enc!!…` on a re-link), so the first sync after a re-link
+// refetches the 7-day overlap under new ids and imports it again. On that sync
+// only (fetchMappedTransactions stamps `relinkPrefix` on the rows), drop an
+// incoming row that matches a stored row of the same account on date, amount,
+// direction and description when the two refs are in *different* formats. Two
+// rows in the same format are never matched: that is two genuine identical
+// purchases. Each stored row absorbs at most one incoming row, and the stored
+// row is kept as is, so its category and segment survive. Pure.
+function dropRelinkFormatTwins(existing, incoming) {
+  if (!incoming.some((t) => t.relinkPrefix)) return incoming;
+  const incomingIds = new Set(incoming.map((t) => t.id));
+  const claimed = new Set();
+  const refOf = (id, prefix) => (id.startsWith(prefix) ? id.slice(prefix.length) : null);
+  return incoming.filter((t) => {
+    const prefix = t.relinkPrefix;
+    if (!prefix) return true;
+    const ref = refOf(t.id, prefix);
+    if (ref == null) return true;
+    const twin = existing.find((e) => {
+      if (claimed.has(e.id) || incomingIds.has(e.id) || e.pending || t.pending) return false;
+      const eRef = refOf(e.id, prefix);
+      return eRef != null
+        && refFormat(eRef) !== refFormat(ref)
+        && (e.account || '') === (t.account || '')
+        && e.date === t.date
+        && (e.kind || 'expense') === (t.kind || 'expense')
+        && Math.abs(e.amount - t.amount) < 0.005
+        && e.description === t.description;
+    });
+    if (!twin) return true;
+    claimed.add(twin.id);
+    return false;
+  });
+}
+
 function mergeTransactions(existing, incoming, deletedIds = []) {
   const deleted = new Set(deletedIds);
   // A row the user soft-deleted in the UI must not come back on the next sync.
   const byId = new Map(existing.filter((t) => !deleted.has(t.id)).map((t) => [t.id, t]));
+  // `relinkPrefix` is a sync-only marker; it never reaches the stored ledger.
+  incoming = dropRelinkFormatTwins([...byId.values()], incoming)
+    .map((t) => {
+      if (!('relinkPrefix' in t)) return t;
+      const row = { ...t };
+      delete row.relinkPrefix;
+      return row;
+    });
   for (const t of incoming) {
     if (deleted.has(t.id)) continue; // honor client-side soft-deletes
     const prior = byId.get(t.id);
@@ -642,6 +697,9 @@ async function finishLink(code, state) {
     // Preserve the prior sync time on a re-link so we don't refetch 90 days.
     last_sync: idx >= 0 ? store.connections[idx].last_sync || null : null,
     needs_relink: false,
+    // A re-link (or a re-add of a removed bank) already has rows in the ledger;
+    // the next sync checks its overlap for a changed reference format.
+    ...(idx >= 0 || (store.removed || []).some((c) => c.id === pending.connectionId) ? { relinked: true } : {}),
     accounts: idx >= 0 ? carryAccountKeys(store.connections[idx].accounts, accounts) : accounts,
     accounts_note: note,
   };
@@ -770,7 +828,7 @@ async function fetchMappedTransactions() {
             account: accountKey(c, acc),
             bank: c.aspsp || undefined,
             accountName: acc.name || acc.product || '',
-          }),
+          }).map((row) => (c.relinked ? { ...row, relinkPrefix: c.idPrefix } : row)),
         );
       }
     } catch (err) {
@@ -837,6 +895,7 @@ function recordSync(outcome = {}) {
       if (sessionValid(c)) {
         c.last_sync = now;
         c.needs_relink = false;
+        delete c.relinked;
       }
     }
   }
@@ -863,6 +922,7 @@ module.exports = {
   mapEBTransaction,
   mapEBTransactions,
   mergeTransactions,
+  dropRelinkFormatTwins,
   evictSupersededPending,
   dropStaleBareTwins,
   normalizeAccount,

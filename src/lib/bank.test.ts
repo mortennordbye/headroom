@@ -257,6 +257,47 @@ describe('mergeTransactions', () => {
   });
 });
 
+describe('mergeTransactions after a re-link (reference format change)', () => {
+  const prefix = 'eb-aaaa1111-';
+  const opts = { idPrefix: prefix, account: 'aaaa1111:1' };
+  const relinked = (rows: MappedTransaction[]) => rows.map((t) => ({ ...t, relinkPrefix: prefix }));
+  const stored = mapEBTransactions([tx({ entry_reference: '2026-10-27-0' })], opts)
+    .map((t: MappedTransaction) => ({ ...t, category: 'groceries', categorySource: 'manual' as const }));
+  const refetched = mapEBTransactions([tx({ entry_reference: 'enc!!Q2hvY29sYXRl' })], opts);
+
+  it('drops the overlap row the bank re-sent under a new-format id, keeping the stored row and its category', () => {
+    const merged = mergeTransactions(stored, relinked(refetched));
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe(`${prefix}2026-10-27-0`);
+    expect(merged[0].category).toBe('groceries');
+    expect(merged[0]).not.toHaveProperty('relinkPrefix');
+  });
+
+  it('keeps two genuine identical purchases in the same format', () => {
+    const second = mapEBTransactions([tx({ entry_reference: '2026-10-27-1' })], opts);
+    const merged = mergeTransactions(stored, relinked(second));
+    expect(merged).toHaveLength(2);
+  });
+
+  it('absorbs at most one new row per stored row', () => {
+    const two = mapEBTransactions([tx({ entry_reference: 'enc!!AAAA' }), tx({ entry_reference: 'enc!!BBBB' })], opts);
+    const merged = mergeTransactions(stored, relinked(two));
+    expect(merged).toHaveLength(2);
+  });
+
+  it('keeps a new-format row that differs in amount, date or account', () => {
+    const other = mapEBTransactions([tx({ entry_reference: 'enc!!CCCC', transaction_amount: { currency: 'NOK', amount: '39.00' } })], opts);
+    const otherAccount = mapEBTransactions([tx({ entry_reference: 'enc!!DDDD' })], { idPrefix: prefix, account: 'aaaa1111:2' });
+    expect(mergeTransactions(stored, relinked(other))).toHaveLength(2);
+    expect(mergeTransactions(stored, relinked(otherAccount))).toHaveLength(2);
+  });
+
+  it('leaves a normal sync (no re-link marker) unchanged', () => {
+    const merged = mergeTransactions(stored, refetched);
+    expect(merged).toHaveLength(2);
+  });
+});
+
 // evictSupersededPending is the CJS twin of the same function in
 // src/lib/bankDedup.ts (they must stay byte-equivalent); these cases mirror
 // bankDedup.test.ts.
