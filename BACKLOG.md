@@ -95,12 +95,6 @@ in git and the CHANGELOG, not here.
 
 ## Bank import
 
-- **A re-link can import the overlap window twice when the bank changes its reference format.** On
-  the 2026-10-29 re-link Handelsbanken switched from `2026-08-03-0`-style references to `enc!!…`
-  ones, so two overlap-day rows came in again under new ids. **Unblock**: decide on a content match
-  (same account, date, amount, description; one old-style and one new-style id) limited to the first
-  sync after a re-link. **Where**: `fetchMappedTransactions` / `mergeTransactions` in
-  `server/bank.js`.
 - **`deletedBankIds` grows unbounded.** No prune is provably safe without knowing the bank's sync
   window. **Unblock**: a server-side retention rule keyed to that window, or drop ids when their
   connection is removed. **Where**: `src/context/FinanceContext.tsx`, `mergeTransactions` in

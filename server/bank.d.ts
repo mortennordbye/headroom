@@ -21,6 +21,9 @@ export interface MappedTransaction {
   // Provisional (not yet booked). Present only when pending import is enabled;
   // a booked twin later evicts it (see evictSupersededPending).
   pending?: boolean;
+  // Sync-only: the connection's id prefix, on rows from the first sync after a
+  // re-link (see dropRelinkFormatTwins). Stripped before the row is stored.
+  relinkPrefix?: string;
 }
 
 export interface MapOptions {
@@ -38,6 +41,7 @@ export function mapEBTransaction(tx: any, opts?: MapOptions): MappedTransaction;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapEBTransactions(txs: any[], opts?: MapOptions): MappedTransaction[];
 export function mergeTransactions(a: MappedTransaction[], b: MappedTransaction[], deletedIds?: string[]): MappedTransaction[];
+export function dropRelinkFormatTwins(existing: MappedTransaction[], incoming: MappedTransaction[]): MappedTransaction[];
 export function evictSupersededPending(txs: MappedTransaction[]): MappedTransaction[];
 export function dropStaleBareTwins(txs: MappedTransaction[]): MappedTransaction[];
 export function lastSyncAgeMs(nowMs?: number): number;
