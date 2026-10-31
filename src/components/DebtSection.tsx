@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PlusCircle, Trash2, Landmark } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer } from './charts/ResponsiveContainer';
 import { useFinance, type Debt, type DebtType } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import EditModal, { type ModalField } from './EditModal';

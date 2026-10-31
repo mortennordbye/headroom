@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, subMonths } from 'date-fns';
 import { ArrowDown, ArrowUp, ArrowUpDown, Building2, Check, Database, ExternalLink, LineChart, Plus, Tag, Upload } from 'lucide-react';
-import { Area, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Area, ComposedChart, Line, ReferenceLine, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ResponsiveContainer } from '../../components/charts/ResponsiveContainer';
 import { useFinance } from '../../context/FinanceContext';
 import { useMarketData, MarketImportError } from '../../hooks/useMarketData';
 import { useBalanceHistory } from '../../hooks/useBalanceHistory';

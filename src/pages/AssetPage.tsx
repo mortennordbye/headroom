@@ -20,8 +20,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
 } from 'recharts';
+import { ResponsiveContainer } from '../components/charts/ResponsiveContainer';
 import { useFinance, DEFAULT_TAX_RATES, type NumericAssetKey, type Debt, type Pension, type SavingsAccount } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { RestoreDefaultsButton } from '../components/ui/RestoreDefaultsButton';

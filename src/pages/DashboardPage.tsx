@@ -29,8 +29,9 @@ import InsightBanner from '../components/InsightBanner';
 import HistoryInsights from '../components/HistoryInsights';
 import {
   AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
+  Tooltip, ReferenceLine, ReferenceDot,
 } from 'recharts';
+import { ResponsiveContainer } from '../components/charts/ResponsiveContainer';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART } from '../lib/chartColors';
 import { netWorthSeriesFrom } from '../lib/netWorth';

@@ -22,9 +22,9 @@ import {
   YAxis,
   Tooltip,
   LabelList,
-  ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
+import { ResponsiveContainer } from '../components/charts/ResponsiveContainer';
 import {
   useFinance,
   type SalaryEntry,

@@ -46,9 +46,22 @@ const Layout: React.FC = () => {
   // Balance-page "edit this month": opens the History manager straight into the
   // viewed month's balances editor (past months are read-only on the page itself).
   const [editMonthOpen, setEditMonthOpen] = useState(false);
-  const moreActive = MORE_ROUTES.includes(location.pathname);
-  // The group owning the current route drives the active top tab and the sub-tab strip.
+  // The tab the user just tapped. The route change renders in a transition and a
+  // chart-heavy page can take a while to commit on a phone, so light the tapped tab
+  // right away; otherwise the tap looks ignored and gets repeated. Cleared once the
+  // route actually changes (adjusting state during render, not in an effect).
+  const [pendingNav, setPendingNav] = useState<string | null>(null);
+  const [seenPath, setSeenPath] = useState(location.pathname);
+  if (seenPath !== location.pathname) {
+    setSeenPath(location.pathname);
+    setPendingNav(null);
+  }
+  const navPath = pendingNav ?? location.pathname;
+  const moreActive = MORE_ROUTES.includes(navPath);
+  // The group owning the current route drives the sub-tab strip; the tab bars
+  // follow `navPath` so they react to a tap before the page has rendered.
   const activeGroup = groupForPath(location.pathname);
+  const navGroup = groupForPath(navPath);
   const sheetRef = useFocusTrap<HTMLDivElement>(() => setMoreOpen(false), undefined, moreOpen);
 
   const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
@@ -166,7 +179,8 @@ const Layout: React.FC = () => {
               to={group.primary}
               icon={navIconForPath(group.primary)}
               label={t.nav[group.key]}
-              active={activeGroup?.primary === group.primary}
+              active={navGroup?.primary === group.primary}
+              onNavigate={setPendingNav}
             />
           ))}
         </nav>
@@ -456,7 +470,7 @@ const Layout: React.FC = () => {
               {NAV_ITEMS
                 .filter(item => MORE_ROUTES.includes(item.path) && isVisible(item.path))
                 .map(item => (
-                  <SheetItem key={item.path} to={item.path} icon={<item.icon size={20} strokeWidth={1.75} />} label={t.nav[item.key]} onNavigate={() => setMoreOpen(false)} />
+                  <SheetItem key={item.path} to={item.path} icon={<item.icon size={20} strokeWidth={1.75} />} label={t.nav[item.key]} onNavigate={() => { setMoreOpen(false); setPendingNav(item.path); }} />
                 ))}
             </div>
             {/* Setup guide — the mobile trigger for the guided tour */}
@@ -489,10 +503,10 @@ const Layout: React.FC = () => {
           borderColor: 'var(--rule)',
         }}
       >
-        <MobileNavTab to="/" icon={navIconForPath('/')} label={t.nav.dashboard} active={activeGroup?.primary === '/'} />
-        <MobileNavTab to="/budget" icon={navIconForPath('/budget')} label={t.nav.budget} active={activeGroup?.primary === '/budget'} />
-        <MobileNavTab to="/assets" icon={navIconForPath('/assets')} label={t.nav.assets} active={activeGroup?.primary === '/assets'} />
-        <MobileNavTab to="/salary" icon={navIconForPath('/salary')} label={t.nav.salary} active={activeGroup?.primary === '/salary'} />
+        <MobileNavTab to="/" icon={navIconForPath('/')} label={t.nav.dashboard} active={navGroup?.primary === '/'} onNavigate={setPendingNav} />
+        <MobileNavTab to="/budget" icon={navIconForPath('/budget')} label={t.nav.budget} active={navGroup?.primary === '/budget'} onNavigate={setPendingNav} />
+        <MobileNavTab to="/assets" icon={navIconForPath('/assets')} label={t.nav.assets} active={navGroup?.primary === '/assets'} onNavigate={setPendingNav} />
+        <MobileNavTab to="/salary" icon={navIconForPath('/salary')} label={t.nav.salary} active={navGroup?.primary === '/salary'} onNavigate={setPendingNav} />
         <button
           onClick={() => setMoreOpen(true)}
           className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
@@ -537,6 +551,10 @@ const Layout: React.FC = () => {
   );
 };
 
+// A click that navigates this tab (not a modifier-click opening a new tab/window).
+const isPlainClick = (e: React.MouseEvent) =>
+  e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+
 interface SheetItemProps {
   to: string;
   icon: React.ReactNode;
@@ -567,15 +585,17 @@ interface NavButtonProps {
   label: string;
   /** Active state is driven by the owning group, so the tab stays lit on a child route. */
   active: boolean;
+  onNavigate: (to: string) => void;
 }
 
 // Section icons are brass like the active underline: full brass on the active
 // tab, the dimmed brass elsewhere, so the active tab still reads first. Shown
 // from xl only: below that the seven tabs plus icons collide with the month picker.
-const NavButton: React.FC<NavButtonProps> = ({ to, icon: Icon, label, active }) => (
+const NavButton: React.FC<NavButtonProps> = ({ to, icon: Icon, label, active, onNavigate }) => (
   <NavLink
     to={to}
     end={to === '/'}
+    onClick={e => { if (isPlainClick(e)) onNavigate(to); }}
     className="inline-flex items-center gap-1.5 text-[13px] font-medium pb-1 border-b transition-colors"
     style={{
       borderColor: active ? 'var(--brass)' : 'transparent',
@@ -595,12 +615,14 @@ interface MobileNavTabProps {
   label: string;
   /** Group-driven active state, so the tab stays lit on a folded child route. */
   active: boolean;
+  onNavigate: (to: string) => void;
 }
 
-const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, active }) => (
+const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, active, onNavigate }) => (
   <NavLink
     to={to}
     end={to === '/'}
+    onClick={e => { if (isPlainClick(e)) onNavigate(to); }}
     className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
     style={{
       color: active ? 'var(--brass)' : 'var(--text-3)',
