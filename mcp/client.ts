@@ -8,7 +8,7 @@
 
 import type { ExportPayload, InflationPoint } from '../src/context/FinanceContext';
 import { partitionSavings, mergeStoredSavings } from '../src/lib/savingsMigration';
-import { reconcileMortgageSlices } from '../src/lib/mortgageSlices';
+import { migrateMortgageBalance } from '../src/lib/mortgageSlices';
 import { currentMonthKey } from '../src/lib/date';
 import type { ComparableSale } from '../src/lib/marketValuation';
 
@@ -56,17 +56,15 @@ export interface DataSnapshot {
   rev: number;
 }
 
-/**
- * The whole finance blob plus its current rev, for reading: the mortgage slices
- * are reconciled as the app does on load (mortgageSlices.ts), so every tool sees
- * the balance the app shows. Read-only: the reconciled copy is never written back.
- */
+/** The whole finance blob plus its current rev, migrated as the app does on load. */
 export async function getData(): Promise<DataSnapshot> {
-  const { blob, rev } = await fetchData();
-  return { blob: reconcileMortgageSlices(blob, currentMonthKey()), rev };
+  return fetchData();
 }
 
-/** GET the stored blob plus its current rev. Logs in once if auth is on. */
+/** GET the stored blob plus its current rev. Logs in once if auth is on. A
+ *  legacy mortgage balance is moved onto assets.houseDebt as the app does on
+ *  load (mortgageSlices.ts), so every tool reads the balance the app shows and
+ *  a mutation writes the current shape. */
 async function fetchData(retryOnAuth = true): Promise<DataSnapshot> {
   const res = await fetch(`${BASE_URL}/api/data`, { headers: authHeaders() });
   if (res.status === 401 && retryOnAuth) {
@@ -77,7 +75,7 @@ async function fetchData(retryOnAuth = true): Promise<DataSnapshot> {
   const rev = Number(res.headers.get('x-data-rev') ?? 0);
   const blob = (await res.json()) as ExportPayload | null;
   if (!blob) throw new Error('no data yet — open the app and enter some data first');
-  return { blob: normalizeSavings(blob), rev };
+  return { blob: migrateMortgageBalance(normalizeSavings(blob), currentMonthKey()), rev };
 }
 
 /** POST the whole blob back, echoing the rev for optimistic concurrency. */

@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 
 describe('seed.js', () => {
-  it('seeds a homeowner whose three mortgage slices agree', () => {
+  it('seeds a homeowner whose mortgage balance is stored once', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'headroom-seed-'));
     try {
       execFileSync(process.execPath, [path.join(__dirname, 'seed.js')], { env: { ...process.env, DATA_DIR: dir }, stdio: 'ignore' });
@@ -18,8 +18,9 @@ describe('seed.js', () => {
       const blob = JSON.parse(db.prepare('SELECT content FROM finance_data WHERE id = ?').get('headroom').content);
       db.close();
       expect(blob.housingMode).toBe('homeowner');
-      expect(blob.assets.houseDebt).toBe(blob.homeowner.currentMortgageBalance);
-      expect(blob.transition.currentMortgageBalance).toBe(blob.homeowner.currentMortgageBalance);
+      expect(blob.assets.houseDebt).toBe(3_200_000);
+      expect(blob.homeowner).not.toHaveProperty('currentMortgageBalance');
+      expect(blob.transition).not.toHaveProperty('currentMortgageBalance');
       expect(blob.transition.currentHouseValue).toBe(blob.assets.houseValue);
       expect(blob.homeowner.currentMortgageBalanceAsOf).toMatch(/^\d{4}-\d{2}$/);
     } finally {

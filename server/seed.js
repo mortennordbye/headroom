@@ -142,7 +142,7 @@ const assets = {
   unrealizedGain: 95_000,
   taxRate: 37.84,
   houseValue: 4_800_000,
-  // The whole mortgage, the same balance as homeowner/transition below.
+  // The whole mortgage, the one stored balance.
   houseDebt: 3_200_000,
   bsu: 150_000,
   savings: 0, // legacy scalar — superseded by savingsAccounts
@@ -171,7 +171,6 @@ const loan = {
 };
 
 const homeowner = {
-  currentMortgageBalance: 3_200_000,
   originalLoanAmount: 3_800_000,
   rente: 5.65,
   nedbetalingstid: 22,
@@ -182,7 +181,6 @@ const homeowner = {
 
 const transition = {
   currentHouseValue: 4_800_000,
-  currentMortgageBalance: 3_200_000,
   agentFeePercent: 1.8,
   documentFee: 25_000,
   otherSaleCosts: 15_000,

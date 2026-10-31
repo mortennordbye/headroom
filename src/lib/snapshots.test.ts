@@ -116,11 +116,11 @@ describe('buildManualSnapshot', () => {
     otpBalance: 150000, ipsBalance: 30000,
   };
 
-  it('overlays balances and mirrors the house across all three slices', () => {
+  it('overlays balances, mirrors the house value and drops old balance copies', () => {
     const s = buildManualSnapshot(base, balances, '2026-03');
     expect(s.assets.houseDebt).toBe(2800000);
-    expect(s.homeowner.currentMortgageBalance).toBe(2800000);
-    expect(s.transition.currentMortgageBalance).toBe(2800000);
+    expect(s.homeowner).not.toHaveProperty('currentMortgageBalance');
+    expect(s.transition).not.toHaveProperty('currentMortgageBalance');
     expect(s.transition.currentHouseValue).toBe(4000000);
     expect(s.pension.otpBalance).toBe(150000);
     expect(s.debts).toEqual(balances.debts);

@@ -6,6 +6,7 @@ import { useFinance } from '../../context/FinanceContext';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { calcAmortizationSchedule } from '../../lib/calculations';
 import { effectiveRemainingMonths } from '../../lib/loanTerm';
+import { currentMortgage } from '../../lib/existingMortgage';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 
@@ -37,8 +38,7 @@ export default function LtvChart() {
     const months = Object.keys(balanceSnapshots).sort();
     const actual: LtvRow[] = months.map(mk => {
       const s = balanceSnapshots[mk];
-      const hb = finite(s.homeowner?.currentMortgageBalance);
-      const debt = hb > 0 ? hb : finite(s.assets?.houseDebt);
+      const debt = currentMortgage(s.housingMode, s.assets, s.homeowner, s.transition, mk).fullBalance;
       const value = finite(s.assets?.houseValue);
       const ltv = value > 0 ? (debt / value) * 100 : 0;
       return {
@@ -49,7 +49,7 @@ export default function LtvChart() {
     });
 
     // Projection anchored at the latest actual balance/value (or live if none).
-    const anchorDebt = homeowner.currentMortgageBalance;
+    const anchorDebt = finite(assets.houseDebt);
     const anchorValue = assets.houseValue || 0;
     // Remaining term as of today (counts down); ceil so a partial last year is drawn.
     const termYears = effectiveRemainingMonths(homeowner) / 12;
@@ -74,7 +74,7 @@ export default function LtvChart() {
       return [...actual, ...projected.slice(1)];
     }
     return projected;
-  }, [balanceSnapshots, homeowner, assets.houseValue, houseGrowthRate, dateLocale]);
+  }, [balanceSnapshots, homeowner, assets.houseValue, assets.houseDebt, houseGrowthRate, dateLocale]);
 
   return (
     <div role="img" aria-label={c.aria.ltv} className="w-full h-full">

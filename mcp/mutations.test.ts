@@ -244,14 +244,12 @@ const cases: {
     },
   },
   {
-    name: 'update_asset (houseDebt/houseValue mirror into homeowner and transition)',
+    name: 'update_asset (houseDebt stamps the homeowner date, houseValue mirrors into transition)',
     touched: ['assets', 'homeowner', 'transition'],
     mutate: (b) => updateAsset(b, { houseDebt: 2400000, houseValue: 4200000 }, '2026-07'),
     assertChange: (b) => {
       expect(b.assets.houseDebt).toBe(2400000);
-      expect(b.homeowner?.currentMortgageBalance).toBe(2400000);
       expect(b.homeowner?.currentMortgageBalanceAsOf).toBe('2026-07');
-      expect(b.transition?.currentMortgageBalance).toBe(2400000);
       expect(b.transition?.currentHouseValue).toBe(4200000);
       expect(b.homeowner?.rente).toBe(5.5); // rest of the slice untouched
     },
@@ -315,17 +313,16 @@ const cases: {
     mutate: (b) => updateCurrentMortgage(b, { rente: 5.2, termYears: 24, termMonths: 3 }, '2026-07'),
     assertChange: (b) => expect(b.homeowner).toMatchObject({
       rente: 5.2, nedbetalingstid: 24.25, nedbetalingstidAsOf: '2026-07',
-      currentMortgageBalance: 2500000, currentMortgageBalanceAsOf: '2026-06',
+      currentMortgageBalanceAsOf: '2026-06',
     }),
   },
   {
-    name: 'update_current_mortgage (balance mirrors into assets and transition)',
-    touched: ['homeowner', 'assets', 'transition'],
+    name: 'update_current_mortgage (balance goes to assets.houseDebt and stamps its month)',
+    touched: ['homeowner', 'assets'],
     mutate: (b) => updateCurrentMortgage(b, { balance: 2450000 }, '2026-07'),
     assertChange: (b) => {
-      expect(b.homeowner).toMatchObject({ currentMortgageBalance: 2450000, currentMortgageBalanceAsOf: '2026-07', nedbetalingstidAsOf: '2026-06' });
+      expect(b.homeowner).toMatchObject({ currentMortgageBalanceAsOf: '2026-07', nedbetalingstidAsOf: '2026-06' });
       expect(b.assets.houseDebt).toBe(2450000);
-      expect(b.transition?.currentMortgageBalance).toBe(2450000);
     },
   },
   {

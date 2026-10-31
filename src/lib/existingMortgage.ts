@@ -1,12 +1,13 @@
 import type { CoOwner } from '../context/FinanceContext';
 import { calcAmortizationSchedule } from './calculations';
 import { effectiveRemainingMonths, paymentTermMonths, type TermFields } from './loanTerm';
-import { reconcileMortgageSlices, validHousingMode } from './mortgageSlices';
+import { migrateMortgageBalance, validHousingMode, type MortgageSliceFields } from './mortgageSlices';
 import { ownershipShares } from './ownership';
 
 export type MortgageHousingMode = 'first_buyer' | 'homeowner' | 'transitioning';
 
-/** The homeowner fields read here. Loose: imported blobs may lack any of them. */
+/** The homeowner fields read here. Loose: imported blobs may lack any of them.
+ *  `currentMortgageBalance` exists only on legacy data and stored snapshots. */
 export interface HomeownerLoanFields extends TermFields {
   currentMortgageBalance?: number;
   currentMortgageBalanceAsOf?: string;
@@ -53,29 +54,27 @@ const finiteOr0 = (v: unknown): number => (typeof v === 'number' && Number.isFin
  *    and only drives the purchase maths, so it is never read here.
  *  • first_buyer: whatever debt the Assets page holds, flat (no rate, no term).
  *    The Loan page's loan is a plan, not a debt.
- * The slices are reconciled first (mortgageSlices.ts), so a raw or old blob
- * gives the balance the app would show after loading it.
+ * The balance is `assets.houseDebt`. Legacy data (an old blob or a stored
+ * snapshot, which may still carry the homeowner and transition copies) is
+ * migrated first (mortgageSlices.ts), so it gives the balance the app would
+ * show after loading it. `transition` is read only for that.
  */
 export function currentMortgage(
   mode: MortgageHousingMode | undefined,
   assets: MortgageAssetFields | null | undefined,
   homeowner: HomeownerLoanFields | null | undefined,
-  transition: { currentMortgageBalance?: number } | null | undefined,
+  transition: MortgageSliceFields['transition'] | null | undefined,
   monthKey: string,
 ): CurrentMortgage {
   const housingMode = validHousingMode(mode) ?? 'first_buyer';
-  const r = reconcileMortgageSlices({
+  const r = migrateMortgageBalance({
     housingMode,
     assets: assets ?? undefined,
     homeowner: homeowner ?? undefined,
     transition: transition ?? undefined,
   }, monthKey);
   const h = r.homeowner;
-  const raw = housingMode === 'homeowner' ? h?.currentMortgageBalance ?? r.assets?.houseDebt
-    : housingMode === 'transitioning'
-      ? r.transition?.currentMortgageBalance ?? h?.currentMortgageBalance ?? r.assets?.houseDebt
-      : r.assets?.houseDebt;
-  const fullBalance = Math.max(0, finiteOr0(raw));
+  const fullBalance = Math.max(0, finiteOr0(r.assets?.houseDebt));
   const balance = fullBalance * ownershipShares(assets, monthKey).debt;
   if (housingMode === 'first_buyer') {
     return { fullBalance, balance, ratePct: 0, paymentTermMonths: 0, remainingMonths: 0, balanceAsOf: null, amortises: false };

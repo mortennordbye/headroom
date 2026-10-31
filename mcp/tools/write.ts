@@ -319,7 +319,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update asset balances',
       description:
-        'Change numeric asset fields. Only provided fields change. houseValue/houseDebt are also mirrored into the homeowner/transition housing data, as the app does. Savings accounts use upsert_savings_account.',
+        'Change numeric asset fields. Only provided fields change. houseDebt is the current mortgage balance and stamps its month; houseValue is also mirrored into the transition housing data, as the app does. Savings accounts use upsert_savings_account.',
       inputSchema: {
         portfolio: kr.optional().describe('Funds/shares market value in kr.'),
         unrealizedGain: z.number().optional().describe('Unrealized gain on the portfolio in kr (may be negative).'),
@@ -428,7 +428,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update the current mortgage',
       description:
-        'Change the mortgage the user already has (the `homeowner` slice): a homeowner\'s loan, and while transitioning the current home\'s loan owed until the sale (its rate and term drive the projections until the mode is switched). Only provided fields change. The remaining term is given as termYears + termMonths (both together) and counts down from the current month. balance also updates assets.houseDebt and the transition balance. For the planned purchase loan use update_loan.',
+        'Change the mortgage the user already has (the `homeowner` slice): a homeowner\'s loan, and while transitioning the current home\'s loan owed until the sale (its rate and term drive the projections until the mode is switched). Only provided fields change. The remaining term is given as termYears + termMonths (both together) and counts down from the current month. balance is written to assets.houseDebt, the one stored mortgage balance. For the planned purchase loan use update_loan.',
       inputSchema: {
         rente: z.number().min(0).optional().describe('Nominal interest rate %.'),
         termingebyr: kr.optional().describe('Fee per instalment in kr.'),

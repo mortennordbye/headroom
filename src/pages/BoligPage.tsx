@@ -61,6 +61,7 @@ import { loanTimeline, currentResidence, residenceMetrics } from '../lib/propert
 import { activeCoOwners, ownershipShares, myHouseValue, myHouseDebt, validateCoOwners } from '../lib/ownership';
 import { makeId } from '../lib/savingsMigration';
 import { currentMonthKey } from '../lib/date';
+import { currentMortgage } from '../lib/existingMortgage';
 import {
   effectiveRemainingMonths, paymentTermMonths, splitTermMonths, yearsFromParts, formatTerm, isValidTermParts,
 } from '../lib/loanTerm';
@@ -92,7 +93,7 @@ const BoligPage: React.FC = () => {
     housingMode: liveHousingMode, setHousingMode,
     homeowner: liveHomeowner, updateHomeowner,
     transition: liveTransition, updateTransition,
-    assets: liveAssets, setCoOwners,
+    assets: liveAssets, setCoOwners, updateAsset,
     residences,
     grossAnnualIncome, capacityDebt,
     formatCurrency,
@@ -117,6 +118,9 @@ const BoligPage: React.FC = () => {
   const transition = snap?.transition ?? liveTransition;
   const assets = snap?.assets ?? liveAssets;
   const housingMode = snap?.housingMode ?? liveHousingMode;
+  // The whole loan on the current home (assets.houseDebt; a past month's
+  // snapshot may still hold it in its older homeowner/transition copies).
+  const mortgageBalance = currentMortgage(housingMode, assets, homeowner, transition, hist.activeKey).fullBalance;
   const equityBreakdown = useMemo(() => computeEquityBreakdown(assets), [assets]);
   const houseEquity = equityBreakdown.houseEquity;
 
@@ -313,6 +317,18 @@ const BoligPage: React.FC = () => {
     });
   };
 
+  const editMortgageBalance = (label: string) => {
+    openModal({
+      title: label,
+      fields: [{ key: 'value', label, type: 'number', value: mortgageBalance.toString() }],
+      onSave: (vals) => {
+        const n = parseLocaleNumber(vals.value);
+        if (!isNaN(n) && n >= 0) updateAsset('houseDebt', n);
+        closeModal();
+      },
+    });
+  };
+
   const editTransition = (label: string, key: keyof TransitionData, current: number) => {
     openModal({
       title: label,
@@ -385,24 +401,24 @@ const BoligPage: React.FC = () => {
   const remainingMonths = effectiveRemainingMonths(homeowner, hist.activeKey);
   const homeownerStatus = useMemo(
     () => calcHomeownerMortgageStatus(
-      homeowner.currentMortgageBalance,
+      mortgageBalance,
       homeowner.originalLoanAmount,
       homeowner.rente,
       paymentTermYears,
       RENTEFRADRAG_RATE_PCT,
     ),
-    [homeowner, paymentTermYears]
+    [mortgageBalance, homeowner, paymentTermYears]
   );
 
   const homeownerAmortization = useMemo(
-    () => calcAmortizationSchedule(homeowner.currentMortgageBalance, homeowner.rente, paymentTermYears),
-    [homeowner.currentMortgageBalance, homeowner.rente, paymentTermYears]
+    () => calcAmortizationSchedule(mortgageBalance, homeowner.rente, paymentTermYears),
+    [mortgageBalance, homeowner.rente, paymentTermYears]
   );
   const homeownerChartData = homeownerAmortization.filter((_, i) => i % Math.ceil(homeownerAmortization.length / 15) === 0 || i === homeownerAmortization.length - 1);
 
   // Transitioning calculations. `mySale` is the user's part of the sale
   // (proceeds split by ownership, loan by debt share).
-  const transitionNewLoan = useMemo(() => calcTransitionNewLoan(transition, loan, shares), [transition, loan, shares]);
+  const transitionNewLoan = useMemo(() => calcTransitionNewLoan(transition, mortgageBalance, loan, shares), [transition, mortgageBalance, loan, shares]);
   const { saleProceeds, bridgeCost, mySale } = transitionNewLoan;
 
   const fmtNum = (n: number) => formatCurrency(Math.round(n));
@@ -418,7 +434,7 @@ const BoligPage: React.FC = () => {
 
   // Homeowner KPI tiles: equity, value, debt, LTV + purchase-vs-value metrics.
   const propMetrics = residenceMetrics(currentResidence(residences), assets.houseValue);
-  const ltvPct = assets.houseValue > 0 ? (homeowner.currentMortgageBalance / assets.houseValue) * 100 : null;
+  const ltvPct = assets.houseValue > 0 ? (mortgageBalance / assets.houseValue) * 100 : null;
   // Property-level, like LTV: the whole home's equity over its whole value.
   const equityPct = ltvPct != null ? 100 - ltvPct : null;
   const monthlyPaymentFull = homeownerStatus.monthlyPaymentCalc + homeowner.termingebyr;
@@ -699,7 +715,7 @@ const BoligPage: React.FC = () => {
             />
             <StatCard
               title={t.currentMortgageBalance}
-              value={fmtNum(homeowner.currentMortgageBalance)}
+              value={fmtNum(mortgageBalance)}
               sublabel={homeowner.originalLoanAmount > 0 || hasCoOwners
                 ? <>
                     {homeowner.originalLoanAmount > 0 && `${lp.kpiOf} ${fmtNum(homeowner.originalLoanAmount)} ${lp.kpiOriginal}`}
@@ -727,8 +743,8 @@ const BoligPage: React.FC = () => {
                   value={homeowner.accountLabel || '–'}
                   onEdit={() => editHomeownerText(lp.accountLabel, 'accountLabel', homeowner.accountLabel ?? '', lp.accountLabelPlaceholder)} />
                 <LoanRow label={t.currentMortgageBalance}
-                  value={fmtNum(homeowner.currentMortgageBalance)}
-                  onEdit={() => editHomeowner(t.currentMortgageBalance, 'currentMortgageBalance', homeowner.currentMortgageBalance)} />
+                  value={fmtNum(mortgageBalance)}
+                  onEdit={() => editMortgageBalance(t.currentMortgageBalance)} />
                 <LoanRow label={t.originalLoanAmount}
                   value={fmtNum(homeowner.originalLoanAmount)}
                   onEdit={() => editHomeowner(t.originalLoanAmount, 'originalLoanAmount', homeowner.originalLoanAmount)} />
@@ -828,10 +844,10 @@ const BoligPage: React.FC = () => {
                       value={`${homeowner.rente - policyRate >= 0 ? '+' : ''}${fmtPct(homeowner.rente - policyRate)}`} />
                   </>
                 )}
-                <LoanRow label={lp.remainingDebt} value={fmtNum(homeowner.currentMortgageBalance)} />
+                <LoanRow label={lp.remainingDebt} value={fmtNum(mortgageBalance)} />
                 <LoanRow label={lp.ltv}
                   value={assets.houseValue > 0
-                    ? fmtPct((homeowner.currentMortgageBalance / assets.houseValue) * 100)
+                    ? fmtPct((mortgageBalance / assets.houseValue) * 100)
                     : '–'}
                   highlight />
               </div>
@@ -872,7 +888,7 @@ const BoligPage: React.FC = () => {
             t={t}
             lang={lang}
             formatCurrency={formatCurrency}
-            principal={homeowner.currentMortgageBalance}
+            principal={mortgageBalance}
             annualRatePct={homeowner.rente}
             basePayment={homeownerStatus.monthlyPaymentCalc}
           />
@@ -910,8 +926,8 @@ const BoligPage: React.FC = () => {
                   onEdit={() => editTransition(t.currentHouseValue, 'currentHouseValue', transition.currentHouseValue)} />
                 <LoanRow label={t.currentMortgageBalance}
                   notes={lp.currentLoanNote}
-                  value={fmtNum(transition.currentMortgageBalance)}
-                  onEdit={() => editTransition(t.currentMortgageBalance, 'currentMortgageBalance', transition.currentMortgageBalance)} />
+                  value={fmtNum(mortgageBalance)}
+                  onEdit={() => editMortgageBalance(t.currentMortgageBalance)} />
                 {/* The current loan's rate, term and balance date (the homeowner
                     slice): projections pay it down until the mode is switched. */}
                 <LoanRow label={lp.nominalRate}
@@ -1014,7 +1030,7 @@ const BoligPage: React.FC = () => {
             <div className="flex items-center gap-2 flex-wrap mb-6">
               <FlowStep label={lp.flowSell} value={fmtNum(transition.currentHouseValue)} color="blue" />
               <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
-              <FlowStep label={lp.flowPayLoan} value={fmtNum(transition.currentMortgageBalance)} color="red" />
+              <FlowStep label={lp.flowPayLoan} value={fmtNum(mortgageBalance)} color="red" />
               <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
               <FlowStep
                 label={lp.flowNetProceeds}
