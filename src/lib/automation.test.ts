@@ -375,6 +375,11 @@ describe('monthlyPaydownPrincipal', () => {
     expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], { ...state, housingMode: 'first_buyer' }, MONTH)).toBe(0);
   });
 
+  it('a revolving card cleared every month keeps nothing', () => {
+    const card = { ...state, debts: { card: { balance: 15_000, rate: 0, revolving: true } } };
+    expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'debt', debtId: 'card' }], card, MONTH)).toBe(0);
+  });
+
   it('never NaN from broken amounts or balances', () => {
     const p = monthlyPaydownPrincipal([
       { amount: NaN, destinationKind: 'mortgage' },
