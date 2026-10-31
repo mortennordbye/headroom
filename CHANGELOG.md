@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.2](https://github.com/mortennordbye/headroom/compare/v3.10.1...v3.10.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* make mobile tab switches respond on the first tap ([#292](https://github.com/mortennordbye/headroom/issues/292)) ([b8bb273](https://github.com/mortennordbye/headroom/commit/b8bb273219807757d80528b5c3b8cda185bdcde2))
+* refuse undo it can't express, read text balances, and tighten tests ([#290](https://github.com/mortennordbye/headroom/issues/290)) ([4a17acc](https://github.com/mortennordbye/headroom/commit/4a17accece432eb829feb6789bbb9042170ed674))
+
 ## [3.10.1](https://github.com/mortennordbye/headroom/compare/v3.10.0...v3.10.1) (2026-10-31)
 
 
