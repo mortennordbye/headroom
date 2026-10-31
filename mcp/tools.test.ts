@@ -242,7 +242,9 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     // Year-one interest on the homeowner loan, deducted from alminnelig inntekt.
     const interest = calcAmortizationSchedule(2500000, 5.5, 25)[0].interestPaid;
     expect(s.annualMortgageInterestDeduction).toBe(Math.round(interest));
-    const noDeduction = calcTaxByRegion(720000, 'no', 37.84, 15000, 0, 0);
+    // The tax is on salary plus the year's holiday pay above it, as the budget's.
+    expect(s.holidaySurplusAnnual).toBe(Math.round(derive.holidaySurplus(blob, 2026)));
+    const noDeduction = calcTaxByRegion(720000 + derive.holidaySurplus(blob, 2026), 'no', 37.84, 15000, 0, 0);
     expect(noDeduction.totalTax - s.tax!.totalTax).toBeCloseTo(interest * 0.22, 0);
     expect(s.netMonthlyOverridden).toBe(false);
     expect(s.payslip).toBeNull();
@@ -276,6 +278,14 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     // The surplus arrives net of tax at the marginal rate: more than nothing, less than all of it.
     expect(gain).toBeGreaterThan(surplus * 0.4);
     expect(gain).toBeLessThan(surplus);
+  });
+
+  it('forecast year one nets the same as the budget income times twelve', () => {
+    const b = fullFixture();
+    delete b.monthlyIncomes;
+    expect(derive.holidaySurplus(b, 2026)).toBeGreaterThan(0);
+    const year0 = derive.forecast(b, {}, '2026-03').projection[0];
+    expect(Math.abs(year0.net - derive.netMonthlyFor(b, '2026-03') * 12)).toBeLessThanOrEqual(12);
   });
 
   it('salary & tax: no salary entries means no invented tax breakdown', () => {
@@ -355,7 +365,8 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       inflationPct,
     });
     const net = calcPensionIncomeTax(income.gross, TAX_YEAR).netAnnual;
-    const currentNet = calcTaxByRegion(p.pensionableIncome, 'no', 30, p.ipsAnnualContribution, 0).netAnnual;
+    // Today's net pay includes the year's holiday pay above salary, as the page's.
+    const currentNet = calcTaxByRegion(p.pensionableIncome + derive.holidaySurplus(b, Number(MONTH.slice(0, 4))), 'no', 30, p.ipsAnnualContribution, 0).netAnnual;
     expect(Math.abs(p.retirementIncomeAnnual.otp - income.otp)).toBeLessThanOrEqual(1);
     expect(Math.abs(p.retirementIncomeAnnual.gross - income.gross)).toBeLessThanOrEqual(2);
     expect(Math.abs(p.netPensionMonthly - net / 12)).toBeLessThanOrEqual(1);

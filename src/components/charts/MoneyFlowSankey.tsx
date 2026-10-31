@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Sankey, Tooltip, ResponsiveContainer, Layer, Rectangle } from 'recharts';
-import { useFinance } from '../../context/FinanceContext';
+import { useFinance, calcActiveGrossAnnual } from '../../context/FinanceContext';
+import { monthKeyFromDate } from '../../lib/date';
 import { calcTaxByRegion } from '../../lib/norwegianTax';
 import ChartTooltip from '../ChartTooltip';
 import { CHART } from '../../lib/chartColors';
@@ -53,11 +54,20 @@ export default function MoneyFlowSankey() {
   const {
     t, region, grossAnnualIncome, customTaxRatePct, pension, annualMortgageInterest,
     totalFixedExpenses, savingsContributions, plannedMonthlySaving, formatCurrency,
+    salaries, jobs, currentMonth, holidaySurplusFor,
   } = useFinance();
 
+  // The year's holiday pay above salary is taxed income on top of it, as in the
+  // budget. Only with real salaries: a gross backed out of a flat net has it.
+  const monthKey = monthKeyFromDate(currentMonth);
+  const holidaySurplus = calcActiveGrossAnnual(salaries, jobs, monthKey) > 0
+    ? holidaySurplusFor(Number(monthKey.slice(0, 4)))
+    : 0;
+
   const data = useMemo(() => {
-    const b = calcTaxByRegion(grossAnnualIncome, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest);
-    const grossM = grossAnnualIncome / 12;
+    const grossAnnual = grossAnnualIncome + holidaySurplus;
+    const b = calcTaxByRegion(grossAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest);
+    const grossM = grossAnnual / 12;
     const taxM = b.totalTax / 12;
     const netM = b.netMonthly;
     // The whole point of this diagram is where the money goes, so a savings
@@ -102,7 +112,7 @@ export default function MoneyFlowSankey() {
     const nodes = usedIdx.map(i => allNodes[i]);
     const links = rawLinks.map(l => ({ ...l, source: remap.get(l.source)!, target: remap.get(l.target)! }));
     return { nodes, links, grossM };
-  }, [region, grossAnnualIncome, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, totalFixedExpenses, savingsContributions, plannedMonthlySaving, t]);
+  }, [region, grossAnnualIncome, holidaySurplus, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, totalFixedExpenses, savingsContributions, plannedMonthlySaving, t]);
 
   if (!(data.grossM > 0)) {
     return (

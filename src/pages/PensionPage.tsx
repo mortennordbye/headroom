@@ -69,7 +69,7 @@ const AutoPostToggle: React.FC<{
 };
 
 const PensionPage: React.FC = () => {
-  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang } = useFinance();
+  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang, holidaySurplusFor } = useFinance();
   const pa = t.pensionAutomation;
   const reduced = useReducedMotion();
 
@@ -165,7 +165,9 @@ const PensionPage: React.FC = () => {
   const netPensionMonthly = netPensionAnnual / 12;
 
   // Replacement ratio vs current net salary.
-  const currentNetAnnual = calcTaxByRegion(pensionableIncome, region, customTaxRatePct, ipsAnnualContribution, 0).netAnnual;
+  // Holiday pay above salary is part of today's taxed income, as in the budget.
+  const holidaySurplus = pensionableIncome > 0 ? holidaySurplusFor(Number(asOfMonth.slice(0, 4))) : 0;
+  const currentNetAnnual = calcTaxByRegion(pensionableIncome + holidaySurplus, region, customTaxRatePct, ipsAnnualContribution, 0).netAnnual;
   const replacementPct = currentNetAnnual > 0 ? (netPensionAnnual / currentNetAnnual) * 100 : 0;
 
   return (
