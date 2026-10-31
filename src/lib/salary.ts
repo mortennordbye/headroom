@@ -1,4 +1,5 @@
 import type { SalaryEntry, JobEntry, HoursSnapshot } from '../context/FinanceContext';
+import { addMonthsKey } from './date';
 
 /** Average weeks in a month (52 / 12), for converting weekly hours to monthly. */
 export const WEEKS_PER_MONTH = 4.345;
@@ -70,6 +71,66 @@ export function activeJobBreakdown(
     c.job.startDate < monthKey &&
     out.some(o => o !== c && o.job?.startDate === monthKey && o.job.endDate !== monthKey)
   ));
+}
+
+/** A run of consecutive months in which the same two or more jobs all count. */
+export interface JobOverlapRange {
+  /** First month of the run ('yyyy-MM'). */
+  start: string;
+  /** Last month of the run ('yyyy-MM', inclusive). */
+  end: string;
+  /** The jobs counting in every month of the run. */
+  jobIds: string[];
+}
+
+/** Safety cap on the scan, so a mistyped far-future date can't loop for ages. */
+const MAX_SCAN_MONTHS = 1200;
+
+/**
+ * Every run of months where more than one job counts towards gross income,
+ * scanned from the first salary up to `untilMonth`, or later when salaries or
+ * job dates are set in the future. Uses `activeJobBreakdown`, so it agrees with
+ * the summed income month by month. Runs are in chronological order; a change
+ * in which jobs overlap starts a new run.
+ */
+export function jobOverlapRanges(
+  salaries: SalaryEntry[],
+  jobs: JobEntry[],
+  untilMonth: string,
+): JobOverlapRange[] {
+  if (salaries.length === 0) return [];
+  const month7 = (d: string) => d.slice(0, 7);
+  let month = salaries.map(s => month7(s.effectiveDate)).reduce((a, b) => (b < a ? b : a));
+  let last = untilMonth;
+  for (const d of [...salaries.map(s => s.effectiveDate), ...jobs.flatMap(j => [j.startDate, j.endDate ?? ''])]) {
+    if (d && month7(d) > last) last = month7(d);
+  }
+
+  const ranges: JobOverlapRange[] = [];
+  for (let i = 0; i < MAX_SCAN_MONTHS && month <= last; i++, month = addMonthsKey(month, 1)) {
+    const active = activeJobBreakdown(salaries, jobs, month);
+    if (active.length < 2) continue;
+    const jobIds = active.map(c => c.jobId).sort();
+    const prev = ranges[ranges.length - 1];
+    if (prev && addMonthsKey(prev.end, 1) === month && prev.jobIds.join('|') === jobIds.join('|')) prev.end = month;
+    else ranges.push({ start: month, end: month, jobIds });
+  }
+  return ranges;
+}
+
+/**
+ * True when salaries have started but no job adds gross income in `monthKey`
+ * (every job with a salary has ended). The budget then falls back to the flat
+ * monthly `income` field instead of the salary system (`derivedNetMonthlyFor`),
+ * which is easy to miss, so the pages warn about it.
+ */
+export function allSalariedJobsEnded(
+  salaries: SalaryEntry[],
+  jobs: JobEntry[],
+  monthKey: string,
+): boolean {
+  if (!salaries.some(s => s.effectiveDate <= monthKey)) return false;
+  return activeJobBreakdown(salaries, jobs, monthKey).reduce((sum, c) => sum + c.gross, 0) === 0;
 }
 
 /** How a salary-change amount is entered when recording a raise/adjustment. */

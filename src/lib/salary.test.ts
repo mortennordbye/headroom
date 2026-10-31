@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob, activeJobBreakdown, salaryVsCpiYoy } from './salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob, activeJobBreakdown, salaryVsCpiYoy, jobOverlapRanges, allSalariedJobsEnded } from './salary';
 import type { SalaryEntry, JobEntry, HoursSnapshot } from '../context/FinanceContext';
 
 const sal = (id: string, effectiveDate: string, grossAnnual: number, jobId = 'j1'): SalaryEntry => ({
@@ -271,5 +271,71 @@ describe('salaryVsCpiYoy', () => {
     const s = withCpi(13, () => 100);
     s[0].totalAnnual = 0;
     expect(salaryVsCpiYoy(s)!.salary).toBe(0);
+  });
+});
+
+const jobAt = (id: string, startDate: string, endDate: string | null): JobEntry => ({
+  id, startDate, endDate, employer: 'Acme', role: id, contractedHoursPerWeek: 37.5,
+});
+
+describe('jobOverlapRanges', () => {
+  it('finds a past overlap the current-month check misses', () => {
+    // Old job's end date left two months too late after a change in 2024-03.
+    const r = jobOverlapRanges(
+      [sal('s1', '2023-01', 600_000, 'old'), sal('s2', '2024-03', 700_000, 'new')],
+      [jobAt('old', '2023-01', '2024-05'), jobAt('new', '2024-03', null)],
+      '2026-10',
+    );
+    expect(r).toEqual([{ start: '2024-03', end: '2024-05', jobIds: ['new', 'old'] }]);
+  });
+
+  it('is empty for a clean job change', () => {
+    const r = jobOverlapRanges(
+      [sal('s1', '2023-01', 600_000, 'old'), sal('s2', '2024-03', 700_000, 'new')],
+      [jobAt('old', '2023-01', '2024-02'), jobAt('new', '2024-03', null)],
+      '2026-10',
+    );
+    expect(r).toEqual([]);
+  });
+
+  it('scans past the current month to future-dated jobs', () => {
+    const r = jobOverlapRanges(
+      [sal('s1', '2023-01', 600_000, 'a'), sal('s2', '2027-02', 700_000, 'b')],
+      [jobAt('a', '2023-01', '2027-03'), jobAt('b', '2027-02', null)],
+      '2026-10',
+    );
+    expect(r).toEqual([{ start: '2027-02', end: '2027-03', jobIds: ['a', 'b'] }]);
+  });
+
+  it('splits runs when the set of overlapping jobs changes', () => {
+    const r = jobOverlapRanges(
+      [sal('s1', '2024-01', 1, 'a'), sal('s2', '2024-01', 1, 'b'), sal('s3', '2024-03', 1, 'c')],
+      [jobAt('a', '2024-01', null), jobAt('b', '2024-01', '2024-04'), jobAt('c', '2024-03', '2024-03')],
+      '2024-06',
+    );
+    expect(r).toEqual([
+      { start: '2024-01', end: '2024-02', jobIds: ['a', 'b'] },
+      { start: '2024-03', end: '2024-03', jobIds: ['a', 'b', 'c'] },
+      { start: '2024-04', end: '2024-04', jobIds: ['a', 'b'] },
+    ]);
+  });
+
+  it('is empty without salaries', () => {
+    expect(jobOverlapRanges([], [], '2026-10')).toEqual([]);
+  });
+});
+
+describe('allSalariedJobsEnded', () => {
+  it('is true once every salaried job has ended', () => {
+    expect(allSalariedJobsEnded([sal('s1', '2023-01', 600_000, 'a')], [jobAt('a', '2023-01', '2026-06')], '2026-10')).toBe(true);
+  });
+
+  it('is false while a job is active', () => {
+    expect(allSalariedJobsEnded([sal('s1', '2023-01', 600_000, 'a')], [jobAt('a', '2023-01', null)], '2026-10')).toBe(false);
+  });
+
+  it('is false with no salaries, or before the first salary starts', () => {
+    expect(allSalariedJobsEnded([], [], '2026-10')).toBe(false);
+    expect(allSalariedJobsEnded([sal('s1', '2027-01', 600_000, 'a')], [jobAt('a', '2027-01', null)], '2026-10')).toBe(false);
   });
 });

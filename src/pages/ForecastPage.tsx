@@ -25,6 +25,7 @@ import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { formatAxisInt } from '../lib/format';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
+import { allSalariedJobsEnded } from '../lib/salary';
 
 const ForecastPage: React.FC = () => {
   const {
@@ -282,6 +283,11 @@ const ForecastPage: React.FC = () => {
         <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
           {t.forecast.subtitle}
         </p>
+        {allSalariedJobsEnded(salaries, jobs, today) && (
+          <p className="mt-2 text-[12px]" role="status" style={{ color: 'var(--warning)' }}>
+            {t.forecast.jobsEndedNote}
+          </p>
+        )}
       </header>
 
       {/* Control panel */}
