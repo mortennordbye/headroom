@@ -470,7 +470,7 @@ const Layout: React.FC = () => {
               {NAV_ITEMS
                 .filter(item => MORE_ROUTES.includes(item.path) && isVisible(item.path))
                 .map(item => (
-                  <SheetItem key={item.path} to={item.path} icon={<item.icon size={20} strokeWidth={1.75} />} label={t.nav[item.key]} onNavigate={() => { setMoreOpen(false); setPendingNav(item.path); }} />
+                  <SheetItem key={item.path} to={item.path} icon={item.icon} label={t.nav[item.key]} onNavigate={() => { setMoreOpen(false); setPendingNav(item.path); }} />
                 ))}
             </div>
             {/* Setup guide — the mobile trigger for the guided tour */}
@@ -479,7 +479,7 @@ const Layout: React.FC = () => {
               className="mt-2 w-full flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
               style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)', color: 'var(--text-1)' }}
             >
-              <HelpCircle size={18} strokeWidth={1.75} />
+              <HelpCircle size={18} strokeWidth={1.75} aria-hidden style={{ color: 'var(--brass-dim)' }} />
               <span>{t.onboarding.guide}</span>
             </button>
             {/* Glossary — the mobile trigger for the term lookup */}
@@ -488,7 +488,7 @@ const Layout: React.FC = () => {
               className="mt-2 w-full flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
               style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)', color: 'var(--text-1)' }}
             >
-              <BookOpen size={18} strokeWidth={1.75} />
+              <BookOpen size={18} strokeWidth={1.75} aria-hidden style={{ color: 'var(--brass-dim)' }} />
               <span>{t.glossary.open}</span>
             </button>
           </div>
@@ -496,8 +496,10 @@ const Layout: React.FC = () => {
       )}
 
       {/* ─── Mobile bottom nav ───────────────── */}
+      {/* The home-indicator inset is padding on each tab, not on the bar, so the
+          whole bar is tappable: a thumb landing below the label still navigates. */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex border-t pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
+        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex border-t pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
         style={{
           background: 'var(--bg)',
           borderColor: 'var(--rule)',
@@ -509,11 +511,11 @@ const Layout: React.FC = () => {
         <MobileNavTab to="/salary" icon={navIconForPath('/salary')} label={t.nav.salary} active={navGroup?.primary === '/salary'} onNavigate={setPendingNav} />
         <button
           onClick={() => setMoreOpen(true)}
-          className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
+          className="flex-1 min-w-0 flex flex-col items-center gap-1 pt-2 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-[10px] font-medium transition-colors"
           style={{ color: moreActive ? 'var(--brass)' : 'var(--text-3)' }}
           aria-label={t.nav.more}
         >
-          <MenuIcon size={20} strokeWidth={1.75} />
+          <MenuIcon size={20} strokeWidth={1.75} aria-hidden style={{ color: moreActive ? 'var(--brass)' : 'var(--brass-dim)' }} />
           <span className="truncate max-w-full px-0.5">{t.nav.more}</span>
         </button>
       </nav>
@@ -557,12 +559,12 @@ const isPlainClick = (e: React.MouseEvent) =>
 
 interface SheetItemProps {
   to: string;
-  icon: React.ReactNode;
+  icon: LucideIcon;
   label: string;
   onNavigate: () => void;
 }
 
-const SheetItem: React.FC<SheetItemProps> = ({ to, icon, label, onNavigate }) => (
+const SheetItem: React.FC<SheetItemProps> = ({ to, icon: Icon, label, onNavigate }) => (
   <NavLink
     to={to}
     end={to === '/'}
@@ -574,8 +576,13 @@ const SheetItem: React.FC<SheetItemProps> = ({ to, icon, label, onNavigate }) =>
       color: isActive ? 'var(--brass)' : 'var(--text-1)',
     })}
   >
-    {icon}
-    <span>{label}</span>
+    {({ isActive }) => (
+      <>
+        {/* Brass like the bottom-bar tab icons: full when active, dimmed otherwise. */}
+        <Icon size={20} strokeWidth={1.75} aria-hidden style={{ color: isActive ? 'var(--brass)' : 'var(--brass-dim)' }} />
+        <span>{label}</span>
+      </>
+    )}
   </NavLink>
 );
 
@@ -623,7 +630,7 @@ const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, acti
     to={to}
     end={to === '/'}
     onClick={e => { if (isPlainClick(e)) onNavigate(to); }}
-    className="flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors"
+    className="flex-1 min-w-0 flex flex-col items-center gap-1 pt-2 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-[10px] font-medium transition-colors"
     style={{
       color: active ? 'var(--brass)' : 'var(--text-3)',
     }}
