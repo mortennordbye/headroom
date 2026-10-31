@@ -15,7 +15,8 @@ const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max
  *
  * Mortgage/debt paydown is deliberately not in here: only the principal portion
  * of those builds equity and a `FixedExpense` holds the gross payment, so
- * counting them whole would overstate the rate. They stay expenses.
+ * counting them whole would overstate the rate. They stay expenses; the savings
+ * rate adds back just the principal (`monthlyPaydownPrincipal` in automation.ts).
  *
  * A paused saving moves nothing, so it is left out: pausing is how a month with
  * no room to save frees the money for spending.
@@ -210,8 +211,10 @@ export interface PlanSavingsRow {
  * utgifter" — from income, fixed expenses and the savings target alone, so it is
  * complete for every month and identical whether or not a bank is connected.
  *
- * `spendFixedTotal` must exclude automated savings contributions: money moved to
- * a savings account is retained, not spent (see `savingsContributionTotal`).
+ * `spendFixedTotal` must exclude automated savings contributions and the
+ * principal part of loan payments: money moved to a savings account or off a
+ * loan is retained, not spent (see `savingsContributionTotal` and
+ * `monthlyPaydownPrincipal`).
  */
 export function planSavingsRateSeries(
   months: string[],

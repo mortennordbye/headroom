@@ -42,7 +42,7 @@ import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest, typ
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
   computeAutomationPostings,
-  automationMortgage, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
+  automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
 import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
@@ -1064,6 +1064,11 @@ interface FinanceDerivedContextType {
   /** The part of `totalFixedExpenses` that is a move into savings rather than
    *  spend — i.e. the savings list's total. */
   savingsContributions: number;
+  /** The principal the month's mortgage/debt paydown expenses move off the
+   *  loans (the user's share; monthlyPaydownPrincipal). Still an expense, but
+   *  it builds equity, so the savings rate counts it as kept. From today's
+   *  balances, also when viewing another month. */
+  paydownPrincipal: number;
   /** Savings for the selected month: live config with derived amounts resolved,
    *  or the recorded snapshot's savings when viewing a past month (read-only). */
   viewSavings: Saving[];
@@ -2666,6 +2671,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }), [assets.savingsAccounts, assets.bufferAccount, assets.portfolio, assets.bsu, assets.coOwners,
       pension.otpBalance, pension.ipsBalance, housingMode, currentMortgageNow, debts]);
 
+  // The equity-building part of the viewed month's paydown expenses.
+  const paydownPrincipal = useMemo(
+    () => monthlyPaydownPrincipal(viewFixedExpenses, automationState, currentMonthKey()),
+    [viewFixedExpenses, automationState],
+  );
+
   // Apply a resolved posting's absolute new balance to the right slice. Debt
   // writes are batched by the caller (a single setDebts) to avoid stale-closure
   // clobber; savings/mortgage use functional setters and compose safely.
@@ -3300,7 +3311,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, currentMortgage: currentMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
-    totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
+    totalResidual, totalFixedExpenses, savingsContributions, paydownPrincipal, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   }), [
@@ -3310,7 +3321,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, currentMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
-    totalResidual, totalFixedExpenses, savingsContributions, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
+    totalResidual, totalFixedExpenses, savingsContributions, paydownPrincipal, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
     monthlyBudget, dailyBudget, dailyData, reconciliation,
     totalEquity, taxOnGain, netInvestment, houseEquity, cryptoTaxOnGain, netCrypto,
   ]);

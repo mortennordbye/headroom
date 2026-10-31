@@ -22,7 +22,7 @@ export default function SavingsRateChart() {
   const {
     t, lang, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
     region, grossAnnualIncome, employerCostConfig,
-    savingsTargetPercent, savingsContributions, planSavingsContributions,
+    savingsTargetPercent, savingsContributions, planSavingsContributions, paydownPrincipal,
   } = useFinance();
   const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -32,23 +32,24 @@ export default function SavingsRateChart() {
     const seasonal = region === 'no'
       ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
       : null;
-    // Automated savings transfers are money retained, not spent — subtract only
-    // the consumption part of the fixed expenses.
-    const spendFixedTotal = totalFixedExpenses - savingsContributions;
+    // Automated savings transfers and the principal part of loan payments are
+    // money retained, not spent — subtract only the consumption part of the
+    // fixed expenses.
+    const spendFixedTotal = totalFixedExpenses - savingsContributions - paydownPrincipal;
     return planSavingsRateSeries(months, monthlyIncomes, Math.round(effectiveIncome), spendFixedTotal, seasonal)
       .map(({ month, rate }) => ({
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
         rate,
       }));
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, paydownPrincipal, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   // The target is a share of residual; the line is a share of income. Restate it
   // so the reference line and the plotted rate are the same quantity. It is the
   // plan's line, so a month adjusted to save less doesn't move it.
   const targetRate = useMemo(
     () => targetRateOfIncome(effectiveIncome, totalFixedExpenses - savingsContributions + planSavingsContributions,
-      planSavingsContributions, savingsTargetPercent),
-    [effectiveIncome, totalFixedExpenses, savingsContributions, planSavingsContributions, savingsTargetPercent],
+      planSavingsContributions + paydownPrincipal, savingsTargetPercent),
+    [effectiveIncome, totalFixedExpenses, savingsContributions, planSavingsContributions, paydownPrincipal, savingsTargetPercent],
   );
 
   return (

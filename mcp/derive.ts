@@ -14,6 +14,7 @@ import type {
 } from '../src/context/FinanceContext';
 import { computeEquityBreakdown, sumSavings } from '../src/lib/equity';
 import { activeCoOwners, myHouseDebt, myHouseValue, myPrimaryHomeWealthValue, ownershipShares } from '../src/lib/ownership';
+import { automationMortgage, monthlyPaydownPrincipal } from '../src/lib/automation';
 import { ageFromBirthDate } from '../src/lib/date';
 import {
   calcDebtToIncome,
@@ -356,6 +357,17 @@ function seasonalConfig(blob: ExportPayload, monthKey: string) {
     : null;
 }
 
+/** The equity-building part of the paydown expenses. Mirrors FinanceContext `paydownPrincipal`. */
+function paydownPrincipal(blob: ExportPayload, monthKey: string): number {
+  const m = mortgageOwed(blob, monthKey);
+  return monthlyPaydownPrincipal(blob.fixedExpenses ?? [], {
+    ...automationMortgage(m),
+    mortgageDebtShare: ownershipShares(blob.assets, monthKey).debt,
+    debts: Object.fromEntries((blob.debts ?? []).map((d) => [d.id, { balance: d.balance, rate: d.rate }])),
+    housingMode: blob.housingMode ?? 'first_buyer',
+  }, monthKey);
+}
+
 /**
  * Trailing savings-rate health, plan-based like BudgetPage's banner: income and
  * planned fixed expenses only, measured against the target restated as a share
@@ -363,8 +375,9 @@ function seasonalConfig(blob: ExportPayload, monthKey: string) {
  */
 function savingsRateHealth(blob: ExportPayload, monthKey: string, v: ReturnType<typeof savingsView>) {
   const months = lastNMonthKeys(monthAnchor(monthKey), 12);
-  const targetRateOfIncomePct = targetRateOfIncome(v.income, v.fixedTotal + v.planContributions, v.planContributions, v.target);
-  const rows = planSavingsRateSeries(months, blob.monthlyIncomes ?? {}, Math.round(v.income), v.fixedTotal, seasonalConfig(blob, monthKey));
+  const principal = paydownPrincipal(blob, monthKey);
+  const targetRateOfIncomePct = targetRateOfIncome(v.income, v.fixedTotal + v.planContributions, v.planContributions + principal, v.target);
+  const rows = planSavingsRateSeries(months, blob.monthlyIncomes ?? {}, Math.round(v.income), v.fixedTotal - principal, seasonalConfig(blob, monthKey));
   return { targetRateOfIncomePct, status: savingsRateStatus(rows, targetRateOfIncomePct) };
 }
 

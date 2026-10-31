@@ -230,3 +230,54 @@ export function computeAutomationPostings(
   }
   return out;
 }
+
+/** The fixed-expense fields `monthlyPaydownPrincipal` reads. */
+export interface PaydownExpense {
+  amount: number;
+  destinationKind?: 'mortgage' | 'debt';
+  debtId?: string;
+  mortgagePaymentScope?: 'whole' | 'myShare';
+  automationPaused?: boolean;
+}
+
+/**
+ * The principal that one month of the paydown fixed expenses moves off the
+ * loans, on the user's share: the part of those payments that builds equity
+ * instead of leaving as interest. Runs the same amortisation as the runner
+ * (`computeAutomationPostings`) for exactly `month`, from today's balances.
+ *
+ * The mortgage counts at the user's debt share whatever the payment scope: a
+ * 'myShare' payment reaches the loan grossed up by the share, and a 'whole'
+ * payment also pays down the co-owners' part, which is not the user's to keep.
+ * A paused expense moves nothing, and a payment that can't cover the interest
+ * builds nothing.
+ */
+export function monthlyPaydownPrincipal(
+  expenses: readonly PaydownExpense[],
+  state: Pick<AutomationState, 'mortgage' | 'mortgageRate' | 'mortgageDebtShare' | 'debts' | 'housingMode'>,
+  month: string,
+): number {
+  const prev = addMonthsKey(month, -1);
+  const rules: AutomationRule[] = expenses
+    .filter(e => e.destinationKind && !e.automationPaused && Number.isFinite(e.amount) && e.amount > 0)
+    .map((e, i) => ({
+      id: `paydown:${i}`, name: '', amount: e.amount, targetKind: e.destinationKind!,
+      debtId: e.debtId, mortgagePaymentScope: e.mortgagePaymentScope,
+      startMonth: month, lastPostedMonth: prev,
+    }));
+  if (rules.length === 0) return 0;
+  const scalars = Object.fromEntries(SCALAR_TARGETS.map(k => [k, 0])) as Record<ScalarTargetKind, number>;
+  const postings = computeAutomationPostings(rules, { ...state, savings: {}, scalars }, month, 1);
+  // Each loan's balance after the month: postings to one loan stack, so the last wins.
+  let mortgageAfter: number | undefined;
+  const debtAfter: Record<string, number> = {};
+  for (const p of postings) {
+    if (p.targetKind === 'mortgage') mortgageAfter = p.newBalance;
+    else if (p.targetKind === 'debt' && p.debtId) debtAfter[p.debtId] = p.newBalance;
+  }
+  const finite = (n: number | undefined) => (Number.isFinite(n) ? (n as number) : 0);
+  const share = Number.isFinite(state.mortgageDebtShare) ? Math.min(1, Math.max(0, state.mortgageDebtShare!)) : 1;
+  let total = mortgageAfter === undefined ? 0 : Math.max(0, finite(state.mortgage) - mortgageAfter) * share;
+  for (const [id, after] of Object.entries(debtAfter)) total += Math.max(0, finite(state.debts[id]?.balance) - after);
+  return Math.round(total);
+}
