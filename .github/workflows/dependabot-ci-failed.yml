@@ -1,0 +1,42 @@
+name: Dependabot CI failed
+
+# A Dependabot PR with failing checks never auto-merges, and nobody is told: it
+# just sits there. When one of the PR's check workflows fails, label the PR and
+# request the repository owner's review, which sends them a notification.
+#
+# workflow_run runs in the base repository's context, so this token can write
+# to the PR even though the failed run was started by Dependabot.
+on:
+  workflow_run:
+    workflows: [CI, Desktop build, Dependency Review]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  flag:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    steps:
+      - name: Label the PR and request a review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+        run: |
+          # pull_requests[] on the event is empty for some triggers, so look the
+          # PR up by its branch instead.
+          pr=$(gh pr list --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            echo "No open PR for $HEAD_BRANCH; nothing to flag."
+            exit 0
+          fi
+          gh pr edit "$pr" --add-label ci-failed --add-reviewer "$OWNER"
+          gh pr comment "$pr" --body "$WORKFLOW failed on this update, so it will not merge by itself: $RUN_URL"

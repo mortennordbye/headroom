@@ -2,8 +2,9 @@ name: Dependabot auto-merge
 
 on: pull_request
 
-# Needed so `gh pr merge --auto` can arm auto-merge on the PR. GitHub grants
-# these to the Dependabot-triggered token only because they are requested here.
+# Needed so `gh pr merge --auto` can arm auto-merge on the PR, and so a major
+# can be labelled and handed to the owner. GitHub grants these to the
+# Dependabot-triggered token only because they are requested here.
 permissions:
   contents: write
   pull-requests: write
@@ -12,12 +13,29 @@ jobs:
   auto-merge:
     runs-on: ubuntu-latest
     if: github.event.pull_request.user.login == 'dependabot[bot]'
+    env:
+      # Dependabot-triggered runs read the *Dependabot* secret store, so the
+      # release App's credentials must be added there as well as to Actions.
+      HAS_APP: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Arm auto-merge with the release App's token when it is configured. A
+      # merge made with GITHUB_TOKEN does not trigger other workflows, so CI
+      # (which builds and pushes the image) and Release (which cuts the
+      # version) would never run for a merged dependency update. A merge made
+      # by the App does trigger them.
+      - name: Get release App token
+        id: app-token
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       # Two rules:
       #  - Security fixes merge at any size, majors included. A known CVE sitting
@@ -36,4 +54,14 @@ jobs:
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      # A major outside the security group waits for a person: label it and
+      # request the repository owner's review, which sends them a notification.
+      - name: Hand a major to the owner
+        if: steps.metadata.outputs.dependency-group != 'security' && steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: gh pr edit "$PR_URL" --add-label needs-review --add-reviewer "$OWNER"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          OWNER: ${{ github.repository_owner }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
