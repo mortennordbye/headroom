@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.9.0](https://github.com/mortennordbye/headroom/compare/v3.8.2...v3.9.0) (2026-10-31)
+
+
+### Features
+
+* opt-in housing market data with a comparable-sales home valuation ([#265](https://github.com/mortennordbye/headroom/issues/265)) ([6676fae](https://github.com/mortennordbye/headroom/commit/6676fae26f2de41c7c7ac2fd350e0a537e9cbaa4))
+
+
+### Bug Fixes
+
+* **deps:** bump the npm-minor-patch group with 5 updates ([#269](https://github.com/mortennordbye/headroom/issues/269)) ([e042e9b](https://github.com/mortennordbye/headroom/commit/e042e9ba7005617b932c49e79dbc0369c365542b))
+
 ## [3.8.2](https://github.com/mortennordbye/headroom/compare/v3.8.1...v3.8.2) (2026-10-30)
 
 
