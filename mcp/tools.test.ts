@@ -659,6 +659,21 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(recs.savingsRateTargetOfIncomePct).toBe(budget.savingsRateTargetOfIncomePct);
   });
 
+  it('the principal part of a mortgage payment counts as kept in the savings rate', () => {
+    const b = fullFixture();
+    b.monthlyIncomes = {};
+    b.housingMode = 'homeowner';
+    const before = derive.budgetSummary(b, MONTH);
+    b.fixedExpenses = b.fixedExpenses!.map((e) => (e.id === 'f1' ? { ...e, destinationKind: 'mortgage' as const } : e));
+    const after = derive.budgetSummary(b, MONTH);
+    // 14 000 a month against the fixture's 2 500 000 at 5.5 %.
+    const principal = 14000 - 2_500_000 * 0.055 / 12;
+    const income = before.monthlyNetIncome;
+    expect(after.savingsRateTargetOfIncomePct - before.savingsRateTargetOfIncomePct)
+      .toBeCloseTo((principal / income) * 100, 0);
+    expect(after.totalFixedExpenses).toBe(before.totalFixedExpenses);
+  });
+
   it('region generic taxes at the default 30% flat rate when none is stored', () => {
     const b = fullFixture();
     b.region = 'generic';

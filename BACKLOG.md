@@ -12,10 +12,6 @@ in git and the CHANGELOG, not here.
   as enveloped. **Unblock**: resolve `prevMonthSpending` against
   `balanceSnapshots[prevMonthKey].fixedExpenses` too. **Where**: `src/context/FinanceContext.tsx`
   (`prevMonthSpending`/`currentMonthSpending`).
-- **`mortgage` and `debt` destinations count as pure spend in the savings rate.** The principal
-  part of a loan payment builds equity, but a `FixedExpense` holds the gross payment. Needs the
-  amortization split `src/lib/automation.ts` already computes. **Where**:
-  `savingsContributionTotal` in `src/lib/savingsRate.ts`, `src/lib/automation.ts`.
 - **Mortgage edge cases only reachable with hand-made or old data.** MCP `get_mortgage` treats
   missing sale-cost fields as zero proceeds; the paydown plan can anchor on a stored snapshot whose
   old copy of the balance was a dated 3 000 000 placeholder, shows "months ahead" after a sale, and

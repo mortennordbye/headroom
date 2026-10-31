@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeAutomationPostings, applyAmortization, automationMortgage, type AutomationRule, type AutomationState } from './automation';
+import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState } from './automation';
 import { currentMortgage } from './existingMortgage';
 
 const rule = (over: Partial<AutomationRule> = {}): AutomationRule => ({
@@ -331,5 +331,55 @@ describe('applyAmortization', () => {
 
   it('reports infeasible when the payment cannot cover the interest', () => {
     expect(applyAmortization(100_000, 12, 500, 6)).toEqual({ balance: 100_000, infeasible: true });
+  });
+});
+
+describe('monthlyPaydownPrincipal', () => {
+  const state = {
+    mortgage: 2_400_000, mortgageRate: 5, debts: { car: { balance: 100_000, rate: 12 } },
+    housingMode: 'homeowner' as const,
+  };
+  const MONTH = '2026-10';
+
+  it('is the payment less the month\'s interest, mortgage and debt together', () => {
+    const p = monthlyPaydownPrincipal([
+      { amount: 15_000, destinationKind: 'mortgage' },
+      { amount: 3_000, destinationKind: 'debt', debtId: 'car' },
+    ], state, MONTH);
+    expect(p).toBe(Math.round(15_000 - 2_400_000 * 0.05 / 12 + 3_000 - 100_000 * 0.12 / 12));
+  });
+
+  it('counts the mortgage at the user\'s debt share, for either payment scope', () => {
+    const half = { ...state, mortgageDebtShare: 0.5 };
+    // 'whole': the loan gets 15 000; half the principal is the user's.
+    expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], half, MONTH))
+      .toBe(Math.round((15_000 - 10_000) * 0.5));
+    // 'myShare': 7 500 is half the instalment, so the loan again gets 15 000.
+    expect(monthlyPaydownPrincipal([{ amount: 7_500, destinationKind: 'mortgage', mortgagePaymentScope: 'myShare' }], half, MONTH))
+      .toBe(Math.round((15_000 - 10_000) * 0.5));
+  });
+
+  it('a second payment to the same loan is all principal', () => {
+    const p = monthlyPaydownPrincipal([
+      { amount: 15_000, destinationKind: 'mortgage' },
+      { amount: 2_000, destinationKind: 'mortgage' },
+    ], state, MONTH);
+    expect(p).toBe(15_000 - 10_000 + 2_000);
+  });
+
+  it('nothing for paused, plain, infeasible, unknown-debt or first-buyer payments', () => {
+    expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage', automationPaused: true }], state, MONTH)).toBe(0);
+    expect(monthlyPaydownPrincipal([{ amount: 15_000 }], state, MONTH)).toBe(0);
+    expect(monthlyPaydownPrincipal([{ amount: 5_000, destinationKind: 'mortgage' }], state, MONTH)).toBe(0);
+    expect(monthlyPaydownPrincipal([{ amount: 3_000, destinationKind: 'debt', debtId: 'gone' }], state, MONTH)).toBe(0);
+    expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], { ...state, housingMode: 'first_buyer' }, MONTH)).toBe(0);
+  });
+
+  it('never NaN from broken amounts or balances', () => {
+    const p = monthlyPaydownPrincipal([
+      { amount: NaN, destinationKind: 'mortgage' },
+      { amount: 3_000, destinationKind: 'debt', debtId: 'car' },
+    ], { ...state, mortgage: NaN, debts: { car: { balance: NaN, rate: 12 } } }, MONTH);
+    expect(Number.isFinite(p)).toBe(true);
   });
 });

@@ -207,7 +207,7 @@ const BudgetPage: React.FC = () => {
     internalTransferIds,
     savingsTargetPercent,
     monthSavingsTargetPercent,
-    planSavingsContributions,
+    planSavingsContributions, paydownPrincipal,
     payday,
     labelRules,
     region,
@@ -233,8 +233,8 @@ const BudgetPage: React.FC = () => {
   // The plan's, like the chart's line, so an adjusted month doesn't move it.
   const savingsTargetRate = useMemo(
     () => targetRateOfIncome(effectiveIncome, totalFixedExpenses - savingsContributions + planSavingsContributions,
-      planSavingsContributions, savingsTargetPercent),
-    [effectiveIncome, totalFixedExpenses, savingsContributions, planSavingsContributions, savingsTargetPercent],
+      planSavingsContributions + paydownPrincipal, savingsTargetPercent),
+    [effectiveIncome, totalFixedExpenses, savingsContributions, planSavingsContributions, paydownPrincipal, savingsTargetPercent],
   );
 
   // Trailing savings-rate health — flag when the last few months' rate has slipped
@@ -244,12 +244,13 @@ const BudgetPage: React.FC = () => {
     const seasonal = region === 'no'
       ? { grossAnnual: grossAnnualIncome, feriepengesatsPct: employerCostConfig.feriepengesatsPct }
       : null;
-    const spendFixedTotal = totalFixedExpenses - savingsContributions;
+    // The principal part of loan payments is kept, like a saving.
+    const spendFixedTotal = totalFixedExpenses - savingsContributions - paydownPrincipal;
     // Plan-based, matching the chart it sits above: income and fixed expenses
     // only, no transactions.
     const rows = planSavingsRateSeries(months, monthlyIncomes, Math.round(effectiveIncome), spendFixedTotal, seasonal);
     return savingsRateStatus(rows, savingsTargetRate);
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, savingsTargetRate, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, savingsContributions, paydownPrincipal, savingsTargetRate, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
