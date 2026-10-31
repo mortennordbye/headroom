@@ -56,11 +56,14 @@ jobs:
 
       # Arm auto-merge on the release PR. It merges only once the required
       # checks pass, the same gate every other PR goes through.
+      # The PR comes through as raw JSON and is parsed in the shell: step env
+      # is evaluated even when `if` is false, so fromJSON() on an empty output
+      # here would fail the job (and with it the desktop build) on every push.
       - name: Auto-merge the release PR
         if: env.HAS_APP == 'true' && steps.release.outputs.pr != ''
-        run: gh pr merge --auto --squash "$PR_NUMBER"
+        run: gh pr merge --auto --squash "$(jq -r .number <<<"$PR_JSON")"
         env:
-          PR_NUMBER: ${{ fromJSON(steps.release.outputs.pr).number }}
+          PR_JSON: ${{ steps.release.outputs.pr }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
 
