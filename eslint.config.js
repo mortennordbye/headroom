@@ -43,7 +43,7 @@ export default defineConfig([
     rules: { 'no-control-regex': 'off' },
   },
   {
-    files: ['server/**/*.test.js', 'desktop/**/*.test.js', 'eslint.config.js'],
+    files: ['server/**/*.test.js', 'desktop/**/*.test.js', 'scripts/**/*.mjs', 'eslint.config.js'],
     extends: [js.configs.recommended],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: globals.node },
   },

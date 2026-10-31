@@ -66,7 +66,8 @@ export interface AutomationState {
   mortgageRate: number;                                  // annual %, the current loan's (automationMortgage)
   /** The user's share (0..1) of the joint mortgage; absent = 1. */
   mortgageDebtShare?: number;
-  debts: Record<string, { balance: number; rate: number }>; // by debtId; rate is annual %
+  /** By debtId; rate is annual %. `revolving` marks a card cleared every month. */
+  debts: Record<string, { balance: number; rate: number; revolving?: boolean }>;
   housingMode: HousingMode;
 }
 
@@ -250,7 +251,8 @@ export interface PaydownExpense {
  * 'myShare' payment reaches the loan grossed up by the share, and a 'whole'
  * payment also pays down the co-owners' part, which is not the user's to keep.
  * A paused expense moves nothing, and a payment that can't cover the interest
- * builds nothing.
+ * builds nothing. A revolving card is cleared every month and refilled by
+ * spending, so paying it keeps nothing either.
  */
 export function monthlyPaydownPrincipal(
   expenses: readonly PaydownExpense[],
@@ -260,6 +262,7 @@ export function monthlyPaydownPrincipal(
   const prev = addMonthsKey(month, -1);
   const rules: AutomationRule[] = expenses
     .filter(e => e.destinationKind && !e.automationPaused && Number.isFinite(e.amount) && e.amount > 0)
+    .filter(e => !(e.destinationKind === 'debt' && e.debtId && state.debts[e.debtId]?.revolving))
     .map((e, i) => ({
       id: `paydown:${i}`, name: '', amount: e.amount, targetKind: e.destinationKind!,
       debtId: e.debtId, mortgagePaymentScope: e.mortgagePaymentScope,

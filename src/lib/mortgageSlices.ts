@@ -189,6 +189,15 @@ export function migrateImportedMortgage<T extends MortgageSliceFields>(
       assets: { ...merged.assets, houseDebt: b },
       ...(merged.homeowner ? { homeowner: { ...merged.homeowner, currentMortgageBalanceAsOf: asOf } } : {}),
     };
+  } else {
+    // The import carries no balance, so the current one stands, with its own
+    // date: an imported slice without the balance must not replace either.
+    if (imported.assets && current.assets) merged = { ...merged, assets: { ...merged.assets, houseDebt: current.assets.houseDebt } };
+    if (imported.homeowner && merged.homeowner) {
+      const { currentMortgageBalanceAsOf: _imported, ...rest } = merged.homeowner;
+      const asOf = current.homeowner?.currentMortgageBalanceAsOf;
+      merged = { ...merged, homeowner: asOf !== undefined ? { ...rest, currentMortgageBalanceAsOf: asOf } : rest };
+    }
   }
   return stampBalanceDate(dropLegacyFields(merged), monthKey);
 }

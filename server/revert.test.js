@@ -37,6 +37,21 @@ describe('revertChange', () => {
     expect(undoKey('aiContext', undefined, 'note', 'note').blob).toEqual({});
   });
 
+  it('never brings back the old mortgage balance copies a migrated blob dropped', () => {
+    // The migration save dropped the copies; the balance was later set to 2 400 000.
+    const before = { assets: { houseDebt: 2_500_000 }, homeowner: { currentMortgageBalance: 2_500_000, rente: 5 }, transition: { currentMortgageBalance: 2_500_000 } };
+    const after = { assets: { houseDebt: 2_500_000 }, homeowner: { rente: 5 }, transition: {} };
+    const current = { assets: { houseDebt: 2_400_000 }, homeowner: { rente: 5 }, transition: {} };
+    const r = revertChange(current, after, before, changedKeys(before, after));
+    expect(r.blob).toEqual(current);
+  });
+
+  it('still restores the copies in a blob that was never migrated', () => {
+    const before = { homeowner: { currentMortgageBalance: 1 } };
+    const after = { homeowner: { currentMortgageBalance: 2 } };
+    expect(revertChange(after, after, before, ['homeowner']).blob).toEqual(before);
+  });
+
   it('refuses when the value changed again since', () => {
     const r = undoKey('income', 1, 2, 3);
     expect(r.conflicts).toEqual(['income']);

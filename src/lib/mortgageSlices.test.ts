@@ -236,6 +236,17 @@ describe('migrateImportedMortgage: an imported balance takes precedence', () => 
     expect(out.homeowner).toBe(current.homeowner);
   });
 
+  it('an imported homeowner slice without a balance keeps the current balance date', () => {
+    const out = migrateImportedMortgage(current, { homeowner: { currentMortgageBalanceAsOf: '2025-02' } }, NOW);
+    expectMigrated(out, 2_000_000);
+    expect(out.homeowner?.currentMortgageBalanceAsOf).toBe('2026-01');
+  });
+
+  it('an imported assets slice without houseDebt keeps the current balance', () => {
+    const out = migrateImportedMortgage(current, { assets: {} }, NOW);
+    expectMigrated(out, 2_000_000);
+  });
+
   it('an imported unknown mode keeps the current one', () => {
     const out = migrateImportedMortgage(current, { housingMode: 'renter' as unknown as HousingMode }, NOW);
     expect(out.housingMode).toBe('homeowner');

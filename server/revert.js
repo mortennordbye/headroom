@@ -118,7 +118,22 @@ function revertChange(currentBlob, afterBlob, beforeBlob, keys) {
     if (r.absent) delete out[k];
     else out[k] = r.value;
   }
-  return conflicts.length ? { conflicts } : { blob: out };
+  if (conflicts.length) return { conflicts };
+  // The mortgage balance is stored once, in assets.houseDebt; the homeowner and
+  // transition copies older saves held are dropped on load. Never bring a copy
+  // back into a blob that has already dropped it: undoing the save that dropped
+  // it would otherwise restore a stale balance that wins over houseDebt on the
+  // next load. Older revisions changed houseDebt along with the copies, so their
+  // undo still restores the balance through assets.
+  for (const slice of ['homeowner', 'transition']) {
+    const cur = currentBlob[slice];
+    const next = out[slice];
+    if (isObj(cur) && isObj(next) && !('currentMortgageBalance' in cur) && 'currentMortgageBalance' in next) {
+      const { currentMortgageBalance: _legacy, ...rest } = next;
+      out[slice] = rest;
+    }
+  }
+  return { blob: out };
 }
 
 module.exports = { deepEqual, changedKeys, revertChange };

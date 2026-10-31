@@ -2666,7 +2666,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // The current loan in both owner modes (first_buyer posts nothing).
     ...automationMortgage(currentMortgageNow),
     mortgageDebtShare: ownershipShares({ coOwners: assets.coOwners }).debt,
-    debts: Object.fromEntries(debts.map(d => [d.id, { balance: d.balance, rate: d.rate }])),
+    debts: Object.fromEntries(debts.map(d => [d.id, { balance: d.balance, rate: d.rate, revolving: d.revolving }])),
     housingMode,
   }), [assets.savingsAccounts, assets.bufferAccount, assets.portfolio, assets.bsu, assets.coOwners,
       pension.otpBalance, pension.ipsBalance, housingMode, currentMortgageNow, debts]);

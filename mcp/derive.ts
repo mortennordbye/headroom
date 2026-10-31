@@ -363,7 +363,7 @@ function paydownPrincipal(blob: ExportPayload, monthKey: string): number {
   return monthlyPaydownPrincipal(blob.fixedExpenses ?? [], {
     ...automationMortgage(m),
     mortgageDebtShare: ownershipShares(blob.assets, monthKey).debt,
-    debts: Object.fromEntries((blob.debts ?? []).map((d) => [d.id, { balance: d.balance, rate: d.rate }])),
+    debts: Object.fromEntries((blob.debts ?? []).map((d) => [d.id, { balance: d.balance, rate: d.rate, revolving: d.revolving }])),
     housingMode: blob.housingMode ?? 'first_buyer',
   }, monthKey);
 }
