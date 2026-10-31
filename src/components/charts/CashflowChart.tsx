@@ -9,6 +9,7 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
 import { lastNMonthKeys } from '../../lib/date';
+import { formatAxisInt } from '../../lib/format';
 import { monthlyCashflow } from '../../lib/monthlyCashflow';
 
 /**
@@ -25,7 +26,7 @@ export default function CashflowChart() {
     region, grossAnnualIncome, employerCostConfig,
     // Whole-finance cashflow: net out internal transfers, but not per-account (income
     // isn't account-scoped), so use nonTransferTransactions.
-    nonTransferTransactions: dailyTransactions, formatCurrencyShort, viewFixedExpenses,
+    nonTransferTransactions: dailyTransactions, viewFixedExpenses,
   } = useFinance();
   const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -51,7 +52,7 @@ export default function CashflowChart() {
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
         <CartesianGrid {...GRID_PROPS} vertical={false} />
         <XAxis dataKey="label" {...AXIS_PROPS} />
-        <YAxis tickFormatter={formatCurrencyShort} {...AXIS_PROPS_Y} width={44} />
+        <YAxis tickFormatter={formatAxisInt} {...AXIS_PROPS_Y} width={44} />
         <Tooltip cursor={{ fill: CHART.track }} content={<ChartTooltip />} />
         <ReferenceLine y={0} stroke={CHART.rule} />
         <Bar isAnimationActive={!reduced} name={t.charts.income} dataKey="income" fill={CHART.forestLight} radius={[2, 2, 0, 0]} maxBarSize={18} />

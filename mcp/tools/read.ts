@@ -176,11 +176,11 @@ export function registerReadTools(server: McpServer) {
           .number()
           .min(1)
           .optional()
-          .describe('Horizon in years for prepay_vs_invest (default 15).'),
+          .describe('Horizon in years for prepay_vs_invest; defaults to the saved Forecast horizon (else 15).'),
         investReturnPct: z
           .number()
           .optional()
-          .describe('Expected annual investment return %; defaults to the app growth assumption.'),
+          .describe('Expected annual investment return %; defaults to the saved Forecast return (else the app growth assumption).'),
         debtId: z
           .string()
           .optional()
@@ -193,7 +193,7 @@ export function registerReadTools(server: McpServer) {
         const { blob } = await getData();
         if (mode === 'prepay_vs_invest') {
           return jsonResult(
-            derive.whatIfPrepayVsInvest(blob, extraMonthly, years ?? 15, investReturnPct),
+            derive.whatIfPrepayVsInvest(blob, extraMonthly, years, investReturnPct),
           );
         }
         if (!debtId) return errorResult('extra_debt_payment requires debtId');

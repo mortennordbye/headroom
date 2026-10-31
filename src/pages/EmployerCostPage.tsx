@@ -16,6 +16,8 @@ import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
 import { provenanceOf } from '../lib/provenance';
 import { currentMonthKey } from '../lib/date';
+import { otpContributionCap } from '../lib/pension';
+import { TAX_YEAR } from '../lib/norwegianTax';
 import { parseLocaleNumber } from '../lib/validators';
 
 const EmployerCostPage: React.FC = () => {
@@ -47,9 +49,9 @@ const EmployerCostPage: React.FC = () => {
 
   const hours = calcBillableHours(billingConfig);
   const gross = solveFor === 'salary'
-    ? calcFairGross(storedRate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct, isNo)
+    ? calcFairGross(storedRate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct, isNo, TAX_YEAR, isNo)
     : storedGross;
-  const cost = calcEmployerCost(gross, otpPct, employerCostConfig, isNo);
+  const cost = calcEmployerCost(gross, otpPct, employerCostConfig, isNo, TAX_YEAR, isNo);
   const billing = calcBillingRate(cost.totalEmployerCost, billingConfig);
   const rate = solveFor === 'rate' ? billing.targetHourly : storedRate;
   const result = calcBilledRate(rate, hours, cost.totalEmployerCost);
@@ -58,7 +60,7 @@ const EmployerCostPage: React.FC = () => {
   const markupPct = billing.breakEvenHourly > 0 ? (rate / billing.breakEvenHourly - 1) * 100 : 0;
   // From the margin angle, also say what a fair salary would be at the target margin.
   const fairGross = solveFor === 'margin'
-    ? calcFairGross(rate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct, isNo)
+    ? calcFairGross(rate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct, isNo, TAX_YEAR, isNo)
     : null;
 
   // Freeze the value that was being solved for into stored state, so switching
@@ -73,6 +75,10 @@ const EmployerCostPage: React.FC = () => {
   const feriepengerLabel = isNo ? ec.feriepenger : ec.benefitsLeave;
   const pensionLabel = isNo ? ec.employerPension : ec.employerPensionGeneric;
   const payrollLabel = isNo ? ec.payrollTax : ec.payrollTaxGeneric;
+  // Above 12G the OTP % no longer applies to the whole salary, so say so next to the amount.
+  const pensionSub = isNo && cost.gross > otpContributionCap(TAX_YEAR)
+    ? ec.employerPensionCapped.replace('{pct}', String(otpPct))
+    : `${otpPct}%`;
 
   return (
     <div className="space-y-6 md:space-y-7">
@@ -308,7 +314,7 @@ const EmployerCostPage: React.FC = () => {
               value={`+ ${formatCurrency(cost.feriepenger)}`}
               sub={`${Math.round(holidayPayPct(employerCostConfig.feriepengesatsPct, isNo) * 10) / 10}%`}
             />
-            <BreakdownRow label={pensionLabel} value={`+ ${formatCurrency(cost.employerPension)}`} sub={`${otpPct}%`} />
+            <BreakdownRow label={pensionLabel} value={`+ ${formatCurrency(cost.employerPension)}`} sub={pensionSub} />
             <BreakdownRow label={ec.payrollTaxBase} value={formatCurrency(cost.payrollTaxBase)} muted />
             <BreakdownRow label={payrollLabel} value={`+ ${formatCurrency(cost.payrollTax)}`} sub={`${employerCostConfig.payrollTaxPct}%`} />
             <BreakdownRow label={ec.overheadFlat.replace(' (kr/år)', '').replace(' (kr/yr)', '')} value={`+ ${formatCurrency(cost.overhead)}`} />
