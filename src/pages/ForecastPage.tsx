@@ -32,7 +32,7 @@ const ForecastPage: React.FC = () => {
     formatCurrency, region, customTaxRatePct, pension,
     planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, currentMortgage, bsuTaxCredit,
     assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
-    forecastAssumptions: fa, setForecastAssumptions,
+    forecastAssumptions: fa, setForecastAssumptions, holidaySurplusFor, employerCostConfig,
   } = useFinance();
   const reduced = useReducedMotion();
 
@@ -42,10 +42,15 @@ const ForecastPage: React.FC = () => {
   // Total current gross = base + on-call across all active jobs — the same
   // figure the Salary and Budget pages use, not just one job's base salary.
   // Without salaries, the gross that nets the monthly-net `income` (as the context).
-  const currentGross = useMemo(() => {
-    const active = calcActiveGrossAnnual(salaries, jobs, today);
-    return active > 0 ? active : grossFromNetAnnual(income * 12, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit);
-  }, [salaries, jobs, income, today, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit]);
+  const salaryGross = useMemo(() => calcActiveGrossAnnual(salaries, jobs, today), [salaries, jobs, today]);
+  const currentGross = useMemo(() => (
+    salaryGross > 0 ? salaryGross : grossFromNetAnnual(income * 12, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit)
+  ), [salaryGross, income, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, bsuTaxCredit]);
+  // Holiday pay above salary, taxed with it as the budget does. Only with real
+  // salaries: the gross backed out of a flat net income already contains it.
+  const startYear = Number(today.slice(0, 4));
+  const startHolidaySurplus = salaryGross > 0 ? holidaySurplusFor(startYear) : 0;
+  const feriepengesatsPct = salaryGross > 0 ? employerCostConfig.feriepengesatsPct : 0;
 
   // Retirement readiness: years to retirement + projected pension wealth.
   const retirement = useMemo(() => {
@@ -123,11 +128,11 @@ const ForecastPage: React.FC = () => {
   const inflationSeed = useMemo(() => latestInflationPct(inflation), [inflation]);
 
   const savingsSeed = useMemo(() => {
-    const net = calcTaxByRegion(currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
+    const net = calcTaxByRegion(currentGross + startHolidaySurplus, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netAnnual;
     if (net <= 0) return 25;
     const pct = (planMonthlySaving * 12 / net) * 100;
     return Number.isFinite(pct) && pct > 0 ? Math.min(90, Math.round(pct)) : 25;
-  }, [currentGross, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, planMonthlySaving]);
+  }, [currentGross, startHolidaySurplus, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest, planMonthlySaving]);
 
   // Assumptions are persisted per scenario (null-until-dragged, so each slider
   // keeps following its live-data seed until the user sets it). Scenario B seeds
@@ -168,7 +173,9 @@ const ForecastPage: React.FC = () => {
   const inputs = useMemo<ForecastInputs>(() => ({
     currentGross, mortgage, region, customTaxRatePct,
     ipsAnnualContribution: pension.ipsAnnualContribution,
-    startYear: new Date().getFullYear(),
+    startYear,
+    startHolidaySurplus,
+    feriepengesatsPct,
     // Balance sheet, split as the Dashboard's net worth: the home (and its
     // mortgage, as the Dashboard projects it), financial assets, other debt.
     startHomeValue: myHouseValue(assets),
@@ -178,7 +185,7 @@ const ForecastPage: React.FC = () => {
     startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
     debts,
     monthKey: today,
-  }), [currentGross, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
+  }), [currentGross, startYear, startHolidaySurplus, feriepengesatsPct, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),

@@ -8,6 +8,7 @@ import { primaryHomeWealthValueOfShare } from './ownership';
 import { calcAmortizationSchedule, calcMortgageBalanceByYear } from './calculations';
 import { calcDebtBalanceByYear } from './debt';
 import type { CurrentMortgage } from './existingMortgage';
+import { feriepengerSurplus } from './feriepenger';
 
 /** One saved forecast scenario. Each assumption is null until the user drags its
  *  slider, so the page can keep seeding it from live data until then. */
@@ -96,6 +97,12 @@ export interface ForecastInputs {
   /** Non-mortgage debts, projected with `calcDebtBalanceByYear` from `monthKey`. */
   debts: Debt[];
   monthKey?: string;
+  /** Holiday pay above salary in `startYear` (`holidaySurplusFor`), taxed with
+   *  year 0's salary so year 0 matches the budget's net income. Default 0. */
+  startHolidaySurplus?: number;
+  /** Holiday-pay rate (%) for the later years' surplus, from each year's
+   *  projected salary and the year before. 0 or unset (and outside Norway) adds none. */
+  feriepengesatsPct?: number;
 }
 
 export interface ForecastRow {
@@ -131,7 +138,8 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
   const { currentGross, mortgage: m,
     region, customTaxRatePct, ipsAnnualContribution, startYear,
     startHomeValue, houseGrowthPct, startShares, startOtherAssets,
-    debts, monthKey, homeOwnShare = 1 } = inputs;
+    debts, monthKey, homeOwnShare = 1,
+    startHolidaySurplus = 0, feriepengesatsPct = 0 } = inputs;
   // The interest actually paid each year on the amortising schedule: the
   // rentefradrag base, so year 0 matches the app's `annualMortgageInterest`.
   const interestByYear = m.amortises && m.balance > 0 && m.ratePct > 0 && m.termYears > 0
@@ -153,11 +161,20 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
     const homeDebt = homeDebtByYear[y] ?? 0;
     // This year's rentefradrag base, declining as the mortgage amortizes.
     const mortgageInterest = interestByYear[y] ?? 0;
+    const prevGross = gross;
     if (y > 0) {
       gross = gross * (1 + s.raisePct / 100);
       homeValue = homeValue * (1 + houseGrowthPct / 100);
     }
-    const net = calcTaxByRegion(gross, region, customTaxRatePct, ipsAnnualContribution, mortgageInterest).netAnnual;
+    // Holiday pay above salary is taxable income on top of it: today's from the
+    // real salary history, later years' from this year's and last year's salary.
+    const year = startYear + y;
+    const holidaySurplus = y === 0
+      ? startHolidaySurplus
+      : region === 'no'
+        ? feriepengerSurplus(year, (k) => (k < `${year}-01` ? prevGross : gross), feriepengesatsPct)
+        : 0;
+    const net = calcTaxByRegion(gross + holidaySurplus, region, customTaxRatePct, ipsAnnualContribution, mortgageInterest).netAnnual;
     const contribution = Math.max(0, net * (s.savingsPct / 100));
     if (y > 0) {
       // Wealth tax leaves the pot before it can compound further.

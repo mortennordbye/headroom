@@ -6,14 +6,6 @@ in git and the CHANGELOG, not here.
 
 ## Calculations and money figures
 
-- **Holiday pay above salary isn't in the Forecast, money-flow chart or pension figures.** Budget
-  income (UI and MCP) and the skattekort's expected tax count `feriepengerSurplus` as taxed income;
-  the Forecast's yearly net, the money-flow Sankey, the Pension page's current net and the Salary
-  page's tax breakdown still tax salary only, so Forecast year one sits ~1% of salary below
-  budget × 12. **Unblock**: thread the surplus through `projectForecast` (needs last year's gross
-  per projected year) and the other `calcTaxByRegion` salary callers. **Where**:
-  `src/lib/forecastProjection.ts`, `src/components/charts/MoneyFlowSankey.tsx`,
-  `src/pages/PensionPage.tsx`, `mcp/derive.ts`.
 - **Small UI and labelling issues from the 2026-10-30 review.** Employer cost shows "5 %" next to
   the 12G-capped pension amount and applies the Norwegian 12G cap in the generic region too. The
   Forecast slider says "realavkastning" but is used as a nominal return. The generic-region IPS hint

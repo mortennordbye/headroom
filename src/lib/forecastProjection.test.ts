@@ -24,6 +24,27 @@ const scenario = (over: Partial<EffectiveScenario> = {}): EffectiveScenario => (
   raisePct: 4, savingsPct: 20, returnPct: 6, inflationPct: 3, years: 10, extraMonthly: 0, ...over,
 });
 
+describe('projectForecast — holiday pay above salary', () => {
+  const no: ForecastInputs = { ...inputs, region: 'no', mortgage: NO_MORTGAGE };
+  it('taxes year 0 on salary plus the given surplus', () => {
+    const rows = projectForecast({ ...no, startHolidaySurplus: 12_000, feriepengesatsPct: 12 }, scenario({ years: 1 }));
+    expect(rows[0].net).toBe(Math.round(calcTaxByRegion(600_000 + 12_000, 'no', 30, 0, 0).netAnnual));
+    expect(rows[0].gross).toBe(600_000);
+  });
+  it('derives later years from this and last year\'s projected salary', () => {
+    const rows = projectForecast({ ...no, feriepengesatsPct: 12 }, scenario({ years: 1, raisePct: 0 }));
+    // Flat salary on the 12% rate: 12% of it minus five weeks' fratrekk.
+    const surplus = 600_000 * 0.12 - (600_000 * 5) / 52;
+    expect(rows[1].net).toBe(Math.round(calcTaxByRegion(600_000 + surplus, 'no', 30, 0, 0).netAnnual));
+  });
+  it('adds nothing outside Norway or without a rate', () => {
+    const plain = projectForecast(no, scenario({ years: 1 }));
+    expect(plain[1].net).toBe(Math.round(calcTaxByRegion(plain[1].gross, 'no', 30, 0, 0).netAnnual));
+    const generic = projectForecast({ ...inputs, mortgage: NO_MORTGAGE, feriepengesatsPct: 12 }, scenario({ years: 1 }));
+    expect(generic[1].net).toBe(Math.round(generic[1].gross * 0.7));
+  });
+});
+
 describe('projectForecast — co-owned home', () => {
   // Year-1 wealth tax is assessed on year 0's ending composition. Only the home,
   // no shares/other/debt, Norway: half of a 16 MNOK home (8 M share, no growth).

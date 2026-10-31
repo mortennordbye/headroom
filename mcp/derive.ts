@@ -625,10 +625,12 @@ export function salaryAndTax(blob: ExportPayload, monthKey = currentMonthKey()) 
   // Salary-system gross only: the `income * 12` fallback is annualised NET pay,
   // so taxing it would invent a breakdown. Without salaries there is none.
   const gross = activeGrossAnnual(blob, monthKey);
-  const tax = gross > 0 ? taxFor(blob, gross) : null;
+  const year = yearOf(monthKey);
+  // The year's holiday pay above salary is taxed with it, as the budget does.
+  const surplus = gross > 0 ? holidaySurplus(blob, year) : 0;
+  const tax = gross > 0 ? taxFor(blob, gross + surplus) : null;
   const ips = blob.pension?.ipsAnnualContribution ?? 0;
   const payslips = blob.payslips ?? {};
-  const year = yearOf(monthKey);
   return {
     monthKey,
     region,
@@ -644,6 +646,7 @@ export function salaryAndTax(blob: ExportPayload, monthKey = currentMonthKey()) 
     // whose old end date was never set; the Salary page warns on it.
     overlappingJobs: jobs.length > 1,
     grossAnnual: Math.round(gross),
+    holidaySurplusAnnual: Math.round(surplus),
     tax,
     // Rate on the next krone of combined gross, after the mortgage-interest
     // deduction. SalaryPage shows it for the latest salary without that deduction,
@@ -744,7 +747,8 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
   const pensionTax = region === 'no'
     ? calcPensionIncomeTax(income.gross, TAX_YEAR)
     : calcTaxByRegion(income.gross, region, customRate);
-  const currentNetAnnual = calcTaxByRegion(pensionableIncome, region, customRate, ipsAnnualContribution, 0).netAnnual;
+  const holidayPay = pensionableIncome > 0 ? holidaySurplus(blob, yearOf(monthKey)) : 0;
+  const currentNetAnnual = calcTaxByRegion(pensionableIncome + holidayPay, region, customRate, ipsAnnualContribution, 0).netAnnual;
   const replacementRatePct = currentNetAnnual > 0 ? Math.round((pensionTax.netAnnual / currentNetAnnual) * 1000) / 10 : 0;
   return {
     configured: true as const,
@@ -837,7 +841,13 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       if (Number.isFinite(cagr) && cagr > 0) raiseSeed = Math.round(cagr * 10) / 10;
     }
   }
-  const net = taxFor(blob, currentGross, false).netAnnual;
+  // Holiday pay above salary, as ForecastPage: only with real salaries.
+  const fromSalaries = activeGrossAnnual(blob, monthKey) > 0;
+  const startHolidaySurplus = fromSalaries ? holidaySurplus(blob, yearOf(monthKey)) : 0;
+  const feriepengesatsPct = fromSalaries && (blob.region ?? 'no') === 'no'
+    ? blob.employerCostConfig?.feriepengesatsPct ?? FERIEPENGER_DEFAULT_PCT
+    : 0;
+  const net = taxFor(blob, currentGross + startHolidaySurplus, false).netAnnual;
   const { planMonthlySaving } = budgetPlan(blob, monthKey);
   const savingsPctRaw = net > 0 ? (planMonthlySaving * 12 / net) * 100 : 0;
   const savingsSeed = Number.isFinite(savingsPctRaw) && savingsPctRaw > 0 ? Math.min(90, Math.round(savingsPctRaw)) : 25;
@@ -868,6 +878,8 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       startOtherAssets: eq.netCrypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
       debts: blob.debts ?? [],
       monthKey,
+      startHolidaySurplus,
+      feriepengesatsPct,
     },
     scenario,
   );

@@ -96,7 +96,7 @@ const SalaryPage: React.FC = () => {
     inflation, inflationStale, refreshInflation,
     wageStats, wageStatsStale, payslips,
     region, customTaxRatePct, pension, annualMortgageInterest, bsuTaxCredit,
-    grossAnnualIncome,
+    grossAnnualIncome, holidaySurplusFor,
   } = useFinance();
   const reduced = useReducedMotion();
   const isGeneric = region === 'generic';
@@ -181,6 +181,10 @@ const SalaryPage: React.FC = () => {
 
   // ── Summary metrics ────────────────────────────────────────────
   const current = series.length > 0 ? series[series.length - 1] : null;
+  // Net per month includes the year's holiday pay above salary, as the budget does.
+  const currentNetMonthly = current
+    ? calcTaxByRegion(current.totalAnnual + holidaySurplusFor(yearOf(current.month)), region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netMonthly
+    : 0;
   const first = series.length > 0 ? series[0] : null;
 
   const cumulativeGrowthPct =
@@ -640,8 +644,8 @@ const SalaryPage: React.FC = () => {
           value={current ? formatCurrency(current.totalAnnual) : '—'}
           sub={current ? (
             currentOnCallAnnual > 0
-              ? `${formatCurrency(current.grossAnnual)} ${t.salaryPage.baseSuffix} + ${formatCurrency(currentOnCallAnnual)} ${t.salary.onCallShort} · ${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netMonthly)} ${t.salaryPage.netPerMonth}`
-              : `${formatCurrency(calcTaxByRegion(current.totalAnnual, region, customTaxRatePct, pension.ipsAnnualContribution, annualMortgageInterest).netMonthly)} ${t.salaryPage.netPerMonth}`
+              ? `${formatCurrency(current.grossAnnual)} ${t.salaryPage.baseSuffix} + ${formatCurrency(currentOnCallAnnual)} ${t.salary.onCallShort} · ${formatCurrency(currentNetMonthly)} ${t.salaryPage.netPerMonth}`
+              : `${formatCurrency(currentNetMonthly)} ${t.salaryPage.netPerMonth}`
           ) : ''}
           chip={(() => {
             if (!current) return undefined;
