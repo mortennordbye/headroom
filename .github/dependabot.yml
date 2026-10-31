@@ -1,4 +1,12 @@
 version: 2
+
+# Commit prefixes decide whether a merged update cuts a release. release-please
+# releases on fix/feat and ignores chore, so:
+#  - fix(deps): anything that ships in the app or the image (runtime npm
+#    dependencies in all three packages, the Docker base image), so a merged
+#    update reaches users as a patch release without anyone touching it.
+#  - chore(deps-dev) / chore(deps): dev tooling and GitHub Actions, which
+#    change nothing a user runs.
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -15,7 +23,7 @@ updates:
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "chore(deps):"
+      prefix: "fix(deps):"
     # Keep the base image on the Node LTS line. Digest and minor refreshes still
     # come through, which is how a rebuilt base carrying CVE fixes arrives, but
     # majors are ignored so Dependabot can't move us off LTS — it proposed Node 25,
@@ -33,7 +41,8 @@ updates:
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "chore(deps):"
+      prefix: "fix(deps):"
+      prefix-development: "chore(deps-dev):"
     open-pull-requests-limit: 5
     groups:
       npm-minor-patch:
@@ -58,7 +67,8 @@ updates:
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "chore(deps):"
+      prefix: "fix(deps):"
+      prefix-development: "chore(deps-dev):"
     open-pull-requests-limit: 5
     groups:
       # A catch-all rather than minor/patch: majors need grouping too, or they
