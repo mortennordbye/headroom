@@ -589,14 +589,17 @@ export function prepayVsInvestSettings(blob: ExportPayload): PrepayVsInvestSetti
   };
 }
 
+/** Unset return and horizon default to the saved Forecast scenario A, as on the page. */
 export function whatIfPrepayVsInvest(
   blob: ExportPayload,
   extraMonthly: number,
-  years: number,
+  years?: number,
   investReturnPct?: number,
 ) {
-  const returnPct = investReturnPct ?? blob.growthReturnRate ?? 7;
-  return prepayVsInvestFor(prepayVsInvestSettings(blob), extraMonthly, returnPct, years);
+  const a = blob.forecastAssumptions?.a;
+  const returnPct = investReturnPct ?? a?.returnPct ?? blob.growthReturnRate ?? 7;
+  const horizon = years ?? a?.years ?? 15;
+  return prepayVsInvestFor(prepayVsInvestSettings(blob), extraMonthly, returnPct, horizon);
 }
 
 export function whatIfExtraDebtPayment(
@@ -1027,9 +1030,9 @@ export function employerCost(blob: ExportPayload, monthKey = currentMonthKey()) 
   const isNo = (blob.region ?? 'no') === 'no';
   const hours = calcBillableHours(billing);
   const gross = billing.solveFor === 'salary'
-    ? calcFairGross(storedRate, hours, otpPct, costConfig, billing.targetMarginPct, isNo)
+    ? calcFairGross(storedRate, hours, otpPct, costConfig, billing.targetMarginPct, isNo, TAX_YEAR, isNo)
     : storedGross;
-  const cost = calcEmployerCost(gross, otpPct, costConfig, isNo);
+  const cost = calcEmployerCost(gross, otpPct, costConfig, isNo, TAX_YEAR, isNo);
   const breakEven = calcBillingRate(cost.totalEmployerCost, billing);
   const rate = billing.solveFor === 'rate' ? breakEven.targetHourly : storedRate;
   const result = calcBilledRate(rate, hours, cost.totalEmployerCost);
@@ -1044,7 +1047,7 @@ export function employerCost(blob: ExportPayload, monthKey = currentMonthKey()) 
     marginPct: billing.solveFor === 'margin' ? result.marginPct : billing.targetMarginPct,
     markupOverBreakEvenPct: breakEven.breakEvenHourly > 0 ? (rate / breakEven.breakEvenHourly - 1) * 100 : 0,
     fairGrossAtTargetMargin: billing.solveFor === 'margin'
-      ? Math.round(calcFairGross(rate, hours, otpPct, costConfig, billing.targetMarginPct, isNo))
+      ? Math.round(calcFairGross(rate, hours, otpPct, costConfig, billing.targetMarginPct, isNo, TAX_YEAR, isNo))
       : null,
     employerCost: cost,
     billing: breakEven,

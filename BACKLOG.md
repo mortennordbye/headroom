@@ -6,13 +6,6 @@ in git and the CHANGELOG, not here.
 
 ## Calculations and money figures
 
-- **Small UI and labelling issues from the 2026-10-30 review.** Employer cost shows "5 %" next to
-  the 12G-capped pension amount and applies the Norwegian 12G cap in the generic region too. The
-  Forecast slider says "realavkastning" but is used as a nominal return. The generic-region IPS hint
-  says "~22%". Dashboard cash-flow and Assets loan y-axis labels are clipped. MCP prepay-vs-invest
-  defaults to `growthReturnRate`/15 years instead of the saved scenario. **Where**:
-  `src/pages/EmployerCostPage.tsx` ~311, `src/lib/employerCost.ts` ~86,
-  `src/i18n/translations.ts` (`forecast.returnAssumption`, `ipsHint`), `mcp/tools/read.ts` ~196.
 - **Dashboard "vs last month" spend chip mixes fixed-expense sources.** `currentMonthSpending`
   reconciles against the viewed month's snapshot fixed expenses (`viewFixedExpenses`) while
   `prevMonthSpending` uses live `fixedExpenses`, so the delta % can count different transactions

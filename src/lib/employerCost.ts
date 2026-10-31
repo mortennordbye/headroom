@@ -73,6 +73,8 @@ export function holidayPayPct(satsPct: number, holidayPayInSalary: boolean): num
  * @param employerPensionPct employer pension % of gross (Norway: pension.otpEmployerPct),
  *                           paid on pay up to 12G for `year`
  * @param holidayPayInSalary true for Norwegian monthly pay (ferietrekk applies)
+ * @param otpCap             cap the pension base at 12G (Norwegian OTP); false
+ *                           outside Norway, where the % applies to the whole salary
  */
 export function calcEmployerCost(
   grossAnnual: number,
@@ -80,10 +82,12 @@ export function calcEmployerCost(
   config: EmployerCostConfig,
   holidayPayInSalary = false,
   year = TAX_YEAR,
+  otpCap = true,
 ): EmployerCostBreakdown {
   const gross = Math.max(0, grossAnnual);
   const feriepenger = gross * (holidayPayPct(config.feriepengesatsPct, holidayPayInSalary) / 100);
-  const employerPension = otpAnnualContribution(gross, Math.max(0, employerPensionPct), year);
+  const pensionPct = Math.max(0, employerPensionPct);
+  const employerPension = otpCap ? otpAnnualContribution(gross, pensionPct, year) : gross * pensionPct / 100;
   const payrollTaxBase = gross + feriepenger + employerPension;
   const payrollTax = payrollTaxBase * (Math.max(0, config.payrollTaxPct) / 100);
   const overhead = Math.max(0, config.overheadAnnual) + gross * (Math.max(0, config.overheadPct) / 100);
@@ -193,7 +197,7 @@ export function calcBilledRate(
 /**
  * The gross salary at which the employer keeps exactly `targetMarginPct` of the
  * revenue from `billedHourly`. Total cost is piecewise linear in gross, as the
- * pension stops at the 12G cap:
+ * pension stops at the 12G cap (with `otpCap`; without it the first piece applies throughout):
  *   up to the cap: gross * k + overheadAnnual,
  *     k = (1 + ferie + otp) * (1 + aga) + overheadPct (ferie from `holidayPayPct`)
  *   above it:      gross * k0 + cap * otp * (1 + aga) + overheadAnnual,
@@ -208,6 +212,7 @@ export function calcFairGross(
   targetMarginPct: number,
   holidayPayInSalary = false,
   year = TAX_YEAR,
+  otpCap = true,
 ): number {
   const revenue = Math.max(0, billedHourly) * Math.max(0, billableHoursPerYear);
   const margin = Math.min(0.95, Math.max(0, targetMarginPct / 100));
@@ -216,7 +221,7 @@ export function calcFairGross(
   const otp = pct(employerPensionPct);
   const k0 = (1 + pct(holidayPayPct(costConfig.feriepengesatsPct, holidayPayInSalary))) * aga + pct(costConfig.overheadPct);
   const budget = revenue * (1 - margin) - Math.max(0, costConfig.overheadAnnual);
-  const cap = otpContributionCap(year);
+  const cap = otpCap ? otpContributionCap(year) : Infinity;
   const belowCap = budget / (k0 + otp * aga);
   const gross = belowCap <= cap ? belowCap : (budget - cap * otp * aga) / k0;
   return Math.max(0, gross);

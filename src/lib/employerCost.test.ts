@@ -30,6 +30,12 @@ describe('calcEmployerCost', () => {
     expect(b.payrollTaxBase).toBeCloseTo(2_000_000 + 240_000 + 81_929.4, 4);
   });
 
+  it('applies the pension % to the whole salary outside Norway (no 12G cap)', () => {
+    const b = calcEmployerCost(2_000_000, 5, DEFAULT_EMPLOYER_COST_CONFIG, false, 2026, false);
+    expect(b.employerPension).toBe(100_000);
+    expect(b.payrollTaxBase).toBe(2_000_000 + 240_000 + 100_000);
+  });
+
   it('counts only holiday pay above ferietrekk for monthly-paid staff (Norway)', () => {
     // 800 000 gross on the 12% rate: feriepenger 96 000, but the 5 holiday weeks
     // (800 000 × 5/52 = 76 923) are already in the 12 monthly salaries and taken
@@ -161,6 +167,12 @@ describe('calcFairGross', () => {
     const cost = calcEmployerCost(2_000_000, 5, DEFAULT_EMPLOYER_COST_CONFIG, false, 2026);
     const rate = calcBillingRate(cost.totalEmployerCost, DEFAULT_BILLING_CONFIG).targetHourly;
     expect(calcFairGross(rate, 1560, 5, DEFAULT_EMPLOYER_COST_CONFIG, 30, false, 2026)).toBeCloseTo(2_000_000, 4);
+  });
+
+  it('round-trips above 12G without the cap (generic region)', () => {
+    const g = calcFairGross(2500, 1560, 5, DEFAULT_EMPLOYER_COST_CONFIG, 30, false, 2026, false);
+    expect(g).toBeGreaterThan(1_638_588);
+    expect(calcEmployerCost(g, 5, DEFAULT_EMPLOYER_COST_CONFIG, false, 2026, false).totalEmployerCost).toBeCloseTo(2500 * 1560 * 0.7, 4);
   });
 
   it('floors at zero when the rate cannot cover the fixed overhead', () => {

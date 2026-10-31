@@ -13,6 +13,7 @@ import { myHouseDebt, ownershipShares } from '../src/lib/ownership';
 import { calcPensionIncomeTax, calcTaxByRegion, TAX_YEAR } from '../src/lib/norwegianTax';
 import { fullFixture } from './fixture';
 import { prepayVsInvestFor } from '../src/lib/prepayVsInvest';
+import { DEFAULT_FORECAST_ASSUMPTIONS, EMPTY_SCENARIO } from '../src/lib/forecastProjection';
 import { retirementIncomeInTodaysKroner } from '../src/lib/retirementIncome';
 
 const MONTH = '2026-06';
@@ -164,6 +165,16 @@ describe('derive (pure, no server)', () => {
   it('what_if prepay_vs_invest returns a winner', () => {
     const r = derive.whatIfPrepayVsInvest(blob, 5000, 15, 7);
     expect(['invest', 'prepay', 'tie']).toContain(r.winner);
+  });
+
+  it('what_if prepay_vs_invest defaults to the saved Forecast scenario', () => {
+    const b: ExportPayload = {
+      ...blob,
+      growthReturnRate: 7,
+      forecastAssumptions: { ...DEFAULT_FORECAST_ASSUMPTIONS, a: { ...EMPTY_SCENARIO, returnPct: 4, years: 25 } },
+    };
+    expect(derive.whatIfPrepayVsInvest(b, 5000)).toEqual(derive.whatIfPrepayVsInvest(b, 5000, 25, 4));
+    expect(derive.whatIfPrepayVsInvest(b, 5000)).not.toEqual(derive.whatIfPrepayVsInvest(b, 5000, 15, 7));
   });
 
   it('what_if prepay_vs_invest gives the Forecast page answer', () => {

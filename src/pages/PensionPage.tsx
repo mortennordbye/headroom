@@ -358,7 +358,7 @@ const PensionPage: React.FC = () => {
           <div className="mt-4 flex items-start gap-2 rounded-[8px] p-3" style={{ background: 'var(--positive-bg)', color: 'var(--positive)' }}>
             <Calculator size={14} className="mt-0.5 shrink-0" />
             <span className="text-[12px]">
-              {`${t.ipsHint}${t.pensionPage.ipsSavePre}${formatCurrency(ipsTaxSaving)}${t.pensionPage.ipsSaveSuf}`}
+              {`${region === 'generic' ? t.ipsHintGeneric : t.ipsHint}${t.pensionPage.ipsSavePre}${formatCurrency(ipsTaxSaving)}${t.pensionPage.ipsSaveSuf}`}
             </span>
           </div>
           {hist.isLive && (
