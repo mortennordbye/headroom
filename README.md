@@ -226,7 +226,7 @@ npm run dev                   # Vite on :5173, proxies /api → :3001
 make seed-local               # optional: seed ./data with demo data
 ```
 
-`npm test` runs the Vitest suite; `npm run lint` runs ESLint.
+`npm test` runs the Vitest suite; `npm run lint` runs ESLint. `npm run test:e2e` builds the app and runs the Playwright smoke tests in `e2e/` against a throwaway server and data directory (run `npx playwright install chromium` once first).
 
 ## AI access (MCP)
 

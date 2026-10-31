@@ -40,6 +40,8 @@ npm-debug.log*
 
 # Playwright artifacts
 .playwright-mcp/
+/test-results/
+/playwright-report/
 
 # Local screenshots from verification / design iterations are scratch and
 # ignored — except the README images, which are tracked.
