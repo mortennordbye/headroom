@@ -7,10 +7,16 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './createServer';
 
-const server = createServer();
+const { server, syncOptIn } = createServer();
+
+// How often to re-check which opt-in tool groups the user has turned on, so
+// flipping the switch in Settings reaches a long-running client without a restart.
+const OPT_IN_POLL_MS = 60_000;
 
 async function main() {
+  await syncOptIn();
   await server.connect(new StdioServerTransport());
+  setInterval(() => void syncOptIn(), OPT_IN_POLL_MS).unref();
   // stdout is the MCP channel; log to stderr only.
   process.stderr.write('headroom-mcp: connected over stdio\n');
 }

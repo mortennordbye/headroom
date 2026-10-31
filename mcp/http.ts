@@ -98,7 +98,8 @@ const httpServer = createHttpServer(async (req, res) => {
     }
 
     const body = req.method === 'POST' ? await readJsonBody(req) : undefined;
-    const server = createServer();
+    const { server, syncOptIn } = createServer();
+    await syncOptIn();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // stateless
       enableJsonResponse: true,

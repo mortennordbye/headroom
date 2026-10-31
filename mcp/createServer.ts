@@ -5,10 +5,17 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerReadTools } from './tools/read';
 import { registerWriteTools } from './tools/write';
+import { registerMarketTools, syncMarketTools } from './tools/market';
 
-export function createServer(): McpServer {
+/**
+ * The server plus a `syncOptIn` that shows or hides the opt-in tool groups
+ * (market data) to match the app's settings. They start hidden.
+ */
+export function createServer(): { server: McpServer; syncOptIn: () => Promise<void> } {
   const server = new McpServer({ name: 'headroom', version: '1.0.0' });
   registerReadTools(server);
   registerWriteTools(server);
-  return server;
+  const marketTools = registerMarketTools(server);
+  for (const t of marketTools) t.disable();
+  return { server, syncOptIn: async () => { await syncMarketTools(marketTools); } };
 }

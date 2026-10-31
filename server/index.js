@@ -8,6 +8,7 @@ const { fetchCpi, withYoy } = require('./ssb');
 const { fetchKvmpris, dwellingToBoligtype } = require('./boligPrices');
 const { fetchWageStats } = require('./wageStats');
 const { lookupPostnr } = require('./postnummer');
+const { createMarketStore, makeMarketGate, parseBatch, parseListing, parseSale, isPastDay } = require('./market');
 const { fetchPolicyRate } = require('./norgesBank');
 const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
@@ -993,6 +994,55 @@ app.get('/api/wage-stats', async (req, res) => {
   }
   const points = rows.map((r) => ({ year: r.year, median: r.median }));
   res.json({ points, source: stale ? 'ssb-cache' : 'ssb-live', stale, count: points.length });
+});
+
+// ── Housing-market data (opt-in) ─────────────────────────────────
+// Listings and sold comparables the user imports (usually via MCP). Store and
+// validation in server/market.js. Always off on a demo instance.
+const market = createMarketStore(db);
+const marketEnabled = () => !DEMO_MODE && market.isEnabled();
+app.use(makeMarketGate(marketEnabled));
+
+app.get('/api/market/status', (_req, res) => {
+  res.json({ ...market.status(), enabled: marketEnabled() });
+});
+
+// Turn the feature on or off. Turning it off with { wipe: true } also deletes
+// every imported row.
+app.post('/api/market/config', requireAppHeader, (req, res) => {
+  const { enabled, wipe } = req.body || {};
+  if (typeof enabled !== 'boolean' || (wipe !== undefined && typeof wipe !== 'boolean')) {
+    return res.status(400).json({ error: 'expected { enabled: boolean, wipe?: boolean }' });
+  }
+  if (DEMO_MODE) return res.status(403).json({ error: 'not available in demo mode' });
+  market.setEnabled(enabled);
+  if (!enabled && wipe) market.wipe();
+  res.json(market.status());
+});
+
+app.post('/api/market/listings', requireAppHeader, (req, res) => {
+  const { listings, seenOn } = req.body || {};
+  if (seenOn !== undefined && !isPastDay(seenOn)) return res.status(400).json({ error: 'seenOn must be YYYY-MM-DD, not in the future' });
+  const parsed = parseBatch(listings, parseListing);
+  if (parsed.errors) return res.status(400).json({ error: 'invalid listings', details: parsed.errors });
+  const day = seenOn || new Date().toISOString().slice(0, 10);
+  res.json({ ...market.importListings(parsed.rows, day), seenOn: day });
+});
+
+app.post('/api/market/sales', requireAppHeader, (req, res) => {
+  const parsed = parseBatch((req.body || {}).sales, parseSale);
+  if (parsed.errors) return res.status(400).json({ error: 'invalid sales', details: parsed.errors });
+  res.json(market.importSales(parsed.rows));
+});
+
+app.get('/api/market/listings', (_req, res) => {
+  res.json({ listings: market.listings() });
+});
+
+app.get('/api/market/sales', (req, res) => {
+  const postnr = String(req.query.postnr || '');
+  if (!/^\d{4}$/.test(postnr)) return res.status(400).json({ error: 'postnr must be 4 digits' });
+  res.json({ sales: market.salesForPostnr(postnr) });
 });
 
 // ── Bank sync (Enable Banking) ───────────────────────────────────

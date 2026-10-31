@@ -10,6 +10,7 @@ import type { ExportPayload, InflationPoint } from '../src/context/FinanceContex
 import { partitionSavings, mergeStoredSavings } from '../src/lib/savingsMigration';
 import { reconcileMortgageSlices } from '../src/lib/mortgageSlices';
 import { currentMonthKey } from '../src/lib/date';
+import type { ComparableSale } from '../src/lib/marketValuation';
 
 const BASE_URL = (process.env.HEADROOM_URL || 'http://localhost:8080').replace(/\/$/, '');
 const PASSWORD = process.env.HEADROOM_PASSWORD || '';
@@ -258,4 +259,65 @@ function normalizeSavings(blob: ExportPayload): ExportPayload {
     fixedExpenses: partitionSavings(blob.fixedExpenses ?? []).expenses,
     savings: mergeStoredSavings(blob.savings, blob.fixedExpenses),
   };
+}
+
+/**
+ * JSON request to one of the app's /api/market/* or other read endpoints. Logs
+ * in once on 401. Surfaces the server's own error message (and validation
+ * details) so the model can correct an import and retry.
+ */
+async function requestJson<T>(method: 'GET' | 'POST', path: string, body?: unknown, retryOnAuth = true): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: authHeaders(body === undefined ? {} : { 'content-type': 'application/json', 'x-headroom-source': 'mcp' }),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 401 && retryOnAuth) {
+    await login();
+    return requestJson<T>(method, path, body, false);
+  }
+  const json = (await res.json().catch(() => ({}))) as { error?: string; details?: string[] };
+  if (!res.ok) {
+    const details = json.details?.length ? `: ${json.details.join('; ')}` : '';
+    throw new Error(`${json.error ?? `${method} ${path} failed (${res.status})`}${details}`);
+  }
+  return json as T;
+}
+
+export interface MarketStatus {
+  enabled: boolean;
+  listings: number;
+  sales: number;
+  lastListingSeen: string | null;
+  lastSalesImport: string | null;
+}
+
+/** Whether market data is turned on, plus row counts. */
+export function getMarketStatus(): Promise<MarketStatus> {
+  return requestJson<MarketStatus>('GET', '/api/market/status');
+}
+
+export function importMarketListings(listings: unknown[], seenOn?: string) {
+  return requestJson<{ added: number; updated: number; priceChanges: unknown[]; seenOn: string }>(
+    'POST', '/api/market/listings', { listings, seenOn },
+  );
+}
+
+export function importMarketSales(sales: unknown[]) {
+  return requestJson<{ added: number; duplicates: number }>('POST', '/api/market/sales', { sales });
+}
+
+export async function getMarketSales(postnr: string): Promise<ComparableSale[]> {
+  return (await requestJson<{ sales: ComparableSale[] }>('GET', `/api/market/sales?postnr=${encodeURIComponent(postnr)}`)).sales;
+}
+
+/** SSB average kr/m² for the postnummer's kommune and dwelling type (null when SSB has none). */
+export async function getKvmpris(postnr: string, type?: string): Promise<{
+  latestPrice: number | null;
+  latestQuarter: string | null;
+  poststed?: string;
+  points?: { quarter: string; price: number | null }[];
+}> {
+  const q = new URLSearchParams({ postnr, ...(type ? { type } : {}) });
+  return requestJson('GET', `/api/kvmpris?${q}`);
 }

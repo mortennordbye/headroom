@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   Key,
+  LineChart,
   Home,
   ArrowLeftRight,
   ArrowRight,
@@ -70,6 +71,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { Card } from '../components/ui/Card';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import SecondHomePanel from './bolig/SecondHomePanel';
+import MarketPanel from './bolig/MarketPanel';
 import { format, parse } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 
@@ -97,9 +99,9 @@ const BoligPage: React.FC = () => {
     policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
     capacityOverrides, setCapacityOverride,
   } = useFinance();
-  // Hub tab: the mortgage tools ('boliglaan') vs. the second-home planner
-  // ('sekundaerbolig'). View state only — not persisted.
-  const [hubTab, setHubTab] = useState<'boliglaan' | 'sekundaerbolig'>('boliglaan');
+  // Hub tab: the mortgage tools ('boliglaan'), the second-home planner
+  // ('sekundaerbolig') and the opt-in market data ('marked'). View state only — not persisted.
+  const [hubTab, setHubTab] = useState<'boliglaan' | 'sekundaerbolig' | 'marked'>('boliglaan');
   const [refreshingPolicyRate, setRefreshingPolicyRate] = useState(false);
   const handleRefreshPolicyRate = async () => {
     setRefreshingPolicyRate(true);
@@ -478,6 +480,7 @@ const BoligPage: React.FC = () => {
   const hubTabs = [
     { id: 'boliglaan' as const, label: t.boligPage.hubMortgage, icon: <Building2 size={14} strokeWidth={1.75} /> },
     { id: 'sekundaerbolig' as const, label: t.boligPage.hubSecondHome, icon: <Key size={14} strokeWidth={1.75} /> },
+    { id: 'marked' as const, label: t.boligPage.hubMarket, icon: <LineChart size={14} strokeWidth={1.75} /> },
   ];
 
   return (
@@ -493,7 +496,9 @@ const BoligPage: React.FC = () => {
         items={hubTabs.map(({ id, label, icon }) => ({ value: id, label, icon }))}
       />
 
-      {hubTab === 'sekundaerbolig' ? (
+      {hubTab === 'marked' ? (
+        <MarketPanel />
+      ) : hubTab === 'sekundaerbolig' ? (
         <SecondHomePanel />
       ) : (
       <div
@@ -775,7 +780,7 @@ const BoligPage: React.FC = () => {
             <PropertyCard currentValue={assets.houseValue} readOnly={!hist.isLive} />
 
             {/* Estimert markedsverdi (SSB kvadratmeterpris) */}
-            <PropertyValueEstimate residence={currentResidence(residences)} currentValue={assets.houseValue} />
+            <PropertyValueEstimate residence={currentResidence(residences)} currentValue={assets.houseValue} onOpenMarket={() => setHubTab('marked')} />
           </div>
 
           {/* Bohistorikk — full bredde */}
