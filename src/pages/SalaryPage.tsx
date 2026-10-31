@@ -48,7 +48,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors'
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { restskattEstimate } from '../lib/restskatt';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, activeJobBreakdown, salaryVsCpiYoy } from '../lib/salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, activeJobBreakdown, salaryVsCpiYoy, jobOverlapRanges, allSalariedJobsEnded, type JobOverlapRange } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 import { ChartSkeleton } from '../components/ui/Skeleton';
@@ -96,7 +96,7 @@ const SalaryPage: React.FC = () => {
     inflation, inflationStale, refreshInflation,
     wageStats, wageStatsStale, payslips,
     region, customTaxRatePct, pension, annualMortgageInterest, bsuTaxCredit,
-    grossAnnualIncome, holidaySurplusFor,
+    grossAnnualIncome, holidaySurplusFor, income,
   } = useFinance();
   const reduced = useReducedMotion();
   const isGeneric = region === 'generic';
@@ -129,6 +129,20 @@ const SalaryPage: React.FC = () => {
   // shortened — and that silently doubles income. Surface it either way.
   const overlappingJobs = useMemo(
     () => activeJobBreakdown(salaries, jobs, currentMonthKey),
+    [salaries, jobs, currentMonthKey],
+  );
+  // The same check over every month, so a stale end date in a past or future
+  // month is caught too, not just one that overlaps today.
+  const otherOverlaps = useMemo(
+    () => jobOverlapRanges(salaries, jobs, currentMonthKey)
+      .filter(r => !(r.start <= currentMonthKey && currentMonthKey <= r.end)),
+    [salaries, jobs, currentMonthKey],
+  );
+  const latestOverlap = otherOverlaps[otherOverlaps.length - 1];
+  const formatRange = (r: JobOverlapRange) => (r.start === r.end ? r.start : `${r.start} → ${r.end}`);
+  // Every salaried job has ended: the budget quietly falls back to `income`.
+  const salariedJobsEnded = useMemo(
+    () => allSalariedJobsEnded(salaries, jobs, currentMonthKey),
     [salaries, jobs, currentMonthKey],
   );
 
@@ -631,6 +645,63 @@ const SalaryPage: React.FC = () => {
               </p>
               <p className="mt-1 text-[12px]" style={{ color: 'var(--text-3)' }}>
                 {t.salaryPage.overlapHint}
+              </p>
+              {otherOverlaps.length > 0 && (
+                <p className="mt-1 text-[12px]" style={{ color: 'var(--text-2)' }}>
+                  {t.salaryPage.overlapMoreRanges.replace('{ranges}', otherOverlaps.map(formatRange).join(', '))}
+                </p>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {overlappingJobs.length <= 1 && latestOverlap && (
+        <Card padding="md" style={{ borderColor: 'var(--warning)' }}>
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={16} strokeWidth={2} className="shrink-0 mt-0.5" style={{ color: 'var(--warning)' }} />
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium" style={{ color: 'var(--warning)' }}>
+                {t.salaryPage.overlapRangeTitle
+                  .replace('{count}', String(latestOverlap.jobIds.length))
+                  .replace('{range}', formatRange(latestOverlap))}
+              </p>
+              <ul className="mt-2 space-y-1">
+                {latestOverlap.jobIds.map((id) => {
+                  const job = jobs.find(j => j.id === id);
+                  return (
+                    <li key={id} className="text-[13px] flex items-baseline gap-2">
+                      <span className="text-[var(--text-1)] truncate">{job?.role ?? t.salaryPage.overlapUnknownJob}</span>
+                      <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>
+                        {job?.startDate ?? '—'} → {job?.endDate ?? t.salaryPage.overlapOpenEnded}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
+                {t.salaryPage.overlapHint}
+              </p>
+              {otherOverlaps.length > 1 && (
+                <p className="mt-1 text-[12px]" style={{ color: 'var(--text-2)' }}>
+                  {t.salaryPage.overlapMoreRanges.replace('{ranges}', otherOverlaps.slice(0, -1).map(formatRange).join(', '))}
+                </p>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {salariedJobsEnded && (
+        <Card padding="md" style={{ borderColor: 'var(--warning)' }}>
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={16} strokeWidth={2} className="shrink-0 mt-0.5" style={{ color: 'var(--warning)' }} />
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium" style={{ color: 'var(--warning)' }}>
+                {t.salaryPage.jobsEndedTitle}
+              </p>
+              <p className="mt-1 text-[12px]" style={{ color: 'var(--text-2)' }}>
+                {t.salaryPage.jobsEndedHint.replace('{income}', formatCurrency(income))}
               </p>
             </div>
           </div>

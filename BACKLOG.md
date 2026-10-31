@@ -58,14 +58,6 @@ in git and the CHANGELOG, not here.
 
 ## Income and salary
 
-- **The overlapping-jobs warning only checks the current month.** A job change with a stale end
-  date in a past or future month double-counts gross there (and in the 12-month income series)
-  without a warning. **Where**: `overlappingJobs` in `src/pages/SalaryPage.tsx`,
-  `activeJobBreakdown` in `src/lib/salary.ts`.
-- **A job with no salary entries contributes nothing, silently.** Once every job with a salary has
-  ended, `calcActiveGrossAnnual` returns 0 and `derivedNetMonthlyFor` falls back to the legacy flat
-  `income`, so a long forecast can switch to one stale number. Wants a warning. **Where**:
-  `derivedNetMonthlyFor` in `src/context/FinanceContext.tsx`.
 - **Manual monthly-income override goes stale vs the salary system.** The per-month override never
   re-syncs when salary/tax/IPS change. Wants a "stale override" indicator or re-sync affordance.
   **Where**: `effectiveIncome`/`derivedNetMonthlyFor` in `src/context/FinanceContext.tsx`.
