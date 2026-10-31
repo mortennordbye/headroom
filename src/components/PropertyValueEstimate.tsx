@@ -1,25 +1,32 @@
 import { useEffect, useState } from 'react';
-import { LineChart } from 'lucide-react';
+import { format } from 'date-fns';
+import { ArrowRight, LineChart } from 'lucide-react';
 import { useFinance, type Residence } from '../context/FinanceContext';
 import { Sparkline, DeltaChip } from './ui';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { estimatedPropertyValue } from '../lib/propertyEstimate';
+import { bedroomsFromRooms, valuationFromSales } from '../lib/marketValuation';
+import { useMarketData } from '../hooks/useMarketData';
 
 interface Props {
   /** The current residence — its postalCode + dwellingType + sizeSqm drive the estimate. */
   residence: Residence | undefined;
   /** The user's own current value for the home, for the vs-estimate delta. */
   currentValue: number;
+  /** Switches the Bolig page to its Marked tab (sold homes, homes for sale). */
+  onOpenMarket?: () => void;
 }
 
 /**
- * Estimated market value of the current home from SSB square-metre prices
- * (table 14310): sizeSqm × the kommune's average kr/m² for the dwelling type.
- * A rough, kommune-average ballpark — labelled as such.
+ * Estimated market value of the current home. With housing-market data on and
+ * at least three comparable sales imported (Bolig page → Marked), the mid of
+ * the comparables range (src/lib/marketValuation.ts); otherwise SSB
+ * square-metre prices (table 14310): sizeSqm × the kommune's average kr/m² for
+ * the dwelling type, a rough kommune-average ballpark labelled as such.
  */
-export function PropertyValueEstimate({ residence, currentValue }: Props) {
-  const { t, formatCurrency, kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris } = useFinance();
+export function PropertyValueEstimate({ residence, currentValue, onOpenMarket }: Props) {
+  const { t, formatCurrency, kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris, demoMode } = useFinance();
   const lp = t.loanPage;
 
   const postnr = residence?.postalCode;
@@ -27,6 +34,8 @@ export function PropertyValueEstimate({ residence, currentValue }: Props) {
   const sizeSqm = residence?.sizeSqm;
 
   const [refreshing, setRefreshing] = useState(false);
+  // Demo mode shows a made-up home; never mix the user's real imported sales into it.
+  const { status: market, sales } = useMarketData(demoMode ? undefined : postnr);
 
   useEffect(() => {
     void loadKvmpris(postnr, type);
@@ -58,7 +67,15 @@ export function PropertyValueEstimate({ residence, currentValue }: Props) {
     );
   }
 
-  const estimate = estimatedPropertyValue(sizeSqm, kvmpris?.latestPrice);
+  const ssbEstimate = estimatedPropertyValue(sizeSqm, kvmpris?.latestPrice);
+  const comps = residence
+    ? valuationFromSales(
+        { address: residence.address, postnr, sizeSqm, bedrooms: bedroomsFromRooms(residence.rooms), fellesgjeld: residence.jointDebtShare },
+        sales,
+        { asOf: format(new Date(), 'yyyy-MM-dd'), index: kvmpris?.points },
+      )
+    : null;
+  const estimate = comps ? comps.mid : ssbEstimate;
   const priceSeries = (kvmpris?.points ?? [])
     .map((p) => p.price)
     .filter((v): v is number => typeof v === 'number');
@@ -79,10 +96,17 @@ export function PropertyValueEstimate({ residence, currentValue }: Props) {
               <div className="text-[26px] font-mono font-semibold text-[var(--text-1)] leading-none">
                 {formatCurrency(estimate)}
               </div>
-              <div className="mt-1.5 text-[12px] text-[var(--text-2)]">
-                {formatCurrency(kvmpris!.latestPrice!)}{lp.estValuePerSqmUnit}
-                {kvmpris?.poststed ? ` · ${kvmpris.poststed}` : ''} · {lp.estValueBasis}
-              </div>
+              {comps ? (
+                <div className="mt-1.5 text-[12px] text-[var(--text-2)]">
+                  {lp.estCompsRange} {formatCurrency(comps.low)} – {formatCurrency(comps.high)}
+                  {' · '}{(comps.scope === 'street' ? lp.estCompsStreet : lp.estCompsPostnr).replace('{count}', String(comps.count))}
+                </div>
+              ) : (
+                <div className="mt-1.5 text-[12px] text-[var(--text-2)]">
+                  {formatCurrency(kvmpris!.latestPrice!)}{lp.estValuePerSqmUnit}
+                  {kvmpris?.poststed ? ` · ${kvmpris.poststed}` : ''} · {lp.estValueBasis}
+                </div>
+              )}
             </div>
             {delta != null && (
               <DeltaChip tone={delta >= 0 ? 'positive' : 'negative'} showArrow>
@@ -97,11 +121,11 @@ export function PropertyValueEstimate({ residence, currentValue }: Props) {
             <div className="text-[11px] text-[var(--text-2)]">{lp.estValueVsCurrent}</div>
           )}
 
-          {priceSeries.length >= 2 && (
+          {!comps && priceSeries.length >= 2 && (
             <Sparkline values={priceSeries} tone="auto" height={36} />
           )}
 
-          {kvmpris?.latestSales != null && kvmpris.latestQuarter && (
+          {!comps && kvmpris?.latestSales != null && kvmpris.latestQuarter && (
             <div className="text-[11px] text-[var(--text-2)]">
               {kvmpris.latestSales} {lp.estValueSalesLabel} · {kvmpris.latestQuarter}
             </div>
@@ -123,7 +147,19 @@ export function PropertyValueEstimate({ residence, currentValue }: Props) {
         </p>
       )}
 
-      <p className="text-[11px] text-[var(--text-3)] leading-relaxed">{lp.estValueSource}</p>
+      {onOpenMarket && market && !demoMode && (
+        <button
+          type="button"
+          onClick={onOpenMarket}
+          className="inline-flex items-center gap-1.5 text-[12px] font-medium hover:opacity-80 transition-opacity"
+          style={{ color: 'var(--accent)' }}
+        >
+          {market.enabled ? lp.estCompsOpen : lp.estCompsOff}
+          <ArrowRight size={13} />
+        </button>
+      )}
+
+      <p className="text-[11px] text-[var(--text-3)] leading-relaxed">{comps ? lp.estCompsSource : lp.estValueSource}</p>
     </Card>
   );
 }

@@ -144,6 +144,29 @@ Notes on a few of them:
 - `add_rule` replaces an existing rule of the same type with the same match text.
 - `add_salary` requires an existing `jobId`; `add_bonus` checks it when given.
 
+**Housing market (opt-in, off by default):**
+
+Listed only while the user has turned on housing market (Bolig page → Marked tab). The stdio
+server re-checks the setting every minute and the HTTP server on each request,
+so a connected client sees the tools appear or disappear without a restart. The
+app enforces the same switch: while it is off, `/api/market/*` answers 404.
+
+| Tool | What it does |
+| --- | --- |
+| `import_listings` | Store homes for sale (up to 500 per call), keyed by URL. Re-importing records the asking price for `seenOn`, which builds a price history; returns price changes since the previous snapshot |
+| `import_sales` | Store sold homes (up to 500 per call); an identical sale is skipped |
+| `get_home_valuation` | Value of the current home from imported sales of a similar size nearby (low/mid/high), falling back to the SSB kommune average |
+
+The same rows can also be added in the app without an AI client: one sold home
+at a time on the Bolig page's Marked tab, or a JSON file (same fields)
+through "Import file" on the same tab.
+
+Headroom never fetches market data. The rows hold facts only (price, fellesgjeld,
+size, rooms, floor, year, location, link); unknown fields such as photos or ad
+text are rejected. The data lives in its own tables, outside the finance blob, so
+it is not part of the revision history or export. "Delete all market data" on
+the tab empties it.
+
 `get_overview` includes a `notes` field — the user's free-text plans/goals context
 (editable in Settings → "Context for the AI assistant"); `set_ai_context` writes it.
 
