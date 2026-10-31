@@ -233,6 +233,14 @@ const MarketPanel: React.FC = () => {
     );
   }
 
+  // When the stored data was last refreshed. A sales import is an ISO timestamp
+  // (shown as the local day), a listing's last sighting a 'YYYY-MM-DD' day.
+  const salesImported = status.lastSalesImport ? new Date(status.lastSalesImport) : null;
+  const freshness = [
+    salesImported && !isNaN(salesImported.getTime()) && mk.lastSalesImport.replace('{date}', format(salesImported, 'dd.MM.yyyy')),
+    status.lastListingSeen && mk.lastListingSeen.replace('{date}', fmtDate(status.lastListingSeen)),
+  ].filter((s): s is string => !!s);
+
   // ── Valuation ──────────────────────────────────────────────────────────────
   const confidence = valuation ? valuationConfidence(valuation, asOfDay) : null;
   const chartData = history.map((p) => ({ ...p, range: [p.low, p.high] as [number, number] }));
@@ -664,6 +672,9 @@ const MarketPanel: React.FC = () => {
         <p className="mt-1 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>
           {mk.dataCounts.replace('{listings}', String(status.listings)).replace('{sales}', String(status.sales))}
         </p>
+        {freshness.length > 0 && (
+          <p className="mt-1 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>{freshness.join(' · ')}</p>
+        )}
         <p className="mt-3 text-[13px] max-w-3xl leading-relaxed" style={{ color: 'var(--text-2)' }}>{mk.dataBody}</p>
         <details className="mt-4 text-[12px] max-w-3xl" style={{ color: 'var(--text-2)' }}>
           <summary className="cursor-pointer select-none" style={{ color: 'var(--text-1)' }}>{mk.formatTitle}</summary>
