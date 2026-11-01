@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.14.1](https://github.com/mortennordbye/headroom/compare/v3.14.0...v3.14.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* close the co-owner gaps in catch-ups, buy-and-sell and onboarding ([#340](https://github.com/mortennordbye/headroom/issues/340)) ([10b586a](https://github.com/mortennordbye/headroom/commit/10b586af30b6ecdd40d32b70bbdd0fa32698086d))
+* count a co-owned home at its market share in gjeldsreduksjon ([#343](https://github.com/mortennordbye/headroom/issues/343)) ([a37c67e](https://github.com/mortennordbye/headroom/commit/a37c67eba7617f97ea4ddc5a8e167e9c973f99a0))
+
 ## [3.14.0](https://github.com/mortennordbye/headroom/compare/v3.13.0...v3.14.0) (2026-11-01)
 
 
