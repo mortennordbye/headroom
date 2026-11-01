@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.2](https://github.com/mortennordbye/headroom/compare/v3.14.1...v3.14.2) (2026-11-01)
+
+
+### Bug Fixes
+
+* charge interest for months a paydown's stamp never paid ([#344](https://github.com/mortennordbye/headroom/issues/344)) ([8d778fc](https://github.com/mortennordbye/headroom/commit/8d778fcbfb3040911971516b7de0874d69c6d0a3))
+
 ## [3.14.1](https://github.com/mortennordbye/headroom/compare/v3.14.0...v3.14.1) (2026-11-01)
 
 
