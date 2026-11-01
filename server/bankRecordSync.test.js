@@ -131,6 +131,103 @@ describe('fetchMappedTransactions + recordSync', () => {
     expect(calls.filter((c) => c.from).map((c) => c.from)).toEqual([floor, floor]);
   });
 
+  it("stamps each row with its linked account's number, whitespace removed", async () => {
+    // Fictitious account numbers.
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [{ uid: 'u1', iban: 'NO12 4444 5566 666' }, { uid: 'u2' }] }] });
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const ref = new URL(url).pathname.split('/')[2];
+      return { ok: true, status: 200, text: async () => JSON.stringify({ transactions: [tx(`${ref}-1`)] }) };
+    }));
+    const { rows } = await bank.fetchMappedTransactions();
+    const byAccount = Object.fromEntries(rows.map((r) => [r.account, r.accountNumber]));
+    expect(byAccount).toEqual({ 'aaaa1111:u1': 'NO1244445566666', 'aaaa1111:u2': undefined });
+  });
+
+  // Fictitious account numbers. `details` maps uid → the /details response.
+  const stubAccounts = (details = {}) => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const [, , uid, what] = new URL(url).pathname.split('/');
+      calls.push(`${uid}/${what}`);
+      const body = what === 'details' ? (details[uid] || {}) : { transactions: [tx(`${uid}-1`)] };
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    }));
+    return calls;
+  };
+  const numbers = (rows) => Object.fromEntries(rows.map((r) => [r.account, r.accountNumber]));
+
+  it('leaves the number off rows from loan and card accounts, keeping unknown types', async () => {
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [
+      { uid: 'u1', iban: '11112233333', cash_account_type: 'CACC' },
+      { uid: 'u2', iban: '44445566666', cash_account_type: 'LOAN' },
+      { uid: 'u3', iban: '77778899999', cash_account_type: 'CARD' },
+      { uid: 'u4', iban: '12121212121' },
+    ] }] });
+    stubAccounts();
+    const { rows } = await bank.fetchMappedTransactions();
+    expect(numbers(rows)).toEqual({
+      'aaaa1111:u1': '11112233333', 'aaaa1111:u2': undefined, 'aaaa1111:u3': undefined, 'aaaa1111:u4': '12121212121',
+    });
+  });
+
+  it('fetches the missing account type once for accounts linked before it was captured', async () => {
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [
+      { uid: 'u1', iban: '11112233333' },
+      { uid: 'u2', iban: '44445566666' },
+    ] }] });
+    const calls = stubAccounts({ u1: { cash_account_type: 'SVGS' }, u2: { cash_account_type: 'LOAN' } });
+    const { rows } = await bank.fetchMappedTransactions();
+    expect(numbers(rows)).toEqual({ 'aaaa1111:u1': '11112233333', 'aaaa1111:u2': undefined });
+    const stored = readStore().connections[0];
+    expect(stored.accounts.map((a) => a.cash_account_type)).toEqual(['SVGS', 'LOAN']);
+    expect(stored.accounts_typed).toBe(true);
+    calls.length = 0;
+    await bank.fetchMappedTransactions();
+    expect(calls.filter((c) => c.endsWith('/details'))).toEqual([]);
+  });
+
+  // `detailsOk()` decides per call whether /details succeeds.
+  const stubFailingDetails = (detailsOk = () => false) => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const isDetails = new URL(url).pathname.endsWith('/details');
+      if (isDetails) calls.push(url);
+      const ok = !isDetails || detailsOk();
+      const body = !isDetails ? { transactions: [tx('u1-1')] } : ok ? { cash_account_type: 'CACC' } : { error: 'x' };
+      return { ok, status: ok ? 200 : 500, text: async () => JSON.stringify(body) };
+    }));
+    return calls;
+  };
+
+  it('keeps an account counting as own when its details cannot be fetched', async () => {
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [{ uid: 'u1', iban: '11112233333' }] }] });
+    stubFailingDetails();
+    const { rows } = await bank.fetchMappedTransactions();
+    expect(numbers(rows)).toEqual({ 'aaaa1111:u1': '11112233333' });
+    expect(readStore().connections[0].accounts_typed).toBeUndefined();
+    expect(readStore().connections[0].accounts_type_attempts).toBe(1);
+  });
+
+  it('retries the details fetch on a later sync and marks it done once it succeeds', async () => {
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [{ uid: 'u1', iban: '11112233333' }] }] });
+    let ok = false;
+    const calls = stubFailingDetails(() => ok);
+    await bank.fetchMappedTransactions();
+    ok = true;
+    await bank.fetchMappedTransactions();
+    expect(calls).toHaveLength(2);
+    expect(readStore().connections[0]).toMatchObject({ accounts_typed: true, accounts: [{ cash_account_type: 'CACC' }] });
+  });
+
+  it('stops trying the details fetch after three failed syncs', async () => {
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [{ uid: 'u1', iban: '11112233333' }] }] });
+    const calls = stubFailingDetails();
+    for (let i = 0; i < 5; i++) await bank.fetchMappedTransactions();
+    expect(calls).toHaveLength(3);
+    expect(readStore().connections[0].accounts_type_attempts).toBe(3);
+    expect(readStore().connections[0].accounts_typed).toBeUndefined();
+  });
+
   it('logs a sync that fully fetched no connection as a failure', () => {
     writeStore({ connections: [conn('bbbb2222', ['b1'])] });
     bank.recordSync({ ok: true, added: 0, fetched: 0, total: 0, synced: [{ connectionId: 'bbbb2222-x', sessionId: 's-bbbb2222', complete: false }] });

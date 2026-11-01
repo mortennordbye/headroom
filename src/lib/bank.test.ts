@@ -19,6 +19,8 @@ interface EBTransaction {
   remittance_information?: string[] | null;
   bank_transaction_code?: { description?: string } | null;
   merchant_category_code?: string | number | null;
+  creditor_account?: { iban?: string; bban?: string; other?: { identification?: string } } | null;
+  debtor_account?: { iban?: string; bban?: string; other?: { identification?: string } } | null;
 }
 
 const tx = (over: Partial<EBTransaction> = {}): EBTransaction => ({
@@ -73,6 +75,20 @@ describe('mapEBTransaction', () => {
     const r = mapEBTransaction(tx({ merchant_category_code: 5411 }));
     expect(r.merchant).toBe('REMA 1000');
     expect(r.mcc).toBe('5411');
+  });
+
+  it('captures the counterparty account number for the right direction', () => {
+    const debit = mapEBTransaction({ ...tx(), creditor_account: { iban: 'NO12 4444 5566 666' }, debtor_account: { iban: 'NO9911112233333' } });
+    expect(debit.counterpartyAccountNumber).toBe('NO1244445566666');
+    const credit = mapEBTransaction({ ...tx({ credit_debit_indicator: 'CRDT' }), creditor_account: { iban: 'NO1244445566666' }, debtor_account: { other: { identification: '11112233333' } } });
+    expect(credit.counterpartyAccountNumber).toBe('11112233333');
+  });
+
+  it('stamps this account\'s number from the map options, and omits both when unknown', () => {
+    expect(mapEBTransaction(tx(), { accountNumber: 'NO9911112233333' }).accountNumber).toBe('NO9911112233333');
+    const r = mapEBTransaction(tx());
+    expect(r.accountNumber).toBeUndefined();
+    expect(r.counterpartyAccountNumber).toBeUndefined();
   });
 
   it('omits merchant/mcc when the feed does not carry them', () => {
@@ -171,6 +187,11 @@ describe('normalizeAccount', () => {
 
   it('wraps a bare uid string (ASPSPs that return only ids)', () => {
     expect(normalizeAccount('uid-abc')).toEqual({ uid: 'uid-abc' });
+  });
+
+  it('captures the cash account type so loan and card accounts can be told apart', () => {
+    expect(normalizeAccount({ uid: 'u1', name: 'Loan', cash_account_type: 'LOAN' }))
+      .toEqual({ uid: 'u1', name: 'Loan', cash_account_type: 'LOAN' });
   });
 
   it('captures the IBAN from account_id so same-named accounts can be told apart', () => {

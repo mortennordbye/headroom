@@ -9,6 +9,10 @@
 // for an expense in the window) are skipped rather than guessed — a false net
 // is worse than a missed one, and every netted row is still shown (marked) in
 // the ledger so the user can see what happened.
+//
+// Separately, a row whose counterparty account number is one of the user's own
+// connected accounts (as stamped by bank sync) is an internal transfer outright,
+// whatever the amount or timing: the bank itself says where the money went.
 import type { DailyTransaction } from '../context/FinanceContext';
 
 // Max days between the two legs of an internal transfer. Own-account moves
@@ -27,6 +31,19 @@ function isCandidate(t: DailyTransaction): boolean {
 }
 
 /**
+ * Canonical form of an account number for comparison: whitespace, dots and
+ * dashes dropped, upper-cased, and a Norwegian IBAN ("NO" + 2 check digits + the
+ * 11-digit BBAN) reduced to its BBAN so the two spellings of one account match.
+ * Empty string when there's nothing usable.
+ */
+export function normalizeAccountNumber(raw: string | undefined): string {
+  if (typeof raw !== 'string') return '';
+  const s = raw.replace(/[\s.-]/g, '').toUpperCase();
+  const no = /^NO\d{2}(\d{11})$/.exec(s);
+  return no ? no[1] : s;
+}
+
+/**
  * Return the ids of transactions that are legs of a detected internal transfer
  * (both the outgoing and incoming side). Empty when nothing matches.
  */
@@ -34,10 +51,69 @@ export function findInternalTransferIds(txs: DailyTransaction[]): Set<string> {
   const matched = new Set<string>();
   const expenses = txs.filter((t) => isCandidate(t) && t.kind !== 'income');
   const incomes = txs.filter((t) => isCandidate(t) && t.kind === 'income');
+  const withinWindow = (a: DailyTransaction, b: DailyTransaction) => {
+    const da = dayNumber(a.date);
+    const db = dayNumber(b.date);
+    return Number.isFinite(da) && Number.isFinite(db) && Math.abs(da - db) <= WINDOW_DAYS;
+  };
+
+  // Own-account matching: the user's own account numbers are the ones stamped on
+  // their connected rows; a row paying to / receiving from one of those (and not
+  // its own account) is a move between the user's accounts.
+  const own = new Set<string>();
+  for (const t of [...expenses, ...incomes]) {
+    const n = normalizeAccountNumber(t.accountNumber);
+    if (n) own.add(n);
+  }
+  // Only a row that itself sits on an own account (has `accountNumber`) can
+  // start a match: rows from loan and card accounts carry no number (server
+  // `ownAccountNumber`), and their legs are debt service, not transfers.
+  const byNumber: DailyTransaction[] = [];
+  for (const t of [...expenses, ...incomes]) {
+    const mine = normalizeAccountNumber(t.accountNumber);
+    const cp = normalizeAccountNumber(t.counterpartyAccountNumber);
+    if (mine && cp && own.has(cp) && cp !== mine) {
+      matched.add(t.id);
+      byNumber.push(t);
+    }
+  }
+
+  // Legs already paired, either direction, so no row is claimed twice.
+  const usedIncome = new Set<string>();
+  const usedExpense = new Set<string>();
+  // The other leg of a row matched by account number may carry no counterparty
+  // number itself. Look for it on the account the number names: opposite kind,
+  // same amount, within the window, and exactly one candidate. A candidate that
+  // names some other counterparty is a different payment, never the partner.
+  for (const t of byNumber) {
+    const isIncome = t.kind === 'income';
+    if ((isIncome ? usedIncome : usedExpense).has(t.id)) continue;
+    const mine = normalizeAccountNumber(t.accountNumber);
+    const cp = normalizeAccountNumber(t.counterpartyAccountNumber);
+    const usedPool = isIncome ? usedExpense : usedIncome;
+    const partners = (isIncome ? expenses : incomes).filter(
+      (p) => {
+        const pcp = normalizeAccountNumber(p.counterpartyAccountNumber);
+        return (
+          !usedPool.has(p.id) &&
+          (!pcp || pcp === mine) &&
+          normalizeAccountNumber(p.accountNumber) === cp &&
+          p.amount === t.amount &&
+          withinWindow(t, p)
+        );
+      },
+    );
+    if (partners.length === 1) {
+      (isIncome ? usedIncome : usedExpense).add(t.id);
+      usedPool.add(partners[0].id);
+      matched.add(partners[0].id);
+    }
+  }
+
   if (!expenses.length || !incomes.length) return matched;
 
-  const usedIncome = new Set<string>();
   for (const e of expenses) {
+    if (matched.has(e.id)) continue; // already proven by account number
     const eDay = dayNumber(e.date);
     if (!Number.isFinite(eDay)) continue;
     // Candidate incomes: same amount, a DIFFERENT account, within the window,
@@ -45,6 +121,7 @@ export function findInternalTransferIds(txs: DailyTransaction[]): Set<string> {
     const candidates = incomes.filter(
       (i) =>
         !usedIncome.has(i.id) &&
+        !matched.has(i.id) &&
         i.account !== e.account &&
         i.amount === e.amount &&
         Number.isFinite(dayNumber(i.date)) &&
