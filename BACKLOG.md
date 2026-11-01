@@ -80,9 +80,6 @@ in git and the CHANGELOG, not here.
 - **`SavingsAllocationPanel` is the one place that writes both `savings` and `fixedExpenses`.**
   Correct, but the likeliest spot for a future regression. **Where**: `createExpenses` in
   `src/components/SavingsAllocationPanel.tsx`.
-- **Editing an allocation percentage doesn't update the expenses it created.** **Unblock**: agree
-  the allocation is authoritative, then a "sync amounts" button. **Where**:
-  `src/components/SavingsAllocationPanel.tsx`.
 - **The savings target shrinks as you automate, by construction** (it's a share of the
   uncommitted residual). Surfaced in the panel rather than changed. **Where**:
   `calcRecommendations` in `src/lib/calculations.ts`.
