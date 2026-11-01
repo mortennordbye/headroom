@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, Plus, Trash2, Wand2 } from 'lucide-react';
+import { format } from 'date-fns';
+import { ChevronDown, Plus, RefreshCw, Trash2, Wand2 } from 'lucide-react';
 import { useFinance, type AllocationDestinationKind, type Saving } from '../context/FinanceContext';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
 import { SavingsModeToggle } from './SavingsModeToggle';
-import { resolveAllocation, isCreatableRow, destinationKey, type AllocationRow } from '../lib/savingsAllocation';
+import ConfirmModal from './ConfirmModal';
+import { isCreatableRow, destinationKey, type AllocationRow } from '../lib/savingsAllocation';
 import { savingsBase, isPercentSavings, isRestSavings, percentOfSavingsBase } from '../lib/savingsRate';
 import { currentMonthKey } from '../lib/date';
+import { allocationSyncPlan, buildActivation, sizeAllocation } from '../lib/allocationSync';
 
 // Turns the savings target (residual × savingsTargetPercent) into a per-destination
 // plan, and — on an explicit click — into the fixed expenses that make it real.
@@ -31,13 +34,14 @@ interface PanelProps {
 
 export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) => {
   const {
-    t, assets, debts, housingMode, formatCurrency, plannedMonthlySaving,
+    t, assets, debts, housingMode, formatCurrency, currentMonth,
     savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
     fixedExpenses, setFixedExpenses, savings, setSavings, viewSavings, viewFixedExpenses,
-    automationEnabled, effectiveIncome,
+    automationEnabled, effectiveIncome, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent,
   } = useFinance();
   const sa = t.savingsAllocation;
   const [created, setCreated] = useState(0);
+  const [confirmSync, setConfirmSync] = useState(false);
   const modeLabels = {
     group: sa.toggleMode,
     percent: '%',
@@ -66,12 +70,19 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   // The pot is the WHOLE savings target, not the slice still uncommitted.
   // `recommendedInvestment` is the target minus what is already automated, so
   // dividing that made an activated plan appear to empty itself: every row read
-  // 0 kr and a valid 100 % split was flagged as over-allocated. The rows below
-  // pair with their "Active · X" chips only when both count the same pot.
-  const plan = useMemo(
-    () => resolveAllocation(savingsAllocations, Math.max(0, plannedMonthlySaving)),
-    [savingsAllocations, plannedMonthlySaving],
+  // 0 kr and a valid 100 % split was flagged as over-allocated.
+  //
+  // One sizing for the rows shown, for activating them and for syncing them
+  // (see sizeAllocation), so the three can't disagree. It is the CURRENT
+  // month's, whatever month is being viewed: what it sizes is written to live
+  // transfers, and a one-month adjustment must not reshape the standing plan.
+  const nowKey = currentMonthKey();
+  const nowIncome = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
+  const sizing = useMemo(
+    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent),
+    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent],
   );
+  const plan = sizing.plan;
 
   const savingsIds = savingsAccounts.map(s => s.id);
   const debtIds = debts.map(d => d.id);
@@ -157,43 +168,45 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   // split can't be inferred from a `type` field any more — the destination
   // decides, at the one moment it is chosen.
   const createExpenses = () => {
-    // Same convention as assigning a destination by hand: the first move happens
-    // NEXT month, never retroactively.
-    const stamp = currentMonthKey();
-    const newSavings: Saving[] = [];
-    const newExpenses = [];
-    for (const row of creatable) {
-      if (row.destinationKind === 'mortgage' || row.destinationKind === 'debt') {
-        newExpenses.push({
-          id: crypto.randomUUID(),
-          name: labelFor(row),
-          amount: row.amount,
-          type: 'fixed' as const,
-          destinationKind: row.destinationKind,
-          debtId: row.debtId,
-          lastPostedMonth: stamp,
-        });
-        continue;
-      }
-      newSavings.push({
-        id: crypto.randomUUID(),
-        name: labelFor(row),
-        amount: row.amount,
-        // A 'rest' row activates as a rest row, so the live saving keeps
-        // absorbing what the others leave instead of freezing at today's split.
-        mode: row.mode ?? 'percent',
-        // A percentage row is activated as a share of the BASE, not of the
-        // target, so later editing the target percent doesn't silently re-scale
-        // a live transfer.
-        percent: row.mode === 'percent' || row.mode === undefined ? percentOfBase(row.amount) : undefined,
-        destinationKind: row.destinationKind,
-        savingsAccountId: row.savingsAccountId,
-        lastPostedMonth: stamp,
-      });
-    }
-    if (newSavings.length) setSavings([...savings, ...newSavings]);
-    if (newExpenses.length) setFixedExpenses([...fixedExpenses, ...newExpenses]);
+    // A '%' saving is a share of the base left after the paydowns this same
+    // click creates, the base sync reads too.
+    const creating = new Set(creatable.map(r => r.id));
+    const made = buildActivation(
+      creatable,
+      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating),
+      // Same convention as assigning a destination by hand: the first move
+      // happens NEXT month, never retroactively.
+      currentMonthKey(),
+      labelFor,
+      () => crypto.randomUUID(),
+    );
+    if (made.savings.length) setSavings([...savings, ...made.savings]);
+    if (made.expenses.length) setFixedExpenses([...fixedExpenses, ...made.expenses]);
     setCreated(creatable.length);
+  };
+
+  // The allocation is authoritative over the transfers it created (and only
+  // those: the match is on `allocationId`). Edited rows leave those transfers
+  // behind until the user syncs them here.
+  // Offered only while viewing the current month, since it rewrites live
+  // transfers from the current month's sizing.
+  const viewingNow = format(currentMonth, 'yyyy-MM') === nowKey;
+  const syncChanges = viewingNow ? allocationSyncPlan(sizing, savings, fixedExpenses) : [];
+  const nameOf = (id: string) =>
+    savings.find(sv => sv.id === id)?.name ?? fixedExpenses.find(e => e.id === id)?.name ?? '';
+  const syncPreview = syncChanges.map(c => {
+    const fmt = (n: number) => (c.field === 'percent' ? `${n} %` : formatCurrency(n));
+    return `${nameOf(c.id)}: ${fmt(c.from)} → ${fmt(c.to)}`;
+  }).join(' · ');
+  const syncAmounts = () => {
+    const patch = new Map(syncChanges.map(c => [c.id, { [c.field]: c.to }]));
+    if (syncChanges.some(c => c.kind === 'saving')) {
+      setSavings(savings.map(sv => (patch.has(sv.id) ? { ...sv, ...patch.get(sv.id) } : sv)));
+    }
+    if (syncChanges.some(c => c.kind === 'expense')) {
+      setFixedExpenses(fixedExpenses.map(e => (patch.has(e.id) ? { ...e, ...patch.get(e.id) } : e)));
+    }
+    setConfirmSync(false);
   };
 
   const body = (
@@ -201,7 +214,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
       <div className="flex items-baseline justify-between gap-3 flex-wrap pb-4 border-b border-[var(--border)]">
         {!bare && <SectionLabel>{sa.title}</SectionLabel>}
         <span className="text-[12px] font-mono tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
-          <span className="block">{formatCurrency(Math.max(0, plannedMonthlySaving))} {sa.perMonth}</span>
+          <span className="block">{formatCurrency(sizing.target)} {sa.perMonth}</span>
           {committedTotal > 0 && (
             <span className="block mt-0.5" style={{ color: 'var(--text-3)' }}>
               {sa.alreadyAutomated.replace('{amount}', formatCurrency(committedTotal))}
@@ -210,6 +223,11 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
         </span>
       </div>
       <p className="mt-3 text-[12px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{sa.intro}</p>
+      {/* The budget's target still counts a paydown as spending (see
+          sizeAllocation), so say why the two figures can differ. */}
+      {savingsAllocations.some(a => a.destinationKind === 'mortgage' || a.destinationKind === 'debt') && (
+        <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{sa.paydownNote}</p>
+      )}
       {/* Says out loud what the per-row switch does. The difference between the
           two modes is the whole feature, and a two-letter toggle can't carry it. */}
       <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
@@ -409,6 +427,11 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
             {sa.create.replace('{count}', String(creatable.length))}
           </Button>
         )}
+        {syncChanges.length > 0 && !plan.overAllocated && (
+          <Button variant="secondary" leadingIcon={<RefreshCw size={14} />} onClick={() => setConfirmSync(true)}>
+            {sa.syncAmounts.replace('{count}', String(syncChanges.length))}
+          </Button>
+        )}
       </div>
 
       {created > 0 && (
@@ -421,6 +444,17 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
       )}
       {!automationEnabled && (
         <p className="mt-3 text-[12px]" style={{ color: 'var(--warning)' }}>{t.pensionAutomation.masterOff}</p>
+      )}
+      {confirmSync && (
+        <ConfirmModal
+          title={sa.syncTitle}
+          message={`${sa.syncConfirm.replace('{count}', String(syncChanges.length))} ${syncPreview}`}
+          confirmLabel={sa.syncConfirmLabel}
+          cancelLabel={t.cancel}
+          danger={false}
+          onConfirm={syncAmounts}
+          onCancel={() => setConfirmSync(false)}
+        />
       )}
     </>
   );

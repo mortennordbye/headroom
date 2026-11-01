@@ -323,12 +323,187 @@ describe('computeAutomationPostings — two payments to one loan', () => {
     expect(p.newBalance).toBe(1_000_000 - 4000);
   });
 
+  it("charges the interest of months another rule's declined catch-up skipped", () => {
+    // Both rules last paid May. 'main' declined its catch-up in July: it paid
+    // July only, so June's interest is still to charge when 'extra' catches up.
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-07', uncoveredMonths: { '2026-06': 0 } });
+    const extra = loanRule({ id: 'extra', amount: 5000, lastPostedMonth: '2026-05' });
+    const [p] = computeAutomationPostings([extra], state(), '2026-07', undefined, [main, extra]);
+    const june = 1_000_000 + 1_000_000 * 0.05 / 12 - 5000;
+    expect(p.newBalance).toBe(Math.round(june - 5000));
+  });
+
+  it("charges only the part of a month's interest another payment has not already paid", () => {
+    // 'extra' put 3000 toward June's 4166.67 of interest without covering it.
+    const extra = loanRule({ id: 'extra', amount: 3000, lastPostedMonth: '2026-06', uncoveredMonths: { '2026-06': 3000 } });
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' });
+    const [p] = computeAutomationPostings([main], state(), '2026-06', undefined, [main, extra]);
+    expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 3000 - 10_000));
+  });
+
+  it('records the months a declined loan catch-up skipped while another rule still owes them', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-04' });
+    const extra = loanRule({ id: 'extra', amount: 5000, lastPostedMonth: '2026-04' });
+    const [p] = computeAutomationPostings([main], state(), '2026-07', 1, [main, extra]);
+    expect(p.monthsDue).toBe(1);
+    expect(p.uncoveredMonths).toEqual({ '2026-05': 0, '2026-06': 0 });
+  });
+
+  it('drops skipped months every other rule on the loan has already passed', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-04', uncoveredMonths: { '2026-02': 0 } });
+    const extra = loanRule({ id: 'extra', amount: 5000, lastPostedMonth: '2026-05' });
+    const [p] = computeAutomationPostings([main], state(), '2026-07', 1, [main, extra]);
+    expect(p.uncoveredMonths).toEqual({ '2026-06': 0 });
+  });
+
+  it('records no skipped months for a declined catch-up on a loan no other rule pays', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-04' });
+    const [p] = computeAutomationPostings([main], state(), '2026-07', 1, [main]);
+    expect(p.uncoveredMonths).toEqual({});
+  });
+
+  it('leaves the recorded months alone on a posting that covers every month', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-06', uncoveredMonths: { '2026-05': 0 } });
+    const [p] = computeAutomationPostings([main], state(), '2026-07');
+    expect(p).not.toHaveProperty('uncoveredMonths');
+  });
+
+  it("records what a payment put toward months whose interest it couldn't cover", () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-08', uncoveredMonths: { '2026-06': 0, '2026-07': 0 } });
+    const extra = loanRule({ id: 'extra', amount: 3000, lastPostedMonth: '2026-05' });
+    const other = loanRule({ id: 'other', amount: 5000, lastPostedMonth: '2026-05' });
+    const [p] = computeAutomationPostings([extra], state(), '2026-08', undefined, [main, extra, other]);
+    expect(p.uncoveredMonths).toEqual({ '2026-06': 3000, '2026-07': 3000 });
+    expect(p.monthsShort).toBe(2);
+    expect(p.infeasible).toBe(true);
+  });
+
+  // Click through the catch-up prompt the way FinanceContext does: post one
+  // rule against the others, write its stamp and recorded months, move on.
+  const clickThrough = (rules: AutomationRule[], steps: [string, 'all' | 'one'][], month = '2026-08') => {
+    let s = state();
+    for (const [id, choice] of steps) {
+      const target = rules.find(r => r.id === id)!;
+      const [p] = computeAutomationPostings([target], s, month, choice === 'one' ? 1 : undefined, rules);
+      s = { ...s, mortgage: p.newBalance };
+      rules = rules.map(r => {
+        if (r.id !== id) return r;
+        const { uncoveredMonths: _old, ...rest } = r;
+        const kept = p.uncoveredMonths ?? r.uncoveredMonths;
+        return { ...rest, lastPostedMonth: month, ...(kept && Object.keys(kept).length ? { uncoveredMonths: kept } : {}) };
+      });
+    }
+    return s.mortgage;
+  };
+
+  it('ends at the same balance whichever of two catch-ups is answered first', () => {
+    const rules = [
+      loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' }),
+      loanRule({ id: 'extra', amount: 3000, lastPostedMonth: '2026-05' }),
+    ];
+    const a = clickThrough(rules, [['main', 'one'], ['extra', 'all']]);
+    const b = clickThrough(rules, [['extra', 'all'], ['main', 'one']]);
+    // August: one month's interest on 1 000 000, then both payments.
+    expect(a).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 13_000));
+    expect(b).toBe(a);
+  });
+
+  it('charges every skipped month its interest whichever of three catch-ups is answered first', () => {
+    const rules = [
+      loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' }),
+      loanRule({ id: 'e1', amount: 3000, lastPostedMonth: '2026-05' }),
+      loanRule({ id: 'e2', amount: 5000, lastPostedMonth: '2026-05' }),
+    ];
+    const a = clickThrough(rules, [['main', 'one'], ['e1', 'all'], ['e2', 'all']]);
+    const b = clickThrough(rules, [['main', 'one'], ['e2', 'all'], ['e1', 'all']]);
+    // Each month's interest is worked out on the balance at the click, so the
+    // two orders differ by a few kroner, never by a month's interest.
+    expect(Math.abs(a - b)).toBeLessThan(100);
+    // June and July: 8000 paid against about 4140 of interest each; August: 18 000 after interest.
+    const aug = 1_000_000 + 1_000_000 * 0.05 / 12 - 18_000;
+    expect(a).toBeGreaterThan(aug - 2 * (8000 - 4100));
+    expect(a).toBeLessThan(aug - 2 * (8000 - 4200));
+  });
+
+  it('never moves less on "catch up all" than on "just this month"', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-08', uncoveredMonths: { '2026-06': 0, '2026-07': 0 } });
+    const extra = loanRule({ id: 'extra', amount: 3000, lastPostedMonth: '2026-05' });
+    const [all] = computeAutomationPostings([extra], state(), '2026-08', undefined, [main, extra]);
+    const [one] = computeAutomationPostings([extra], state(), '2026-08', 1, [main, extra]);
+    expect(one.newBalance).toBe(1_000_000 - 3000);
+    expect(all.newBalance).toBeLessThanOrEqual(one.newBalance);
+  });
+
   it('charges each debt its own interest', () => {
     const s = state({ debts: { 'debt-1': { balance: 50_000, rate: 12 }, 'debt-2': { balance: 50_000, rate: 12 } } });
     const a = loanRule({ id: 'a', targetKind: 'debt', debtId: 'debt-1', amount: 5000 });
     const b = loanRule({ id: 'b', targetKind: 'debt', debtId: 'debt-2', amount: 5000 });
     const postings = computeAutomationPostings([a, b], s, '2026-07');
     expect(postings.map(p => p.newBalance)).toEqual([45_500, 45_500]);
+  });
+});
+
+describe('computeAutomationPostings — co-owner share changes with a second payment to the loan', () => {
+  // 1 000 000 at 5 %. Co-owner A holds half through February; co-owner B holds
+  // all of March only. So the user carries half the loan in February, none in
+  // March, and all of it from April.
+  const coOwners = [
+    co(50, { id: 'a', since: '2025-01', until: '2026-02' }),
+    co(100, { id: 'b', since: '2026-03', until: '2026-03' }),
+  ];
+  const r = 0.05 / 12;
+  const mine = (over: Partial<AutomationRule>) => rule({
+    id: 'mine', targetKind: 'mortgage', savingsAccountId: undefined, mortgagePaymentScope: 'myShare',
+    lastPostedMonth: '2026-01', ...over,
+  });
+  const extra = (over: Partial<AutomationRule>) => rule({
+    id: 'extra', targetKind: 'mortgage', savingsAccountId: undefined, ...over,
+  });
+
+  it("charges each month's interest once against a declined catch-up's uncovered months", () => {
+    // `extra` declined its catch-up in May: it paid May only, so Feb-Apr are uncovered.
+    const declined = extra({ amount: 2000, lastPostedMonth: '2026-05', uncoveredMonths: { '2026-02': 0, '2026-03': 0, '2026-04': 0 } });
+    const [p] = computeAutomationPostings([mine({ amount: 5000 })], state({ coOwners }), '2026-05', undefined, [declined]);
+    let bal = 1_000_000;
+    bal = bal + bal * r - 10_000; // Feb: interest charged here, payment grossed up by the half share
+    //                               Mar: skipped, the co-owner paid it; no interest, no payment
+    bal = bal + bal * r - 5000;   // Apr: interest charged here
+    bal = bal - 5000;             // May: `extra` already charged it, so all principal
+    expect(p.newBalance).toBe(Math.round(bal));
+    expect(p.noChange).toBeUndefined();
+    expect(p.uncoveredMonths).toBeUndefined();
+  });
+
+  it('records the grossed short payments by month and the other rule charges only what is left', () => {
+    // A small 'myShare' payment can't cover the interest; `extra` hasn't caught up yet.
+    const pending = extra({ amount: 10_000, lastPostedMonth: '2026-01' });
+    const [short] = computeAutomationPostings([mine({ amount: 2000 })], state({ coOwners }), '2026-04', undefined, [pending]);
+    expect(short.newBalance).toBe(1_000_000);
+    expect(short.monthsShort).toBe(2);
+    // February's payment is grossed up to 4 000; March (0 % share) is never recorded.
+    expect(short.uncoveredMonths).toEqual({ '2026-02': 4000, '2026-04': 2000 });
+
+    const stamped = mine({ amount: 2000, lastPostedMonth: '2026-04', uncoveredMonths: short.uncoveredMonths });
+    const [p] = computeAutomationPostings([pending], state({ coOwners }), '2026-04', undefined, [stamped]);
+    let bal = 1_000_000;
+    bal = bal + (bal * r - 4000) - 10_000; // Feb: only the interest left after the 4 000
+    bal = bal - 10_000;                    // Mar: the co-owner covered it, all principal
+    bal = bal + (bal * r - 2000) - 10_000; // Apr: only the interest left after the 2 000
+    expect(p.newBalance).toBe(Math.round(bal));
+  });
+
+  it('a 0 % month skipped in one call counts as charged for the other rule in that call', () => {
+    const both = computeAutomationPostings(
+      [mine({ amount: 5000 }), extra({ amount: 6000, lastPostedMonth: '2026-01' })], state({ coOwners }), '2026-04');
+    const last = both[both.length - 1];
+    let bal = 1_000_000;
+    // `extra` (largest payment) goes first and charges each month's interest, but March's is the co-owner's.
+    bal = bal + bal * r - 6000;
+    bal = bal - 6000;
+    bal = bal + bal * r - 6000;
+    // Then `mine`, all principal: 10 000 in Feb, nothing in Mar, 5 000 in Apr.
+    bal = bal - 10_000 - 5000;
+    expect(last.newBalance).toBe(Math.round(bal));
   });
 });
 
@@ -351,7 +526,7 @@ describe('computeAutomationPostings — mixed batch', () => {
 
 describe('applyAmortization', () => {
   it('is a no-op on a zero balance', () => {
-    expect(applyAmortization(0, 5, 1000, 3)).toEqual({ balance: 0, infeasible: false });
+    expect(applyAmortization(0, 5, 1000, 3)).toEqual({ balance: 0, infeasible: false, shortMonths: [] });
   });
 
   it('applies straight subtraction at 0% interest', () => {
@@ -359,7 +534,16 @@ describe('applyAmortization', () => {
   });
 
   it('reports infeasible when the payment cannot cover the interest', () => {
-    expect(applyAmortization(100_000, 12, 500, 6)).toEqual({ balance: 100_000, infeasible: true });
+    expect(applyAmortization(100_000, 12, 500, 3)).toEqual({ balance: 100_000, infeasible: true, shortMonths: [0, 1, 2] });
+  });
+
+  it('skips only the months whose interest the payment cannot cover', () => {
+    // Month one's interest is already charged; month two's is not, and 500 can't cover it.
+    expect(applyAmortization(100_000, 12, 500, 2, [Infinity, 0])).toEqual({ balance: 99_500, infeasible: true, shortMonths: [1] });
+  });
+
+  it("charges only the interest another payment hasn't already paid", () => {
+    expect(applyAmortization(100_000, 12, 800, 1, [500])).toEqual({ balance: 99_700, infeasible: false, shortMonths: [] });
   });
 });
 

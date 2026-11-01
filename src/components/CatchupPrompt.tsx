@@ -15,11 +15,14 @@ const CatchupPrompt: React.FC = () => {
     .replace('{months}', String(next.monthsDue))
     .replace('{name}', next.name)
     .replace('{amount}', `${next.deltaFull >= 0 ? '+' : '−'}${formatCurrency(Math.abs(next.deltaFull))}`);
+  const short = next.monthsShort > 0
+    ? ` ${t.expenseDestination.catchupShort.replace('{months}', String(next.monthsShort))}`
+    : '';
 
   return (
     <ConfirmModal
       title={t.expenseDestination.catchupTitle}
-      message={message}
+      message={message + short}
       confirmLabel={t.expenseDestination.catchupConfirm}
       cancelLabel={t.expenseDestination.catchupDecline}
       danger={false}
