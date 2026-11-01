@@ -389,18 +389,19 @@ export function budgetSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
   const months = lastNMonthKeys(monthAnchor(monthKey), 12);
   const seasonal = seasonalConfig(blob, monthKey);
   const income = Math.round(v.income);
-  // Literal cashflow, as CashflowChart: transfers netted out, budgeted bills
-  // reconciled against their imported payments, each month against its own
-  // fixed expenses plus its own savings.
-  const { fixedFor, totalFor } = perMonthFixed(blob, osloMonthKey());
+  // Cashflow, as CashflowChart: transfers netted out, budgeted bills reconciled
+  // against their imported payments, each month against its own fixed expenses.
+  // Each month's own savings are reported apart as `saved`, not as spending.
+  const { fixedFor, fixedTotalFor, savedFor } = perMonthFixed(blob, osloMonthKey());
   const rows = monthlyCashflow(
     months,
     nonTransferTransactions(blob),
     blob.monthlyIncomes ?? {},
     income,
-    totalFor,
+    fixedTotalFor,
     seasonal,
     fixedFor,
+    savedFor,
   );
   const health = savingsRateHealth(blob, monthKey, v);
   return {
@@ -423,8 +424,10 @@ export function budgetSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
 }
 
 /** Per-month fixed-expense resolvers, as CashflowChart and YearReviewPage build them:
- *  a past month's recorded list when it has one, else the live list, plus that
- *  month's own savings (resolved against the month's effective income). */
+ *  a past month's recorded list when it has one, else the live list, and that
+ *  month's own savings (resolved against the month's effective income).
+ *  `totalFor` is fixed plus savings (YearReviewPage); `fixedTotalFor` and
+ *  `savedFor` keep them apart (CashflowChart). */
 function perMonthFixed(blob: ExportPayload, nowKey: string) {
   const snapshots = blob.balanceSnapshots ?? {};
   const live = blob.fixedExpenses ?? [];
@@ -436,10 +439,11 @@ function perMonthFixed(blob: ExportPayload, nowKey: string) {
     fixedExpenses: live,
   };
   const fixedFor = (month: string) => fixedExpensesForMonth(snapshots, live, month, nowKey);
-  const totalFor = (month: string) =>
-    fixedFor(month).reduce((sum, item) => sum + item.amount, 0)
-    + savingsContributionsForMonth(savingsData, month, nowKey, effectiveIncome(blob, month));
-  return { fixedFor, totalFor };
+  const fixedTotalFor = (month: string) => fixedFor(month).reduce((sum, item) => sum + item.amount, 0);
+  const savedFor = (month: string) =>
+    savingsContributionsForMonth(savingsData, month, nowKey, effectiveIncome(blob, month));
+  const totalFor = (month: string) => fixedTotalFor(month) + savedFor(month);
+  return { fixedFor, fixedTotalFor, savedFor, totalFor };
 }
 
 /** Transactions with internal (own-account) transfers netted out, mirroring the

@@ -26,8 +26,10 @@ export interface MonthlyCashflowRow {
   saved: number;
   net: number; // income - expenses - saved: what is left after spending and saving
   /**
-   * Savings rate as a percent of income: the share not spent, so `saved` counts
-   * as retained. 0 when income ≤ 0.
+   * Savings rate as a percent of income, (income - expenses) / income. With
+   * `savingsFor`, savings sit outside `expenses` and count as retained; without
+   * it, whatever savings the caller put in `totalFixedExpenses` count as spent.
+   * 0 when income ≤ 0.
    */
   rate: number;
   /**
@@ -57,7 +59,7 @@ export function monthlyCashflow(
   fixedExpenses?: FixedExpense[] | ((month: string) => FixedExpense[]),
   // What each month moved into savings (`savingsContributionsForMonth`). Must NOT
   // also be inside `totalFixedExpenses`: it is reported as `saved`, apart from
-  // spending, so the cashflow uses the savings rate's definition of savings.
+  // spending, so the cashflow classifies savings the same way as the savings rate.
   savingsFor?: (month: string) => number,
 ): MonthlyCashflowRow[] {
   const spendByMonth = new Map<string, number>();

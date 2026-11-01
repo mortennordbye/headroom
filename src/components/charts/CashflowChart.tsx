@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
+  ComposedChart, Bar, Rectangle, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Legend,
+  type BarShapeProps,
 } from 'recharts';
 import { ResponsiveContainer } from './ResponsiveContainer';
 import { format } from 'date-fns';
@@ -19,7 +20,8 @@ import { savingsContributionsForMonth } from '../../lib/savingsRate';
  * Monthly cashflow for the last 12 months: money in (income) vs money out,
  * split into spending (fixed expenses + logged expense transactions) and what
  * was moved into savings, with a net line for what is left after both. Savings
- * are their own series, not spending, the same definition the savings rate uses.
+ * are their own series, not spending: the chart classifies savings the same way
+ * as the savings rate.
  * Income uses the manual override for a month when set, else the current
  * effective income as an estimate — reshaped by the June feriepenger spike and
  * December half-trekk for Norwegian salary. Each month's fixed expenses are its
@@ -70,9 +72,14 @@ export default function CashflowChart() {
         <Tooltip cursor={{ fill: CHART.track }} content={<ChartTooltip />} />
         <ReferenceLine y={0} stroke={CHART.rule} />
         <Bar isAnimationActive={!reduced} name={t.charts.income} dataKey="income" stackId="in" fill={CHART.forestLight} radius={[2, 2, 0, 0]} maxBarSize={18} />
-        {/* Money out as one stacked column: spending, with savings on top. */}
-        <Bar isAnimationActive={!reduced} name={t.charts.expenses} dataKey="expenses" stackId="out" fill={CHART.rust} maxBarSize={18} />
-        <Bar isAnimationActive={!reduced} name={t.charts.savings} dataKey="saved" stackId="out" fill={CHART.forest} radius={[2, 2, 0, 0]} maxBarSize={18} />
+        <Legend wrapperStyle={{ fontSize: 11 }} itemSorter={null} />
+        {/* Money out as one stacked column: spending, with savings on top. The
+            top segment gets the rounded corners, so spending rounds when nothing was saved. */}
+        <Bar
+          isAnimationActive={!reduced} name={t.charts.expenses} dataKey="expenses" stackId="out" fill={CHART.rust} maxBarSize={18}
+          shape={(props: BarShapeProps) => <Rectangle {...props} radius={props.payload?.saved > 0 ? 0 : [2, 2, 0, 0]} />}
+        />
+        <Bar isAnimationActive={!reduced} name={t.charts.savings} dataKey="saved" stackId="out" fill={CHART.teal} radius={[2, 2, 0, 0]} maxBarSize={18} />
         <Line isAnimationActive={!reduced} name={t.charts.net} dataKey="net" stroke={CHART.brass} strokeWidth={2} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>

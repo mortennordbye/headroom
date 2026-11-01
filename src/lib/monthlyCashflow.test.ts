@@ -125,7 +125,6 @@ describe('monthlyCashflow — per-month fixed expenses', () => {
     expect(rows[1].expenses).toBe(1300);
   });
 
-
   it('keeps savings out of spending when passed as savingsFor instead of in the total', () => {
     const txs = [tx({ date: '2026-06-05', amount: 1100, kind: 'expense', description: 'stroem AS' })];
     const fixedOnly = (m: string) => byMonth[m].reduce((s, e) => s + e.amount, 0);
