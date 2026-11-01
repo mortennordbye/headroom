@@ -1,6 +1,5 @@
 import type { Assets, BalanceSnapshot, CoOwner } from '../context/FinanceContext';
 import { addMonthsKey, currentMonthKey } from './date';
-import { TAX_YEAR, WEALTH_TAX_PARAMS } from './norwegianTax';
 import { coerceNumber } from './sanitizePayload';
 
 // Co-owned home. `assets.houseValue` / `houseDebt` always hold the whole property
@@ -42,45 +41,6 @@ export function myHouseValue(a: Pick<Assets, 'coOwners' | 'houseValue'>, month?:
 
 export function myHouseDebt(a: Pick<Assets, 'coOwners' | 'houseDebt'>, month?: string): number {
   return pct(a.houseDebt) * ownershipShares(a, month).debt;
-}
-
-/**
- * The market value to hand `calcWealthTax` as `primaryHomeValue` for an `own`
- * share of a primary home worth `fullValue`. The 70 % rule's threshold is tested
- * against the whole property, then the valued amount is split by share: 16 MNOK
- * at 50 % gives (10 M × 0.25 × 0.5) + (6 M × 0.7 × 0.5) = 3 350 000, not the
- * 2 000 000 that valuing an 8 M share on its own would give.
- * Source: Skatte-ABC 2025/2026, B-11-2.7.1 "Boliger med færre enn fem boenheter"
- * (skatteetaten.no/rettskilder/type/handboker/skatte-abc/gjeldende/b-11-bolig--formue/B-11.002/B-11.012/):
- * "Vurderingen av om boligen har så høy verdi at 70 %-regelen skal benyttes,
- * gjøres imidlertid med utgangspunkt i hele eiendommens omsetningsverdi."
- * calcWealthTax only takes a market value, so this returns the value v with
- * valued(v) = own × valued(fullValue).
- */
-export function primaryHomeWealthValue(fullValue: number, own: number, year: number = TAX_YEAR): number {
-  const P = WEALTH_TAX_PARAMS[year] ?? WEALTH_TAX_PARAMS[TAX_YEAR];
-  const v = Math.max(0, pct(fullValue));
-  const share = clamp01(pct(own));
-  if (share === 1) return v;
-  const low = P.primaryHomeHighThreshold * P.primaryHomeRate;
-  const valued = v <= P.primaryHomeHighThreshold
-    ? v * P.primaryHomeRate
-    : low + (v - P.primaryHomeHighThreshold) * P.primaryHomeHighRate;
-  const target = valued * share;
-  return target <= low
-    ? target / P.primaryHomeRate
-    : P.primaryHomeHighThreshold + (target - low) / P.primaryHomeHighRate;
-}
-
-/** Same, from the user's share of the market value (`own × fullValue`), for
- *  projections that only carry the scaled amount. */
-export function primaryHomeWealthValueOfShare(myValue: number, own: number, year?: number): number {
-  const share = clamp01(pct(own));
-  return share > 0 ? primaryHomeWealthValue(pct(myValue) / share, share, year) : 0;
-}
-
-export function myPrimaryHomeWealthValue(a: Pick<Assets, 'coOwners' | 'houseValue'>, month?: string): number {
-  return primaryHomeWealthValue(a.houseValue, ownershipShares(a, month).own);
 }
 
 /** The user's part of a co-owned home's sale: the proceeds before the loan are

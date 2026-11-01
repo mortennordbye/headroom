@@ -4,7 +4,6 @@
 // savings contribution) and mortgage paydown one year at a time.
 import type { Debt } from '../context/FinanceContext';
 import { calcTaxByRegion, calcWealthTax, type Region } from './norwegianTax';
-import { primaryHomeWealthValueOfShare } from './ownership';
 import { calcAmortizationSchedule, calcMortgageBalanceByYear } from './calculations';
 import { calcDebtBalanceByYear } from './debt';
 import type { CurrentMortgage } from './existingMortgage';
@@ -201,7 +200,8 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
     // share discount applies.
     if (region === 'no') {
       wealthTaxDue = calcWealthTax({
-        primaryHomeValue: primaryHomeWealthValueOfShare(homeValue, homeOwnShare),
+        primaryHomeValue: homeValue,
+        primaryHomeShare: homeOwnShare,
         shares: financial * sharesRatio,
         otherAssets: financial * (1 - sharesRatio),
         debt: homeDebt + otherDebt,

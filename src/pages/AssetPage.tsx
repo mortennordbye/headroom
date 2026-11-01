@@ -39,7 +39,7 @@ import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { snapshotHasAssumptions } from '../lib/snapshots';
 import { SavingsAllocationPanel } from '../components/SavingsAllocationPanel';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
-import { activeCoOwners, myHouseDebt, myHouseValue, myPrimaryHomeWealthValue, ownershipShares } from '../lib/ownership';
+import { activeCoOwners, myHouseDebt, myHouseValue, ownershipShares } from '../lib/ownership';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
 import { calcWealthTax, TAX_YEAR, WEALTH_PARAMS } from '../lib/norwegianTax';
@@ -144,12 +144,13 @@ const AssetPage: React.FC = () => {
   // deposits/crypto/BSU/buffer at full value, minus debt after gjeldsreduksjon. Norway region only.
   const wealthTax = useMemo(
     () => calcWealthTax({
-      primaryHomeValue: myPrimaryHomeWealthValue(assets),
+      primaryHomeValue: myValue,
+      primaryHomeShare: ownershipShares(assets).own,
       shares: assets.portfolio,
       otherAssets: assets.crypto + assets.bsu + sumSavings(assets) + assets.bufferAccount,
       debt: myDebt + totalDebt,
     }),
-    [assets, myDebt, totalDebt],
+    [assets, myValue, myDebt, totalDebt],
   );
   // Summary "liabilities" figure: mortgage + other debt + net latent tax. Latent
   // tax can be negative (an unrealized-loss tax shield), so this can flip sign.

@@ -266,6 +266,22 @@ describe('calcWealthTax (formuesskatt)', () => {
     expect(r.tax).toBeCloseTo((5_300_000 - 1_760_000) * 0.010, 2);
   });
 
+  it('co-owned home: 70 % threshold on the whole home, gjeldsreduksjon on the owner\'s market share', () => {
+    // 2025 threshold 10M. Whole home 16M, owner holds 50 % → market share 8M (below the
+    // threshold), but the 70 % rule is tested on the whole home (Skatte-ABC B-11-2.7.1):
+    // home 0.5 × (10M ×0.25 + 6M ×0.70) = 3.35M; shares 2M ×0.80 = 1.6M → valued 4.95M.
+    // Gjeldsreduksjon uses market values (home at its full 8M share): shares 2M of 10M gross,
+    // 4M debt × (1 − 0.20 × 2/10) = 3.84M deductible → net 1.11M.
+    const r = calcWealthTax({ primaryHomeValue: 8_000_000, primaryHomeShare: 0.5, shares: 2_000_000, otherAssets: 0, debt: 4_000_000 }, 2025);
+    expect(r.valuedAssets).toBeCloseTo(4_950_000, 2);
+    expect(r.netWealth).toBeCloseTo(1_110_000, 2);
+  });
+
+  it('a 0 % home share contributes nothing', () => {
+    const r = calcWealthTax({ primaryHomeValue: 0, primaryHomeShare: 0, shares: 0, otherAssets: 1_000_000, debt: 0 }, 2025);
+    expect(r.valuedAssets).toBe(1_000_000);
+  });
+
   it('never goes negative and rises monotonically with wealth', () => {
     const broke = calcWealthTax({ primaryHomeValue: 3_000_000, shares: 0, otherAssets: 0, debt: 9_000_000 });
     expect(broke.netWealth).toBe(0);

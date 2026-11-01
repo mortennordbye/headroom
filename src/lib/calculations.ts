@@ -1,6 +1,6 @@
 import { calcWealthTax, type Region } from './norwegianTax';
 import type { LoanData, TransitionData } from '../context/FinanceContext';
-import { mySaleProceeds, primaryHomeWealthValueOfShare } from './ownership';
+import { mySaleProceeds } from './ownership';
 
 export function calcMonthlyPayment(principal: number, annualRate: number, years: number): number {
   const monthlyRate = annualRate / 100 / 12;
@@ -550,7 +550,8 @@ export function calcNetWorthProjectionByBucket(
     if (wtOn) {
       const mortgage = Math.max(0, wealthTax.mortgageByYear[y] ?? 0);
       wt = calcWealthTax({
-        primaryHomeValue: primaryHomeWealthValueOfShare(Math.max(0, houseVal + mortgage), wealthTax.ownShare ?? 1, wealthTax.year),
+        primaryHomeValue: Math.max(0, houseVal + mortgage),
+        primaryHomeShare: wealthTax.ownShare ?? 1,
         shares: Math.max(0, stocks),
         otherAssets: Math.max(0, cash + crypto),
         debt: Math.max(0, mortgage + debtVal),
