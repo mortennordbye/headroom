@@ -46,8 +46,10 @@ export function calcBsuTaxCredit(
 
 /**
  * The tracked deposit total after an automated posting moves the BSU balance
- * from `prevBalance` to `newBalance`. A rise is a deposit and is added; a fall
- * or no change leaves it. An untracked (absent) total stays absent.
+ * from `prevBalance` to `newBalance`. The delta moves the total either way: an
+ * automated drop is always the reversal of an automated deposit (a month
+ * override correcting a posted amount), never interest or a withdrawal, so it
+ * comes off the total, floored at 0. An untracked (absent) total stays absent.
  */
 export function bsuDepositedAfterPosting(
   totalDeposited: number | undefined,
@@ -55,7 +57,7 @@ export function bsuDepositedAfterPosting(
   newBalance: number,
 ): number | undefined {
   if (totalDeposited === undefined) return undefined;
-  return totalDeposited + Math.max(0, finite(newBalance) - finite(prevBalance));
+  return Math.max(0, totalDeposited + finite(newBalance) - finite(prevBalance));
 }
 
 export interface BsuStatus {

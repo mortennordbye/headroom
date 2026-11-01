@@ -103,9 +103,17 @@ describe('bsuDepositedAfterPosting', () => {
   it('leaves an untracked total untracked', () => {
     expect(bsuDepositedAfterPosting(undefined, 110000, 112500)).toBeUndefined();
   });
-  it('never lowers the total on a withdrawal or no-op', () => {
-    expect(bsuDepositedAfterPosting(100000, 110000, 105000)).toBe(100000);
+  it('lowers the total on a negative correction (reversal of an automated deposit), floored at 0', () => {
+    expect(bsuDepositedAfterPosting(100000, 110000, 105000)).toBe(95000);
     expect(bsuDepositedAfterPosting(100000, 110000, 110000)).toBe(100000);
+    expect(bsuDepositedAfterPosting(2000, 110000, 105000)).toBe(0);
+  });
+  it('does not double-count a deposit that is reversed and posted again', () => {
+    // Post 2 500, override the month to 0, then reset the override.
+    const afterPost = bsuDepositedAfterPosting(50000, 100000, 102500)!;
+    const afterOverride = bsuDepositedAfterPosting(afterPost, 102500, 100000)!;
+    const afterReset = bsuDepositedAfterPosting(afterOverride, 100000, 102500);
+    expect(afterReset).toBe(52500);
   });
   it('treats a non-finite balance as 0', () => {
     expect(bsuDepositedAfterPosting(100000, NaN, 2500)).toBe(102500);

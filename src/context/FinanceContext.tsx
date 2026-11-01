@@ -2746,7 +2746,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           ...markGainReview(prev, currentMonthKey(), p.newBalance - prev.portfolio),
         }));
       } else if (p.targetKind === 'bsu') {
-        // A tracked deposit total grows with the deposit, so the lifetime room stays right.
+        // A tracked deposit total follows the posting (and its corrections), so the lifetime room stays right.
         setAssets(prev => {
           const deposited = bsuDepositedAfterPosting(prev.bsuTotalDeposited, prev.bsu, p.newBalance);
           return { ...prev, bsu: p.newBalance, ...(deposited !== undefined ? { bsuTotalDeposited: deposited } : {}) };
