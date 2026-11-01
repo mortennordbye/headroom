@@ -34,6 +34,18 @@ describe('migrateHistory', () => {
     expect(stmts.list.all().map((r) => r.rev)).toEqual([2]);
   });
 
+  it('backfills rows left without bytes when the column already exists', () => {
+    migrateHistory(db);
+    const stmts = historyStatements(db);
+    insert(stmts, 1, 'x'.repeat(10));
+    // What an older image, rolled back to, inserts: no bytes.
+    db.prepare('INSERT INTO finance_history (rev, ts, content) VALUES (?, ?, ?)').run(2, 't2', 'x'.repeat(7));
+
+    migrateHistory(db);
+
+    expect(stmts.list.all().map((r) => [r.rev, r.bytes])).toEqual([[2, 7], [1, 10]]);
+  });
+
   it('is idempotent and creates the table on a fresh DB', () => {
     migrateHistory(db);
     migrateHistory(db);

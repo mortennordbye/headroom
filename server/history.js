@@ -22,13 +22,11 @@ function migrateHistory(db) {
   if (!cols.includes('label')) db.exec('ALTER TABLE finance_history ADD COLUMN label TEXT');
   if (!cols.includes('change')) db.exec('ALTER TABLE finance_history ADD COLUMN change TEXT');
   // Each snapshot's size, stored at insert so the size prune doesn't read every
-  // snapshot on each save. Existing rows are backfilled once, with the column.
-  if (!cols.includes('bytes')) {
-    db.transaction(() => {
-      db.exec('ALTER TABLE finance_history ADD COLUMN bytes INTEGER');
-      db.exec('UPDATE finance_history SET bytes = LENGTH(content) WHERE bytes IS NULL');
-    })();
-  }
+  // snapshot on each save. The backfill runs on every startup, not just when the
+  // column is added: an older image rolled back to inserts rows without bytes,
+  // which would otherwise count as 0 toward the cap. A no-op once filled.
+  if (!cols.includes('bytes')) db.exec('ALTER TABLE finance_history ADD COLUMN bytes INTEGER');
+  db.exec('UPDATE finance_history SET bytes = LENGTH(content) WHERE bytes IS NULL');
   // bytes sits after content in the row, so reading it from the table still
   // walks each snapshot's overflow pages. The covering index lets the prune's
   // running total skip the table entirely.
