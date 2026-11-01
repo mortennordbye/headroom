@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { nearestSnapshot, historyRows, buildManualSnapshot, resolveMonthView, type SnapshotBalances } from './snapshots';
+import { nearestSnapshot, historyRows, buildManualSnapshot, resolveMonthView, fixedExpensesForMonth, type SnapshotBalances } from './snapshots';
 import { netWorthFromSnapshot } from './netWorth';
-import type { BalanceSnapshot } from '../context/FinanceContext';
+import type { BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
 
 const mk = (source: 'auto' | 'manual' = 'auto'): BalanceSnapshot =>
   ({ source, assets: {} } as unknown as BalanceSnapshot);
@@ -151,5 +151,28 @@ describe('buildManualSnapshot', () => {
     // equity: portfolio 300000 + crypto 40000 + bsu 1000 + savings 5000 + buffer 2000
     //         + (house 4000000 − debt 2800000) = 1548000; minus debt 12000
     expect(netWorthFromSnapshot(s)).toBe(1548000 - 12000);
+  });
+});
+
+describe('fixedExpensesForMonth', () => {
+  const live = [{ id: 'rent', amount: 12000 }] as unknown as FixedExpense[];
+  const recorded = [{ id: 'rent', amount: 10000 }] as unknown as FixedExpense[];
+  const snapshots = {
+    '2026-05': { ...mk(), fixedExpenses: recorded },
+    '2026-06': mk(),
+  } as unknown as Record<string, BalanceSnapshot>;
+
+  it("reads a past month's captured expenses", () => {
+    expect(fixedExpensesForMonth(snapshots, live, '2026-05', '2026-07')).toBe(recorded);
+  });
+
+  it('falls back to live for a past month with no captured expenses', () => {
+    expect(fixedExpensesForMonth(snapshots, live, '2026-06', '2026-07')).toBe(live);
+    expect(fixedExpensesForMonth(snapshots, live, '2026-01', '2026-07')).toBe(live);
+  });
+
+  it('reads live for the current and future months even if a snapshot exists', () => {
+    expect(fixedExpensesForMonth(snapshots, live, '2026-05', '2026-05')).toBe(live);
+    expect(fixedExpensesForMonth(snapshots, live, '2026-05', '2026-04')).toBe(live);
   });
 });

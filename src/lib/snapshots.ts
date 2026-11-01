@@ -1,4 +1,4 @@
-import type { BalanceSnapshot, CoOwner, Debt, SavingsAccount } from '../context/FinanceContext';
+import type { BalanceSnapshot, CoOwner, Debt, FixedExpense, SavingsAccount } from '../context/FinanceContext';
 
 /**
  * The snapshot to default a backfilled month from: the nearest *older* recorded
@@ -18,6 +18,21 @@ export function nearestSnapshot(
   if (older) return snapshots[older];
   const newer = others.find(k => k > monthKey);
   return newer ? snapshots[newer] : null;
+}
+
+/**
+ * The fixed expenses that applied in `monthKey`: that month's captured copy for a
+ * past month that recorded one, otherwise the live list. Current and future
+ * months always read live config.
+ */
+export function fixedExpensesForMonth(
+  snapshots: Record<string, BalanceSnapshot>,
+  live: FixedExpense[],
+  monthKey: string,
+  nowKey: string,
+): FixedExpense[] {
+  const recorded = monthKey < nowKey ? snapshots[monthKey]?.fixedExpenses : undefined;
+  return recorded ?? live;
 }
 
 /**
