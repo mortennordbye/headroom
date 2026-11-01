@@ -2,16 +2,16 @@ import type { CoOwner } from '../context/FinanceContext';
 import { calcAmortizationSchedule } from './calculations';
 import { effectiveRemainingMonths, paymentTermMonths, type TermFields } from './loanTerm';
 import { migrateMortgageBalance, validHousingMode, type MortgageSliceFields } from './mortgageSlices';
+import { withNotifiedRate, type NotifiedRateFields } from './notifiedRate';
 import { ownershipShares } from './ownership';
 
 export type MortgageHousingMode = 'first_buyer' | 'homeowner' | 'transitioning';
 
 /** The homeowner fields read here. Loose: imported blobs may lack any of them.
  *  `currentMortgageBalance` exists only on legacy data and stored snapshots. */
-export interface HomeownerLoanFields extends TermFields {
+export interface HomeownerLoanFields extends TermFields, NotifiedRateFields {
   currentMortgageBalance?: number;
   currentMortgageBalanceAsOf?: string;
-  rente?: number;
 }
 
 /** The assets fields read here. */
@@ -54,6 +54,9 @@ const finiteOr0 = (v: unknown): number => (typeof v === 'number' && Number.isFin
  *    and only drives the purchase maths, so it is never read here.
  *  • first_buyer: whatever debt the Assets page holds, flat (no rate, no term).
  *    The Loan page's loan is a plan, not a debt.
+ * The rate is the one in force at `monthKey`: a notified rate whose month has
+ * come is the rate (notifiedRate.ts), so a stored snapshot, which keeps the
+ * slice as entered, reads the rate of its own month.
  * The balance is `assets.houseDebt`. Legacy data (an old blob or a stored
  * snapshot, which may still carry the homeowner and transition copies) is
  * migrated first (mortgageSlices.ts), so it gives the balance the app would
@@ -73,7 +76,7 @@ export function currentMortgage(
     homeowner: homeowner ?? undefined,
     transition: transition ?? undefined,
   }, monthKey);
-  const h = r.homeowner;
+  const h = withNotifiedRate(r.homeowner, monthKey);
   const fullBalance = Math.max(0, finiteOr0(r.assets?.houseDebt));
   const balance = fullBalance * ownershipShares(assets, monthKey).debt;
   if (housingMode === 'first_buyer') {

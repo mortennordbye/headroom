@@ -1955,16 +1955,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
 
   // The homeowner slice as of today: a notified rate whose month has come is the
-  // current rate (notifiedRate.ts). Pages, projections and this month's snapshot
-  // read this; the stored slice is left as entered.
+  // current rate (notifiedRate.ts). The pages read this; the stored slice and
+  // this month's snapshot keep it as entered (currentMortgage applies the notice
+  // at the month it is read for), so a month backfilled from them before the
+  // notice keeps the old rate. Recomputed when the slice changes, like
+  // currentMortgageNow: a tab open across the switch month updates on reload.
   const homeownerNow = useMemo(() => withNotifiedRate(homeowner, currentMonthKey()), [homeowner]);
 
   // The current home's mortgage today: the current loan in the owner modes
   // (homeowner rate and term, also while transitioning), a first buyer's Assets
   // debt held flat. Every projection and the rentefradrag read it.
   const currentMortgageNow = useMemo(
-    () => currentMortgage(housingMode, assets, homeownerNow, transition, currentMonthKey()),
-    [housingMode, assets, homeownerNow, transition],
+    () => currentMortgage(housingMode, assets, homeowner, transition, currentMonthKey()),
+    [housingMode, assets, homeowner, transition],
   );
 
   // Year-one mortgage interest (rentefradrag): reduces alminnelig inntekt at 22%,
@@ -2385,14 +2388,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     assets: assets.coOwners === undefined
       ? assets
       : { ...assets, coOwners: snapshotCoOwners(assets.coOwners, currentMonthKey()) },
-    loan, pension, homeowner: homeownerNow, transition, housingMode, debts,
+    loan, pension, homeowner, transition, housingMode, debts,
     v: 3,
     fixedExpenses,
     savings,
     assumptions: { savingsTargetPercent, growthReturnRate, houseGrowthRate },
     categoryBudgets,
     source: 'auto',
-  }), [assets, loan, pension, homeownerNow, transition, housingMode, debts,
+  }), [assets, loan, pension, homeowner, transition, housingMode, debts,
        fixedExpenses, savings, savingsTargetPercent, growthReturnRate, houseGrowthRate, categoryBudgets]);
 
   // Capture the full balance state for the current calendar month whenever it

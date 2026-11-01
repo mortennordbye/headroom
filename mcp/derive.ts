@@ -132,7 +132,7 @@ export function grossAnnualIncome(blob: ExportPayload, monthKey: string): number
  * term an old blob lacks, as the app's load merges them in.
  */
 function mortgageOwed(blob: ExportPayload, monthKey = currentMonthKey()) {
-  const h = withNotifiedRate(blob.homeowner, monthKey);
+  const h = blob.homeowner;
   const homeowner = { ...h, rente: h?.rente ?? 5.5, nedbetalingstid: h?.nedbetalingstid ?? 25 };
   return currentMortgage(blob.housingMode, blob.assets, homeowner, blob.transition, monthKey);
 }

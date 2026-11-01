@@ -62,6 +62,7 @@ import { activeCoOwners, ownershipShares, myHouseValue, myHouseDebt, validateCoO
 import { makeId } from '../lib/savingsMigration';
 import { currentMonthKey } from '../lib/date';
 import { currentMortgage } from '../lib/existingMortgage';
+import { withNotifiedRate } from '../lib/notifiedRate';
 import {
   effectiveRemainingMonths, paymentTermMonths, splitTermMonths, yearsFromParts, formatTerm, isValidTermParts,
 } from '../lib/loanTerm';
@@ -114,7 +115,8 @@ const BoligPage: React.FC = () => {
   const hist = useBalanceHistory();
   const snap = hist.snapshot;
   const loan = snap?.loan ?? liveLoan;
-  const homeowner = snap?.homeowner ?? liveHomeowner;
+  // A snapshot keeps the slice as entered: read its rate as of that month.
+  const homeowner = snap?.homeowner ? withNotifiedRate(snap.homeowner, hist.activeKey) : liveHomeowner;
   const transition = snap?.transition ?? liveTransition;
   const assets = snap?.assets ?? liveAssets;
   const housingMode = snap?.housingMode ?? liveHousingMode;

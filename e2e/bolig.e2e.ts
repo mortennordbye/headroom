@@ -71,4 +71,14 @@ test('a notified rate shows as upcoming until its month, then is the rate', asyn
   await expect(card).toContainText('6.37%');
   await expect(card).not.toContainText('4.11%');
   await expect(card).not.toContainText('Varslet nominell rente');
+
+  // This month's record keeps the slice as entered, so a month backfilled from
+  // it before the notice keeps the old rate.
+  const d = new Date();
+  const nowKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  await expect.poll(async () => {
+    const snaps = (await getBlob(request)).blob.balanceSnapshots as Record<string, { homeowner?: Record<string, unknown> }> | undefined;
+    const h = snaps?.[nowKey]?.homeowner;
+    return h && { rente: h.rente, notifiedRate: h.notifiedRate };
+  }).toEqual({ rente: 4.11, notifiedRate: 6.37 });
 });
