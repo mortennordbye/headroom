@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.10.4](https://github.com/mortennordbye/headroom/compare/v3.10.3...v3.10.4) (2026-11-01)
+
+
+### Bug Fixes
+
+* show the loading skeleton on the first tap to a page that isn't loaded ([#295](https://github.com/mortennordbye/headroom/issues/295)) ([8ee616e](https://github.com/mortennordbye/headroom/commit/8ee616e2eb4b31480bb24e06308a668601165fdd))
+
 ## [3.10.3](https://github.com/mortennordbye/headroom/compare/v3.10.2...v3.10.3) (2026-10-31)
 
 
