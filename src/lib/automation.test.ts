@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, unpaidStampMonths, type AutomationRule, type AutomationState } from './automation';
+import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, unpaidStampMonths, paydownStampOnSave, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, mergePaydownStamps, type AutomationRule, type AutomationState } from './automation';
 import { currentMortgage } from './existingMortgage';
 import type { CoOwner, FixedExpense } from '../context/FinanceContext';
 
@@ -293,15 +293,16 @@ describe('computeAutomationPostings — two payments to one loan', () => {
     }
   });
 
-  it('keeps charging interest once per month across a catch-up', () => {
+  it('keeps charging interest once per month across a catch-up, month by month', () => {
     const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' });
     const extra = loanRule({ id: 'extra', amount: 2000, lastPostedMonth: '2026-04' });
     const postings = computeAutomationPostings([main, extra], state(), '2026-07');
-    // 'main' pays June and July with interest (its stamp says May was paid);
-    // 'extra' then catches up May to July as principal only.
-    const m1 = 1_000_000 + 1_000_000 * 0.05 / 12 - 10_000;
-    const m2 = m1 + m1 * 0.05 / 12 - 10_000;
-    expect(postings.at(-1)!.newBalance).toBe(Math.round(m2) - 6000);
+    // May: 'main' already paid it, so its interest is charged and 'extra' pays
+    // principal. June and July: the month's interest once, then both payments.
+    const may = 1_000_000 - 2000;
+    const jun = may + may * 0.05 / 12 - 12_000;
+    const jul = jun + jun * 0.05 / 12 - 12_000;
+    expect(postings.at(-1)!.newBalance).toBe(Math.round(jul));
   });
 
   it("counts a month another rule's stamp covers as interest-charged", () => {
@@ -316,11 +317,13 @@ describe('computeAutomationPostings — two payments to one loan', () => {
 
   it("treats a month another rule already posted to the loan as interest-charged", () => {
     // 'main' already posted through July, so confirming the extra payment's
-    // two-month catch-up afterwards pays principal only.
+    // two-month catch-up afterwards pays principal only. July's interest was
+    // charged on a balance without the extra June payment, so the interest on
+    // that payment comes back.
     const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-07' });
     const extra = loanRule({ id: 'extra', amount: 2000, lastPostedMonth: '2026-05' });
     const [p] = computeAutomationPostings([extra], state(), '2026-07', undefined, [main, extra]);
-    expect(p.newBalance).toBe(1_000_000 - 4000);
+    expect(p.newBalance).toBe(Math.round(1_000_000 - 2000 - 2000 * 0.05 / 12 - 2000));
   });
 
   it("charges the interest of months another rule's declined catch-up skipped", () => {
@@ -330,7 +333,8 @@ describe('computeAutomationPostings — two payments to one loan', () => {
     const extra = loanRule({ id: 'extra', amount: 5000, lastPostedMonth: '2026-05' });
     const [p] = computeAutomationPostings([extra], state(), '2026-07', undefined, [main, extra]);
     const june = 1_000_000 + 1_000_000 * 0.05 / 12 - 5000;
-    expect(p.newBalance).toBe(Math.round(june - 5000));
+    // July's interest, charged by 'main' before June's net payment, comes back on that payment.
+    expect(p.newBalance).toBe(Math.round(june - (1_000_000 - june) * 0.05 / 12 - 5000));
   });
 
   it("charges only the part of a month's interest another payment has not already paid", () => {
@@ -468,7 +472,9 @@ describe('computeAutomationPostings — co-owner share changes with a second pay
     bal = bal + bal * r - 10_000; // Feb: interest charged here, payment grossed up by the half share
     //                               Mar: skipped, the co-owner paid it; no interest, no payment
     bal = bal + bal * r - 5000;   // Apr: interest charged here
-    bal = bal - 5000;             // May: `extra` already charged it, so all principal
+    // May: `extra` already charged it, on a balance without Feb-Apr's net
+    // payments; the interest on those comes back, then all principal.
+    bal = bal - (1_000_000 - bal) * r - 5000;
     expect(p.newBalance).toBe(Math.round(bal));
     expect(p.noChange).toBeUndefined();
     expect(p.uncoveredMonths).toBeUndefined();
@@ -509,12 +515,12 @@ describe('computeAutomationPostings — co-owner share changes with a second pay
       const aThenB = inTurn(A, B).p2.newBalance;
       const both = computeAutomationPostings([A, B], s, NOW);
       expect(both[both.length - 1].newBalance).toBe(aThenB);
-      // A charges Oct-Nov interest (Aug-Sep was the co-owners'); B's four
-      // payments are all principal.
-      let ab = 1_000_000;
-      ab = ab + ab * r - 9000;
-      ab = ab + ab * r - 9000;
-      expect(aThenB).toBe(Math.round(ab - 4 * 1000));
+      // Aug-Sep were the co-owners': B's payments are principal. Oct-Nov: the
+      // month's interest once, then both payments.
+      let ab = 1_000_000 - 2000;
+      ab = ab + ab * r - 10_000;
+      ab = ab + ab * r - 10_000;
+      expect(aThenB).toBe(Math.round(ab));
 
       // B first: Aug-Sep are principal (not charged interest, which was the
       // 2 000 kr order gap), and its 1 000 goes toward Oct-Nov interest, which
@@ -522,14 +528,7 @@ describe('computeAutomationPostings — co-owner share changes with a second pay
       const bThenA = inTurn(B, A);
       expect(bThenA.p1.newBalance).toBe(1_000_000 - 2000);
       expect(bThenA.p1.uncoveredMonths).toEqual({ '2026-10': 1000, '2026-11': 1000 });
-      let ba = 1_000_000 - 2000;
-      ba = ba + (ba * r - 1000) - 9000;
-      ba = ba + (ba * r - 1000) - 9000;
-      expect(bThenA.p2.newBalance).toBe(Math.round(ba));
-      // What is left between the orders is the runner amortizing one rule at a
-      // time (B's Aug-Sep principal lands before or after A's interest), which
-      // two plain rules on a loan with no co-owners show too.
-      expect(Math.abs(bThenA.p2.newBalance - aThenB)).toBeLessThan(50);
+      expect(bThenA.p2.newBalance).toBe(aThenB);
     });
 
     it('a declined catch-up never records 0 % months as uncovered', () => {
@@ -541,7 +540,9 @@ describe('computeAutomationPostings — co-owner share changes with a second pay
       bal = bal + bal * r - 9000; // A: November only
       // B: Aug, Sep and Nov are principal. October's interest is still due and
       // B's 1 000 can't cover it, so October moves nothing and is B's short month.
-      expect(p2.newBalance).toBe(Math.round(bal - 3 * 1000));
+      // A charged November before B's Aug-Sep payments, so their interest comes back.
+      expect(p2.newBalance).toBe(Math.round(p1.newBalance - 2000 - 2000 * r - 1000));
+      expect(p1.newBalance).toBe(Math.round(bal));
       expect(p2.monthsShort).toBe(1);
     });
   });
@@ -551,13 +552,12 @@ describe('computeAutomationPostings — co-owner share changes with a second pay
       [mine({ amount: 5000 }), extra({ amount: 6000, lastPostedMonth: '2026-01' })], state({ coOwners }), '2026-04');
     const last = both[both.length - 1];
     let bal = 1_000_000;
-    // `extra` (largest payment) goes first and charges each month's interest, but March's is the co-owner's.
-    bal = bal + bal * r - 6000;
-    bal = bal - 6000;
-    bal = bal + bal * r - 6000;
-    // Then `mine`, all principal: 10 000 in Feb, nothing in Mar, 5 000 in Apr.
-    bal = bal - 10_000 - 5000;
+    // Each month's interest once, then both payments; March's interest is the co-owner's.
+    bal = bal + bal * r - 6000 - 10_000; // Feb: `mine` grossed up by the half share
+    bal = bal - 6000;                    // Mar: `mine` pays nothing
+    bal = bal + bal * r - 6000 - 5000;   // Apr
     expect(last.newBalance).toBe(Math.round(bal));
+    expect(both.map(p => p.newBalance)).toEqual([last.newBalance, last.newBalance]);
   });
 });
 
@@ -714,5 +714,254 @@ describe('unpaidStampMonths — a stamp that pays nothing', () => {
     const upToDate = { ...main, lastPostedMonth: '2026-07' };
     expect(unpaidStampMonths(undefined, expense(), '2026-07', [upToDate, paused, onDebt])).toBeUndefined();
     expect(unpaidStampMonths(undefined, expense({ destinationKind: undefined }), '2026-07', [main])).toBeUndefined();
+  });
+});
+
+describe('computeAutomationPostings — catch-up order never moves the loan', () => {
+  // 1 000 000 at 5 %, catching up to August.
+  const NOW = '2026-08';
+  const loanRule = (over: Partial<AutomationRule>) =>
+    rule({ targetKind: 'mortgage', savingsAccountId: undefined, ...over });
+  // Answer each rule's "catch up all" prompt in `order`, writing its stamp as FinanceContext does.
+  const answer = (rules: AutomationRule[], order: string[], s: AutomationState) => {
+    for (const id of order) {
+      const [p] = computeAutomationPostings([rules.find(r => r.id === id)!], s, NOW, undefined, rules);
+      s = { ...s, mortgage: p.newBalance };
+      rules = rules.map(r => (r.id === id ? { ...r, lastPostedMonth: NOW, uncoveredMonths: p.uncoveredMonths } : r));
+    }
+    return s.mortgage;
+  };
+  const batch = (rules: AutomationRule[], s: AutomationState) => computeAutomationPostings(rules, s, NOW).at(-1)!.newBalance;
+  // Each prompt rounds the balance it writes, so orders may differ by a krone of rounding.
+  const expectSame = (values: number[]) => {
+    for (const v of values) expect(Math.abs(v - values[0])).toBeLessThanOrEqual(1);
+  };
+
+  const rules = [
+    loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' }),
+    loanRule({ id: 'extra', amount: 3000, lastPostedMonth: '2026-02' }),
+    loanRule({ id: 'top', amount: 7000, lastPostedMonth: '2026-06' }),
+  ];
+
+  it('two rules: the same balance whichever prompt is answered first, and as one batch', () => {
+    const two = rules.slice(0, 2);
+    const ab = answer(two, ['main', 'extra'], state());
+    expect(answer(two, ['extra', 'main'], state())).toBe(ab);
+    expect(batch(two, state())).toBe(ab);
+    // March-May: 'main' paid them earlier and their interest is charged, on a
+    // balance without 'extra' in it, so 'extra' pays principal and gets the
+    // interest on what it moved before back. June-August: interest once, then both.
+    let bal = 1_000_000;
+    for (let i = 0; i < 3; i++) bal = bal - (1_000_000 - bal) * 0.05 / 12 - 3000;
+    for (let i = 0; i < 3; i++) bal = bal + bal * 0.05 / 12 - 13_000;
+    expect(ab).toBe(Math.round(bal));
+  });
+
+  it('three rules with different stamps: every order, and one batch, agree', () => {
+    const orders = [['main', 'extra', 'top'], ['top', 'extra', 'main'], ['extra', 'main', 'top'], ['top', 'main', 'extra']];
+    expectSame([batch(rules, state()), ...orders.map(o => answer(rules, o, state()))]);
+  });
+
+  it('with co-owners whose share changes during the catch-up', () => {
+    // Half the loan through April, none in May, all of it from June.
+    const s = state({ coOwners: [co(50, { id: 'a', since: '2025-01', until: '2026-04' }), co(100, { id: 'b', since: '2026-05', until: '2026-05' })] });
+    const withShare = rules.map(r => (r.id === 'main' ? { ...r, mortgagePaymentScope: 'myShare' as const } : r));
+    const orders = [['main', 'extra', 'top'], ['top', 'extra', 'main'], ['extra', 'main', 'top']];
+    expectSame([batch(withShare, s), ...orders.map(o => answer(withShare, o, s))]);
+  });
+
+  it('on a debt', () => {
+    const s = state({ debts: { 'debt-1': { balance: 200_000, rate: 12 } } });
+    const onDebt = rules.slice(0, 2).map(r => ({ ...r, targetKind: 'debt' as const, debtId: 'debt-1' }));
+    const answerDebt = (order: string[]) => {
+      let st = s;
+      let rs = onDebt;
+      for (const id of order) {
+        const [p] = computeAutomationPostings([rs.find(r => r.id === id)!], st, NOW, undefined, rs);
+        st = { ...st, debts: { 'debt-1': { ...st.debts['debt-1'], balance: p.newBalance } } };
+        rs = rs.map(r => (r.id === id ? { ...r, lastPostedMonth: NOW } : r));
+      }
+      return st.debts['debt-1'].balance;
+    };
+    expectSame([answerDebt(['main', 'extra']), answerDebt(['extra', 'main']), computeAutomationPostings(onDebt, s, NOW).at(-1)!.newBalance]);
+  });
+
+  it('every posting on a loan carries the same final balance', () => {
+    const postings = computeAutomationPostings(rules, state(), NOW);
+    expect(new Set(postings.map(p => p.newBalance)).size).toBe(1);
+  });
+});
+
+describe('a paydown expense that stops paying a loan keeps the months it paid', () => {
+  // 1 000 000 at 5 %. 'main' last paid May and has a catch-up pending in July;
+  // 'P' paid June, so June's interest was charged.
+  const r = 0.05 / 12;
+  const expense = (over: Partial<FixedExpense>): FixedExpense => ({
+    id: 'P', name: 'P', amount: 5000, type: 'fixed', destinationKind: 'mortgage', lastPostedMonth: '2026-06', ...over,
+  });
+  const main = expense({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' });
+  const P = expense({});
+  const asRule = (e: FixedExpense): AutomationRule => ({
+    id: e.id, name: e.name, amount: e.amount, targetKind: e.destinationKind!, debtId: e.debtId,
+    startMonth: '2026-08', lastPostedMonth: e.lastPostedMonth, uncoveredMonths: e.uncoveredMonths,
+    ...(e.automationPaused ? { paused: true } : {}),
+  });
+  const mainCatchUp = (others: AutomationRule[]) =>
+    computeAutomationPostings([asRule(main)], state(), '2026-07', undefined, [asRule(main), ...others])[0].newBalance;
+  // June: already charged, so all principal. July: charged here.
+  const june = 1_000_000 - 10_000;
+  const once = Math.round(june + june * r - 10_000);
+  // What the catch-up comes to when June's interest is charged a second time.
+  const twice = Math.round((1_000_000 * (1 + r) - 10_000) * (1 + r) - 10_000);
+  const leave = (next: FixedExpense[]) => departedPaydownRules(recordDepartedPaydowns(undefined, [main, P], next));
+
+  it('charges June once while P is still paying', () => {
+    expect(mainCatchUp([asRule(P)])).toBe(once);
+    expect(mainCatchUp([])).toBe(twice);
+  });
+
+  it('paused: its stamp still counts, and it never posts', () => {
+    const paused = asRule({ ...P, automationPaused: true });
+    expect(mainCatchUp([paused])).toBe(once);
+    expect(computeAutomationPostings([paused], state(), '2026-07')).toEqual([]);
+  });
+
+  it('moved to another loan', () => {
+    expect(mainCatchUp(leave([main, { ...P, destinationKind: 'debt', debtId: 'debt-1', lastPostedMonth: '2026-07' }]))).toBe(once);
+  });
+
+  it('destination cleared', () => {
+    expect(mainCatchUp(leave([main, { ...P, destinationKind: undefined, lastPostedMonth: undefined }]))).toBe(once);
+  });
+
+  it('deleted', () => {
+    expect(mainCatchUp(leave([main]))).toBe(once);
+  });
+
+  it('keeps the months the departed expense did not cover', () => {
+    // P declined a catch-up over May-June: it paid June only, so May is still main's to charge.
+    const declined = expense({ uncoveredMonths: { '2026-05': 0 } });
+    const mainApril = expense({ id: 'main', amount: 10_000, lastPostedMonth: '2026-04' });
+    const record = recordDepartedPaydowns(undefined, [mainApril, declined], [mainApril]);
+    expect(record).toEqual({ mortgage: { lastPostedMonth: '2026-06', uncoveredMonths: { '2026-05': 0 } } });
+    const [p] = computeAutomationPostings([asRule(mainApril)], state(), '2026-07', undefined, departedPaydownRules(record));
+    let bal = 1_000_000;
+    bal = bal + bal * r - 10_000;               // May: charged here
+    bal = bal - (1_000_000 - bal) * r - 10_000; // June: charged by P, before May's net payment
+    bal = bal + bal * r - 10_000;               // July
+    expect(p.newBalance).toBe(Math.round(bal));
+  });
+
+  it('records nothing when no other active expense on the loan is behind it', () => {
+    const upToDate = { ...main, lastPostedMonth: '2026-07' };
+    const pausedBehind = { ...main, automationPaused: true };
+    expect(recordDepartedPaydowns(undefined, [upToDate, P], [upToDate])).toBeUndefined();
+    expect(recordDepartedPaydowns(undefined, [pausedBehind, P], [pausedBehind])).toBeUndefined();
+    // Staying on the loan (an edit or a pause) is not leaving it.
+    expect(recordDepartedPaydowns(undefined, [main, P], [main, { ...P, amount: 6000, automationPaused: true }])).toBeUndefined();
+    const record = { mortgage: { lastPostedMonth: '2026-03' } };
+    expect(recordDepartedPaydowns(record, [main, P], [main, P])).toBe(record);
+  });
+
+  it('keys a debt by its id', () => {
+    const onDebt = (e: FixedExpense) => ({ ...e, destinationKind: 'debt' as const, debtId: 'debt-1' });
+    const record = recordDepartedPaydowns(undefined, [onDebt(main), onDebt(P)], [onDebt(main)]);
+    expect(record).toEqual({ 'debt:debt-1': { lastPostedMonth: '2026-06' } });
+    expect(departedPaydownRules(record)).toMatchObject([{ targetKind: 'debt', debtId: 'debt-1', lastPostedMonth: '2026-06', paused: true }]);
+  });
+
+  it('merges two departures: a month either charged stays charged, otherwise what each paid adds up', () => {
+    expect(mergePaydownStamps(
+      { lastPostedMonth: '2026-06', uncoveredMonths: { '2026-04': 0, '2026-05': 1000, '2026-06': 2000 } },
+      { lastPostedMonth: '2026-08', uncoveredMonths: { '2026-05': 500, '2026-06': 0, '2026-07': 0, '2026-03': 0 } },
+    )).toEqual({ lastPostedMonth: '2026-08', uncoveredMonths: { '2026-05': 1500, '2026-06': 2000, '2026-07': 0 } });
+    expect(mergePaydownStamps(undefined, { lastPostedMonth: '2026-06' })).toEqual({ lastPostedMonth: '2026-06' });
+    expect(mergePaydownStamps({ lastPostedMonth: '2026-06' }, { lastPostedMonth: '2026-04', uncoveredMonths: { '2026-04': 0 } }))
+      .toEqual({ lastPostedMonth: '2026-06' });
+  });
+
+  it("a paused 'myShare' expense counts the co-owners' months only up to its stamp", () => {
+    // The co-owner carried the whole loan through September; the paused share
+    // payment was stamped in July, so August and September are charged as usual.
+    const s = state({ coOwners: [co(100, { id: 'x', until: '2026-09' })] });
+    const B = rule({ id: 'B', targetKind: 'mortgage', savingsAccountId: undefined, amount: 6000, lastPostedMonth: '2026-07' });
+    const A = rule({ id: 'A', targetKind: 'mortgage', savingsAccountId: undefined, amount: 9000, mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-07' });
+    const [alone] = computeAutomationPostings([B], s, '2026-09');
+    const [withPaused] = computeAutomationPostings([B], s, '2026-09', undefined, [{ ...A, paused: true }]);
+    const [withActive] = computeAutomationPostings([B], s, '2026-09', undefined, [A]);
+    expect(withPaused.newBalance).toBe(alone.newBalance);
+    expect(withActive.newBalance).toBe(1_000_000 - 12_000);
+  });
+});
+
+describe('paydownStampOnSave — the stamp the edit dialog saves', () => {
+  const expense = (over: Partial<FixedExpense> = {}): FixedExpense => ({
+    id: 'e', name: 'E', amount: 5000, type: 'fixed', destinationKind: 'mortgage', lastPostedMonth: '2026-05', ...over,
+  });
+  const main = expense({ id: 'main', lastPostedMonth: '2026-05' });
+  const NOW = '2026-07';
+
+  it('keeps the stamp and its record when the destination is unchanged, paused or not', () => {
+    const e = expense({ uncoveredMonths: { '2026-04': 0 } });
+    expect(paydownStampOnSave(e, e, NOW, [main, e])).toEqual({ lastPostedMonth: '2026-05', uncoveredMonths: { '2026-04': 0 } });
+    expect(paydownStampOnSave(e, { ...e, automationPaused: true }, NOW, [main, e]))
+      .toEqual({ lastPostedMonth: '2026-05', uncoveredMonths: { '2026-04': 0 } });
+  });
+
+  it('stamps a new paydown now, recording the months it never paid', () => {
+    expect(paydownStampOnSave(undefined, { destinationKind: 'mortgage' }, NOW, [main]))
+      .toEqual({ lastPostedMonth: NOW, uncoveredMonths: { '2026-06': 0, '2026-07': 0 } });
+  });
+
+  it('restamps on a resume, keeping the old record', () => {
+    const paused = expense({ lastPostedMonth: '2026-06', automationPaused: true, uncoveredMonths: { '2026-06': 3000 } });
+    expect(paydownStampOnSave(paused, { destinationKind: 'mortgage' }, '2026-08', [main, paused]))
+      .toEqual({ lastPostedMonth: '2026-08', uncoveredMonths: { '2026-06': 3000, '2026-07': 0, '2026-08': 0 } });
+  });
+
+  it('restamps on a move to another loan, dropping the old record', () => {
+    const onDebt = expense({ destinationKind: 'debt', debtId: 'debt-1', uncoveredMonths: { '2026-04': 0 } });
+    expect(paydownStampOnSave(onDebt, { destinationKind: 'mortgage' }, NOW, [main, onDebt]))
+      .toEqual({ lastPostedMonth: NOW, uncoveredMonths: { '2026-06': 0, '2026-07': 0 } });
+    // Another debt is another loan.
+    expect(paydownStampOnSave(onDebt, { destinationKind: 'debt', debtId: 'debt-2' }, NOW, [main, onDebt]))
+      .toEqual({ lastPostedMonth: NOW, uncoveredMonths: undefined });
+  });
+
+  it('clears both when the destination is removed', () => {
+    expect(paydownStampOnSave(expense({ uncoveredMonths: { '2026-04': 0 } }), {}, NOW, [main]))
+      .toEqual({ lastPostedMonth: undefined, uncoveredMonths: undefined });
+  });
+});
+
+describe('pruneDepartedPaydowns — dropping stamps nothing can charge again', () => {
+  const expense = (over: Partial<FixedExpense>): FixedExpense => ({
+    id: 'main', name: 'Main', amount: 10_000, type: 'fixed', destinationKind: 'mortgage', lastPostedMonth: '2026-05', ...over,
+  });
+  const record = {
+    mortgage: { lastPostedMonth: '2026-06' },
+    'debt:debt-1': { lastPostedMonth: '2026-06', uncoveredMonths: { '2026-05': 0 } },
+  };
+  const onDebt = expense({ id: 'car', destinationKind: 'debt', debtId: 'debt-1' });
+
+  it('keeps a stamp while an active expense on the loan is stamped before it', () => {
+    expect(pruneDepartedPaydowns(record, [expense({}), onDebt], ['debt-1'])).toBe(record);
+  });
+
+  it('drops a stamp once every active expense on the loan has caught up past it', () => {
+    expect(pruneDepartedPaydowns(record, [expense({ lastPostedMonth: '2026-06' }), onDebt], ['debt-1']))
+      .toEqual({ 'debt:debt-1': record['debt:debt-1'] });
+    // A paused expense restamps when it resumes, so it never catches up over those months.
+    expect(pruneDepartedPaydowns(record, [expense({ automationPaused: true }), onDebt], ['debt-1']))
+      .toEqual({ 'debt:debt-1': record['debt:debt-1'] });
+  });
+
+  it("drops a debt's stamp once the debt is gone", () => {
+    expect(pruneDepartedPaydowns(record, [expense({}), onDebt], [])).toEqual({ mortgage: record.mortgage });
+  });
+
+  it('is undefined once nothing is left, and leaves no record alone', () => {
+    expect(pruneDepartedPaydowns(record, [], ['debt-1'])).toBeUndefined();
+    expect(pruneDepartedPaydowns(undefined, [expense({})], [])).toBeUndefined();
   });
 });

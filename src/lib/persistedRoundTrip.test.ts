@@ -294,6 +294,21 @@ describe("a fixed expense's uncovered months (optional field)", () => {
   });
 });
 
+describe("departed paydown stamps (optional assets field)", () => {
+  const departed = { mortgage: { lastPostedMonth: '2026-06', uncoveredMonths: { '2026-05': 0 } }, 'debt:car': { lastPostedMonth: '2026-04' } };
+
+  it('a blob without it loads and saves without adding it', () => {
+    const saved = loadAndSave(fullBlob({ assets: { bsu: 120_000 } }));
+    expect('departedPaydowns' in slice(saved, 'assets')).toBe(false);
+  });
+
+  it('survives load, autosave and a second load', () => {
+    const saved = loadAndSave(fullBlob({ assets: { bsu: 120_000, departedPaydowns: departed } }));
+    expect(slice(saved, 'assets').departedPaydowns).toEqual(departed);
+    expect(loadAndSave(saved)).toEqual(saved);
+  });
+});
+
 // A saving or paydown expense created from the savings allocation carries the
 // plan row's id, which is what "Sync amounts" matches on. Losing it on any path
 // would quietly turn an allocation-made transfer into a hand-made one.

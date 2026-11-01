@@ -18,6 +18,7 @@ const { isDemoMode, makeDemoGate, parseTrustProxy } = require('./demo');
 const { isWindowComplete, osloMonthKey } = require('./cpiWindow');
 const { changedKeys, revertChange } = require('./revert');
 const { migrateHistory, historyStatements } = require('./history');
+const { isValidFinancePayload } = require('./payload');
 const pkg = require('./package.json');
 
 // Public read-only demo instance (see server/demo.js). Off unless DEMO_MODE is
@@ -507,35 +508,6 @@ app.get('/api/data', (req, res) => {
   res.set('X-Data-Rev', String(blob ? blob.rev : 0));
   res.json(blob ? blob.content : null);
 });
-
-// Minimal shape check so a stray/garbage POST can't overwrite the single data
-// row with junk (`[]`, `42`, undefined body from a missing JSON content-type).
-// Not a full schema — just enough to reject anything that clearly isn't the
-// finance blob. Acts as a corruption firewall.
-function isValidFinancePayload(body) {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
-  // Expect the core domain keys the client always persists.
-  return (
-    typeof body.income === 'number' &&
-    typeof body.assets === 'object' && body.assets !== null &&
-    // Optional; older blobs don't carry it.
-    (body.assets.bsuTotalDeposited === undefined || (
-      typeof body.assets.bsuTotalDeposited === 'number'
-      && Number.isFinite(body.assets.bsuTotalDeposited) && body.assets.bsuTotalDeposited >= 0
-    )) &&
-    Array.isArray(body.fixedExpenses) &&
-    // Optional per expense; older blobs don't carry it.
-    body.fixedExpenses.every((e) => typeof e !== 'object' || e === null || e.uncoveredMonths === undefined || (
-      typeof e.uncoveredMonths === 'object' && e.uncoveredMonths !== null && !Array.isArray(e.uncoveredMonths)
-      && Object.values(e.uncoveredMonths).every((kr) => typeof kr === 'number' && Number.isFinite(kr) && kr >= 0)
-    )) &&
-    Array.isArray(body.dailyTransactions) &&
-    (body.deletedBankTombstones === undefined || (
-      Array.isArray(body.deletedBankTombstones)
-      && body.deletedBankTombstones.every((t) => typeof t === 'object' && t !== null && typeof t.id === 'string')
-    ))
-  );
-}
 
 const SIZE_WARN_BYTES = 2 * 1024 * 1024; // warn once the blob passes ~2 MB
 

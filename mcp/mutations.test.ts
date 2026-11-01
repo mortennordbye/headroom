@@ -526,3 +526,38 @@ describe('update_current_mortgage and a notified rate', () => {
     expect(b.homeowner).toMatchObject({ rente: 5.5, notifiedRate: 5.7 });
   });
 });
+
+describe('delete_fixed_expense on a paydown expense', () => {
+  // 'f1' last paid May with a catch-up still to come; 'f2' paid June.
+  function withPaydowns() {
+    const blob = structuredClone(fullFixture());
+    blob.fixedExpenses = blob.fixedExpenses.map((e) => (e.id === 'f1'
+      ? { ...e, destinationKind: 'mortgage' as const, lastPostedMonth: '2026-05' }
+      : e.id === 'f2' ? { ...e, destinationKind: 'mortgage' as const, lastPostedMonth: '2026-06', uncoveredMonths: { '2026-06': 100 } } : e));
+    return blob;
+  }
+
+  it('keeps its stamp on the loan, so the months it paid are not charged again', () => {
+    const blob = withPaydowns();
+    const changes = deleteFixedExpense(blob, { id: 'f2' });
+    expect(blob.assets.departedPaydowns).toEqual({ mortgage: { lastPostedMonth: '2026-06', uncoveredMonths: { '2026-06': 100 } } });
+    expect(changes.map((c) => c.field)).toEqual(['fixedExpenses[f2]', 'assets.departedPaydowns']);
+  });
+
+  it('touches only fixedExpenses and assets, and only departedPaydowns within assets', () => {
+    const after = withPaydowns();
+    const before = structuredClone(after);
+    deleteFixedExpense(after, { id: 'f2' });
+    expectPreserved(before, after, ['fixedExpenses', 'assets']);
+    const { departedPaydowns: _d, ...rest } = after.assets;
+    expect(rest).toEqual(before.assets);
+    expectJsonStable(after);
+  });
+
+  it('records nothing when no other expense on the loan is behind it', () => {
+    const blob = withPaydowns();
+    deleteFixedExpense(blob, { id: 'f1' });
+    expect(blob.assets.departedPaydowns).toBeUndefined();
+    expect('departedPaydowns' in blob.assets).toBe(false);
+  });
+});

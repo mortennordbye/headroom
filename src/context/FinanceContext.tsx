@@ -43,7 +43,7 @@ import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest, typ
 import { withNotifiedRate } from '../lib/notifiedRate';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
-  computeAutomationPostings,
+  computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
 import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
@@ -375,6 +375,10 @@ export interface Assets {
   gainReviewMonth?: string;
   /** Total paid into the portfolio that month, for the prompt's copy. */
   gainReviewAmount?: number;
+  /** By loan ('mortgage' or 'debt:<id>'): the merged stamp of paydown expenses
+   *  that left the loan while another expense on it had not caught up, so the
+   *  months they paid keep counting as interest-charged. */
+  departedPaydowns?: Record<string, PaydownStamp>;
 }
 
 /** The scalar `Assets` fields — the ones `updateAsset` may write. */
@@ -1458,6 +1462,27 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setDeletedBankTombstones((prev) => forgetRestoredBankRows(prev, nextIds));
     setDailyTransactions(val);
   }, [dailyTransactions]);
+
+  // Exposed setter that keeps a paydown's stamp when the expense leaves its loan
+  // (deleted, pointed elsewhere, destination cleared): the months it paid had
+  // their interest charged, so another expense's catch-up must not charge them again.
+  const setFixedExpensesTracked = useCallback((val: FixedExpense[]) => {
+    const departed = recordDepartedPaydowns(assets.departedPaydowns, fixedExpenses, val);
+    if (departed !== assets.departedPaydowns) setAssets(prev => ({ ...prev, departedPaydowns: departed }));
+    setFixedExpenses(val);
+  }, [fixedExpenses, assets.departedPaydowns]);
+
+  // Drop a departed stamp once no catch-up can charge its months again (or its debt is gone).
+  useEffect(() => {
+    if (!loaded.current) return;
+    const pruned = pruneDepartedPaydowns(assets.departedPaydowns, fixedExpenses, debts.map(d => d.id));
+    if (pruned === assets.departedPaydowns) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAssets(prev => {
+      const { departedPaydowns: _old, ...rest } = prev;
+      return pruned ? { ...rest, departedPaydowns: pruned } : rest;
+    });
+  }, [assets.departedPaydowns, fixedExpenses, debts]);
 
   // ── Persist payload: single source of shape (§4.2) ──────────────────────────
   // The one place that projects app state → the persisted/exported blob. Used by
@@ -2701,9 +2726,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         startMonth: addMonthsKey(nowKey, 1),
         lastPostedMonth: sv.lastPostedMonth,
       }));
+    // A paused expense never posts, but its stamp still counts on the loan.
     const expenseRules: AutomationRule[] = fixedExpenses
-      .filter(e => e.destinationKind && !e.automationPaused)
+      .filter(e => e.destinationKind)
       .map(e => ({
+        ...(e.automationPaused ? { paused: true } : {}),
         id: e.id,
         name: e.name,
         amount: e.amount,
@@ -2717,6 +2744,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return [
       ...savingRules,
       ...expenseRules,
+      ...departedPaydownRules(assets.departedPaydowns),
       ...pensionAccrualRules({
         otpAutoPost: pension.otpAutoPost,
         ipsAutoPost: pension.ipsAutoPost,
@@ -2731,7 +2759,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t]);
+  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t, assets.departedPaydowns]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
@@ -2852,7 +2880,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
     // A no-change posting has nothing to confirm: it is stamped with this month's.
     const multi = postings.filter(p => p.monthsDue >= 2 && !p.noChange);
-    const nextPending: PendingCatchup[] = multi.map(p => {
+    const nextPending: PendingCatchup[] = multi.map(batched => {
+      // What confirming this prompt alone moves: in the batch a loan's balance
+      // carries every rule paying it.
+      const [p = batched] = computeAutomationPostings(
+        [batched.rule], automationState, currentMonth, undefined, automationRules);
       const base = p.targetKind === 'savingsAccount' ? (automationState.savings[p.savingsAccountId!] ?? 0)
         : p.targetKind === 'mortgage' ? automationState.mortgage
         : p.targetKind === 'debt' ? (automationState.debts[p.debtId!]?.balance ?? 0)
@@ -3337,7 +3369,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     netWorthHistory, balanceSnapshots, liveBalanceSnapshot,
     automationRules, automationState,
     setManualSnapshot, deleteManualSnapshot, clearHistory,
-    fixedExpenses, setFixedExpenses,
+    fixedExpenses, setFixedExpenses: setFixedExpensesTracked,
     savings, setSavings,
     debts, setDebts,
     dailyTransactions, setDailyTransactions: setDailyTransactionsTracked,
@@ -3375,7 +3407,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     balanceSnapshots, liveBalanceSnapshot, automationRules, automationState,
     setManualSnapshot, deleteManualSnapshot, clearHistory,
     fixedExpenses, debts, dailyTransactions,
-    setDailyTransactionsTracked, accountLabels, setAccountLabel, applyBankSync,
+    setDailyTransactionsTracked, setFixedExpensesTracked, accountLabels, setAccountLabel, applyBankSync,
     categoryRules, addCategoryRule, removeCategoryRule, labelRules, addLabelRule, removeLabelRule,
     transferRules, addTransferRule, removeTransferRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
