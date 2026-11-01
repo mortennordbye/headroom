@@ -634,14 +634,21 @@ function mergeTransactions(existing, incoming, deletedIds = [], tombstones = [],
 
 // --- high-level flow used by the routes -------------------------------------
 
-function markRelink(connId, reason) {
+// Patch one connection in the store as it is on disk now, and only while it
+// still holds `sessionId`. A sync works from a snapshot read at its start;
+// writing that snapshot back would undo a markRelink, finishLink or
+// removeConnection made since. Returns whether the patch applied.
+function updateConnection(connId, sessionId, patch) {
   const store = readStore();
-  const c = store.connections.find((x) => x.id === connId);
-  if (c) {
-    c.needs_relink = true;
-    c.relink_reason = reason;
-    writeStore(store);
-  }
+  const c = store.connections.find((x) => x.id === connId && x.session_id === sessionId);
+  if (!c) return false;
+  Object.assign(c, patch);
+  writeStore(store);
+  return true;
+}
+
+function markRelink(connId, sessionId, reason) {
+  updateConnection(connId, sessionId, { needs_relink: true, relink_reason: reason });
 }
 
 /**
@@ -827,7 +834,7 @@ async function fetchMappedTransactions() {
     // A single expired bank flags itself for re-link but doesn't block the
     // others — we still sync every bank whose consent is live.
     if (!sessionValid(c)) {
-      markRelink(c.id, 'consent expired');
+      markRelink(c.id, c.session_id, 'consent expired');
       continue;
     }
     anyValid = true;
@@ -845,17 +852,24 @@ async function fetchMappedTransactions() {
         if (refreshed.length) c.accounts = carryAccountKeys(c.accounts, refreshed);
         c.accounts_note = note;
         if (missingIban) c.accounts_enriched = true;
-        writeStore(store);
+        updateConnection(c.id, c.session_id, {
+          accounts: c.accounts, accounts_note: c.accounts_note,
+          ...(c.accounts_enriched ? { accounts_enriched: true } : {}),
+        });
         console.log(`[bank] ${c.aspsp}: ${refreshed.length} account(s) after refresh${note ? ` (${note})` : ''}`);
       } catch (err) {
         if (missingIban) c.accounts_enriched = true;
         c.accounts_note = `fetch-failed: ${err.message}`;
-        writeStore(store);
+        updateConnection(c.id, c.session_id, { accounts_note: c.accounts_note, ...(c.accounts_enriched ? { accounts_enriched: true } : {}) });
         console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);
       }
     }
     const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
-    const fromMs = lastSync ? lastSync - RESYNC_OVERLAP_DAYS * 864e5 : Date.now() - DAYS * 864e5;
+    // Never further back than EB_DAYS: a connection whose sync keeps failing
+    // keeps its old last_sync, and an ever-growing window would end in an error
+    // the bank returns for too old a date_from, failing every bank's sync.
+    const oldest = Date.now() - DAYS * 864e5;
+    const fromMs = lastSync ? Math.max(lastSync - RESYNC_OVERLAP_DAYS * 864e5, oldest) : oldest;
     const from = new Date(fromMs).toISOString().slice(0, 10);
     const sync = { connectionId: c.id, sessionId: c.session_id, complete: false };
     synced.push(sync);
@@ -875,7 +889,7 @@ async function fetchMappedTransactions() {
       sync.complete = (c.accounts || []).length > 0;
     } catch (err) {
       if (err.status === 401 || err.status === 403) {
-        markRelink(c.id, `fetch ${err.status}`);
+        markRelink(c.id, c.session_id, `fetch ${err.status}`);
         continue;
       }
       throw err;
@@ -952,7 +966,11 @@ function recordSync(outcome = {}) {
       }
     }
   }
-  store.syncLog = appendSyncLog(store.syncLog, makeSyncEntry(outcome, now));
+  // A sync that fully fetched no connection didn't sync anything: log it as a failure.
+  const logged = outcome.ok !== false && Array.isArray(outcome.synced) && !outcome.synced.some((s) => s.complete)
+    ? { ok: false, error: 'no bank connection could be fully synced' }
+    : outcome;
+  store.syncLog = appendSyncLog(store.syncLog, makeSyncEntry(logged, now));
   writeStore(store);
 }
 
@@ -961,7 +979,14 @@ function recordSync(outcome = {}) {
 // so frequent restarts don't re-sync early (mirrors backup.js's newestAgeMs).
 function lastSyncAgeMs(nowMs = Date.now()) {
   const store = readStore();
+  // The newest successful sync in the log, so a connection that never stamps
+  // last_sync (no accounts) doesn't trigger a sync on every restart; connection
+  // stamps cover a store from before the log.
   let newest = 0;
+  for (const e of store.syncLog || []) {
+    const t = e && e.ok ? Date.parse(e.at) : 0;
+    if (Number.isFinite(t) && t > newest) newest = t;
+  }
   for (const c of store.connections) {
     const t = c.last_sync ? Date.parse(c.last_sync) : 0;
     if (Number.isFinite(t) && t > newest) newest = t;

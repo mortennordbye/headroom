@@ -127,9 +127,8 @@ export function evictSupersededPending(txs: DailyTransaction[]): DailyTransactio
 // `deletedBankIds`. After a re-link the bank may resend that row under a new
 // reference format, which the id alone can't catch; the server matches these
 // fingerprints the way it matches stored rows (`dropRelinkFormatTwins` in
-// server/bank.js). `deletedAt` records when it was deleted. Returns `prev`
-// unchanged when nothing new was removed.
-export function addDeletedBankTombstones(prev: DeletedBankTombstone[], removed: DailyTransaction[], now: Date = new Date()): DeletedBankTombstone[] {
+// server/bank.js). Returns `prev` unchanged when nothing new was removed.
+export function addDeletedBankTombstones(prev: DeletedBankTombstone[], removed: DailyTransaction[]): DeletedBankTombstone[] {
   const have = new Set(prev.map((t) => t.id));
   const added: DeletedBankTombstone[] = [];
   for (const t of removed) {
@@ -138,7 +137,6 @@ export function addDeletedBankTombstones(prev: DeletedBankTombstone[], removed: 
     added.push({
       id: t.id, date: t.date, amount: t.amount, account: t.account, description: t.description, kind: t.kind,
       ...(t.pending ? { pending: true } : {}),
-      deletedAt: now.toISOString(),
     });
   }
   return added.length ? [...prev, ...added] : prev;

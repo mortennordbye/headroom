@@ -1173,8 +1173,6 @@ export interface DeletedBankTombstone {
   description: string;
   kind?: 'income' | 'expense';
   pending?: boolean;
-  /** When the row was deleted (ISO). Absent on tombstones written before it existed. */
-  deletedAt?: string;
 }
 
 export interface ExportPayload {
