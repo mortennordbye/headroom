@@ -14,9 +14,6 @@ in git and the CHANGELOG, not here.
   app models one person. **Unblock**: an issue covering a marital-status field. **Where**:
   `src/lib/norwegianTax.ts`, `annualMortgageInterest` in `src/context/FinanceContext.tsx` and
   `mcp/derive.ts`.
-- **OTP base excludes bonuses.** `otpAnnualContribution` is capped at 12G but uses base + on-call
-  only; a real OTP base may include bonuses. **Where**: `src/lib/pension.ts`,
-  `src/pages/PensionPage.tsx`.
 - **Not audited yet**: bank import and categorisation.
 
 ## Income and salary

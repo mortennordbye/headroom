@@ -46,6 +46,7 @@ import {
   computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
+import { otpPensionableIncome } from '../lib/pension';
 import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
@@ -389,7 +390,10 @@ export interface Pension {
   otpEmployerPct: number;              // % of gross salary employer pays (typ 2–7)
   otpEmployeePct: number;              // optional employee top-up % (0 default)
   otpGrowthRate: number;               // annual return % (default 5%)
-  ipsBalance: number;                  // IPS (voluntary) current balance in kr
+  /** The scheme counts bonuses paid in the year in the OTP base. Off by default:
+   *  many schemes use fixed salary only (innskuddspensjonsloven § 5-5 annet ledd a). */
+  otpIncludesBonuses: boolean;
+  ipsBalance: number;                 // IPS (voluntary) current balance in kr
   ipsAnnualContribution: number;       // kr/year (NAV cap 15 000 in 2025)
   ipsGrowthRate: number;               // annual return % (default 7%)
   birthYear: number;                   // 0 = unset
@@ -705,6 +709,7 @@ export const DEFAULT_PENSION: Pension = {
   otpEmployerPct: 5,
   otpEmployeePct: 0,
   otpGrowthRate: 5,
+  otpIncludesBonuses: false,
   ipsBalance: 0,
   ipsAnnualContribution: 0,
   ipsGrowthRate: 7,
@@ -2755,11 +2760,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         ipsAnnualContribution: Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION),
         otpLastPostedMonth: pension.otpLastPostedMonth,
         ipsLastPostedMonth: pension.ipsLastPostedMonth,
-        pensionableIncome: calcActiveGrossAnnual(salaries, jobs, nowKey),
+        pensionableIncome: otpPensionableIncome(calcActiveGrossAnnual(salaries, jobs, nowKey), bonuses, Number(nowKey.slice(0, 4)), pension.otpIncludesBonuses),
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t, assets.departedPaydowns]);
+  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, bonuses, t, assets.departedPaydowns]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).

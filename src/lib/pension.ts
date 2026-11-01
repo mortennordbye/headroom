@@ -4,6 +4,7 @@
 // year-by-year recurrence `next = prev * (1 + r) + contribution`.
 
 import { folketrygdParamsFor } from './folketrygd';
+import type { BonusEntry } from '../context/FinanceContext';
 
 /** OTP contributions are calculated on pay up to 12G (innskuddspensjonsloven § 5-2). */
 export const OTP_CONTRIBUTION_CAP_G = 12;
@@ -20,6 +21,31 @@ export function otpContributionCap(year: number): number {
 export function otpAnnualContribution(pensionableIncome: number, totalPct: number, year: number): number {
   const base = Math.min(Math.max(0, pensionableIncome), otpContributionCap(year));
   return base * totalPct / 100;
+}
+
+/**
+ * The pay an OTP contribution is calculated on for `year`. By law the base is
+ * all pay received in the contribution year (innskuddspensjonsloven § 5-5 første
+ * ledd), but a scheme may leave out varying or temporary supplements (§ 5-5
+ * annet ledd bokstav a), and many base it on fixed salary. So bonuses paid in
+ * `year` count only when `includeBonuses` says the user's scheme includes them.
+ * Holiday pay entries are not bonuses and never count here. The 12G cap is
+ * applied later, by `otpAnnualContribution`.
+ */
+export function otpPensionableIncome(
+  fixedGross: number,
+  bonuses: readonly Pick<BonusEntry, 'date' | 'amount' | 'type'>[],
+  year: number,
+  includeBonuses: boolean,
+): number {
+  const base = Math.max(0, fixedGross);
+  if (!includeBonuses) return base;
+  const prefix = `${year}-`;
+  const bonusTotal = bonuses.reduce(
+    (s, b) => (b.type !== 'holiday_pay' && b.date.startsWith(prefix) && b.amount > 0 ? s + b.amount : s),
+    0,
+  );
+  return base + bonusTotal;
 }
 
 /**

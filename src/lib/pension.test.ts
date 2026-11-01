@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { otpAnnualContribution, pensionFutureValue, projectPensionWealth } from './pension';
+import { otpAnnualContribution, otpPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
 
 describe('pensionFutureValue', () => {
   it('returns the starting balance for zero or negative years', () => {
@@ -68,5 +68,36 @@ describe('otpAnnualContribution', () => {
 
   it('returns 0 for non-positive income', () => {
     expect(otpAnnualContribution(-1, 5, 2026)).toBe(0);
+  });
+});
+
+describe('otpPensionableIncome', () => {
+  const bonuses = [
+    { date: '2026-03-15', amount: 50_000, type: 'annual' as const },
+    { date: '2026-09-01', amount: 20_000, type: 'performance' as const },
+    { date: '2026-06-10', amount: 40_000, type: 'holiday_pay' as const },
+    { date: '2025-12-20', amount: 99_000, type: 'annual' as const },
+  ];
+
+  it('leaves bonuses out when the scheme bases OTP on fixed pay', () => {
+    expect(otpPensionableIncome(600_000, bonuses, 2026, false)).toBe(600_000);
+  });
+
+  it('adds bonuses paid in the contribution year, not holiday pay or other years', () => {
+    expect(otpPensionableIncome(600_000, bonuses, 2026, true)).toBe(670_000);
+  });
+
+  it('feeds the 12G cap: bonuses lift the base only up to 12G', () => {
+    // 1.6M fixed + 70k bonus = 1.67M, above 12G (1,638,588 in 2026).
+    const base = otpPensionableIncome(1_600_000, bonuses, 2026, true);
+    expect(otpAnnualContribution(base, 5, 2026)).toBeCloseTo(81_929.4, 6);
+  });
+
+  it('ignores non-positive or NaN bonus amounts and a negative fixed gross', () => {
+    const bad = [
+      { date: '2026-01-01', amount: Number.NaN, type: 'annual' as const },
+      { date: '2026-01-01', amount: -5_000, type: 'other' as const },
+    ];
+    expect(otpPensionableIncome(-1, bad, 2026, true)).toBe(0);
   });
 });

@@ -19,7 +19,7 @@ import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
 import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
-import { otpAnnualContribution as otpContribution, projectPensionWealth } from '../lib/pension';
+import { otpAnnualContribution as otpContribution, otpPensionableIncome, projectPensionWealth } from '../lib/pension';
 import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { currentMonthKey } from '../lib/date';
@@ -70,7 +70,7 @@ const AutoPostToggle: React.FC<{
 };
 
 const PensionPage: React.FC = () => {
-  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang, holidaySurplusFor } = useFinance();
+  const { t, pension: livePension, updatePension, salaries, jobs, bonuses, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang, holidaySurplusFor } = useFinance();
   const pa = t.pensionAutomation;
   const reduced = useReducedMotion();
 
@@ -97,7 +97,9 @@ const PensionPage: React.FC = () => {
     [salaries, jobs, asOfMonth],
   );
 
-  const otpAnnualContribution = otpContribution(pensionableIncome, pension.otpEmployerPct + pension.otpEmployeePct, TAX_YEAR);
+  // OTP base: the fixed pay above, plus the year's bonuses when the scheme counts them.
+  const otpBase = otpPensionableIncome(pensionableIncome, bonuses, Number(asOfMonth.slice(0, 4)), pension.otpIncludesBonuses);
+  const otpAnnualContribution = otpContribution(otpBase, pension.otpEmployerPct + pension.otpEmployeePct, TAX_YEAR);
   const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
   // IPS lowers alminnelig inntekt, taxed at 22% in Norway. Under the generic
   // region there's no fixed rate, so the saving is the user's own marginal rate.
@@ -324,6 +326,14 @@ const PensionPage: React.FC = () => {
             <SliderRow label={t.otpEmployerPct} value={pension.otpEmployerPct} onChange={(v) => updatePension('otpEmployerPct', v)} min={0} max={10} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.otpEmployerPct, DEFAULT_PENSION.otpEmployerPct)} />} />
             <SliderRow label={t.otpEmployeePct} value={pension.otpEmployeePct} onChange={(v) => updatePension('otpEmployeePct', v)} min={0} max={5} step={0.5} suffix="%" />
             <SliderRow label={t.otpGrowthRate} value={pension.otpGrowthRate} onChange={(v) => updatePension('otpGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.otpGrowthRate, DEFAULT_PENSION.otpGrowthRate)} />} />
+          </div>
+          <div className="mt-5">
+            <ToggleRow
+              label={t.pensionPage.otpIncludesBonusesLabel}
+              checked={!!pension.otpIncludesBonuses}
+              onChange={(on) => updatePension('otpIncludesBonuses', on)}
+              hint={t.pensionPage.otpIncludesBonusesHint}
+            />
           </div>
           <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
             {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}

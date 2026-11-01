@@ -347,6 +347,14 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(p.otpAnnualContribution).toBe(36000); // 720000 * 5% default employer share
   });
 
+  it('pension: the year\'s bonuses join the OTP base only when the scheme counts them', () => {
+    const b = fullFixture();
+    b.pension = { otpBalance: 100000, otpIncludesBonuses: true } as ExportPayload['pension'];
+    const p = derive.pensionSummary(b, MONTH);
+    if (!p.configured) throw new Error('expected a configured pension');
+    expect(p.otpAnnualContribution).toBe(37500); // (720000 + 30000 bonus) * 5%
+  });
+
   it('pension: headline income is in today\'s kroner and equals the inTodaysKroner block', () => {
     const real = derive.pensionSummary(blob, MONTH, 3);
     const flat = derive.pensionSummary(blob, MONTH, 0);
