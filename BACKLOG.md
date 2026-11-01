@@ -74,6 +74,18 @@ in git and the CHANGELOG, not here.
   matching only covers rows the bank returns again (sync window). **Unblock**: a one-off full
   re-fetch within the bank's history limit. **Where**: `server/bank.js` (`fetchMappedTransactions`
   window), `src/lib/transfers.ts`.
+- **The amount matcher can still net a loan or card payment.** Own-account matching skips loan
+  and card accounts, but the older equal-amount pairing in `findInternalTransferIds` doesn't know
+  account types, so an unambiguous checking-to-loan payment with both legs synced is netted as a
+  transfer instead of counting as debt service. **Why deferred**: rows carry no account type, only
+  the server's account list does. **Unblock**: stamp the account type (or a "debt account" flag)
+  on rows at sync and exclude those legs from pairing. **Where**: `src/lib/transfers.ts`,
+  `server/bank.js` (`fetchMappedTransactions`, `ownAccountNumber`).
+- **An auto-matched transfer can't be un-marked.** `segment: 'transfer'` only adds rows to the
+  transfer set; there is no override that takes a row the matcher netted back into spending.
+  **Why deferred**: needs a new segment value (or flag) plus UI. **Unblock**: an explicit
+  "not a transfer" override honoured by `excludedTransferIds`. **Where**: `src/lib/transferRules.ts`,
+  `src/lib/segments.ts`, `src/pages/BudgetPage.tsx`.
 
 ## Budget and savings UI
 

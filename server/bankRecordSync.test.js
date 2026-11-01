@@ -186,14 +186,46 @@ describe('fetchMappedTransactions + recordSync', () => {
     expect(calls.filter((c) => c.endsWith('/details'))).toEqual([]);
   });
 
+  // `detailsOk()` decides per call whether /details succeeds.
+  const stubFailingDetails = (detailsOk = () => false) => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const isDetails = new URL(url).pathname.endsWith('/details');
+      if (isDetails) calls.push(url);
+      const ok = !isDetails || detailsOk();
+      const body = !isDetails ? { transactions: [tx('u1-1')] } : ok ? { cash_account_type: 'CACC' } : { error: 'x' };
+      return { ok, status: ok ? 200 : 500, text: async () => JSON.stringify(body) };
+    }));
+    return calls;
+  };
+
   it('keeps an account counting as own when its details cannot be fetched', async () => {
     writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [{ uid: 'u1', iban: '11112233333' }] }] });
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
-      const ok = !new URL(url).pathname.endsWith('/details');
-      return { ok, status: ok ? 200 : 500, text: async () => JSON.stringify(ok ? { transactions: [tx('u1-1')] } : { error: 'x' }) };
-    }));
+    stubFailingDetails();
     const { rows } = await bank.fetchMappedTransactions();
     expect(numbers(rows)).toEqual({ 'aaaa1111:u1': '11112233333' });
+    expect(readStore().connections[0].accounts_typed).toBeUndefined();
+    expect(readStore().connections[0].accounts_type_attempts).toBe(1);
+  });
+
+  it('retries the details fetch on a later sync and marks it done once it succeeds', async () => {
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [{ uid: 'u1', iban: '11112233333' }] }] });
+    let ok = false;
+    const calls = stubFailingDetails(() => ok);
+    await bank.fetchMappedTransactions();
+    ok = true;
+    await bank.fetchMappedTransactions();
+    expect(calls).toHaveLength(2);
+    expect(readStore().connections[0]).toMatchObject({ accounts_typed: true, accounts: [{ cash_account_type: 'CACC' }] });
+  });
+
+  it('stops trying the details fetch after three failed syncs', async () => {
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [{ uid: 'u1', iban: '11112233333' }] }] });
+    const calls = stubFailingDetails();
+    for (let i = 0; i < 5; i++) await bank.fetchMappedTransactions();
+    expect(calls).toHaveLength(3);
+    expect(readStore().connections[0].accounts_type_attempts).toBe(3);
+    expect(readStore().connections[0].accounts_typed).toBeUndefined();
   });
 
   it('logs a sync that fully fetched no connection as a failure', () => {

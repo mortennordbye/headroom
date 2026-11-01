@@ -730,9 +730,11 @@ function ownAccountNumber(acc) {
 
 // Fill in the account type (and IBAN, if missing) for accounts linked before it
 // was captured, from GET /accounts/{uid}/details under the existing consent.
-// An account whose details can't be fetched is returned unchanged.
+// An account whose details can't be fetched is returned unchanged and counted
+// in `failed`.
 async function enrichAccountTypes(accounts) {
-  return Promise.all(accounts.map(async (a) => {
+  let failed = 0;
+  const out = await Promise.all(accounts.map(async (a) => {
     if (a.cash_account_type) return a;
     try {
       const d = normalizeAccount({ ...(await api('GET', `/accounts/${a.uid}/details`)), uid: a.uid });
@@ -742,10 +744,16 @@ async function enrichAccountTypes(accounts) {
         ...(!a.iban && d.iban ? { iban: d.iban } : {}),
       };
     } catch {
+      failed += 1;
       return a;
     }
   }));
+  return { accounts: out, failed };
 }
+
+// Syncs that may try the account-details fetch before giving up, so a bank that
+// keeps failing it doesn't eat into the PSD2 daily request allowance.
+const ACCOUNT_TYPE_ATTEMPTS = 3;
 
 // Accounts as returned when the session was created, with a GET fallback for
 // ASPSPs that don't inline them in the POST /sessions response. Returns a
@@ -916,13 +924,23 @@ async function fetchMappedTransactions() {
         console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);
       }
     }
-    // Once per connection: accounts linked before the account type was captured
-    // fetch their details, so a loan or card account stops counting as "own"
-    // (ownAccountNumber). Same consent, no re-link.
-    if (Array.isArray(c.accounts) && c.accounts.some((a) => !a.cash_account_type) && !c.accounts_typed) {
-      c.accounts = await enrichAccountTypes(c.accounts);
-      c.accounts_typed = true;
-      updateConnection(c.id, c.session_id, { accounts: c.accounts, accounts_typed: true });
+    // Accounts linked before the account type was captured fetch their details,
+    // so a loan or card account stops counting as "own" (ownAccountNumber).
+    // Same consent, no re-link. Done once it succeeds; at most one try per sync
+    // and ACCOUNT_TYPE_ATTEMPTS in all while calls fail.
+    const typeAttempts = c.accounts_type_attempts || 0;
+    if (Array.isArray(c.accounts) && c.accounts.some((a) => !a.cash_account_type)
+      && !c.accounts_typed && typeAttempts < ACCOUNT_TYPE_ATTEMPTS) {
+      const { accounts: typed, failed } = await enrichAccountTypes(c.accounts);
+      c.accounts = typed;
+      const patch = { accounts: typed };
+      if (failed === 0) {
+        c.accounts_typed = patch.accounts_typed = true;
+      } else {
+        c.accounts_type_attempts = patch.accounts_type_attempts = typeAttempts + 1;
+        console.log(`[bank] ${c.aspsp}: account details failed for ${failed} account(s) (attempt ${typeAttempts + 1}/${ACCOUNT_TYPE_ATTEMPTS})`);
+      }
+      updateConnection(c.id, c.session_id, patch);
     }
     const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
     // Never further back than EB_DAYS: a connection whose sync keeps failing

@@ -65,10 +65,14 @@ export function findInternalTransferIds(txs: DailyTransaction[]): Set<string> {
     const n = normalizeAccountNumber(t.accountNumber);
     if (n) own.add(n);
   }
+  // Only a row that itself sits on an own account (has `accountNumber`) can
+  // start a match: rows from loan and card accounts carry no number (server
+  // `ownAccountNumber`), and their legs are debt service, not transfers.
   const byNumber: DailyTransaction[] = [];
   for (const t of [...expenses, ...incomes]) {
+    const mine = normalizeAccountNumber(t.accountNumber);
     const cp = normalizeAccountNumber(t.counterpartyAccountNumber);
-    if (cp && own.has(cp) && cp !== normalizeAccountNumber(t.accountNumber)) {
+    if (mine && cp && own.has(cp) && cp !== mine) {
       matched.add(t.id);
       byNumber.push(t);
     }
@@ -79,18 +83,25 @@ export function findInternalTransferIds(txs: DailyTransaction[]): Set<string> {
   const usedExpense = new Set<string>();
   // The other leg of a row matched by account number may carry no counterparty
   // number itself. Look for it on the account the number names: opposite kind,
-  // same amount, within the window, and exactly one candidate.
+  // same amount, within the window, and exactly one candidate. A candidate that
+  // names some other counterparty is a different payment, never the partner.
   for (const t of byNumber) {
     const isIncome = t.kind === 'income';
     if ((isIncome ? usedIncome : usedExpense).has(t.id)) continue;
+    const mine = normalizeAccountNumber(t.accountNumber);
     const cp = normalizeAccountNumber(t.counterpartyAccountNumber);
     const usedPool = isIncome ? usedExpense : usedIncome;
     const partners = (isIncome ? expenses : incomes).filter(
-      (p) =>
-        !usedPool.has(p.id) &&
-        normalizeAccountNumber(p.accountNumber) === cp &&
-        p.amount === t.amount &&
-        withinWindow(t, p),
+      (p) => {
+        const pcp = normalizeAccountNumber(p.counterpartyAccountNumber);
+        return (
+          !usedPool.has(p.id) &&
+          (!pcp || pcp === mine) &&
+          normalizeAccountNumber(p.accountNumber) === cp &&
+          p.amount === t.amount &&
+          withinWindow(t, p)
+        );
+      },
     );
     if (partners.length === 1) {
       (isIncome ? usedIncome : usedExpense).add(t.id);

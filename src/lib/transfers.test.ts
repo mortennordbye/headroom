@@ -131,6 +131,24 @@ describe('findInternalTransferIds own-account matching', () => {
     expect([...findInternalTransferIds([out, other, inn])].sort()).toEqual(['e1', 'i1']);
   });
 
+  it('does not take a payment from someone else as the partner leg', () => {
+    // A → B is synced on A only; B shows an equal gift from a third party.
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000, date: '2026-07-05' });
+    const own = tx({ id: 'x1', account: 'B', accountNumber: OWN_B, kind: 'expense', amount: 1, date: '2026-07-01' });
+    const gift = tx({ id: 'g1', account: 'B', accountNumber: OWN_B, counterpartyAccountNumber: '99998877777', kind: 'income', amount: 5000, date: '2026-07-06' });
+    expect([...findInternalTransferIds([out, own, gift])]).toEqual(['e1']);
+  });
+
+  it('never starts a match from a row without its own account number (loan or card account)', () => {
+    // Checking pays a linked loan account. The loan account's rows carry no
+    // accountNumber; its incoming instalment names the checking account.
+    const pay = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, kind: 'expense', amount: 5000, date: '2026-07-05' });
+    const loanIn = tx({ id: 'l1', account: 'L', counterpartyAccountNumber: OWN_A, kind: 'income', amount: 5000, date: '2026-07-05' });
+    // A third-account income keeps the amount matcher out of it (ambiguous).
+    const other = tx({ id: 'i2', account: 'C', kind: 'income', amount: 5000, date: '2026-07-05' });
+    expect(findInternalTransferIds([pay, loanIn, other]).size).toBe(0);
+  });
+
   it('leaves the partner alone when two rows on the named account could be it', () => {
     const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000, date: '2026-07-05' });
     const i1 = tx({ id: 'i1', account: 'B', accountNumber: OWN_B, kind: 'income', amount: 5000, date: '2026-07-05' });
