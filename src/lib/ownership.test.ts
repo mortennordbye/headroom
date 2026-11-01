@@ -3,7 +3,7 @@ import type { BalanceSnapshot, CoOwner } from '../context/FinanceContext';
 import {
   activeCoOwners, ownershipShares, myHouseValue, myHouseDebt, primaryHomeWealthValue,
   primaryHomeWealthValueOfShare, myPrimaryHomeWealthValue, validateCoOwners, snapshotCoOwners,
-  rewriteSnapshotCoOwners, sanitizeCoOwners, sanitizeSnapshotCoOwners, mySaleProceeds,
+  rewriteSnapshotCoOwners, sanitizeCoOwners, sanitizeSnapshotCoOwners, mySaleProceeds, withOwnershipShare,
 } from './ownership';
 import { calcWealthTax, WEALTH_TAX_PARAMS } from './norwegianTax';
 import { computeEquityBreakdown } from './equity';
@@ -198,5 +198,51 @@ describe('sanitizeCoOwners', () => {
     expect(sanitizeSnapshotCoOwners(snaps)).toBe(snaps);
     const withKey = { '2025-01': { assets: { houseValue: 1, coOwners: 'bad' } } } as unknown as Record<string, BalanceSnapshot>;
     expect(sanitizeSnapshotCoOwners(withKey)['2025-01'].assets.coOwners).toEqual([]);
+  });
+});
+
+describe('withOwnershipShare (the onboarding question)', () => {
+  const M = '2026-11';
+  const fresh = { id: 'coo-new', name: 'Medeier 1' };
+
+  it('100 % with no co-owner leaves the list as it is', () => {
+    const list: CoOwner[] = [];
+    expect(withOwnershipShare(list, 100, M, fresh)).toBe(list);
+  });
+
+  it('below 100 % adds one co-owner holding the rest, from this month', () => {
+    const next = withOwnershipShare([], 60, M, fresh)!;
+    expect(next).toEqual([{ ...fresh, ownershipPct: 40, since: M }]);
+    expect(ownershipShares({ coOwners: next }, M)).toEqual({ own: 0.6, debt: 0.6 });
+  });
+
+  it('keeps a co-owner who has left and adds the new one beside them', () => {
+    const left = co({ id: 'old', since: '2020-01', until: '2024-12' });
+    expect(withOwnershipShare([left], 70, M, fresh)).toEqual([left, { ...fresh, ownershipPct: 30, since: M }]);
+  });
+
+  it("changes the one current co-owner's share, keeping a separate loan share", () => {
+    const c = co({ since: M, debtSharePct: 30 });
+    expect(withOwnershipShare([c], 75, M, fresh)).toEqual([{ ...c, ownershipPct: 25 }]);
+  });
+
+  it('back to 100 %: a co-owner added this month is removed, an older one ends last month', () => {
+    expect(withOwnershipShare([co({ since: M })], 100, M, fresh)).toEqual([]);
+    expect(withOwnershipShare([co({ since: '2023-04' })], 100, M, fresh))
+      .toEqual([co({ since: '2023-04', until: '2026-10' })]);
+    expect(withOwnershipShare([co()], 100, M, fresh)).toEqual([co({ until: '2026-10' })]);
+  });
+
+  it('leaves richer setups to the Bolig page (null)', () => {
+    expect(withOwnershipShare([co({ id: 'a', ownershipPct: 20 }), co({ id: 'b', ownershipPct: 20 })], 50, M, fresh)).toBeNull();
+    expect(withOwnershipShare([co({ until: '2027-06' })], 50, M, fresh)).toBeNull();
+  });
+
+  it('clamps the share and never returns an invalid list', () => {
+    expect(withOwnershipShare([], 150, M, fresh)).toEqual([]);
+    expect(withOwnershipShare([], -5, M, fresh)).toEqual([{ ...fresh, ownershipPct: 100, since: M }]);
+    expect(withOwnershipShare([], NaN, M, fresh)).toBeNull();
+    // A co-owner joining at 60 % next year would overlap a new 50 % one: null, not an invalid list.
+    expect(withOwnershipShare([co({ id: 'later', ownershipPct: 60, since: '2027-06' })], 50, M, fresh)).toBeNull();
   });
 });

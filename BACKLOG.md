@@ -107,10 +107,6 @@ in git and the CHANGELOG, not here.
 
 ## Housing
 
-- **Co-owner gaps.** Projections and automation catch-ups use today's loan share past a co-owner's
-  `until` (`src/lib/automation.ts`, `src/lib/projectBalances.ts`); buy-and-sell treats the next home
-  as the user's alone (`calcTransitionNewLoan`); onboarding doesn't ask the ownership share
-  (`src/lib/onboarding.ts`).
 - **A declined catch-up counts its skipped months as interest-charged.** Needs per-loan "interest
   charged through" state. **Where**: `computeAutomationPostings` in `src/lib/automation.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank

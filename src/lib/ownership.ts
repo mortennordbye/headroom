@@ -1,5 +1,5 @@
 import type { Assets, BalanceSnapshot, CoOwner } from '../context/FinanceContext';
-import { currentMonthKey } from './date';
+import { addMonthsKey, currentMonthKey } from './date';
 import { TAX_YEAR, WEALTH_TAX_PARAMS } from './norwegianTax';
 import { coerceNumber } from './sanitizePayload';
 
@@ -114,6 +114,30 @@ export function validateCoOwners(list: CoOwner[]): { ok: true } | { ok: false; e
     if (active.reduce((s, c) => s + debtPct(c), 0) > 100) return { ok: false, error: 'sumDebt' };
   }
   return { ok: true };
+}
+
+/**
+ * The co-owner list after the user answers "you own `sharePct` % of the home"
+ * in `month` (the onboarding question). Handles the simple shapes only: no
+ * current co-owner (one is added from `month` holding the rest), or one with no
+ * last month (their share is set; at 100 % they are removed if added this
+ * month, else end last month). Anything richer, a non-finite share, or a result
+ * that fails `validateCoOwners` gives null: edit it on the Bolig page.
+ */
+export function withOwnershipShare(
+  list: CoOwner[], sharePct: number, month: string, newRow: Pick<CoOwner, 'id' | 'name'>,
+): CoOwner[] | null {
+  if (!Number.isFinite(sharePct)) return null;
+  const others = 100 - Math.min(100, Math.max(0, sharePct));
+  const active = activeCoOwners(list, month);
+  if (active.length > 1 || active[0]?.until) return null;
+  const c = active[0];
+  let next: CoOwner[];
+  if (!c) next = others > 0 ? [...list, { ...newRow, ownershipPct: others, since: month }] : list;
+  else if (others > 0) next = list.map(x => (x === c ? { ...c, ownershipPct: others } : x));
+  else if (c.since === month) next = list.filter(x => x !== c);
+  else next = list.map(x => (x === c ? { ...c, until: addMonthsKey(month, -1) } : x));
+  return validateCoOwners(next).ok ? next : null;
 }
 
 /** The co-owners to store in `month`'s snapshot: rows active then, dates stripped. */

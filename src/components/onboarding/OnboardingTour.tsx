@@ -15,6 +15,9 @@ import { ProgressBar } from '../ui/ProgressBar';
 import { MonthPicker } from '../ui/MonthPicker';
 import { parseLocaleNumber, isValidYearMonth } from '../../lib/validators';
 import { CATEGORIES, isCategoryKey } from '../../lib/categories';
+import { ownershipShares, withOwnershipShare } from '../../lib/ownership';
+import { currentMonthKey } from '../../lib/date';
+import { makeId } from '../../lib/savingsMigration';
 import {
   ONBOARDING_TOPICS,
   type OnboardingField,
@@ -322,12 +325,23 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     t, lang, setLang, region, setRegion,
     currentMonth, effectiveIncome, setMonthlyIncomeForMonth,
     savingsTargetPercent, setSavingsTargetPercent,
-    assets, updateAsset, pension, updatePension,
+    assets, updateAsset, setCoOwners, pension, updatePension,
     growthReturnRate, setGrowthReturnRate, houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
   } = useFinance();
 
   const monthKey = format(currentMonth, 'yyyy-MM');
+
+  // The ownership share is stored as co-owners, dated from the real month like
+  // the Bolig page's. A setup richer than one co-owner is edited there instead.
+  const shareMonth = currentMonthKey();
+  const coOwnerList = assets.coOwners ?? [];
+  const coOwnersFor = (sharePct: number) => withOwnershipShare(coOwnerList, sharePct, shareMonth, {
+    id: makeId('coo'), name: t.ownership.defaultName.replace('{n}', String((assets.coOwners?.length ?? 0) + 1)),
+  });
+  const myShare = Math.round(ownershipShares(assets, shareMonth).own * 1000) / 10;
+  const [shareEditable] = useState(() => coOwnersFor(myShare) !== null);
+  const shown = fields.filter(f => f.writer !== 'ownershipShare' || shareEditable);
 
   // Growth-rate settings live outside Assets/Pension, so they need their own map.
   const growthRates: Record<string, number> = { growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate };
@@ -345,6 +359,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
       case 'asset': return String(assets[f.key as keyof Assets] ?? 0);
       case 'pension': return String(pension[f.key as keyof Pension] ?? 0);
       case 'growthRate': return String(growthRates[f.key] ?? 0);
+      case 'ownershipShare': return String(myShare);
       default: return '';
     }
   };
@@ -366,6 +381,10 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     else if (f.writer === 'asset') updateAsset(f.key as NumericAssetKey, n);
     else if (f.writer === 'pension') updatePension(f.key as keyof Pension, n);
     else if (f.writer === 'growthRate') growthSetters[f.key]?.(n);
+    else if (f.writer === 'ownershipShare' && n <= 100) {
+      const next = coOwnersFor(n);
+      if (next && next !== coOwnerList) setCoOwners(next);
+    }
   };
 
   const fieldLabels = t.onboarding.fields;
@@ -408,8 +427,8 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     );
   };
 
-  const primary = fields.filter(f => !f.advanced);
-  const advanced = fields.filter(f => f.advanced);
+  const primary = shown.filter(f => !f.advanced);
+  const advanced = shown.filter(f => f.advanced);
 
   return (
     <div className="space-y-3 mb-5">

@@ -10,7 +10,8 @@
  * (an Assets/Pension key, or a sentinel for the special writers).
  */
 
-export type OnboardingWriter = 'lang' | 'region' | 'income' | 'savingsTarget' | 'asset' | 'pension' | 'growthRate';
+export type OnboardingWriter = 'lang' | 'region' | 'income' | 'savingsTarget' | 'asset' | 'pension' | 'growthRate'
+  | 'ownershipShare';
 
 export type OnboardingGroup = 'essentials' | 'wealth' | 'learn';
 
@@ -152,6 +153,8 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     fields: [
       { key: 'houseValue', writer: 'asset', labelKey: 'houseValue', kind: 'number' },
       { key: 'houseDebt', writer: 'asset', labelKey: 'houseDebt', kind: 'number' },
+      // The user's share of the home, written as co-owners (assets.coOwners) like the Bolig page.
+      { key: 'ownershipShare', writer: 'ownershipShare', labelKey: 'ownershipShare', kind: 'percent' },
     ],
   },
   {
