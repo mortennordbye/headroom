@@ -841,8 +841,7 @@ const BudgetPage: React.FC = () => {
           const icon = <Icon size={12} strokeWidth={2.25} className="shrink-0 mt-[3px]" style={{ color }} aria-hidden />;
           return (
           <div key={sv.id} className="py-4 border-b border-[var(--border)] last:border-0">
-            {/* The name gets priority in the narrow column: the amount is in
-                whole kroner, and a long name wraps rather than truncates. */}
+            {/* A long name wraps rather than truncates in the narrow column. */}
             <div className="flex items-start justify-between gap-2 group">
               {expensesReadOnly ? (
                 <span className="flex items-start gap-2 text-[13px] leading-snug font-medium text-[var(--text-1)] min-w-0">
@@ -862,7 +861,7 @@ const BudgetPage: React.FC = () => {
               )}
               <div className="flex items-center gap-2 shrink-0 leading-snug">
                 {expensesReadOnly ? (
-                  <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">{formatCurrencyShort(sv.amount)}</span>
+                  <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">{formatCurrency(sv.amount)}</span>
                 ) : (
                   <>
                     <button
@@ -871,7 +870,7 @@ const BudgetPage: React.FC = () => {
                       className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
                       onClick={() => openSavingDialog(sv)}
                     >
-                      {formatCurrencyShort(sv.amount)}
+                      {formatCurrency(sv.amount)}
                     </button>
                     <button
                       onClick={() => removeSaving(sv.id, sv.name)}
