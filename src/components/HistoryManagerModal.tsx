@@ -51,7 +51,7 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
   const {
     t, lang, formatCurrency,
     balanceSnapshots, netWorthHistory, setManualSnapshot, deleteManualSnapshot, clearHistory,
-    assets, loan, pension, homeowner, transition, housingMode, debts, fixedExpenses, categoryBudgets,
+    assets, loan, pension, transition, housingMode, debts, fixedExpenses, categoryBudgets, liveBalanceSnapshot,
     savingsTargetPercent, growthReturnRate, houseGrowthRate,
   } = useFinance();
   const hm = t.historyManager;
@@ -77,11 +77,13 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
 
   // The live snapshot, used as the defaulting base when no recorded month exists.
   const liveSnapshot = useMemo<BalanceSnapshot>(() => ({
-    assets, loan, pension, homeowner, transition, housingMode, debts,
+    // The homeowner slice as stored (a notified rate not yet applied), so a
+    // month backfilled before the notice keeps the old rate.
+    assets, loan, pension, homeowner: liveBalanceSnapshot.homeowner, transition, housingMode, debts,
     fixedExpenses, categoryBudgets,
     assumptions: { savingsTargetPercent, growthReturnRate, houseGrowthRate },
     v: 2, source: 'manual',
-  }), [assets, loan, pension, homeowner, transition, housingMode, debts, fixedExpenses,
+  }), [assets, loan, pension, liveBalanceSnapshot.homeowner, transition, housingMode, debts, fixedExpenses,
        categoryBudgets, savingsTargetPercent, growthReturnRate, houseGrowthRate]);
 
   const monthLabel = (key: string) =>

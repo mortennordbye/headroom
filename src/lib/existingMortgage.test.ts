@@ -22,6 +22,14 @@ describe('currentMortgage', () => {
     });
   });
 
+  it('a notified rate is the rate from its month on, so a stored slice reads the rate of its month', () => {
+    // A snapshot (or a month backfilled from it) keeps the slice as entered.
+    const h = { ...HOMEOWNER, rente: 4.11, notifiedRate: 6.37, notifiedRateFrom: '2026-10' };
+    expect(currentMortgage('homeowner', ASSETS, h, TRANSITION, '2026-09').ratePct).toBe(4.11);
+    expect(currentMortgage('homeowner', ASSETS, h, TRANSITION, '2026-10').ratePct).toBe(6.37);
+    expect(currentMortgage('transitioning', ASSETS, h, TRANSITION, '2026-11').ratePct).toBe(6.37);
+  });
+
   it('transitioning: the same current loan, rate and term from the homeowner slice', () => {
     expect(currentMortgage('transitioning', ASSETS, HOMEOWNER, TRANSITION, NOW)).toEqual(
       currentMortgage('homeowner', ASSETS, HOMEOWNER, TRANSITION, NOW),

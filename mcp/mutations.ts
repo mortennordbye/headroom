@@ -34,6 +34,7 @@ import { diff, type FieldChange } from './util';
 import { birthYearFrom } from '../src/lib/profile';
 import { currentMonthKey } from '../src/lib/date';
 import { isValidTermParts, yearsFromParts } from '../src/lib/loanTerm';
+import { withNotifiedRate } from '../src/lib/notifiedRate';
 import { rewriteSnapshotCoOwners, sanitizeCoOwners, validateCoOwners, type CoOwnerError } from '../src/lib/ownership';
 import { currentResidence } from '../src/lib/property';
 
@@ -508,9 +509,15 @@ export function updateCurrentMortgage(
   if (termYears !== undefined && !isValidTermParts(termYears, termMonths!)) {
     throw new Error('term must be whole years 0-50 and months 0-11, at least one month');
   }
-  const before = blob.homeowner;
+  // A rate written after a notified rate took effect replaces it: consume the
+  // notice so it can't override the new rate when read (notifiedRate.ts).
+  const before = args.rente !== undefined ? withNotifiedRate(blob.homeowner, monthKey) : blob.homeowner;
   const after = { ...before };
   const changes: FieldChange[] = [];
+  if (before !== blob.homeowner) {
+    changes.push(diff('homeowner.notifiedRate', blob.homeowner.notifiedRate, undefined));
+    changes.push(diff('homeowner.notifiedRateFrom', blob.homeowner.notifiedRateFrom, undefined));
+  }
   for (const key of ['rente', 'termingebyr', 'startDate'] as const) {
     const v = args[key];
     if (v === undefined) continue;

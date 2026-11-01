@@ -486,3 +486,32 @@ describe('delete_transaction on a bank-imported row', () => {
     expect(blob.deletedBankIds).toEqual(['eb-abc12345-1']);
   });
 });
+
+describe('update_current_mortgage and a notified rate', () => {
+  const fixture = () => {
+    const b = structuredClone(fullFixture());
+    b.homeowner = { ...b.homeowner!, rente: 5.5, notifiedRate: 5.7, notifiedRateFrom: '2026-08' };
+    return b;
+  };
+  it('keeps a notice that is not due yet', () => {
+    const b = fixture();
+    updateCurrentMortgage(b, { rente: 5.2 }, '2026-07');
+    expect(b.homeowner).toMatchObject({ rente: 5.2, notifiedRate: 5.7, notifiedRateFrom: '2026-08' });
+  });
+
+  it('a rate written after the notice took effect replaces it', () => {
+    const b = fixture();
+    const changes = updateCurrentMortgage(b, { rente: 5.2 }, '2026-09');
+    expect(b.homeowner?.rente).toBe(5.2);
+    expect(b.homeowner).not.toHaveProperty('notifiedRate');
+    expect(b.homeowner).not.toHaveProperty('notifiedRateFrom');
+    // The diff starts from the rate in force (the notified one).
+    expect(changes).toContainEqual({ field: 'homeowner.rente', before: 5.7, after: 5.2 });
+  });
+
+  it('a non-rate edit leaves the notice alone', () => {
+    const b = fixture();
+    updateCurrentMortgage(b, { termingebyr: 70 }, '2026-09');
+    expect(b.homeowner).toMatchObject({ rente: 5.5, notifiedRate: 5.7 });
+  });
+});

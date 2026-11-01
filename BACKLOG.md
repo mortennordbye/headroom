@@ -124,8 +124,6 @@ in git and the CHANGELOG, not here.
   monthly reconcile prompt. A "at 7% it would now be ~X, confirm" suggestion belongs here too (growth
   never posts by design). **Where**: `src/lib/provenance.ts`, `src/components/ui/ProvenanceBadge.tsx`,
   `src/lib/snapshots.ts`, `src/components/HistoryManagerModal.tsx`.
-- **`notifiedRate` never applies itself** when its month arrives. **Where**: `HomeownerData` in
-  `src/context/FinanceContext.tsx`.
 - **Provenance is a value-comparison heuristic** (a deliberate value equal to the default shows
   "Default"); a fix needs a `touched` set. Badges could extend to fixed-expense seeds,
   `loan`/`homeowner`/`transition` and `savingsTargetPercent`. **Where**: `src/lib/provenance.ts`.

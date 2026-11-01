@@ -42,7 +42,10 @@ const HOMEOWNER: HomeownerData = {
   originalLoanAmount: 3000000, rente: 5.5,
   nedbetalingstid: 25, termingebyr: 65, accountLabel: 'Boliglån',
   nedbetalingstidAsOf: '2026-06', currentMortgageBalanceAsOf: '2026-06',
-  startDate: '2020-01', notifiedRate: 5.7, notifiedRateFrom: '2026-08',
+  // The notice is far in the future: once due it is the rate (notifiedRate.ts),
+  // and several derivations read today's month, so a near date would make the
+  // tests depend on when they run. Tests of the switch set their own month.
+  startDate: '2020-01', notifiedRate: 5.7, notifiedRateFrom: '2099-01',
 };
 
 const TRANSITION: TransitionData = {

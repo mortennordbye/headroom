@@ -40,6 +40,7 @@ import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { stampLegacyTerm } from '../lib/loanTerm';
 import { migrateMortgageBalance, migrateImportedMortgage } from '../lib/mortgageSlices';
 import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest, type CurrentMortgage } from '../lib/existingMortgage';
+import { withNotifiedRate } from '../lib/notifiedRate';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
   computeAutomationPostings,
@@ -426,7 +427,8 @@ export interface HomeownerData {
   accountLabel?: string;
   /** Loan origination month 'YYYY-MM' — anchors payoff date and elapsed/remaining. */
   startDate?: string;
-  /** Notified upcoming nominal rate ("Varslet nominell rente"), display-only. */
+  /** Notified upcoming nominal rate ("Varslet nominell rente"). From its month on
+   *  it is the current rate: read the live slice through notifiedRate.ts. */
   notifiedRate?: number;
   /** Month 'YYYY-MM' the notified rate applies from. */
   notifiedRateFrom?: string;
@@ -1952,6 +1954,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const prevMonthIncome = monthlyIncomes[prevMonthKey] ?? 0;
 
 
+  // The homeowner slice as of today: a notified rate whose month has come is the
+  // current rate (notifiedRate.ts). The pages read this; the stored slice and
+  // this month's snapshot keep it as entered (currentMortgage applies the notice
+  // at the month it is read for), so a month backfilled from them before the
+  // notice keeps the old rate. Recomputed when the slice changes, like
+  // currentMortgageNow: a tab open across the switch month updates on reload.
+  const homeownerNow = useMemo(() => withNotifiedRate(homeowner, currentMonthKey()), [homeowner]);
+
   // The current home's mortgage today: the current loan in the owner modes
   // (homeowner rate and term, also while transitioning), a first buyer's Assets
   // debt held flat. Every projection and the rentefradrag read it.
@@ -2501,7 +2511,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const updateHomeowner = useCallback((key: keyof HomeownerData, value: number | string) => {
     // The term carries the month it was written (see loanTerm.ts).
     const stamp = key === 'nedbetalingstid' ? { nedbetalingstidAsOf: currentMonthKey() } : {};
-    setHomeowner(prev => ({ ...prev, [key]: value, ...stamp }));
+    // Edit the slice as it reads today, so a rate typed after a notified rate
+    // took effect replaces it instead of being overridden by it.
+    setHomeowner(prev => ({ ...withNotifiedRate(prev, currentMonthKey()), [key]: value, ...stamp }));
   }, []);
 
   const updateTransition = useCallback((key: keyof TransitionData, value: number) => {
@@ -3255,7 +3267,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     recurringTemplates, setRecurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount, setCoOwners,
     loan, updateLoan, pension, updatePension,
-    housingMode, setHousingMode: changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
+    housingMode, setHousingMode: changeHousingMode, homeowner: homeownerNow, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,
     secondHomeScenarios, addSecondHomeScenario, updateSecondHomeScenario, removeSecondHomeScenario,
     boligAssumptions, updateBoligAssumptions,
@@ -3288,7 +3300,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     categoryBudgets, setCategoryBudget, recurringTemplates,
     assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount, setCoOwners,
     loan, updateLoan, pension, updatePension, housingMode,
-    changeHousingMode, homeowner, updateHomeowner, transition, updateTransition,
+    changeHousingMode, homeownerNow, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,
     secondHomeScenarios, addSecondHomeScenario, updateSecondHomeScenario, removeSecondHomeScenario,
     boligAssumptions, updateBoligAssumptions,

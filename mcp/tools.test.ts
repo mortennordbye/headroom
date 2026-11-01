@@ -430,6 +430,18 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(later.status?.annualTaxDeduction).toBe(now.status?.annualTaxDeduction);
   });
 
+  it('mortgage: the notified rate becomes the rate from its month on', () => {
+    const b = fullFixture();
+    b.homeowner = { ...b.homeowner!, rente: 5.5, notifiedRate: 5.7, notifiedRateFrom: '2026-08' };
+    const before = derive.mortgage(b, '2026-07');
+    expect(before.ratePct).toBe(5.5);
+    expect(before.notifiedRate).toEqual({ ratePct: 5.7, from: '2026-08' });
+    const after = derive.mortgage(b, '2026-08');
+    expect(after.ratePct).toBe(5.7);
+    expect(after.notifiedRate).toBeNull();
+    expect(after.monthlyPayment).toBeGreaterThan(before.monthlyPayment);
+  });
+
   it('mortgage: a 50 % co-owner halves my share, not the loan or its LTV', () => {
     const b = fullFixture();
     const solo = derive.mortgage(b, MONTH);
