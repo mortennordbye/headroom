@@ -26,9 +26,6 @@ in git and the CHANGELOG, not here.
 
 ## Income and salary
 
-- **Manual monthly-income override goes stale vs the salary system.** The per-month override never
-  re-syncs when salary/tax/IPS change. Wants a "stale override" indicator or re-sync affordance.
-  **Where**: `effectiveIncome`/`derivedNetMonthlyFor` in `src/context/FinanceContext.tsx`.
 - **Consultant features.** Commission entries (`CommissionEntry` aggregated in `compByYear`), a
   per-job billing rate with billed-hours snapshots, and a per-job stack in the Total comp chart
   (`compByYear` aggregates globally). **Where**: `src/context/FinanceContext.tsx`,
