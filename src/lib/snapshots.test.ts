@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nearestSnapshot, historyRows, buildManualSnapshot, resolveMonthView, fixedExpensesForMonth, type SnapshotBalances } from './snapshots';
+import { nearestSnapshot, historyRows, buildManualSnapshot, resolveMonthView, fixedExpensesForMonth, snapshotHasAssumptions, type SnapshotBalances } from './snapshots';
 import { netWorthFromSnapshot } from './netWorth';
 import type { BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
 
@@ -174,5 +174,16 @@ describe('fixedExpensesForMonth', () => {
   it('reads live for the current and future months even if a snapshot exists', () => {
     expect(fixedExpensesForMonth(snapshots, live, '2026-05', '2026-05')).toBe(live);
     expect(fixedExpensesForMonth(snapshots, live, '2026-05', '2026-04')).toBe(live);
+  });
+});
+
+describe('snapshotHasAssumptions', () => {
+  it('is false for a v1 snapshot with no recorded assumptions', () => {
+    expect(snapshotHasAssumptions(mk())).toBe(false);
+  });
+
+  it('is true when the month recorded its assumptions', () => {
+    const snap = { ...mk(), assumptions: { savingsTargetPercent: 20, growthReturnRate: 7, houseGrowthRate: 3 } };
+    expect(snapshotHasAssumptions(snap)).toBe(true);
   });
 });

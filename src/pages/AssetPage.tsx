@@ -36,6 +36,7 @@ import DebtSection from '../components/DebtSection';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
+import { snapshotHasAssumptions } from '../lib/snapshots';
 import { SavingsAllocationPanel } from '../components/SavingsAllocationPanel';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { activeCoOwners, myHouseDebt, myHouseValue, myPrimaryHomeWealthValue, ownershipShares } from '../lib/ownership';
@@ -115,6 +116,7 @@ const AssetPage: React.FC = () => {
   const snapAssumptions = hist.snapshot?.assumptions;
   const projGrowthReturn = snapAssumptions?.growthReturnRate ?? growthReturnRate;
   const projHouseGrowth = snapAssumptions?.houseGrowthRate ?? houseGrowthRate;
+  const assumptionsNotRecorded = hist.mode === 'recorded' && hist.snapshot != null && !snapshotHasAssumptions(hist.snapshot);
   // The mortgage the projections amortise: the viewed month's, read the same
   // way as today's (`currentMortgage`), so a past month uses the loan it had then.
   const mortgage = useMemo(
@@ -732,6 +734,11 @@ const AssetPage: React.FC = () => {
             <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreGrowthRateDefaults} />
           </div>
         </div>
+        {assumptionsNotRecorded && (
+          <p className="text-[11px] -mt-2" style={{ color: 'var(--text-3)' }}>
+            {t.assetPage.assumptionsNotRecorded}
+          </p>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-[13px]">
           <div>
