@@ -35,6 +35,7 @@ import { excludedTransferIds, type TransferRule } from '../lib/transferRules';
 import { isOneOff, withoutOneOffs, type TransactionSegment } from '../lib/segments';
 import type { CategoryKey } from '../lib/categories';
 import { reconcile, runningEnvelopeBalance, discretionarySpendForMonth, type Reconciliation } from '../lib/envelopes';
+import { fixedExpensesForMonth } from '../lib/snapshots';
 import { lastNMonthKeys, currentMonthKey, addMonthsKey } from '../lib/date';
 import { stampLegacyTerm } from '../lib/loanTerm';
 import { migrateMortgageBalance, migrateImportedMortgage } from '../lib/mortgageSlices';
@@ -2032,9 +2033,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // `fixedExpenses`; this is read-only view data (see BudgetPage's read-only gate).
   const fixedExpensesFromSnapshot = monthKey < currentMonthKey()
     && balanceSnapshots[monthKey]?.fixedExpenses !== undefined;
-  const viewFixedExpenses = fixedExpensesFromSnapshot
-    ? balanceSnapshots[monthKey].fixedExpenses!
-    : fixedExpenses;
+  const viewFixedExpenses = fixedExpensesForMonth(balanceSnapshots, fixedExpenses, monthKey, currentMonthKey());
 
   // Income minus consumption — the pool a percentage saving is a share of, and
   // the pool the savings target is measured against. Derived from the expenses
@@ -2260,8 +2259,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // discretionary spend counts, so the chip compares like with like instead of
   // counting salary deposits or own-account moves as spending.
   const prevMonthSpending = useMemo(
-    () => discretionarySpendForMonth(budgetTransactions, fixedExpenses, prevMonthKey),
-    [budgetTransactions, fixedExpenses, prevMonthKey],
+    () => discretionarySpendForMonth(
+      budgetTransactions,
+      fixedExpensesForMonth(balanceSnapshots, fixedExpenses, prevMonthKey, currentMonthKey()),
+      prevMonthKey,
+    ),
+    [budgetTransactions, balanceSnapshots, fixedExpenses, prevMonthKey],
   );
   const currentMonthSpending = useMemo(
     () => discretionarySpendForMonth(budgetTransactions, viewFixedExpenses, monthKey),

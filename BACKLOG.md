@@ -6,12 +6,6 @@ in git and the CHANGELOG, not here.
 
 ## Calculations and money figures
 
-- **Dashboard "vs last month" spend chip mixes fixed-expense sources.** `currentMonthSpending`
-  reconciles against the viewed month's snapshot fixed expenses (`viewFixedExpenses`) while
-  `prevMonthSpending` uses live `fixedExpenses`, so the delta % can count different transactions
-  as enveloped. **Unblock**: resolve `prevMonthSpending` against
-  `balanceSnapshots[prevMonthKey].fixedExpenses` too. **Where**: `src/context/FinanceContext.tsx`
-  (`prevMonthSpending`/`currentMonthSpending`).
 - **Mortgage edge cases only reachable with hand-made or old data.** MCP `get_mortgage` treats
   missing sale-cost fields as zero proceeds; the paydown plan can anchor on a stored snapshot whose
   old copy of the balance was a dated 3 000 000 placeholder, shows "months ahead" after a sale, and
