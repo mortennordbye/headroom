@@ -191,6 +191,23 @@ export function calcRecommendations(
   };
 }
 
+/**
+ * The whole month's planned saving: what already moves automatically
+ * (`planContributions`) plus whatever of the target is still unallocated.
+ * `consumption` is the fixed expenses alone, without the savings transfers.
+ * Income stability only drives the conservative *suggestion*, never the plan,
+ * so no income history is needed here.
+ */
+export function planMonthlySavingFor(
+  income: number,
+  consumption: number,
+  planContributions: number,
+  savingsTargetPercent: number,
+): number {
+  const r = calcRecommendations(income, income, consumption + planContributions, 0, savingsTargetPercent, planContributions);
+  return planContributions + Math.max(0, r.recommendedInvestment);
+}
+
 export type EmergencyFundStatus = 'low' | 'adequate' | 'strong';
 
 export interface EmergencyFundResult {

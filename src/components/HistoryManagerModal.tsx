@@ -7,6 +7,7 @@ import { ModalShell } from './ui/ModalShell';
 import { NumberRow } from './ui/NumberRow';
 import { netWorthFromSnapshot } from '../lib/netWorth';
 import { snapshotCoOwners } from '../lib/ownership';
+import { currentMonthKey } from '../lib/date';
 import {
   nearestSnapshot,
   historyRows,
@@ -56,7 +57,7 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
   } = useFinance();
   const hm = t.historyManager;
   const dateLocale = lang === 'nb' ? nb : enUS;
-  const nowKey = format(new Date(), 'yyyy-MM');
+  const nowKey = currentMonthKey();
 
   const [monthsBefore, setMonthsBefore] = useState(0);
   const [editing, setEditing] = useState<string | null>(initialMonth ?? null); // month being edited

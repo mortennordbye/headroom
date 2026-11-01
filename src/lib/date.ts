@@ -1,4 +1,4 @@
-import { format, parseISO, isValid, differenceInYears } from 'date-fns';
+import { parseISO, isValid, differenceInYears } from 'date-fns';
 
 /**
  * Whole years from a 'YYYY-MM-DD' birth date to `now` (defaults to today).
@@ -12,16 +12,23 @@ export function ageFromBirthDate(birthDate: string | undefined, now: Date = new 
   return differenceInYears(now, dob);
 }
 
+// Fixed to Norway's zone so the browser, the server and the MCP (often UTC in
+// Docker) all agree on which month it is, whatever the host clock's zone.
+const OSLO_YEAR_MONTH = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit',
+});
+
 /**
- * The current month as a 'yyyy-MM' key, in LOCAL time.
+ * The current month as a 'yyyy-MM' key, in Europe/Oslo time.
  *
- * Use this everywhere instead of `new Date().toISOString().slice(0, 7)` — the
- * ISO form is UTC, so for the first hour or two of each month (Norway is UTC+1/
- * +2) it disagrees with the local-time keys used across the rest of the app
- * (FinanceContext, SalaryPage), landing edits in the wrong month.
+ * Use this everywhere instead of `new Date().toISOString().slice(0, 7)` (UTC)
+ * or `format(new Date(), 'yyyy-MM')` (host zone): both disagree with Oslo for
+ * an hour or two around midnight at month end, landing edits in the wrong month.
  */
 export function currentMonthKey(): string {
-  return format(new Date(), 'yyyy-MM');
+  const parts = OSLO_YEAR_MONTH.formatToParts(new Date());
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}`;
 }
 
 /** A specific date as a 'yyyy-MM' key, in LOCAL time. */

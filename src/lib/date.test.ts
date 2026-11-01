@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf, lastNMonthKeys, isBeforePayday, ageFromBirthDate } from './date';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { currentMonthKey, monthKeyFromDate, addMonthsKey, monthsBetween, yearOf, lastNMonthKeys, isBeforePayday, ageFromBirthDate } from './date';
 
 describe('ageFromBirthDate', () => {
   const now = new Date(2026, 6, 18); // 2026-07-18
@@ -15,6 +15,28 @@ describe('ageFromBirthDate', () => {
     expect(ageFromBirthDate('', now)).toBeNull();
     expect(ageFromBirthDate('not-a-date', now)).toBeNull();
     expect(ageFromBirthDate('2030-01-01', now)).toBeNull();
+  });
+});
+
+describe('currentMonthKey', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('uses Oslo time, not the host zone, across a month boundary', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-31T23:30:00Z')); // 00:30 on 1 Nov in Oslo (CET)
+    expect(currentMonthKey()).toBe('2026-11');
+  });
+
+  it('is still the old month just before Oslo midnight in summer time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-30T21:59:00Z')); // 23:59 on 30 Jun in Oslo (CEST)
+    expect(currentMonthKey()).toBe('2026-06');
+  });
+
+  it('rolls the year over on Oslo New Year', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-12-31T23:00:00Z')); // 00:00 on 1 Jan 2027 in Oslo
+    expect(currentMonthKey()).toBe('2027-01');
   });
 });
 

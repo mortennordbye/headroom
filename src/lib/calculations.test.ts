@@ -5,6 +5,7 @@ import {
   calcHouseEquityByYear,
   calcMortgageBalanceByYear,
   calcRecommendations,
+  planMonthlySavingFor,
   calcEmergencyFundStatus,
   bufferRecommendation,
   calcDebtToIncome,
@@ -143,6 +144,21 @@ describe('calcRecommendations — savings is not an expense', () => {
     const r = calcRecommendations(50_000, 50_000, 30_000 + 2_000, 0.2, 20, 2_000);
     expect(r.conservativeMode).toBe(true);
     expect(r.suggestedInvestment).toBe(4_000);
+  });
+});
+
+describe('planMonthlySavingFor', () => {
+  // Same household as above: 31 741 consumption, 65% target → 15 552 total target.
+  it('is the automated transfers plus the unallocated rest of the target', () => {
+    expect(planMonthlySavingFor(55_667, 31_741, 500, 65)).toBe(15_552);
+  });
+
+  it('is what is already automated once that exceeds the target', () => {
+    expect(planMonthlySavingFor(55_667, 31_741, 15_727, 65)).toBe(15_727);
+  });
+
+  it('is only the automated transfers when income does not cover consumption', () => {
+    expect(planMonthlySavingFor(20_000, 25_000, 1_000, 20)).toBe(1_000);
   });
 });
 
