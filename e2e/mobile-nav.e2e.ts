@@ -52,3 +52,26 @@ test('a normal tap on a tab navigates once', async ({ page, request }) => {
   await page.goBack();
   await expect(page).toHaveURL(/\/(\?|$)/);
 });
+
+test('More opens on one tap, stays open, and its items navigate on one tap', async ({ page, request }) => {
+  await putBlob(request, seedBlob());
+  await page.goto('/');
+  await expect(page.getByRole('main').getByRole('heading', { level: 1 }).first()).toBeVisible();
+
+  await page.getByRole('navigation').getByRole('button', { name: 'Mer' }).tap();
+  const sheet = page.getByRole('dialog');
+  await expect(sheet).toBeVisible();
+  // The touch was handled on lift-off and its click cancelled, so nothing
+  // lands on the backdrop that just appeared and closes the sheet again.
+  await page.waitForTimeout(500);
+  await expect(sheet).toBeVisible();
+
+  await sheet.getByRole('link', { name: 'Prognose' }).tap();
+  await expect(page).toHaveURL(/\/forecast/);
+  await expect(sheet).toBeHidden();
+
+  await page.getByRole('navigation').getByRole('button', { name: 'Mer' }).tap();
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole('button', { name: 'Avbryt' }).tap();
+  await expect(sheet).toBeHidden();
+});
