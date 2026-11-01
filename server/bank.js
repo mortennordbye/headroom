@@ -704,11 +704,47 @@ async function startLink(bankName, relinkConnectionId) {
 // An account entry in the session response can be a full object or (for some
 // ASPSPs) a bare uid string. Normalize to the shape we store. The IBAN (or BBAN)
 // is captured so accounts with an identical holder name can still be told apart.
+// `cash_account_type` (ISO 20022: CACC, SVGS, LOAN, CARD, ...) tells a loan or
+// card account apart from one that holds the user's own money.
 function normalizeAccount(a) {
   if (typeof a === 'string') return { uid: a };
   const acctId = a.account_id || {};
   const iban = acctId.iban || acctId.bban || (acctId.other && acctId.other.identification) || a.iban || undefined;
-  return { uid: a.uid, name: a.name, product: a.product, currency: a.currency, ...(iban ? { iban } : {}) };
+  const type = typeof a.cash_account_type === 'string' && a.cash_account_type ? a.cash_account_type : undefined;
+  return {
+    uid: a.uid, name: a.name, product: a.product, currency: a.currency,
+    ...(iban ? { iban } : {}),
+    ...(type ? { cash_account_type: type } : {}),
+  };
+}
+
+// The account number to stamp on this account's rows, which makes it count as
+// one of the user's own accounts in transfer detection (src/lib/transfers.ts).
+// Loan and card accounts are left out: a payment to them is debt service, not a
+// neutral move. An unknown type still counts.
+function ownAccountNumber(acc) {
+  if (!acc.iban) return undefined;
+  if (acc.cash_account_type === 'LOAN' || acc.cash_account_type === 'CARD') return undefined;
+  return String(acc.iban).replace(/\s+/g, '');
+}
+
+// Fill in the account type (and IBAN, if missing) for accounts linked before it
+// was captured, from GET /accounts/{uid}/details under the existing consent.
+// An account whose details can't be fetched is returned unchanged.
+async function enrichAccountTypes(accounts) {
+  return Promise.all(accounts.map(async (a) => {
+    if (a.cash_account_type) return a;
+    try {
+      const d = normalizeAccount({ ...(await api('GET', `/accounts/${a.uid}/details`)), uid: a.uid });
+      return {
+        ...a,
+        ...(d.cash_account_type ? { cash_account_type: d.cash_account_type } : {}),
+        ...(!a.iban && d.iban ? { iban: d.iban } : {}),
+      };
+    } catch {
+      return a;
+    }
+  }));
 }
 
 // Accounts as returned when the session was created, with a GET fallback for
@@ -880,6 +916,14 @@ async function fetchMappedTransactions() {
         console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);
       }
     }
+    // Once per connection: accounts linked before the account type was captured
+    // fetch their details, so a loan or card account stops counting as "own"
+    // (ownAccountNumber). Same consent, no re-link.
+    if (Array.isArray(c.accounts) && c.accounts.some((a) => !a.cash_account_type) && !c.accounts_typed) {
+      c.accounts = await enrichAccountTypes(c.accounts);
+      c.accounts_typed = true;
+      updateConnection(c.id, c.session_id, { accounts: c.accounts, accounts_typed: true });
+    }
     const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
     // Never further back than EB_DAYS: a connection whose sync keeps failing
     // keeps its old last_sync, and an ever-growing window would end in an error
@@ -899,7 +943,7 @@ async function fetchMappedTransactions() {
             account: accountKey(c, acc),
             bank: c.aspsp || undefined,
             accountName: acc.name || acc.product || '',
-            accountNumber: acc.iban ? String(acc.iban).replace(/\s+/g, '') : undefined,
+            accountNumber: ownAccountNumber(acc),
           }).map((row) => (c.relinked ? { ...row, relinkPrefix: c.idPrefix } : row)),
         );
       }

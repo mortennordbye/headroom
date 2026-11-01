@@ -55,7 +55,7 @@ export function dropStaleBareTwins(txs: MappedTransaction[], connectionPrefixes?
 export function connectionPrefixes(): string[];
 export function lastSyncAgeMs(nowMs?: number): number;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string; iban?: string };
+export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string; iban?: string; cash_account_type?: string };
 export function carryAccountKeys<T extends { uid?: string; iban?: string; key_uid?: string }>(prevAccounts: T[] | undefined, nextAccounts: T[]): T[];
 
 export function getAspsps(): Promise<{ name: string; country?: string; logo: string | null }[]>;

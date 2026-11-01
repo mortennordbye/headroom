@@ -189,6 +189,11 @@ describe('normalizeAccount', () => {
     expect(normalizeAccount('uid-abc')).toEqual({ uid: 'uid-abc' });
   });
 
+  it('captures the cash account type so loan and card accounts can be told apart', () => {
+    expect(normalizeAccount({ uid: 'u1', name: 'Loan', cash_account_type: 'LOAN' }))
+      .toEqual({ uid: 'u1', name: 'Loan', cash_account_type: 'LOAN' });
+  });
+
   it('captures the IBAN from account_id so same-named accounts can be told apart', () => {
     expect(normalizeAccount({ uid: 'u1', name: 'Ola Nordmann', account_id: { iban: 'NO2090461303497' } }))
       .toEqual({ uid: 'u1', name: 'Ola Nordmann', iban: 'NO2090461303497' });

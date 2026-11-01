@@ -74,14 +74,6 @@ in git and the CHANGELOG, not here.
   matching only covers rows the bank returns again (sync window). **Unblock**: a one-off full
   re-fetch within the bank's history limit. **Where**: `server/bank.js` (`fetchMappedTransactions`
   window), `src/lib/transfers.ts`.
-- **Own-account matching doesn't skip loan or card accounts.** A linked loan or credit-card
-  account's number counts as "own", so an instalment paid to it from checking is netted as a
-  transfer instead of counting as debt service. **Why deferred**: the bank store keeps no
-  structured account type (`normalizeAccount` keeps only the free-text `product`), and matching on
-  product names would be bank- and language-specific. **Unblock**: capture Enable Banking's
-  `cash_account_type` in `normalizeAccount` and leave `accountNumber` off rows from LOAN/CARD
-  accounts (unknown type still counts). **Where**: `server/bank.js` (`normalizeAccount`,
-  `fetchMappedTransactions`), `src/lib/transfers.ts`.
 
 ## Budget and savings UI
 
