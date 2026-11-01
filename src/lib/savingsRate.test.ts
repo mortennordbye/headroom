@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { savingsRateStatus, savingsContributionTotal, resolveSavingsForMonth, capSavingsToTotal, targetRateOfIncome, planSavingsRateSeries, savingsBase, resolveSavingsAmounts, percentOfSavingsBase, draftSavingsRows } from './savingsRate';
+import { savingsRateStatus, savingsContributionTotal, resolveSavingsForMonth, capSavingsToTotal, targetRateOfIncome, planSavingsRateSeries, savingsBase, resolveSavingsAmounts, percentOfSavingsBase, draftSavingsRows, savingsForMonth, savingsContributionsForMonth, type MonthSavingsInput } from './savingsRate';
 import type { MonthlyCashflowRow } from './monthlyCashflow';
-import type { FixedExpense, Saving } from '../context/FinanceContext';
+import type { BalanceSnapshot, FixedExpense, Saving } from '../context/FinanceContext';
 
 const row = (month: string, income: number, rate: number, measured = true): MonthlyCashflowRow => ({
   month, income, variable: 0, expenses: 0, net: 0, rate, measured,
@@ -379,6 +379,101 @@ describe('kr ⇄ % round-trip', () => {
           { id: 's', name: 's', amount: 0, mode: 'percent', percent: pct, destinationKind: 'portfolio' },
         ];
         expect(resolveSavingsAmounts(rows, base, 20)[0].amount).toBe(amount);
+      }
+    }
+  });
+});
+
+describe('savingsForMonth / savingsContributionsForMonth', () => {
+  const NOW = '2026-06';
+  const fixed = (amount: number): FixedExpense[] => [{ id: 'rent', name: 'Rent', amount, type: 'fixed' }];
+  const kr = (id: string, amount: number): Saving => ({ id, name: id, amount, destinationKind: 'bufferAccount' });
+  const pct = (id: string, percent: number): Saving =>
+    ({ id, name: id, amount: 0, mode: 'percent', percent, destinationKind: 'portfolio' });
+  const rest = (id: string): Saving => ({ id, name: id, amount: 0, mode: 'rest', destinationKind: 'portfolio' });
+  // A recorded month only needs the fields the resolver reads.
+  const snap = (fixedExpenses: FixedExpense[] | undefined, savings: Saving[] | undefined) =>
+    ({ fixedExpenses, savings } as unknown as BalanceSnapshot);
+
+  const data = (over: Partial<MonthSavingsInput> = {}): MonthSavingsInput => ({
+    savings: [kr('buffer', 1000), pct('fund', 10)],
+    savingsTargetPercent: 50,
+    savingsMonthOverrides: {},
+    balanceSnapshots: {},
+    fixedExpenses: fixed(10000),
+    ...over,
+  });
+
+  it('resolves a live month against that month\'s own income', () => {
+    // pool = income - 10 000; the 10 % row follows it.
+    expect(savingsContributionsForMonth(data(), '2026-06', NOW, 40000)).toBe(1000 + 3000);
+    expect(savingsContributionsForMonth(data(), '2026-05', NOW, 50000)).toBe(1000 + 4000);
+  });
+
+  it('reads a past month\'s recorded savings as-is, not re-resolved against today', () => {
+    const d = data({ balanceSnapshots: { '2026-04': snap(fixed(8000), [kr('old', 700), pct('fund', 10)]) } });
+    // The recorded percent row keeps its stored 0 amount: snapshots are never resolved.
+    expect(savingsContributionsForMonth(d, '2026-04', NOW, 40000)).toBe(700);
+  });
+
+  it('a recorded month without a savings list moves nothing', () => {
+    const d = data({ balanceSnapshots: { '2026-04': snap(fixed(8000), undefined) } });
+    expect(savingsContributionsForMonth(d, '2026-04', NOW, 40000)).toBe(0);
+  });
+
+  it('caps a recorded month to its adjustment', () => {
+    const d = data({
+      balanceSnapshots: { '2026-04': snap(fixed(8000), [kr('a', 3000), kr('b', 1000)]) },
+      savingsMonthOverrides: { '2026-04': 2000 },
+    });
+    expect(savingsForMonth(d, '2026-04', NOW, 40000).map(s => s.amount)).toEqual([1500, 500]);
+  });
+
+  it('resolves a live month\'s adjustment so a rest row gives way first', () => {
+    const d = data({ savings: [kr('buffer', 500), rest('fund')], savingsMonthOverrides: { '2026-06': 5000 } });
+    expect(savingsForMonth(d, '2026-06', NOW, 40000).map(s => s.amount)).toEqual([500, 4500]);
+    // The adjustment is only that month's: the month after follows the plan
+    // (rest = 50 % of a 30 000 pool, minus the 500 buffer).
+    expect(savingsContributionsForMonth(d, '2026-07', NOW, 40000)).toBe(15000);
+  });
+
+  it('a past month without a snapshot resolves live savings against the live list', () => {
+    expect(savingsContributionsForMonth(data(), '2026-01', NOW, 30000)).toBe(1000 + 2000);
+  });
+
+  it('treats a non-finite income as no pool instead of leaking NaN', () => {
+    expect(savingsContributionsForMonth(data(), '2026-06', NOW, NaN)).toBe(1000);
+  });
+
+  // The derivation FinanceContext ran inline for the viewed month before it
+  // moved here, kept verbatim so the context's result stays pinned to it.
+  const contextDerivation = (d: MonthSavingsInput, monthKey: string, nowKey: string, income: number): Saving[] => {
+    const fromSnapshot = monthKey < nowKey && d.balanceSnapshots[monthKey]?.fixedExpenses !== undefined;
+    const viewFixed = fromSnapshot ? d.balanceSnapshots[monthKey].fixedExpenses! : d.fixedExpenses;
+    const pool = savingsBase(income, viewFixed);
+    const live = resolveSavingsAmounts(d.savings, pool, d.savingsTargetPercent);
+    const plan = fromSnapshot ? (d.balanceSnapshots[monthKey].savings ?? []) : live;
+    const monthSaving = d.savingsMonthOverrides[monthKey];
+    if (monthSaving === undefined) return plan;
+    return fromSnapshot
+      ? capSavingsToTotal(plan, monthSaving)
+      : resolveSavingsForMonth(d.savings, pool, d.savingsTargetPercent, monthSaving);
+  };
+
+  it('matches the context\'s viewed-month derivation in every branch', () => {
+    const recorded = { '2026-04': snap(fixed(8000), [kr('a', 3000), pct('fund', 10)]), '2026-03': snap(undefined, [kr('x', 9)]) };
+    const variants = [
+      data(),
+      data({ savings: [kr('buffer', 500), rest('fund')] }),
+      data({ balanceSnapshots: recorded }),
+      data({ balanceSnapshots: recorded, savingsMonthOverrides: { '2026-04': 1200, '2026-06': 2500, '2026-03': 0 } }),
+      data({ savings: [kr('buffer', 500), rest('fund'), pct('p', 5)], savingsMonthOverrides: { '2026-06': 800, '2026-08': 99999 } }),
+    ];
+    for (const d of variants) {
+      for (const month of ['2026-03', '2026-04', '2026-05', '2026-06', '2026-08']) {
+        for (const income of [0, 25000, 61234]) {
+          expect(savingsForMonth(d, month, NOW, income)).toEqual(contextDerivation(d, month, NOW, income));
+        }
       }
     }
   });

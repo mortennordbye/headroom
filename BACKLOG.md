@@ -92,12 +92,6 @@ in git and the CHANGELOG, not here.
   `calcRecommendations` in `src/lib/calculations.ts`.
 - **CashflowChart shows savings transfers as money out** (a literal cashflow view), so it disagrees
   with the savings-rate chart. **Where**: `src/components/charts/CashflowChart.tsx`.
-- **CashflowChart applies the viewed month's savings to every month.** Fixed expenses are now per
-  month, but the savings contribution is still the selected month's. **Why deferred**: a month's
-  saving depends on its snapshot, its month override and a pool resolved against that month's
-  income, which only the context derives today. **Unblock**: a pure per-month savings resolver
-  in `src/lib/` shared with `FinanceContext`. **Where**: `src/components/charts/CashflowChart.tsx`,
-  `viewSavings` in `src/context/FinanceContext.tsx`.
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
   `src/lib/envelopes.ts`, `src/context/FinanceContext.tsx`.
 
