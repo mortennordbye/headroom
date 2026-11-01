@@ -5,6 +5,7 @@ import EditModal, { type ModalField } from '../components/EditModal';
 import ConfirmModal from '../components/ConfirmModal';
 import { sumSavings, computeEquityBreakdown } from '../lib/equity';
 import { goalPace, type GoalSourcePoint } from '../lib/goalPace';
+import { vehicleBalance } from '../lib/savingRow';
 import { currentMonthKey, addMonthsKey } from '../lib/date';
 import { ProgressBar } from './ui/ProgressBar';
 import { Card } from './ui/Card';
@@ -34,11 +35,11 @@ function goalSourceSeries(goal: Goal, snapshots: Record<string, { assets: Assets
     const a = snapshots[monthKey].assets;
     let value: number | null = null;
     switch (goal.source) {
-      case 'bsu': value = a.bsu; break;
-      case 'portfolio': value = a.portfolio; break;
-      case 'bufferAccount': value = a.bufferAccount; break;
+      case 'bsu':
+      case 'portfolio':
+      case 'bufferAccount':
+      case 'savingsAccount': value = vehicleBalance(goal.source, goal.savingsAccountId, a); break;
       case 'savings': value = sumSavings(a); break;
-      case 'savingsAccount': value = a.savingsAccounts?.find(s => s.id === goal.savingsAccountId)?.balance ?? null; break;
       case 'totalEquity': value = computeEquityBreakdown(a).totalEquity; break;
     }
     if (value != null && Number.isFinite(value)) out.push({ monthKey, value });

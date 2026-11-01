@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Home,
   TrendingUp,
+  Target,
   type LucideIcon,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
@@ -54,7 +55,7 @@ import { sumLedgerSpent } from '../lib/spentTotals';
 import { isOneOff, oneOffSpend } from '../lib/segments';
 import { formatSignedPct } from '../lib/format';
 import { incomeDiffPct, isIncomeOverrideStale } from '../lib/income';
-import { classifySaving, savingDestinationBalance, type SavingRowKind } from '../lib/savingRow';
+import { savingRow, balanceAssetsForMonth, goalNamesLabel, type SavingRow, type SavingRowKind } from '../lib/savingRow';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -102,7 +103,7 @@ const SAVING_COLOR = CHART.brass;
 // One glyph and tone per kind of savings destination, so a goal pot, the
 // buffer and an invested position don't read as the same row.
 const SAVING_KIND_STYLE: Record<SavingRowKind, { Icon: LucideIcon; color: string }> = {
-  goal: { Icon: Flag, color: 'var(--brass)' },
+  goal: { Icon: Target, color: 'var(--brass)' },
   account: { Icon: PiggyBank, color: 'var(--text-2)' },
   buffer: { Icon: ShieldCheck, color: 'var(--slate)' },
   bsu: { Icon: Home, color: 'var(--teal)' },
@@ -203,7 +204,7 @@ const BudgetPage: React.FC = () => {
     savingsContributions,
     fixedExpenses,
     viewFixedExpenses,
-    savings, setSavings, viewSavings, goals,
+    savings, setSavings, viewSavings, goals, balanceSnapshots,
     fixedExpensesFromSnapshot,
     setFixedExpenses,
     debts,
@@ -414,11 +415,10 @@ const BudgetPage: React.FC = () => {
     setSavingDialog(null);
   };
 
-  // Display label for a saving's destination.
-  const savingTargetLabel = (sv: Saving): string => {
+  // Display label for a saving's destination (its account already resolved).
+  const savingTargetLabel = (sv: Saving, row: SavingRow): string => {
     if (sv.destinationKind === 'savingsAccount') {
-      const acc = (assets.savingsAccounts ?? []).find(a => a.id === sv.savingsAccountId);
-      return acc ? `${t.expenseDestination.savings}: ${acc.name}` : t.expenseDestination.targetMissing;
+      return row.account ? `${t.expenseDestination.savings}: ${row.account.name}` : t.budgetPage.savingAccountMissing;
     }
     if (sv.destinationKind === 'bufferAccount') return t.expenseDestination.buffer;
     if (sv.destinationKind === 'bsu') return t.expenseDestination.bsu;
@@ -647,6 +647,8 @@ const BudgetPage: React.FC = () => {
   const today = new Date();
   const isCurrentMonth = isSameMonth(currentMonth, today);
   const isPast = currentMonth < startOfMonth(today);
+  // Where the savings rows read their destination balances for this month.
+  const savingsBalanceAssets = balanceAssetsForMonth(monthKey, format(today, 'yyyy-MM'), assets, balanceSnapshots);
   // Before payday on the current month, the paycheck hasn't landed — so nudges
   // that judge the month as incomplete (set-your-income, low savings rate) are
   // premature. See isBeforePayday for the exact rule.
@@ -833,33 +835,34 @@ const BudgetPage: React.FC = () => {
     >
       <div className="px-3.5">
         {viewSavings.map((sv) => {
-          const info = classifySaving(sv, goals);
-          const { Icon, color } = SAVING_KIND_STYLE[info.kind];
-          const balance = savingDestinationBalance(sv, assets);
-          const target = savingTargetLabel(sv);
-          const icon = <Icon size={12} strokeWidth={2.25} className="shrink-0" style={{ color }} aria-hidden />;
+          const row = savingRow(sv, goals, assets, savingsBalanceAssets);
+          const { Icon, color } = SAVING_KIND_STYLE[row.kind];
+          const target = savingTargetLabel(sv, row);
+          const icon = <Icon size={12} strokeWidth={2.25} className="shrink-0 mt-[3px]" style={{ color }} aria-hidden />;
           return (
           <div key={sv.id} className="py-4 border-b border-[var(--border)] last:border-0">
-            <div className="flex items-center justify-between gap-3 group">
+            {/* The name gets priority in the narrow column: the amount is in
+                whole kroner, and a long name wraps rather than truncates. */}
+            <div className="flex items-start justify-between gap-2 group">
               {expensesReadOnly ? (
-                <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] min-w-0">
+                <span className="flex items-start gap-2 text-[13px] leading-snug font-medium text-[var(--text-1)] min-w-0">
                   {icon}
-                  <span className="truncate">{sv.name}</span>
+                  <span className="break-words min-w-0">{sv.name}</span>
                 </span>
               ) : (
                 <button
                   type="button"
                   aria-label={`${t.edit} — ${sv.name}`}
-                  className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
+                  className="flex items-start gap-2 text-[13px] leading-snug font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
                   onClick={() => openSavingDialog(sv)}
                 >
                   {icon}
-                  <span className="truncate">{sv.name}</span>
+                  <span className="break-words min-w-0">{sv.name}</span>
                 </button>
               )}
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 leading-snug">
                 {expensesReadOnly ? (
-                  <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">{formatCurrency(sv.amount)}</span>
+                  <span className="text-[13px] font-mono font-medium text-[var(--text-1)]">{formatCurrencyShort(sv.amount)}</span>
                 ) : (
                   <>
                     <button
@@ -868,7 +871,7 @@ const BudgetPage: React.FC = () => {
                       className="text-[13px] font-mono font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors"
                       onClick={() => openSavingDialog(sv)}
                     >
-                      {formatCurrency(sv.amount)}
+                      {formatCurrencyShort(sv.amount)}
                     </button>
                     <button
                       onClick={() => removeSaving(sv.id, sv.name)}
@@ -881,20 +884,21 @@ const BudgetPage: React.FC = () => {
                 )}
               </div>
             </div>
-            {/* Where it goes, and what is there today. A goal pot names the goal
-                (the account stays in the tooltip); the balance is the
-                destination's current one, left out when it isn't known. */}
-            <div className="mt-1 pl-5 flex items-baseline justify-between gap-2 text-[10px]" style={{ color: 'var(--text-3)' }}>
+            {/* Where it goes, and what was there in the month on screen. A goal
+                pot names its goals (the account stays in the tooltip and for
+                screen readers); the balance is left out when it isn't known. */}
+            <div className="mt-1 pl-5 flex items-baseline justify-between gap-2 text-[10px]" style={{ color: row.accountMissing ? 'var(--negative)' : 'var(--text-3)' }}>
               <span className="flex items-center gap-1 uppercase tracking-wider min-w-0" title={target}>
                 <span aria-hidden>→</span>
-                <span className="truncate">
-                  {info.goal ? t.budgetPage.savingGoalPot.replace('{goal}', info.goal.name) : target}
+                <span className={row.accountMissing ? undefined : 'truncate'}>
+                  {row.goals.length ? t.budgetPage.savingGoalPot.replace('{goal}', goalNamesLabel(row.goals)) : target}
                 </span>
+                {row.goals.length > 0 && <span className="sr-only">({target})</span>}
               </span>
-              {balance !== null && (
-                <span className="font-mono tabular-nums shrink-0" title={t.budgetPage.savingBalance}>
+              {row.balance !== null && (
+                <span className="font-mono tabular-nums shrink-0">
                   <span className="sr-only">{t.budgetPage.savingBalance} </span>
-                  {formatCurrencyShort(balance)}
+                  {formatCurrencyShort(row.balance)}
                 </span>
               )}
             </div>
@@ -903,7 +907,7 @@ const BudgetPage: React.FC = () => {
                 Sentence case: in this narrow column the tracked capitals
                 wrapped into ragged lines. */}
             {(isPercentSavings(sv) || isRestSavings(sv)) && (
-              <div className="mt-0.5 pl-5 text-[10.5px] leading-snug" style={{ color: 'var(--brass)' }}>
+              <div className="mt-0.5 pl-5 text-[10px] leading-snug" style={{ color: 'var(--brass)' }}>
                 {isRestSavings(sv)
                   ? t.budgetPage.savingsTakesRest
                   : t.budgetPage.savingsFollowsIncome.replace('{percent}', String(sv.percent))}
