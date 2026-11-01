@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { DailyTransaction } from '../context/FinanceContext';
-import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones, forgetRestoredBankRows } from './bankDedup';
+import type { DailyTransaction, DeletedBankTombstone } from '../context/FinanceContext';
+import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones, forgetRestoredBankRows, prunableBankTombstoneIds } from './bankDedup';
 
 const tx = (over: Partial<DailyTransaction>): DailyTransaction => ({
   id: 'x', date: '2026-06-28', description: 'REMA 1000', amount: 100, kind: 'expense', ...over,
@@ -163,5 +163,69 @@ describe('forgetRestoredBankRows', () => {
   it('returns the same array when nothing was restored', () => {
     const ids = ['eb-1'];
     expect(forgetRestoredBankRows(ids, new Set(['t1']))).toBe(ids);
+  });
+});
+
+describe('prunableBankTombstoneIds', () => {
+  const tomb = (id: string, date: string): DeletedBankTombstone => ({ id, date, amount: 100, description: 'Shop' });
+
+  it('prunes tombstones dated more than the margin before their prefix floor', () => {
+    const floors = { 'eb-aaaa1111-': '2026-06-01' };
+    const out = prunableBankTombstoneIds([
+      tomb('eb-aaaa1111-old', '2026-04-01'),
+      tomb('eb-aaaa1111-edge', '2026-05-02'), // exactly 30 days before: kept
+      tomb('eb-aaaa1111-new', '2026-05-20'),
+    ], floors);
+    expect([...out]).toEqual(['eb-aaaa1111-old']);
+  });
+
+  // A removed connection keeps its prefix floor, and a re-add reuses the prefix
+  // and is clamped to that floor, so its old tombstones are still prunable while
+  // the ones the re-add could refetch are kept.
+  it('prunes a removed connection by its kept floor (re-add after remove)', () => {
+    const floors = { 'eb-bbbb2222-': '2026-03-01', 'eb-aaaa1111-': null };
+    const out = prunableBankTombstoneIds([
+      tomb('eb-bbbb2222-old', '2026-01-10'),
+      tomb('eb-bbbb2222-recent', '2026-02-20'),
+    ], floors);
+    expect([...out]).toEqual(['eb-bbbb2222-old']);
+  });
+
+  // After a long gap the next fetch starts at last_sync minus the overlap, which
+  // the floor equals, so rows inside that long window stay protected.
+  it('keeps everything a long-gap sync can still refetch', () => {
+    const floors = { 'eb-aaaa1111-': '2025-01-01' };
+    const out = prunableBankTombstoneIds([
+      tomb('eb-aaaa1111-a', '2025-03-01'),
+      tomb('eb-aaaa1111-b', '2025-06-01'),
+      tomb('eb-aaaa1111-c', '2024-11-01'),
+    ], floors);
+    expect([...out]).toEqual(['eb-aaaa1111-c']);
+  });
+
+  it('keeps a tombstone whose prefix has no floor yet, or is unknown', () => {
+    const floors = { 'eb-aaaa1111-': null };
+    expect(prunableBankTombstoneIds([tomb('eb-aaaa1111-x', '2020-01-01'), tomb('eb-cccc3333-x', '2020-01-01')], floors).size).toBe(0);
+    expect(prunableBankTombstoneIds([tomb('eb-aaaa1111-x', '2020-01-01')], undefined).size).toBe(0);
+  });
+
+  it('uses the lowest floor when the legacy bare prefix overlaps, and keeps it when that one has none', () => {
+    const tombs = [tomb('eb-aaaa1111-x', '2026-02-01')];
+    expect(prunableBankTombstoneIds(tombs, { 'eb-': null, 'eb-aaaa1111-': '2026-06-01' }).size).toBe(0);
+    expect(prunableBankTombstoneIds(tombs, { 'eb-': '2026-02-15', 'eb-aaaa1111-': '2026-06-01' }).size).toBe(0);
+    expect([...prunableBankTombstoneIds(tombs, { 'eb-': '2026-04-01', 'eb-aaaa1111-': '2026-06-01' })]).toEqual(['eb-aaaa1111-x']);
+  });
+
+  it('keeps tombstones with an unreadable date, and a duplicate id when any copy must stay', () => {
+    const floors = { 'eb-aaaa1111-': '2026-06-01' };
+    expect(prunableBankTombstoneIds([tomb('eb-aaaa1111-x', ''), tomb('eb-aaaa1111-y', 'garbage')], floors).size).toBe(0);
+    expect(prunableBankTombstoneIds([tomb('eb-aaaa1111-x', '2026-01-01'), tomb('eb-aaaa1111-x', '2026-05-30')], floors).size).toBe(0);
+  });
+
+  it('feeds forgetRestoredBankRows to drop ids and tombstones, leaving undated legacy ids', () => {
+    const tombs = [tomb('eb-aaaa1111-old', '2026-01-01'), tomb('eb-aaaa1111-new', '2026-05-30')];
+    const gone = prunableBankTombstoneIds(tombs, { 'eb-aaaa1111-': '2026-06-01' });
+    expect(forgetRestoredBankRows(['eb-legacy-undated', 'eb-aaaa1111-old', 'eb-aaaa1111-new'], gone)).toEqual(['eb-legacy-undated', 'eb-aaaa1111-new']);
+    expect(forgetRestoredBankRows(tombs, gone).map((t) => t.id)).toEqual(['eb-aaaa1111-new']);
   });
 });

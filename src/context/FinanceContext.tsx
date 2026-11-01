@@ -50,7 +50,7 @@ import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
-import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones, forgetRestoredBankRows } from '../lib/bankDedup';
+import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones, forgetRestoredBankRows, prunableBankTombstoneIds } from '../lib/bankDedup';
 import { activeJobBreakdown } from '../lib/salary';
 import { stableStringify } from '../lib/stableStringify';
 import { sanitizePayload } from '../lib/sanitizePayload';
@@ -1602,6 +1602,21 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           lastSyncedRef.current = data === null ? null : stableStringify(data);
           applyPayload(data, true);
           loaded.current = true;
+          // Prune deleted-row tombstones (and their ids) dated before every
+          // future bank fetch can reach, so the two lists stay bounded.
+          const tombs: DeletedBankTombstone[] = Array.isArray(data?.deletedBankTombstones) ? data.deletedBankTombstones : [];
+          if (tombs.length) {
+            void fetch('/api/bank/status')
+              .then((s) => (s.ok ? s.json() : null))
+              .then((s: { fetchFloors?: Record<string, string | null> } | null) => {
+                if (cancelled || !s) return;
+                const gone = prunableBankTombstoneIds(tombs, s.fetchFloors);
+                if (!gone.size) return;
+                setDeletedBankIds((ids) => forgetRestoredBankRows(ids, gone));
+                setDeletedBankTombstones((prev) => forgetRestoredBankRows(prev, gone));
+              })
+              .catch(() => { /* offline or bank routes closed: prune next load */ });
+          }
           // Launch the first-run guided setup for a brand-new user (empty DB →
           // data === null) or one who reloaded mid-tour (flag explicitly false).
           // First-run always opens the gentle essentials-first welcome.

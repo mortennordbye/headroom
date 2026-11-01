@@ -768,6 +768,20 @@ function removeConnection(id) {
   return { removed: before - store.connections.length };
 }
 
+/**
+ * The fetch floor of every id prefix the store knows (live, removed, or floored
+ * before), null for one without a floor yet. The client prunes a deleted-row
+ * tombstone only when every prefix its id starts with has a floor (see
+ * pruneBankTombstones in src/lib/bankDedup.ts). Pure.
+ */
+function fetchFloorsFor(store) {
+  const floors = { ...(store.fetchFloors || {}) };
+  for (const c of [...(store.connections || []), ...(store.removed || [])]) {
+    if (typeof c.idPrefix === 'string' && !(c.idPrefix in floors)) floors[c.idPrefix] = null;
+  }
+  return floors;
+}
+
 /** Status for the Settings card. Never throws. */
 function getStatus() {
   const redirectUrl = getRedirect();
@@ -803,7 +817,22 @@ function getStatus() {
   });
   // Rolling sync history, newest first, for the Settings card.
   const syncLog = [...(store.syncLog || [])].reverse();
-  return { linked: connections.length > 0, connections, syncLog, ...base };
+  return { linked: connections.length > 0, connections, syncLog, fetchFloors: fetchFloorsFor(store), ...base };
+}
+
+/**
+ * The `date_from` of a connection's next fetch: its last sync minus the overlap,
+ * or `days` back on a first sync, but never before the connection's persisted
+ * fetch floor (see recordSync). The clamp is what makes the floor a promise: a
+ * re-add after a remove (last_sync reset, `days` back) or a raised EB_DAYS can't
+ * reach behind it, so the client may prune tombstones older than it. Pure.
+ */
+function fetchFromDate(c, floors, nowMs = Date.now(), days = DAYS) {
+  const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
+  const fromMs = lastSync ? lastSync - RESYNC_OVERLAP_DAYS * 864e5 : nowMs - days * 864e5;
+  const from = new Date(fromMs).toISOString().slice(0, 10);
+  const floor = floors && floors[c.idPrefix];
+  return typeof floor === 'string' && floor > from ? floor : from;
 }
 
 /**
@@ -850,9 +879,7 @@ async function fetchMappedTransactions() {
         console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);
       }
     }
-    const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
-    const fromMs = lastSync ? lastSync - RESYNC_OVERLAP_DAYS * 864e5 : Date.now() - DAYS * 864e5;
-    const from = new Date(fromMs).toISOString().slice(0, 10);
+    const from = fetchFromDate(c, store.fetchFloors);
     try {
       for (const acc of c.accounts || []) {
         const raw = await fetchTransactions(acc.uid, from);
@@ -933,6 +960,12 @@ function recordSync(outcome = {}) {
       if (sessionValid(c)) {
         c.last_sync = now;
         c.needs_relink = false;
+        // The next fetch starts at nextFrom and every later one at or after it
+        // (fetchFromDate clamps), so raise this prefix's floor. Keyed by prefix
+        // and never deleted, so it outlives a remove and binds a re-add.
+        store.fetchFloors = store.fetchFloors || {};
+        const prev = store.fetchFloors[c.idPrefix];
+        if (typeof prev !== 'string' || nextFrom > prev) store.fetchFloors[c.idPrefix] = nextFrom;
         if (!c.linked_at || nextFrom > String(c.linked_at).slice(0, 10)) delete c.relinked;
       }
     }
@@ -964,6 +997,8 @@ module.exports = {
   evictSupersededPending,
   dropStaleBareTwins,
   connectionPrefixes,
+  fetchFromDate,
+  fetchFloorsFor,
   normalizeAccount,
   carryAccountKeys,
   lastSyncAgeMs,

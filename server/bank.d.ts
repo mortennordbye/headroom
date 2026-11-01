@@ -48,6 +48,8 @@ export function dropRelinkFormatTwins(existing: MappedTransaction[], incoming: M
 export function evictSupersededPending(txs: MappedTransaction[]): MappedTransaction[];
 export function dropStaleBareTwins(txs: MappedTransaction[], connectionPrefixes?: string[]): MappedTransaction[];
 export function connectionPrefixes(): string[];
+export function fetchFromDate(c: { idPrefix: string; last_sync?: string | null }, floors?: Record<string, string>, nowMs?: number, days?: number): string;
+export function fetchFloorsFor(store: { connections?: { idPrefix: string }[]; removed?: { idPrefix: string }[]; fetchFloors?: Record<string, string> }): Record<string, string | null>;
 export function lastSyncAgeMs(nowMs?: number): number;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string; iban?: string };
