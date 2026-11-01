@@ -55,8 +55,9 @@ export function netWorthBands(
 /**
  * Bear/bull band around the total of a stacked bucket projection (Assets growth,
  * Dashboard 15-year). Uses the Forecast band's ±`deltaPct` spread with the home
- * held to its own path, but it is not the same calculation: each financial
- * bucket (stocks, crypto, cash) has its own rate shifted, and `project` reruns
+ * held to its own path, but it is not the same calculation: only the market
+ * buckets (stocks, crypto) have their own rates shifted (cash/BSU is a bank
+ * deposit, so its rate stays put), and `project` reruns
  * the chart's own model per leg, so wealth tax is recomputed for each. The band
  * follows that chart's `total` (assets less all debt) and always contains it.
  * Non-finite legs fall back to the base total.
@@ -72,7 +73,6 @@ export function withTotalBand<P extends { total: number }>(
     ...rates,
     stocks: rates.stocks + d,
     crypto: rates.crypto + d,
-    cash: rates.cash + d,
   });
   const bear = project(shift(-delta));
   const bull = project(shift(delta));

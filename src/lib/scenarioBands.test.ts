@@ -56,12 +56,12 @@ describe('withTotalBand', () => {
     expect(last.band[1]).toBeGreaterThan(last.total);
   });
 
-  it('shifts only the financial buckets, not the home', () => {
+  it('shifts only the market buckets (stocks, crypto), not cash or the home', () => {
     const seen: (typeof rates)[] = [];
     withTotalBand(run(rates), rates, 3, r => { seen.push(r); return run(r); });
     expect(seen).toEqual([
-      { stocks: 3, crypto: 7, cash: 0, house: 2 },
-      { stocks: 9, crypto: 13, cash: 6, house: 2 },
+      { stocks: 3, crypto: 7, cash: 3, house: 2 },
+      { stocks: 9, crypto: 13, cash: 3, house: 2 },
     ]);
   });
 

@@ -834,10 +834,10 @@ const AssetPage: React.FC = () => {
                   when there is consumer debt. The band wraps this line, not the stack:
                   a light fill plus dashed bear/bull edges so the lower half stays
                   readable over the near-opaque stack. */}
-              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={false} activeDot={false} legendType="none" />
-              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey={(p: { band: [number, number] }) => p.band[0]} stroke="var(--accent)" strokeOpacity={0.6} strokeWidth={1.25} strokeDasharray="4 3" fill="none" isAnimationActive={false} activeDot={false} legendType="none" tooltipType="none" />
-              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey={(p: { band: [number, number] }) => p.band[1]} stroke="var(--accent)" strokeOpacity={0.6} strokeWidth={1.25} strokeDasharray="4 3" fill="none" isAnimationActive={false} activeDot={false} legendType="none" tooltipType="none" />
-              <Area hide={hiddenBuckets.has('total')} type="monotone" dataKey="total" name={t.assetPage.projectionTotal} stroke="var(--text-1)" strokeWidth={1.75} fill="none" isAnimationActive={false} legendType="none" />
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={!reduced} activeDot={false} legendType="none" />
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey={(p: { band: [number, number] }) => p.band[0]} stroke="var(--accent)" strokeOpacity={0.6} strokeWidth={1.25} strokeDasharray="4 3" fill="none" isAnimationActive={!reduced} activeDot={false} legendType="none" tooltipType="none" />
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey={(p: { band: [number, number] }) => p.band[1]} stroke="var(--accent)" strokeOpacity={0.6} strokeWidth={1.25} strokeDasharray="4 3" fill="none" isAnimationActive={!reduced} activeDot={false} legendType="none" tooltipType="none" />
+              <Area hide={hiddenBuckets.has('total')} type="monotone" dataKey="total" name={t.assetPage.projectionTotal} stroke="var(--text-1)" strokeWidth={1.75} fill="none" isAnimationActive={!reduced} legendType="none" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
