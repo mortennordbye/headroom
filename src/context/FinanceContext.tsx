@@ -471,6 +471,8 @@ export interface TransitionData {
   otherSaleCosts: number;
   bridgeMonths: number;
   bridgeLoanRate: number;
+  /** The user's ownership share of the next home, in percent; absent = 100. */
+  nextHomeOwnershipPct?: number;
 }
 
 // --- Salary tracker types ---
@@ -664,6 +666,7 @@ const DEFAULT_TRANSITION: TransitionData = {
   otherSaleCosts: 0,
   bridgeMonths: 2,
   bridgeLoanRate: 6.5,
+  nextHomeOwnershipPct: 100,
 };
 
 const DEFAULT_LOAN: LoanData = {

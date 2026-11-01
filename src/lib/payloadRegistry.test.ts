@@ -90,7 +90,7 @@ const canonicalHomeowner: HomeownerData = {
 };
 const canonicalTransition: TransitionData = {
   currentHouseValue: 5000000, agentFeePercent: 2.5, documentFee: 8000,
-  otherSaleCosts: 100, bridgeMonths: 3, bridgeLoanRate: 6,
+  otherSaleCosts: 100, bridgeMonths: 3, bridgeLoanRate: 6, nextHomeOwnershipPct: 60,
 };
 const canonicalSnapshot: BalanceSnapshot = {
   assets: { ...canonicalAssets, savings: 0, savingsAccounts: [{ id: 'sav-s1', name: 'S', balance: 1000 }] },

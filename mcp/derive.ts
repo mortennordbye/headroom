@@ -834,7 +834,7 @@ export function pensionSummary(blob: ExportPayload, monthKey = osloMonthKey(), i
  */
 const DEFAULT_TRANSITION: TransitionData = {
   currentHouseValue: 4500000, agentFeePercent: 3, documentFee: 7500,
-  otherSaleCosts: 0, bridgeMonths: 2, bridgeLoanRate: 6.5,
+  otherSaleCosts: 0, bridgeMonths: 2, bridgeLoanRate: 6.5, nextHomeOwnershipPct: 100,
 };
 
 /**

@@ -394,6 +394,24 @@ describe('calcTransitionNewLoan', () => {
     expect(half.newLoanNeeded).toBeCloseTo(4_000_000 - 1_473_600 / 2 - 500_000, 6);
     expect(calcTransitionNewLoan(transition, 3_200_000, { ...loan, kjoepesum: 1_000_000 }, { own: 1, debt: 1 }).newLoanNeeded).toBe(0);
   });
+
+  it('finances only the user\'s share of the next home', () => {
+    const r = calcTransitionNewLoan({ ...transition, nextHomeOwnershipPct: 50 }, 3_200_000, loan, { own: 1, debt: 1 });
+    expect(r.myPurchasePrice).toBe(2_000_000);
+    expect(r.totalEquityNew).toBeCloseTo(1_473_600 + 500_000, 6);
+    expect(r.newLoanNeeded).toBeCloseTo(2_000_000 - 1_473_600 - 500_000, 6);
+    expect(r.newMonthlyPayment).toBeCloseTo(calcMonthlyPayment(r.newLoanNeeded, 5.65, 25) + 50, 6);
+  });
+
+  it('treats an absent or broken next-home share as 100 %', () => {
+    const whole = calcTransitionNewLoan(transition, 3_200_000, loan, { own: 1, debt: 1 });
+    expect(whole.myPurchasePrice).toBe(4_000_000);
+    for (const bad of [NaN, Infinity, -10, 150]) {
+      const r = calcTransitionNewLoan({ ...transition, nextHomeOwnershipPct: bad }, 3_200_000, loan, { own: 1, debt: 1 });
+      expect(Number.isFinite(r.newLoanNeeded)).toBe(true);
+      expect(r.newLoanNeeded).toBe(bad === -10 ? 0 : whole.newLoanNeeded);
+    }
+  });
 });
 
 describe('calcHomeownerMortgageStatus', () => {

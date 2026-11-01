@@ -227,3 +227,17 @@ describe('sanitizePayload: mortgage term stamps', () => {
     expect(paymentTermMonths(out.homeowner)).toBe(300);
   });
 });
+
+describe('sanitizePayload: next-home ownership share', () => {
+  // DEFAULT_TRANSITION carries nextHomeOwnershipPct, so it is a numeric field of the schema.
+  const schemas = { transition: { currentHouseValue: 0, nextHomeOwnershipPct: 100 } };
+  const run = (v: unknown) => (sanitizePayload({ transition: { currentHouseValue: 1, nextHomeOwnershipPct: v } } as Record<string, unknown>,
+    schemas) as { transition: Record<string, unknown> }).transition;
+  it('keeps a valid share and coerces a numeric string', () => {
+    expect(run(50).nextHomeOwnershipPct).toBe(50);
+    expect(run('62,5').nextHomeOwnershipPct).toBe(62.5);
+  });
+  it('drops an unparseable share so the default merges back in', () => {
+    expect('nextHomeOwnershipPct' in run('abc')).toBe(false);
+  });
+});

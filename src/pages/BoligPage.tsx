@@ -331,13 +331,13 @@ const BoligPage: React.FC = () => {
     });
   };
 
-  const editTransition = (label: string, key: keyof TransitionData, current: number) => {
+  const editTransition = (label: string, key: keyof TransitionData, current: number, max = Infinity) => {
     openModal({
       title: label,
       fields: [{ key: 'value', label, type: 'number', value: current.toString() }],
       onSave: (vals) => {
         const n = parseLocaleNumber(vals.value);
-        if (!isNaN(n) && n >= 0) updateTransition(key, n);
+        if (!isNaN(n) && n >= 0 && n <= max) updateTransition(key, n);
         closeModal();
       },
     });
@@ -422,6 +422,7 @@ const BoligPage: React.FC = () => {
   // (proceeds split by ownership, loan by debt share).
   const transitionNewLoan = useMemo(() => calcTransitionNewLoan(transition, mortgageBalance, loan, shares), [transition, mortgageBalance, loan, shares]);
   const { saleProceeds, bridgeCost, mySale } = transitionNewLoan;
+  const nextHomePct = transitionNewLoan.nextHomeShare * 100;
 
   const fmtNum = (n: number) => formatCurrency(Math.round(n));
   const fmtPct = (n: number) => `${n.toFixed(2)}%`;
@@ -995,6 +996,12 @@ const BoligPage: React.FC = () => {
                 <LoanRow label={lp.purchasePrice}
                   value={fmtNum(loan.kjoepesum)}
                   onEdit={() => editNum(lp.purchasePrice, 'kjoepesum', loan.kjoepesum)} />
+                <LoanRow label={om.nextHomeShare}
+                  value={fmtPct(nextHomePct)}
+                  onEdit={() => editTransition(om.nextHomeShare, 'nextHomeOwnershipPct', nextHomePct, 100)} />
+                {nextHomePct < 100 && (
+                  <LoanRow label={om.nextHomePriceShare} value={fmtNum(transitionNewLoan.myPurchasePrice)} />
+                )}
                 <LoanRow label={lp.nominalRate}
                   value={fmtPct(loan.rente)}
                   onEdit={() => editNum(lp.rateEditTitle, 'rente', loan.rente)} />
@@ -1040,7 +1047,7 @@ const BoligPage: React.FC = () => {
                 color={saleProceeds.netProceeds < 0 ? 'red' : 'green'}
               />
               <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
-              <FlowStep label={lp.flowBuy} value={fmtNum(loan.kjoepesum)} color="blue" />
+              <FlowStep label={lp.flowBuy} value={fmtNum(transitionNewLoan.myPurchasePrice)} color="blue" />
               <ArrowRight size={14} className="text-[var(--text-2)] shrink-0" />
               <FlowStep label={lp.flowNeedLoan} value={fmtNum(transitionNewLoan.newLoanNeeded)} color="red" />
             </div>
