@@ -22,6 +22,7 @@ import {
   calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear,
   calcEmergencyFundStatus, calcDebtToIncome, bufferRecommendation,
 } from '../lib/calculations';
+import { withTotalBand, BAND_DELTA_PP } from '../lib/scenarioBands';
 import { calcDebtBalanceByYear } from '../lib/debt';
 import { essentialMonthlyExpenses } from '../lib/fixedExpenseTotals';
 import GoalsSection from '../components/GoalsSection';
@@ -298,7 +299,8 @@ const DashboardPage: React.FC = () => {
   const projection15y = useMemo(() => {
     const debtByYear = calcDebtBalanceByYear(debts, 15, currentMonthKey());
     const mortgageByYear = calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, mortgageTermYears, 15);
-    return calcNetWorthProjectionByBucket(projectionStart, annualSavings, projectionRates, 15, houseByYear, debtByYear, { mortgageByYear, region, ownShare });
+    const run = (rates: typeof projectionRates) => calcNetWorthProjectionByBucket(projectionStart, annualSavings, rates, 15, houseByYear, debtByYear, { mortgageByYear, region, ownShare });
+    return withTotalBand(run(projectionRates), projectionRates, BAND_DELTA_PP, run);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, ownShare, mortgage.balance, mortgage.ratePct, mortgageTermYears, debts, region]);
 
@@ -786,7 +788,7 @@ const DashboardPage: React.FC = () => {
             <DeltaChip tone="violet" size="sm">+{projectionGrowthPct}%</DeltaChip>
           </div>
 
-          <ProjectionChart points={projection15y.map(p => ({ year: p.year, netWorth: p.total }))} />
+          <ProjectionChart points={projection15y.map(p => ({ year: p.year, netWorth: p.total, band: p.band }))} bandLabel={t.forecastPage.band} />
           <div className="mt-1 flex justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
             <span>{projection15y[0]?.year ?? ''}</span>
             <span>{projection15y[Math.floor(projection15y.length / 2)]?.year ?? ''}</span>
@@ -1261,9 +1263,10 @@ function MonthlyInvestmentBars({ bars }: { bars: { key: string; label: string; v
   );
 }
 
-function ProjectionChart({ points }: { points: { year: number; netWorth: number }[] }) {
+function ProjectionChart({ points, bandLabel }: { points: { year: number; netWorth: number; band: [number, number] }[]; bandLabel: string }) {
   if (points.length < 2) return <div className="h-[80px]" />;
-  const values = points.map(p => p.netWorth);
+  // Fit the domain to the band too, so the bear/bull range isn't clipped.
+  const values = points.flatMap(p => [p.netWorth, ...p.band]).filter(Number.isFinite);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const pad = (max - min || 1) * 0.08;
@@ -1286,6 +1289,8 @@ function ProjectionChart({ points }: { points: { year: number; netWorth: number 
             cursor={{ stroke: CHART.teal, strokeDasharray: '2 3', strokeOpacity: 0.6 }}
             content={<ChartTooltip labelFormatter={(y) => String(y)} />}
           />
+          {/* Uncertainty band (bear to bull), drawn first so the line sits on top. */}
+          <Area type="monotone" dataKey="band" name={bandLabel} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={false} activeDot={false} legendType="none" />
           <Area
             name=""
             type="monotone"

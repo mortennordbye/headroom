@@ -5,6 +5,11 @@
 // depend on income and savings rate, not on the return — so only the growth
 // rate varies between the three legs.
 
+import type { BucketRates } from './calculations';
+
+/** Return spread (percentage points) either side of the base for every band. */
+export const BAND_DELTA_PP = 3;
+
 /** Finite-or-0 guard. */
 const finite = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0);
 
@@ -45,4 +50,35 @@ export function netWorthBands(
     bear: Math.round(bear[y]),
     bull: Math.round(bull[y]),
   }));
+}
+
+/**
+ * Bear/bull band around the total of a stacked bucket projection (Assets growth,
+ * Dashboard 15-year). Same assumption as the Forecast band: the return on the
+ * financial buckets (stocks, crypto, cash) moves ±`deltaPct` while the home is
+ * held to its own path. `project` reruns the chart's own model at the shifted
+ * rates, so the band follows each chart's total (wealth tax and all) and always
+ * contains the plotted base line. Non-finite legs fall back to the base total.
+ */
+export function withTotalBand<P extends { total: number }>(
+  base: P[],
+  rates: BucketRates,
+  deltaPct: number,
+  project: (rates: BucketRates) => { total: number }[],
+): (P & { band: [number, number] })[] {
+  const delta = Math.max(0, finite(deltaPct));
+  const shift = (d: number): BucketRates => ({
+    ...rates,
+    stocks: rates.stocks + d,
+    crypto: rates.crypto + d,
+    cash: rates.cash + d,
+  });
+  const bear = project(shift(-delta));
+  const bull = project(shift(delta));
+  return base.map((p, i) => {
+    const total = finite(p.total);
+    const lo = Number.isFinite(bear[i]?.total) ? bear[i].total : total;
+    const hi = Number.isFinite(bull[i]?.total) ? bull[i].total : total;
+    return { ...p, band: [Math.min(lo, hi, total), Math.max(lo, hi, total)] };
+  });
 }
