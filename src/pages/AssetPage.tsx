@@ -881,6 +881,7 @@ interface AssetRowProps {
 function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, icon, badge }: AssetRowProps) {
   return (
     <div
+      role="presentation"
       className={`flex justify-between items-center group py-3.5 border-b border-[var(--border)] last:border-0 ${onEdit ? 'cursor-pointer' : ''}`}
       onClick={onEdit}
     >
@@ -891,12 +892,16 @@ function AssetRow({ label, value, suffix, onEdit, formatCurrency, isNegative, ic
       </span>
       <div className="flex items-center gap-2 shrink-0">
         {onEdit ? (
-          <span className="inline-flex items-center gap-2 rounded-[6px] border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1.5 group-hover:border-[var(--brass-dim)] group-hover:bg-[var(--bg-elev)] transition-colors">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            className="inline-flex items-center gap-2 rounded-[6px] border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1.5 group-hover:border-[var(--brass-dim)] group-hover:bg-[var(--bg-elev)] transition-colors"
+          >
             <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${isNegative ? 'text-[var(--negative)]' : 'text-[var(--text-1)]'}`}>
               {isNegative ? '−' : ''}{formatCurrency(value)}{suffix}
             </span>
             <Edit2 size={12} className="text-[var(--text-3)] shrink-0" />
-          </span>
+          </button>
         ) : (
           <span className={`text-[13px] font-mono font-medium whitespace-nowrap ${isNegative ? 'text-[var(--negative)]' : 'text-[var(--text-2)]'}`}>
             {isNegative ? '−' : ''}{formatCurrency(value)}{suffix}
