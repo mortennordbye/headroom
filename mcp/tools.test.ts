@@ -591,6 +591,18 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(derive.mortgage(b, MONTH)).toMatchObject({ current: null, planned: null });
   });
 
+  it('mortgage: transitioning with missing sale-cost fields uses the app defaults, not zero proceeds', () => {
+    const b = fullFixture();
+    b.housingMode = 'transitioning';
+    const value = b.transition!.currentHouseValue;
+    b.transition = { currentHouseValue: value } as typeof b.transition;
+    // The app merges a stored transition slice over its defaults on load.
+    const app = { currentHouseValue: value, agentFeePercent: 3, documentFee: 7500, otherSaleCosts: 0, bridgeMonths: 2, bridgeLoanRate: 6.5 };
+    const need = calcTransitionNewLoan(app, b.assets.houseDebt, b.loan!, ownershipShares(b.assets, MONTH));
+    expect(need.equityFromSale).toBeGreaterThan(0);
+    expect(derive.mortgage(b, MONTH).balance).toBe(Math.round(need.newLoanNeeded));
+  });
+
   it('mortgage: a planned loan without a rate uses the app default 5.5 %', () => {
     const b = fullFixture();
     b.housingMode = 'first_buyer';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { migrateMortgageBalance, migrateImportedMortgage, type MortgageSliceFields } from './mortgageSlices';
+import { migrateMortgageBalance, migrateImportedMortgage, settlesOnLegacyPlaceholder, type MortgageSliceFields } from './mortgageSlices';
 import type { HousingMode } from '../context/FinanceContext';
 
 const NOW = '2026-10';
@@ -256,5 +256,18 @@ describe('migrateImportedMortgage: an imported balance takes precedence', () => 
   it('an imported unknown mode keeps the current one', () => {
     const out = migrateImportedMortgage(current, { housingMode: 'renter' as unknown as HousingMode }, NOW);
     expect(out.housingMode).toBe('homeowner');
+  });
+});
+
+describe('settlesOnLegacyPlaceholder', () => {
+  it('is true when only a dated legacy copy holds the placeholder', () => {
+    expect(settlesOnLegacyPlaceholder(legacy('homeowner', 0, P, P, '2026-05'), NOW)).toBe(true);
+    expect(settlesOnLegacyPlaceholder({ housingMode: 'homeowner', homeowner: { currentMortgageBalance: P, currentMortgageBalanceAsOf: '2026-05' } }, NOW)).toBe(true);
+  });
+
+  it('is false for a real balance, a 3 000 000 loan in Assets, or current-shape data', () => {
+    expect(settlesOnLegacyPlaceholder(legacy('homeowner', 2_000_000, P, P, '2026-05'), NOW)).toBe(false);
+    expect(settlesOnLegacyPlaceholder(legacy('homeowner', P, P, P, '2026-05'), NOW)).toBe(false);
+    expect(settlesOnLegacyPlaceholder({ housingMode: 'homeowner', assets: { houseDebt: P }, homeowner: { currentMortgageBalanceAsOf: '2026-05' } }, NOW)).toBe(false);
   });
 });

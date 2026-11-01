@@ -1,6 +1,7 @@
 import type { BalanceSnapshot } from '../context/FinanceContext';
 import { calcMonthlyPayment } from './calculations';
 import { currentMortgage } from './existingMortgage';
+import { settlesOnLegacyPlaceholder } from './mortgageSlices';
 
 // Mortgage plan-vs-actual (HISTORY_PLAN §6.3). The plan curve is anchored at the
 // earliest recorded owner-mode mortgage balance using that month's rate/term; the actual
@@ -49,8 +50,10 @@ function snapshotMortgage(snap: BalanceSnapshot, month: string) {
 }
 const mortgageBalance = (snap: BalanceSnapshot, month: string): number => snapshotMortgage(snap, month).fullBalance;
 
-/** Plan balance after `k` monthly payments of `payment` at `monthlyRate`. */
+/** Plan balance after `k` monthly payments of `payment` at `monthlyRate`. With
+ *  no payment (a term of 0, or no rate and term) the plan holds flat. */
 function planBalanceAfter(principal: number, monthlyRate: number, payment: number, k: number): number {
+  if (!(payment > 0)) return principal;
   let b = principal;
   for (let i = 0; i < k; i++) {
     const interest = b * monthlyRate;
@@ -62,11 +65,22 @@ function planBalanceAfter(principal: number, monthlyRate: number, payment: numbe
 
 export function paydownVsPlan(snapshots: Record<string, BalanceSnapshot>): PaydownVsPlan {
   const months = Object.keys(snapshots).sort();
+  // Sold: the latest month has no mortgage and no home it could be paid off on
+  // (a first-buyer month, or no house value). There is no loan left to compare.
+  const lastMonth = months[months.length - 1];
+  if (lastMonth) {
+    const last = snapshotMortgage(snapshots[lastMonth], lastMonth);
+    const houseValue = snapshots[lastMonth].assets?.houseValue;
+    if (last.fullBalance <= 0 && (!last.amortises || !(typeof houseValue === 'number' && houseValue > 0))) return EMPTY;
+  }
+  // A month whose only balance is an old copy of the 3 000 000 placeholder is
+  // not a loan anyone entered, so it never anchors the plan.
+  const candidates = months.filter(m => !settlesOnLegacyPlaceholder(snapshots[m], m));
   // Anchor at the first owner-mode month: a first-buyer month before it has no
   // rate or term, so a plan from there would hold flat and make every later
   // month look ahead. Only when no month is owner-mode is the flat debt used.
-  const anchorMonth = months.find(m => { const o = snapshotMortgage(snapshots[m], m); return o.fullBalance > 0 && o.amortises; })
-    ?? months.find(m => mortgageBalance(snapshots[m], m) > 0) ?? null;
+  const anchorMonth = candidates.find(m => { const o = snapshotMortgage(snapshots[m], m); return o.fullBalance > 0 && o.amortises; })
+    ?? candidates.find(m => mortgageBalance(snapshots[m], m) > 0) ?? null;
   if (!anchorMonth) return EMPTY;
 
   const anchor = snapshotMortgage(snapshots[anchorMonth], anchorMonth);
