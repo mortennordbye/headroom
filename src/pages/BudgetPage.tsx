@@ -48,7 +48,7 @@ import { lastNMonthKeys, isBeforePayday } from '../lib/date';
 import { sumLedgerSpent } from '../lib/spentTotals';
 import { isOneOff, oneOffSpend } from '../lib/segments';
 import { formatSignedPct } from '../lib/format';
-import { incomeDiffPct } from '../lib/income';
+import { incomeDiffPct, isIncomeOverrideStale } from '../lib/income';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -969,7 +969,9 @@ const BudgetPage: React.FC = () => {
                 <>
                   <span style={{ color: 'var(--text-3)' }}>·</span>
                   <span style={{ color: 'var(--text-3)' }}>
-                    {t.budgetPage.autoLabel}: {formatCurrency(derivedMonthlyIncome)}
+                    {isIncomeOverrideStale(monthlyIncomes[monthKey], derivedMonthlyIncome)
+                      ? `${t.budgetPage.overrideStaleLabel}: ${formatCurrency(derivedMonthlyIncome)}`
+                      : t.budgetPage.overrideMatchesLabel}
                   </span>
                   <button
                     onClick={() => clearMonthlyIncomeForMonth(format(currentMonth, 'yyyy-MM'))}
