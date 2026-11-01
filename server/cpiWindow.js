@@ -30,7 +30,7 @@ function shiftMonth(month, n) {
 /**
  * The 'YYYY-MM' month of `now` in Europe/Oslo time. The server usually runs in
  * UTC (Docker), so a plain UTC slice is a month behind Oslo for an hour or two
- * after midnight on the 1st. Mirrors `currentMonthKey` in src/lib/date.ts.
+ * after midnight on the 1st. Mirrors `osloMonthKey` in src/lib/date.ts.
  */
 function osloMonthKey(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit' })

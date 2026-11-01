@@ -47,7 +47,7 @@ import RecordEventModal, { type RecordEditTarget, type RecordType } from '../com
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { restskattEstimate } from '../lib/restskatt';
-import { currentMonthKey as osloMonthKey, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
+import { currentMonthKey as localMonthKey, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
 import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, activeJobBreakdown, salaryVsCpiYoy, jobOverlapRanges, allSalariedJobsEnded, jobIdForHoursSnapshot, type JobOverlapRange } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
@@ -127,7 +127,7 @@ const SalaryPage: React.FC = () => {
     [salaries]
   );
 
-  const currentMonthKey = osloMonthKey();
+  const currentMonthKey = localMonthKey();
 
   // Concurrent employment is legitimate and deliberately summed, but it is also
   // what a job change looks like when the previous job's end date wasn't
