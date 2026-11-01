@@ -140,9 +140,6 @@ in git and the CHANGELOG, not here.
   `src/components/TapDebugLog.tsx`, `src/lib/tapLog.ts`, `<TapDebugLog />` in
   `src/components/Layout.tsx`, the toggle in the About card of `src/pages/SettingsPage.tsx`.
 
-- **Stricter lint presets.** No `recommendedTypeChecked` for the TypeScript and no `jsx-a11y`.
-  **Why deferred**: out of scope for #142, which only brought `server/` and `desktop/` under the
-  recommended rules. **Where**: `eslint.config.js`.
 - **`typescript` 7 is blocked upstream.** `typescript-eslint` peers `typescript <6.1.0`.
   **Unblock**: a release widening it. **Where**: `package.json`.
 - **Dev-only audit alerts with no usable fix.** minimatch GHSA-g3hv-75wg-m249 is fixed only in

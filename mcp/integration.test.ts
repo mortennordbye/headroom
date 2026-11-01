@@ -140,7 +140,7 @@ describe('the server is a backstop: a data-losing write cannot destroy stored da
       client.applyMutation((b) => {
         // A hypothetical buggy mutation that violates the required shape.
         delete (b as Partial<ExportPayload>).income;
-        return b as ExportPayload;
+        return b;
       }),
     ).rejects.toThrow(/400/);
     // Nothing was written: the full fixture is intact.

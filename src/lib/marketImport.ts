@@ -76,7 +76,7 @@ export function parseMarketFile(text: string): MarketFile | { error: 'json' | 's
   const s = sales as Record<string, unknown>[];
   const l = listings as Record<string, unknown>[];
   if (s.length === 0 && l.length === 0) return { error: 'empty' };
-  return { sales: s, listings: l, ...(seenOn ? { seenOn: seenOn as string } : {}) };
+  return { sales: s, listings: l, ...(seenOn ? { seenOn: seenOn } : {}) };
 }
 
 /** Split rows into request-sized batches. */

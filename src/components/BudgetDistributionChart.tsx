@@ -98,7 +98,7 @@ export default function BudgetDistributionChart({
           dataKey="amount"
           radius={[0, 3, 3, 0]}
           barSize={12}
-          background={{ fill: CHART.track, radius: 3 } as unknown as React.ComponentProps<typeof Bar>['background']}
+          background={{ fill: CHART.track, radius: 3 }}
         >
           {data.map((e, i) => (
             <Cell key={`cell-${i}`} fill={expenseColor(e.type)} />

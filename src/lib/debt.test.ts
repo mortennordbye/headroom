@@ -226,7 +226,7 @@ describe('lendingDebtTotal', () => {
 
   it('ignores negatives and NaN/undefined balances and limits', () => {
     const debts = [
-      debt({ id: 'a', type: 'credit_card', balance: -10, creditLimit: NaN as unknown as number }),
+      debt({ id: 'a', type: 'credit_card', balance: -10, creditLimit: NaN }),
       debt({ id: 'b', type: 'consumer', balance: 40_000 }),
       debt({ id: 'c', type: 'credit_card', balance: undefined as unknown as number, creditLimit: 50_000 }),
     ];

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import EditModal, { type ModalField } from './EditModal';
 import { useFinance, type DailyTransaction } from '../context/FinanceContext';
 import { parseLocaleNumber } from '../lib/validators';
-import { isCategoryKey, CATEGORIES, type CategoryKey } from '../lib/categories';
+import { isCategoryKey, CATEGORIES } from '../lib/categories';
 import { matchesTransferRule } from '../lib/transferRules';
 import { isTransactionSegment } from '../lib/segments';
 
@@ -82,7 +82,7 @@ export default function EditTransactionModal({ tx, onClose }: { tx: DailyTransac
     // you actually changed here — the category and/or the custom name.
     if (vals.rememberRule === 'true' && vals.ruleMatch.trim()) {
       const newCat = vals.category.trim();
-      if (isCategoryKey(newCat) && newCat !== (category ?? '')) addCategoryRule(vals.ruleMatch.trim(), newCat as CategoryKey);
+      if (isCategoryKey(newCat) && newCat !== (category ?? '')) addCategoryRule(vals.ruleMatch.trim(), newCat);
       const newName = vals.description.trim();
       if (newName && newName !== description) addLabelRule(vals.ruleMatch.trim(), newName);
     }

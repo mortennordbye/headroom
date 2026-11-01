@@ -3,7 +3,7 @@ import { isSpend } from './spend';
 import type { DailyTransaction } from '../context/FinanceContext';
 
 const tx = (o: Partial<DailyTransaction>): DailyTransaction =>
-  ({ id: 'a', date: '2026-07-01', description: 'x', amount: 100, ...o }) as DailyTransaction;
+  ({ id: 'a', date: '2026-07-01', description: 'x', amount: 100, ...o });
 
 describe('isSpend', () => {
   it('counts a plain expense', () => {

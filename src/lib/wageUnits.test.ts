@@ -5,7 +5,6 @@ import {
   fromAnnual,
   toAnnual,
   wageBreakdown,
-  type WageUnit,
 } from './wageUnits';
 
 describe('WAGE_UNITS_PER_YEAR', () => {
@@ -62,6 +61,6 @@ describe('wageBreakdown', () => {
     const b = wageBreakdown(920_000);
     expect(b.year).toBe(920_000);
     expect(b.hour).toBeCloseTo(471.79, 2);
-    expect(Object.keys(b).sort()).toEqual([...WAGE_UNIT_ORDER].sort() as WageUnit[]);
+    expect(Object.keys(b).sort()).toEqual([...WAGE_UNIT_ORDER].sort());
   });
 });

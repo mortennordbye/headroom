@@ -80,7 +80,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const httpServer = createHttpServer(async (req, res) => {
+async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || `${HOST}:${PORT}`}`);
     if (url.pathname !== MCP_PATH) {
@@ -116,7 +116,9 @@ const httpServer = createHttpServer(async (req, res) => {
     process.stderr.write(`headroom-mcp(http): request error ${String((err as Error)?.stack || err)}\n`);
     if (!res.headersSent) sendJson(res, 500, { error: 'internal error' });
   }
-});
+}
+
+const httpServer = createHttpServer((req, res) => { void handleRequest(req, res); });
 
 httpServer.listen(PORT, HOST, () => {
   process.stderr.write(`headroom-mcp: HTTP transport listening on http://${HOST}:${PORT}${MCP_PATH}\n`);

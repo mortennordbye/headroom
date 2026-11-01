@@ -12,7 +12,7 @@ export type Blob = Record<string, unknown> & {
 
 /** A deep copy of the synthetic blob global-setup seeded the server with. */
 export function seedBlob(): Blob {
-  return JSON.parse(fs.readFileSync(process.env.E2E_SEED_PATH!, 'utf8'));
+  return JSON.parse(fs.readFileSync(process.env.E2E_SEED_PATH!, 'utf8')) as Blob;
 }
 
 export async function getBlob(request: APIRequestContext): Promise<{ blob: Blob; rev: number }> {

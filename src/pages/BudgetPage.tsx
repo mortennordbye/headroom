@@ -332,7 +332,7 @@ const BudgetPage: React.FC = () => {
       else byType.set(type, [e]);
     }
     return order
-      .map((type) => ({ type: type as ExpenseType, expenses: byType.get(type) ?? [] }))
+      .map((type) => ({ type: type, expenses: byType.get(type) ?? [] }))
       .filter((g) => g.expenses.length > 0);
   }, [viewFixedExpenses]);
 

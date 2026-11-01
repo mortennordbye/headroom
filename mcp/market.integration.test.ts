@@ -49,7 +49,8 @@ const setEnabled = (enabled: boolean, wipe?: boolean) =>
  */
 function seedSsbCache(file: string) {
   const req = createRequire(join(import.meta.dirname, '..', 'server', 'package.json'));
-  const Database = req('better-sqlite3');
+  type Db = { exec(sql: string): void; prepare(sql: string): { run(...params: unknown[]): void }; close(): void };
+  const Database = req('better-sqlite3') as new (file: string) => Db;
   const db = new Database(file);
   db.exec(`CREATE TABLE IF NOT EXISTS kvmpris_cache (
     region TEXT NOT NULL, boligtype TEXT NOT NULL, quarter TEXT NOT NULL,
@@ -66,7 +67,7 @@ async function toolNames(): Promise<string[]> {
 
 async function call(name: string, args: Record<string, unknown> = {}) {
   const r = (await mcp.callTool({ name, arguments: args })) as { content: { text: string }[]; isError?: boolean };
-  return { isError: !!r.isError, text: r.content[0].text, json: () => JSON.parse(r.content[0].text) };
+  return { isError: !!r.isError, text: r.content[0].text, json: <T = unknown>() => JSON.parse(r.content[0].text) as T };
 }
 
 beforeAll(async () => {
@@ -138,7 +139,7 @@ describe('market data opt-in', () => {
     }));
     expect((await call('import_sales', { sales })).json()).toEqual({ added: 4, duplicates: 0 });
     expect((await call('import_sales', { sales })).json()).toEqual({ added: 0, duplicates: 4 });
-    const v = (await call('get_home_valuation')).json();
+    const v = (await call('get_home_valuation')).json<{ confidence: { level: string } }>();
     // Flat index (no adjustment), same date and size (equal weights): the
     // weighted 25/50/75 of 95–110k/m² × 40 m².
     expect(v).toMatchObject({
@@ -151,7 +152,7 @@ describe('market data opt-in', () => {
   it('imports listings and reports asking-price changes between snapshots', async () => {
     const ad = { url: 'https://example.com/ad/1', address: 'Annengata 2', postnr: '0570', bra: 60, askingPrice: 5_000_000 };
     expect((await call('import_listings', { listings: [ad], seenOn: '2026-09-28' })).json()).toMatchObject({ added: 1 });
-    const second = (await call('import_listings', { listings: [{ ...ad, askingPrice: 4_800_000 }], seenOn: '2026-10-25' })).json();
+    const second = (await call('import_listings', { listings: [{ ...ad, askingPrice: 4_800_000 }], seenOn: '2026-10-25' })).json<{ priceChanges: unknown }>();
     expect(second.priceChanges).toEqual([{ url: ad.url, from: 5_000_000, to: 4_800_000 }]);
   });
 

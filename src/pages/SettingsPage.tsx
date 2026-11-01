@@ -266,7 +266,7 @@ export default function SettingsPage() {
       return;
     }
     const reader = new FileReader();
-    reader.onload = e => validateAndPreview(String(e.target?.result ?? ''));
+    reader.onload = e => validateAndPreview(typeof e.target?.result === 'string' ? e.target.result : '');
     reader.onerror = () => {
       setImportError(t.invalidFile);
       setImportState('error');
@@ -910,7 +910,7 @@ export default function SettingsPage() {
                       className="sr-only"
                       onChange={e => {
                         const file = e.target.files?.[0];
-                        if (file) processRestoreFile(file);
+                        if (file) void processRestoreFile(file);
                       }}
                     />
                     <button
@@ -1305,7 +1305,7 @@ function RangeRow({
             max={max}
             onChange={e => setDraft(e.target.value)}
             onBlur={commitDraft}
-            onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
             className="w-20 text-right text-[18px] font-semibold tabular-nums bg-transparent outline-none rounded px-1 hover:bg-[var(--surface-3)] focus:bg-[var(--surface-3)] transition-colors"
             style={{ color: 'var(--text-1)' }}
           />
@@ -1372,7 +1372,7 @@ function PayloadSummary({
               <input
                 type="checkbox"
                 checked={on}
-                onChange={() => onToggleSection!(key)}
+                onChange={() => onToggleSection(key)}
                 className="h-3.5 w-3.5 accent-[var(--accent)]"
                 aria-label={sectionLabels[sec.key]}
               />

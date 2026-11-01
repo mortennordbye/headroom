@@ -1861,7 +1861,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       saveTimer.current = setTimeout(() => { doSaveRef.current(); }, delay);
     }
   }, [applyPayload]);
-  useEffect(() => { doSaveRef.current = doSave; }, [doSave]);
+  useEffect(() => { doSaveRef.current = () => { void doSave(); }; }, [doSave]);
 
   // When a backgrounded tab regains focus, pull the latest before it can autosave
   // stale data over a newer write. Skipped if there are unsaved local edits
@@ -1884,8 +1884,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         }
       } catch { /* offline — ignore */ }
     };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+    const listener = () => { void onVisible(); };
+    document.addEventListener('visibilitychange', listener);
+    return () => document.removeEventListener('visibilitychange', listener);
   }, [applyPayload, demoMode]);
 
   // Manual retry from the banner.
