@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.6](https://github.com/mortennordbye/headroom/compare/v3.10.5...v3.10.6) (2026-11-01)
+
+
+### Bug Fixes
+
+* navigate mobile tabs on lift-off, since iOS can drop the click ([#300](https://github.com/mortennordbye/headroom/issues/300)) ([6962b15](https://github.com/mortennordbye/headroom/commit/6962b15b67697bb96b4ba7796bda46d1d2ca9fb3))
+* open the More sheet and act on its buttons on touch end ([#302](https://github.com/mortennordbye/headroom/issues/302)) ([756175f](https://github.com/mortennordbye/headroom/commit/756175f4915b2f07f995ce39e26d31ec87ccf17f))
+
 ## [3.10.5](https://github.com/mortennordbye/headroom/compare/v3.10.4...v3.10.5) (2026-11-01)
 
 
