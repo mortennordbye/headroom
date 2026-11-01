@@ -154,6 +154,17 @@ describe('the server is a backstop: a data-losing write cannot destroy stored da
     expect(await getBlob()).toEqual(fullFixture());
   });
 
+  it('a malformed assets.bsuTotalDeposited is rejected (400); a valid one is stored', async () => {
+    for (const bad of ['120000', -1, null]) {
+      await expect(
+        client.applyMutation((b) => ({ ...b, assets: { ...b.assets, bsuTotalDeposited: bad as unknown as number } })),
+      ).rejects.toThrow(/400/);
+    }
+    expect(await getBlob()).toEqual(fullFixture());
+    await client.applyMutation((b) => ({ ...b, assets: { ...b.assets, bsuTotalDeposited: 25000 } }));
+    expect((await getBlob()).assets.bsuTotalDeposited).toBe(25000);
+  });
+
   it('a stale write is rejected with 409 and the current rev', async () => {
     const rev = await currentRev();
     const stale = await fetch(`${BASE}/api/data`, {

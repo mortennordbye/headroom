@@ -38,6 +38,7 @@ export function getDemoData(): Partial<ExportPayload> {
     taxRate: 37.84,
     bsu: 33000,
     bsuAnnualContribution: 27500,
+    bsuTotalDeposited: 31500,
     savingsAccounts: [
       { id: 'demo-sav-1', name: 'Sparekonto', balance: 60000 },
       { id: 'demo-sav-2', name: 'Feriekonto', balance: 35000 },

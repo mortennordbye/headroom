@@ -255,6 +255,15 @@ const cases: {
     },
   },
   {
+    name: 'update_asset (BSU total deposited)',
+    touched: ['assets'],
+    mutate: (b) => updateAsset(b, { bsuTotalDeposited: 25000 }),
+    assertChange: (b) => {
+      expect(b.assets.bsuTotalDeposited).toBe(25000);
+      expect(b.assets.bsu).toBe(30000); // balance untouched
+    },
+  },
+  {
     name: 'upsert_savings_account (create)',
     touched: ['assets'],
     mutate: (b) => upsertSavingsAccount(b, { id: 'sa-new', create: true, name: 'Holiday', balance: 5000 }),

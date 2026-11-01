@@ -518,6 +518,11 @@ function isValidFinancePayload(body) {
   return (
     typeof body.income === 'number' &&
     typeof body.assets === 'object' && body.assets !== null &&
+    // Optional; older blobs don't carry it.
+    (body.assets.bsuTotalDeposited === undefined || (
+      typeof body.assets.bsuTotalDeposited === 'number'
+      && Number.isFinite(body.assets.bsuTotalDeposited) && body.assets.bsuTotalDeposited >= 0
+    )) &&
     Array.isArray(body.fixedExpenses) &&
     Array.isArray(body.dailyTransactions) &&
     (body.deletedBankTombstones === undefined || (

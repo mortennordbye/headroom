@@ -6,10 +6,6 @@ in git and the CHANGELOG, not here.
 
 ## Calculations and money figures
 
-- **BSU lifetime room is measured against the balance.** The 300k cap counts deposits, but only the
-  balance (with interest) is stored, so the room shown is a floor. **Unblock**: agree a persisted
-  "total deposited" field and its backfill. **Where**: `src/lib/bsu.ts`, payload sites in
-  `src/context/FinanceContext.tsx`.
 - **Wealth tax simplifications.** Single-person bunnfradrag (no spousal doubling), the forecast
   splits financial assets by today's shares-vs-other ratio, and Pengestrøm shows no wealth-tax
   line. Gjeldsreduksjon's gross-asset ratio uses the adjusted `primaryHomeValue`, which overstates
@@ -92,12 +88,6 @@ in git and the CHANGELOG, not here.
   `calcRecommendations` in `src/lib/calculations.ts`.
 - **CashflowChart shows savings transfers as money out** (a literal cashflow view), so it disagrees
   with the savings-rate chart. **Where**: `src/components/charts/CashflowChart.tsx`.
-- **CashflowChart applies the viewed month's savings to every month.** Fixed expenses are now per
-  month, but the savings contribution is still the selected month's. **Why deferred**: a month's
-  saving depends on its snapshot, its month override and a pool resolved against that month's
-  income, which only the context derives today. **Unblock**: a pure per-month savings resolver
-  in `src/lib/` shared with `FinanceContext`. **Where**: `src/components/charts/CashflowChart.tsx`,
-  `viewSavings` in `src/context/FinanceContext.tsx`.
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
   `src/lib/envelopes.ts`, `src/context/FinanceContext.tsx`.
 

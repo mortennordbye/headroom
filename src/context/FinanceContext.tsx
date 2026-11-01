@@ -9,7 +9,7 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations, planMonthlySavingFor } from '../lib/calculations';
-import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, capSavingsToTotal } from '../lib/savingsRate';
+import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, savingsForMonth } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { ownershipShares, rewriteSnapshotCoOwners, snapshotCoOwners } from '../lib/ownership';
@@ -18,7 +18,7 @@ import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { cardNetForMonth, type TaxCard } from '../lib/forskuddstrekk';
 import { feriepengerSurplus } from '../lib/feriepenger';
-import { calcBsuTaxCredit } from '../lib/bsu';
+import { calcBsuTaxCredit, bsuDepositedAfterPosting } from '../lib/bsu';
 import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
 import { DEFAULT_BOLIG_ASSUMPTIONS } from '../lib/secondHome';
 import { getDemoData } from '../lib/demoData';
@@ -337,6 +337,10 @@ export interface Assets {
   taxRate: number;
   bsu: number;
   bsuAnnualContribution: number;       // planned BSU deposit this year (drives the 10% tax credit)
+  /** Total deposited into BSU so far, excluding interest (the 300 000 kr cap
+   *  counts deposits). Absent = not entered; the lifetime room then falls back
+   *  to the balance. */
+  bsuTotalDeposited?: number;
   /**
    * Legacy single savings, superseded by savingsAccounts. Import-time input
    * only: applyPayload absorbs it into savingsAccounts and writes 0, so live
@@ -911,6 +915,8 @@ interface FinanceDataContextType {
   setRecurringTemplates: (val: TransactionTemplate[]) => void;
   assets: Assets;
   updateAsset: (key: NumericAssetKey, value: number) => void;
+  /** Set the BSU deposit total, or clear it (undefined) to fall back to the balance. */
+  setBsuTotalDeposited: (value: number | undefined) => void;
   addSavingsAccount: (name: string, balance: number) => void;
   updateSavingsAccount: (id: string, patch: Partial<Omit<SavingsAccount, 'id'>>) => void;
   removeSavingsAccount: (id: string) => void;
@@ -2092,16 +2098,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     () => (fixedExpensesFromSnapshot ? (balanceSnapshots[monthKey].savings ?? []) : liveSavings),
     [fixedExpensesFromSnapshot, balanceSnapshots, monthKey, liveSavings],
   );
-  // The selected month's own saving, when the user adjusted it. A recorded month
-  // is only capped (its snapshot is never re-resolved); a live one is resolved
-  // against the adjustment so a 'rest' row gives way first.
+  // The selected month's savings, honouring its own adjustment when the user set
+  // one. A recorded month is only capped (its snapshot is never re-resolved); a
+  // live one is resolved against the adjustment so a 'rest' row gives way first.
+  // The same resolver gives every other month its own savings (CashflowChart,
+  // YearReviewPage, the MCP summaries).
   const monthSaving = savingsMonthOverrides[monthKey];
-  const viewSavings = useMemo(() => {
-    if (monthSaving === undefined) return planViewSavings;
-    return fixedExpensesFromSnapshot
-      ? capSavingsToTotal(planViewSavings, monthSaving)
-      : resolveSavingsForMonth(savings, savingsPool, savingsTargetPercent, monthSaving);
-  }, [monthSaving, planViewSavings, fixedExpensesFromSnapshot, savings, savingsPool, savingsTargetPercent]);
+  const viewSavings = useMemo(
+    () => savingsForMonth(
+      { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses },
+      monthKey, currentMonthKey(), effectiveIncome,
+    ),
+    [savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, monthKey, effectiveIncome],
+  );
 
   // What moves into savings rather than being spent. Budgeting treats it like a
   // fixed expense (it does leave free-to-spend), but the savings rate must add it
@@ -2465,6 +2474,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setBsuTotalDeposited = useCallback((value: number | undefined) => {
+    setAssets(({ bsuTotalDeposited: _old, ...rest }) => (value === undefined ? rest : { ...rest, bsuTotalDeposited: value }));
+  }, []);
+
   // savingsAccounts is nested in `assets`; adapt setAssets to the array-setter
   // shape so it shares the same CRUD triple as the top-level entities.
   const savingsCrud = useMemo(
@@ -2751,7 +2764,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           ...markGainReview(prev, currentMonthKey(), p.newBalance - prev.portfolio),
         }));
       } else if (p.targetKind === 'bsu') {
-        updateAsset('bsu', p.newBalance);
+        // A tracked deposit total follows the posting (and its corrections), so the lifetime room stays right.
+        setAssets(prev => {
+          const deposited = bsuDepositedAfterPosting(prev.bsuTotalDeposited, prev.bsu, p.newBalance);
+          return { ...prev, bsu: p.newBalance, ...(deposited !== undefined ? { bsuTotalDeposited: deposited } : {}) };
+        });
       } else if (p.targetKind === 'pensionOtp') {
         updatePension('otpBalance', p.newBalance);
       } else if (p.targetKind === 'pensionIps') {
@@ -3305,7 +3322,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget,
     recurringTemplates, setRecurringTemplates,
-    assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount, setCoOwners,
+    assets, updateAsset, setBsuTotalDeposited, addSavingsAccount, updateSavingsAccount, removeSavingsAccount, setCoOwners,
     loan, updateLoan, pension, updatePension,
     housingMode, setHousingMode: changeHousingMode, homeowner: homeownerNow, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,
@@ -3338,7 +3355,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     transferRules, addTransferRule, removeTransferRule, removeAccountData,
     accountGroups, dataAccounts, accountFilter, setAccountFilter, internalTransferIds, nonTransferTransactions, visibleBudgetTransactions,
     categoryBudgets, setCategoryBudget, recurringTemplates,
-    assets, updateAsset, addSavingsAccount, updateSavingsAccount, removeSavingsAccount, setCoOwners,
+    assets, updateAsset, setBsuTotalDeposited, addSavingsAccount, updateSavingsAccount, removeSavingsAccount, setCoOwners,
     loan, updateLoan, pension, updatePension, housingMode,
     changeHousingMode, homeownerNow, updateHomeowner, transition, updateTransition,
     residences, addResidence, updateResidence, removeResidence,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bsuStatus, calcBsuTaxCredit, BSU_ANNUAL_CAP, BSU_LIFETIME_CAP } from './bsu';
+import { bsuStatus, bsuDepositedAfterPosting, calcBsuTaxCredit, BSU_ANNUAL_CAP, BSU_LIFETIME_CAP } from './bsu';
 
 const snap = (bsu: number) => ({ assets: { bsu } });
 
@@ -47,6 +47,76 @@ describe('bsuStatus', () => {
     const s = bsuStatus(NaN, {}, 2026);
     expect(s.balance).toBe(0);
     expect(s.lifetimeRoomLeft).toBe(BSU_LIFETIME_CAP);
+  });
+});
+
+describe('bsuStatus lifetime room basis', () => {
+  it('falls back to the balance when total deposited is absent', () => {
+    const s = bsuStatus(120000, {}, 2026);
+    expect(s.lifetimeBasis).toBe('balance');
+    expect(s.lifetimeCounted).toBe(120000);
+    expect(s.lifetimeRoomLeft).toBe(BSU_LIFETIME_CAP - 120000);
+  });
+
+  it('measures the lifetime room against total deposited when given (interest excluded)', () => {
+    // 120k balance, of which 110k deposits and 10k interest.
+    const s = bsuStatus(120000, {}, 2026, 110000);
+    expect(s.lifetimeBasis).toBe('deposits');
+    expect(s.lifetimeCounted).toBe(110000);
+    expect(s.lifetimeRoomLeft).toBe(BSU_LIFETIME_CAP - 110000);
+    expect(s.atLifetimeCap).toBe(false);
+  });
+
+  it('never returns negative room and flags the cap when deposits reach 300 000', () => {
+    const s = bsuStatus(330000, {}, 2026, 300000);
+    expect(s.lifetimeRoomLeft).toBe(0);
+    expect(s.atLifetimeCap).toBe(true);
+    const over = bsuStatus(330000, {}, 2026, 310000);
+    expect(over.lifetimeRoomLeft).toBe(0);
+  });
+
+  it('a balance over 300 000 from interest alone still leaves room on the deposits basis', () => {
+    const s = bsuStatus(305000, {}, 2026, 280000);
+    expect(s.lifetimeRoomLeft).toBe(20000);
+    expect(s.atLifetimeCap).toBe(false);
+  });
+
+  it('accepts zero deposited as a real value', () => {
+    const s = bsuStatus(0, {}, 2026, 0);
+    expect(s.lifetimeBasis).toBe('deposits');
+    expect(s.lifetimeRoomLeft).toBe(BSU_LIFETIME_CAP);
+  });
+
+  it('ignores a non-finite or negative total deposited and falls back to the balance', () => {
+    for (const bad of [NaN, Infinity, -5000]) {
+      const s = bsuStatus(50000, {}, 2026, bad);
+      expect(s.lifetimeBasis).toBe('balance');
+      expect(s.lifetimeRoomLeft).toBe(BSU_LIFETIME_CAP - 50000);
+    }
+  });
+});
+
+describe('bsuDepositedAfterPosting', () => {
+  it('adds an automated deposit to a tracked total', () => {
+    expect(bsuDepositedAfterPosting(100000, 110000, 112500)).toBe(102500);
+  });
+  it('leaves an untracked total untracked', () => {
+    expect(bsuDepositedAfterPosting(undefined, 110000, 112500)).toBeUndefined();
+  });
+  it('lowers the total on a negative correction (reversal of an automated deposit), floored at 0', () => {
+    expect(bsuDepositedAfterPosting(100000, 110000, 105000)).toBe(95000);
+    expect(bsuDepositedAfterPosting(100000, 110000, 110000)).toBe(100000);
+    expect(bsuDepositedAfterPosting(2000, 110000, 105000)).toBe(0);
+  });
+  it('does not double-count a deposit that is reversed and posted again', () => {
+    // Post 2 500, override the month to 0, then reset the override.
+    const afterPost = bsuDepositedAfterPosting(50000, 100000, 102500)!;
+    const afterOverride = bsuDepositedAfterPosting(afterPost, 102500, 100000)!;
+    const afterReset = bsuDepositedAfterPosting(afterOverride, 100000, 102500);
+    expect(afterReset).toBe(52500);
+  });
+  it('treats a non-finite balance as 0', () => {
+    expect(bsuDepositedAfterPosting(100000, NaN, 2500)).toBe(102500);
   });
 });
 

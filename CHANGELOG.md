@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.12.1](https://github.com/mortennordbye/headroom/compare/v3.12.0...v3.12.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* charge each cashflow and year review month its own savings ([#328](https://github.com/mortennordbye/headroom/issues/328)) ([c5b7831](https://github.com/mortennordbye/headroom/commit/c5b7831116d4540fe9f2f18dafe08b4199749476))
+* keep a v1 month's assumptions unrecorded when editing its balances ([#330](https://github.com/mortennordbye/headroom/issues/330)) ([6f96651](https://github.com/mortennordbye/headroom/commit/6f9665123a7a501cd22b5b5cb9069a1fd3be520d))
+* show the viewed month's assumptions on the asset rate chips ([#329](https://github.com/mortennordbye/headroom/issues/329)) ([756ae58](https://github.com/mortennordbye/headroom/commit/756ae581cea484bcf4268cd33bdf458e3a82caeb))
+
 ## [3.12.0](https://github.com/mortennordbye/headroom/compare/v3.11.0...v3.12.0) (2026-11-01)
 
 

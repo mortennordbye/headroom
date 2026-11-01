@@ -554,6 +554,17 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(a.equityBreakdown.houseEquity).toBeCloseTo(solo.a.equityBreakdown.houseEquity / 2, 6);
   });
 
+  it('assets & debts: BSU lifetime room uses total deposited when set, else the balance', () => {
+    const b = fullFixture();
+    const floor = derive.assetsAndDebts(b).bsuRoom;
+    expect(floor.lifetimeBasis).toBe('balance');
+    expect(floor.lifetimeRoomLeft).toBe(300000 - b.assets.bsu);
+    b.assets.bsuTotalDeposited = b.assets.bsu - 2000; // 2 000 of the balance is interest
+    const exact = derive.assetsAndDebts(b).bsuRoom;
+    expect(exact.lifetimeBasis).toBe('deposits');
+    expect(exact.lifetimeRoomLeft).toBe(floor.lifetimeRoomLeft + 2000);
+  });
+
   it('co-owners: overview reads equity and debt at the same month', () => {
     const b = fullFixture();
     b.assets.coOwners = [{ id: 'c', name: 'Samboer', ownershipPct: 50, since: '2026-05' }];
@@ -682,11 +693,30 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       '2026-05': { ...b.balanceSnapshots!['2026-06'], fixedExpenses: [b.fixedExpenses![0]] },
     };
     const live = derive.budgetSummary(b, MONTH);
-    // Same formula as CashflowChart: the month's own list plus this month's savings.
+    // Same formula as CashflowChart: the month's own list plus its own savings,
+    // and May's snapshot recorded no savings list, so it moved nothing.
     const may = live.cashflowLast12.find((r) => r.month === '2026-05')!;
     const june = live.cashflowLast12.find((r) => r.month === '2026-06')!;
-    expect(may.expenses).toBe(14000 + live.monthlySavings + 4500);
+    expect(may.expenses).toBe(14000 + 0 + 4500);
     expect(june.expenses).toBe(live.totalFixedExpenses + 2000);
+
+    const review = derive.yearReviewSummary(b, 2026, MONTH);
+    expect(review.monthly.find((r) => r.month === '2026-05')!.expenses).toBe(may.expenses);
+    expect(review.monthly.find((r) => r.month === '2026-06')!.expenses).toBe(june.expenses);
+  });
+
+  it('budget and year review charge each month its own savings', () => {
+    const b = fullFixture();
+    // May was adjusted down to 500 kr; June follows the 2 000 kr plan.
+    b.savingsMonthOverrides = { '2026-05': 500 };
+    const live = derive.budgetSummary(b, MONTH);
+    const fixedTotal = live.totalFixedExpenses - live.monthlySavings;
+    const may = live.cashflowLast12.find((r) => r.month === '2026-05')!;
+    const june = live.cashflowLast12.find((r) => r.month === '2026-06')!;
+    expect(live.monthlySavings).toBe(2000);
+    // May's grocery spend sits inside its envelope; June adds the unenveloped dining.
+    expect(may.expenses).toBe(fixedTotal + 500);
+    expect(june.expenses).toBe(fixedTotal + 2000 + 2000);
 
     const review = derive.yearReviewSummary(b, 2026, MONTH);
     expect(review.monthly.find((r) => r.month === '2026-05')!.expenses).toBe(may.expenses);

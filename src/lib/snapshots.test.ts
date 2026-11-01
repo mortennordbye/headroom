@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nearestSnapshot, historyRows, buildManualSnapshot, resolveMonthView, fixedExpensesForMonth, snapshotHasAssumptions, type SnapshotBalances } from './snapshots';
+import { nearestSnapshot, historyRows, buildManualSnapshot, resolveMonthView, fixedExpensesForMonth, snapshotHasAssumptions, snapshotBalances, assumptionsToSave, type SnapshotBalances } from './snapshots';
 import { netWorthFromSnapshot } from './netWorth';
 import type { BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
 
@@ -151,6 +151,44 @@ describe('buildManualSnapshot', () => {
     // equity: portfolio 300000 + crypto 40000 + bsu 1000 + savings 5000 + buffer 2000
     //         + (house 4000000 − debt 2800000) = 1548000; minus debt 12000
     expect(netWorthFromSnapshot(s)).toBe(1548000 - 12000);
+  });
+});
+
+describe('assumptionsToSave', () => {
+  const today = { savingsTargetPercent: 20, growthReturnRate: 7, houseGrowthRate: 3 };
+  const recorded = { savingsTargetPercent: 15, growthReturnRate: 5, houseGrowthRate: 2 };
+  const v1 = {
+    assets: { portfolio: 1, savings: 0, savingsAccounts: [], bsu: 0, bufferAccount: 0, houseValue: 1, houseDebt: 1, crypto: 0 },
+    loan: {}, pension: { otpBalance: 0, ipsBalance: 0 }, homeowner: {}, transition: { currentHouseValue: 1 },
+    housingMode: 'homeowner',
+  } as unknown as BalanceSnapshot;
+  const v2 = { ...v1, assumptions: recorded, v: 2 } as BalanceSnapshot;
+
+  it("leaves a v1 month's assumptions absent when the user did not touch them", () => {
+    const initial = snapshotBalances(v1, today);
+    const edited = { ...initial, portfolio: 500 };
+    expect(assumptionsToSave(v1, initial, edited)).toBeUndefined();
+    const saved = buildManualSnapshot(v1, { ...edited, assumptions: assumptionsToSave(v1, initial, edited) }, '2025-03');
+    expect(snapshotHasAssumptions(saved)).toBe(false);
+  });
+
+  it('stores them once the user changes a value on a month that recorded none', () => {
+    const initial = snapshotBalances(v1, today);
+    const edited = { ...initial, assumptions: { ...today, growthReturnRate: 6 } };
+    expect(assumptionsToSave(v1, initial, edited)).toEqual({ ...today, growthReturnRate: 6 });
+  });
+
+  it('compares against the values the editor opened with, not later live rates', () => {
+    const opened = snapshotBalances(v1, today);
+    const rebuilt = snapshotBalances(v1, { ...today, growthReturnRate: 8 });
+    expect(assumptionsToSave(v1, opened, opened)).toBeUndefined();
+    // Against a rebuilt seed the untouched editor would wrongly read as edited.
+    expect(assumptionsToSave(v1, rebuilt, opened)).toEqual(today);
+  });
+
+  it('keeps the recorded assumptions of a month that has them', () => {
+    const initial = snapshotBalances(v2, today);
+    expect(assumptionsToSave(v2, initial, initial)).toEqual(recorded);
   });
 });
 

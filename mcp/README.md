@@ -102,7 +102,7 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 | `get_mortgage` | Active mortgage: payment, remaining term (years + months), payoff month and timeline, LTV, paydown vs plan, yearly amortization, and the user's ownership and loan share with co-owners |
 | `get_housing` | Borrowing capacity (with manual overrides), planned purchase, second-home scenarios and portfolio |
 | `get_employer_cost` | Employer cost, break-even/target/billed hourly rate, margin, fair salary |
-| `get_assets_and_debts` | Every balance with its id, equity breakdown, wealth-tax estimate, recent snapshots |
+| `get_assets_and_debts` | Every balance with its id, equity breakdown, BSU room, wealth-tax estimate, recent snapshots |
 | `query_transactions` | Filter by date, category, text, amount, kind; totals and per-category sums over all matches |
 | `what_if` | `prepay_vs_invest` or `extra_debt_payment` scenarios |
 | `list_history` | Recent saved revisions (newest first) with timestamps and sizes |

@@ -2,6 +2,10 @@ import { useEffect, useId, useRef, type MouseEvent, type ReactNode, type RefObje
 import ReactDOM from 'react-dom';
 import { X } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { createModalHistory } from '../../lib/modalHistory';
+
+// Shared by every modal; created on first open so importing this needs no window.
+let openModalEntry: ReturnType<typeof createModalHistory> | undefined;
 
 interface ModalShellProps {
   title: string;
@@ -37,24 +41,12 @@ export function ModalShell({
   const dialogRef = useFocusTrap<HTMLDivElement>(onClose, initialFocus);
   const titleId = useId();
 
-  // Tie the open dialog to a browser-history entry so the hardware/browser Back
-  // button (and Android back gesture) dismisses the dialog instead of navigating
-  // the app away. Closing by any other means (Save/Cancel/Escape/backdrop)
-  // consumes the entry we pushed, unless the user meanwhile navigated the router
-  // (then history.state.modal is no longer set and we leave history alone).
+  // Back closes the top dialog instead of navigating away (see modalHistory).
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
   });
-  useEffect(() => {
-    window.history.pushState({ modal: true }, '');
-    const onPop = () => onCloseRef.current();
-    window.addEventListener('popstate', onPop);
-    return () => {
-      window.removeEventListener('popstate', onPop);
-      if (window.history.state?.modal) window.history.back();
-    };
-  }, []);
+  useEffect(() => (openModalEntry ??= createModalHistory(window))(() => onCloseRef.current()), []);
 
   const onBackdrop = (e: MouseEvent) => { if (e.target === e.currentTarget && !preventBackdropClose) onClose(); };
 

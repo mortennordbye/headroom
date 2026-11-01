@@ -24,6 +24,7 @@ import { dedupeBankTransactions } from './bankDedup';
 import { migrateSavingsAccounts, migrateSnapshotSavings, partitionSavings, mergeStoredSavings } from './savingsMigration';
 import { sanitizeCoOwners, sanitizeSnapshotCoOwners } from './ownership';
 import { sanitizeTaxCard } from './forskuddstrekk';
+import { coerceNumber } from './sanitizePayload';
 
 // Every persisted field. `currentMonth` is view state — added by the callers
 // that need it, never built here — so it is the one `ExportPayload` key excluded.
@@ -100,6 +101,14 @@ export const whenOneOf = <K extends PersistedKey>(key: K, allowed: readonly Fiel
 export const mergedWith = <K extends PersistedKey>(key: K, base: FieldValue<K>): FieldRead<K> =>
   (data) => { const v = data[key]; return v ? ({ ...(base as object), ...(v as object) } as FieldValue<K>) : ABSENT; };
 
+/** Optional `assets.bsuTotalDeposited`: a finite, non-negative amount is kept
+ *  (a numeric string coerced), anything else is dropped so the BSU lifetime
+ *  room falls back to the balance. Absent stays absent. */
+function readBsuTotalDeposited(v: unknown): { bsuTotalDeposited?: number } {
+  const n = coerceNumber(v);
+  return n !== undefined && n >= 0 ? { bsuTotalDeposited: n } : {};
+}
+
 // The object defaults live in FinanceContext (also imported by pages and used as
 // sanitize schemas), so they are injected rather than moved — keeping this module
 // free of any value import from the context (no import cycle).
@@ -162,14 +171,14 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     assets: {
       group: 'reset', demo: 'personal', default: d.assets,
       read: (data) => {
-        const a = data.assets;
-        return a
-          ? {
-              ...d.assets, ...a, savings: 0, savingsAccounts: migrateSavingsAccounts(a),
-              // Absent stays absent, so loading an older blob doesn't dirty it.
-              ...(a.coOwners !== undefined ? { coOwners: sanitizeCoOwners(a.coOwners) } : {}),
-            }
-          : ABSENT;
+        if (!data.assets) return ABSENT;
+        const { bsuTotalDeposited, ...a } = data.assets;
+        return {
+          ...d.assets, ...a, savings: 0, savingsAccounts: migrateSavingsAccounts(a),
+          // Absent stays absent, so loading an older blob doesn't dirty it.
+          ...(a.coOwners !== undefined ? { coOwners: sanitizeCoOwners(a.coOwners) } : {}),
+          ...readBsuTotalDeposited(bsuTotalDeposited),
+        };
       },
     },
     loan: { group: 'reset', demo: 'personal', read: whenTruthy('loan'), default: d.loan },
