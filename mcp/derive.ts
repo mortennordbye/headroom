@@ -11,6 +11,7 @@ import type {
   Goal,
   DailyTransaction,
   Pension,
+  TransitionData,
 } from '../src/context/FinanceContext';
 import { computeEquityBreakdown, sumSavings } from '../src/lib/equity';
 import { activeCoOwners, myHouseDebt, myHouseValue, myPrimaryHomeWealthValue, ownershipShares } from '../src/lib/ownership';
@@ -800,6 +801,17 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
 }
 
 /**
+ * Copy of FinanceContext DEFAULT_TRANSITION (that module pulls in React). The
+ * app merges a stored transition slice over it on load, so missing sale costs
+ * read as the defaults rather than as NaN (which collapses the sale proceeds to
+ * 0); this does the same.
+ */
+const DEFAULT_TRANSITION: TransitionData = {
+  currentHouseValue: 4500000, agentFeePercent: 3, documentFee: 7500,
+  otherSaleCosts: 0, bridgeMonths: 2, bridgeLoanRate: 6.5,
+};
+
+/**
  * The mortgage the active housing mode shows (the planned loan outside homeowner
  * mode), for the mortgage tool. `termYears`
  * prices the payment (homeowner: the term as of the balance's month);
@@ -815,7 +827,7 @@ function activeMortgage(blob: ExportPayload, monthKey: string) {
   const loanTerm = blob.loan?.nedbetalingstid ?? 25;
   const hasTerm = h?.nedbetalingstid != null;
   const plannedBalance = mode === 'transitioning' && blob.transition
-    ? calcTransitionNewLoan(blob.transition, mortgageOwed(blob, monthKey).fullBalance, {
+    ? calcTransitionNewLoan({ ...DEFAULT_TRANSITION, ...blob.transition }, mortgageOwed(blob, monthKey).fullBalance, {
         kjoepesum: blob.loan?.kjoepesum ?? 0, egenkapital: blob.loan?.egenkapital ?? 0,
         rente: loanRate, nedbetalingstid: loanTerm, termingebyr: blob.loan?.termingebyr ?? 0,
       }, ownershipShares(blob.assets, monthKey)).newLoanNeeded

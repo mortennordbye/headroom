@@ -118,3 +118,41 @@ describe('paydownVsPlan', () => {
     expect(r.points.map(p => p.plan)).toEqual([1_000_000, 1_000_000]);
   });
 });
+
+describe('paydownVsPlan edge cases from old or hand-made data', () => {
+  it('does not anchor on a snapshot whose only balance is the dated legacy 3 000 000 placeholder', () => {
+    const placeholder = {
+      housingMode: 'homeowner',
+      homeowner: { currentMortgageBalance: 3_000_000, currentMortgageBalanceAsOf: '2025-12', rente: 5, nedbetalingstid: 25 },
+      assets: { houseDebt: 0, houseValue: 4_000_000 },
+    } as unknown as BalanceSnapshot;
+    const r = paydownVsPlan({ '2026-01': placeholder, '2026-02': mk(2_000_000), '2026-03': mk(1_990_000) });
+    expect(r.anchorMonth).toBe('2026-02');
+    expect(r.points[0].plan).toBe(2_000_000);
+  });
+
+  it('still anchors on a real 3 000 000 loan stored in Assets', () => {
+    const r = paydownVsPlan({ '2026-01': mk(3_000_000), '2026-02': mk(2_990_000) });
+    expect(r.anchorMonth).toBe('2026-01');
+  });
+
+  it('shows no plan comparison once the home is sold', () => {
+    const sold = { housingMode: 'first_buyer', assets: { houseDebt: 0, houseValue: 0 } } as unknown as BalanceSnapshot;
+    const r = paydownVsPlan({ '2026-01': mk(2_000_000), '2026-02': mk(1_990_000), '2026-03': sold });
+    expect(r.monthsAhead).toBe(0);
+    expect(r.aheadBy).toBe(0);
+    expect(r.points).toEqual([]);
+  });
+
+  it('keeps showing a loan paid off on a home still owned as ahead of plan', () => {
+    const paidOff = { housingMode: 'homeowner', homeowner: { rente: 5, nedbetalingstid: 25 }, assets: { houseDebt: 0, houseValue: 4_000_000 } } as unknown as BalanceSnapshot;
+    const r = paydownVsPlan({ '2026-01': mk(2_000_000), '2026-02': paidOff });
+    expect(r.monthsAhead).toBeGreaterThan(0);
+  });
+
+  it('holds the plan flat when the term is 0 instead of growing it', () => {
+    const r = paydownVsPlan({ '2026-01': mk(2_000_000, 5, 0), '2026-06': mk(2_000_000, 5, 0) });
+    expect(r.points[1].plan).toBe(2_000_000);
+    expect(Number.isFinite(r.monthsAhead)).toBe(true);
+  });
+});

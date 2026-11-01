@@ -105,6 +105,18 @@ const hasLegacyFields = (d: MortgageSliceFields) =>
   (d.homeowner != null && 'currentMortgageBalance' in d.homeowner)
   || (d.transition != null && 'currentMortgageBalance' in d.transition);
 
+/**
+ * True when a legacy blob or stored snapshot settles on the 3 000 000
+ * placeholder only because an old homeowner or transition copy held it (a
+ * dated placeholder stands on load when nothing else is real). Assets holding
+ * the same value counts as a real loan. Used where a balance anchors a plan,
+ * so a placeholder nobody entered is not read as a real loan.
+ */
+export function settlesOnLegacyPlaceholder(data: MortgageSliceFields, monthKey: string): boolean {
+  if (!hasLegacyFields(data) || balanceOf(data.assets?.houseDebt) === PLACEHOLDER_MORTGAGE_BALANCE) return false;
+  return balanceOf(migrateMortgageBalance(data, monthKey).assets?.houseDebt) === PLACEHOLDER_MORTGAGE_BALANCE;
+}
+
 /** Drop the old duplicate balance fields. Returns `data` itself when absent. */
 function dropLegacyFields<T extends MortgageSliceFields>(data: T): T {
   if (!hasLegacyFields(data)) return data;

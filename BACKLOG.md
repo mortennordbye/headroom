@@ -6,11 +6,6 @@ in git and the CHANGELOG, not here.
 
 ## Calculations and money figures
 
-- **Mortgage edge cases only reachable with hand-made or old data.** MCP `get_mortgage` treats
-  missing sale-cost fields as zero proceeds; the paydown plan can anchor on a stored snapshot whose
-  old copy of the balance was a dated 3 000 000 placeholder, shows "months ahead" after a sale, and
-  grows when the term is 0. **Why deferred**: the app's own saves never produce these. **Where**:
-  `src/lib/paydown.ts`, `src/lib/mortgageSlices.ts`, `mcp/derive.ts` (`activeMortgage`).
 - **Undo misreads drifted legacy mortgage history.** With an old blob whose Assets copy of the
   balance differed from the homeowner/transition copy, undo of the migration save shows the stale
   Assets value; undo of a legacy edit to only the homeowner copy is refused as a conflict; undo
