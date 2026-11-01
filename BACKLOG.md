@@ -116,6 +116,12 @@ in git and the CHANGELOG, not here.
   `until` (`src/lib/automation.ts`, `src/lib/projectBalances.ts`); buy-and-sell treats the next home
   as the user's alone (`calcTransitionNewLoan`); onboarding doesn't ask the ownership share
   (`src/lib/onboarding.ts`).
+- **Stamps that pay nothing still count as interest-charged.** Creating a paydown expense, resuming
+  it from a pause, or changing its destination sets `lastPostedMonth` to the current month without
+  paying it, so another expense's catch-up on the same loan pays that month as principal only.
+  **Why deferred**: out of scope for the declined catch-up fix (#338). **What would unblock**: record
+  those stamped-but-unpaid months in `unpaidMonths` too. **Where**: `src/components/ExpenseDialog.tsx`,
+  `src/components/SavingsAllocationPanel.tsx`, `computeAutomationPostings` in `src/lib/automation.ts`.
 - **MCP server clock vs browser clock** can disagree for a few hours at month end. **Where**:
   `currentMonthKey` in `src/lib/date.ts`, `mcp/derive.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank
