@@ -186,7 +186,8 @@ Applies to any project with a network, auth, or data surface — APIs, web apps,
 ```
 server/           Express API, SSB inflation fetch, SQLite, seed, docker-entrypoint
 src/
-├── context/      FinanceContext — single source of app state + i18n table
+├── context/      FinanceContext — single source of app state
+├── i18n/         translations table (nb, en)
 ├── lib/          Pure calc/domain logic + Vitest tests (tax, loan, debt, equity, validators)
 ├── pages/        One component per route (Budget, Dashboard, Assets, Loan, Salary, Forecast, …)
 ├── components/   Shared UI (modals, charts, sections) + ui/ primitives
@@ -196,7 +197,7 @@ src/
 ### UI rules
 
 - **Use CSS design tokens, never raw hex.** Colours come from CSS custom properties (`var(--accent)`, `var(--text-2)`, `var(--chart-*)`, etc.) defined in `src/index.css`. Don't hardcode hex values in components.
-- **Never branch JSX copy on `lang`.** User-facing strings belong in the translations table in `FinanceContext.tsx`; `lang` should only select the locale, not appear in component JSX. (There is legacy `lang === 'nb' ? … : …` code being migrated out — don't add more.)
+- **Never branch JSX copy on `lang`.** User-facing strings belong in the translations table in `src/i18n/translations.ts`; `lang` should only select the locale, not appear in component JSX. (There is legacy `lang === 'nb' ? … : …` code being migrated out — don't add more.)
 - Respect `prefers-reduced-motion` and `:focus-visible` (handled globally).
 
 ### Code quality
