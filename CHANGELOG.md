@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.12.0](https://github.com/mortennordbye/headroom/compare/v3.11.0...v3.12.0) (2026-11-01)
+
+
+### Features
+
+* label assets projection when a past month recorded no assumptions ([#323](https://github.com/mortennordbye/headroom/issues/323)) ([2c73521](https://github.com/mortennordbye/headroom/commit/2c735218f13104dffb367ed495180c7af1da9e74))
+* re-categorize auto-labelled transactions from Settings ([#324](https://github.com/mortennordbye/headroom/issues/324)) ([4d5344f](https://github.com/mortennordbye/headroom/commit/4d5344f48bf0f9580e634460434d7aeeb68ad19e))
+
+
+### Bug Fixes
+
+* correct three calculation edge cases found in the module audit ([#321](https://github.com/mortennordbye/headroom/issues/321)) ([9eaf0ef](https://github.com/mortennordbye/headroom/commit/9eaf0efbf33a3268fb58455c8b8592ad43430296))
+* keep a deleted bank row deleted across a re-link ([#316](https://github.com/mortennordbye/headroom/issues/316)) ([abcec11](https://github.com/mortennordbye/headroom/commit/abcec112fe48490690d86517a4e0ca9e8e2abeba))
+
 ## [3.11.0](https://github.com/mortennordbye/headroom/compare/v3.10.8...v3.11.0) (2026-11-01)
 
 
