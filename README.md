@@ -309,6 +309,7 @@ All optional — the defaults are sensible and nothing needs to be set.
 | `ALLOWED_HOSTS` | _(unset — all hosts allowed)_ | Comma-separated hostname allowlist, e.g. `finance.example.com,localhost`. When unset, no host filtering is applied. |
 | `AUTH_PASSWORD` | _(unset — auth off)_ | When set, forces the [optional password](#optional-password) on with this password, overriding the in-app Settings toggle. |
 | `DEMO_MODE` | _(unset — off)_ | Set to `1` to run this instance as a [public read-only demo](#public-demo-mode). |
+| `TRUST_PROXY` | _(unset)_ | Demo mode only. The reverse proxy in front of the demo, preferably as its IP or CIDR (`10.0.0.0/8`, comma-separated for several), or as a hop count from `1` to `10`. Lets the per-visitor rate limit see the real client IP from `X-Forwarded-For`. Ignored outside demo mode. |
 
 ## Public demo mode
 
@@ -343,6 +344,17 @@ What changes:
 - **The UI drops what doesn't apply.** No exit-demo button (there is no real data
   behind it), no password settings, no restore points, no SQLite-backup restore,
   no "delete all data". A "Reset sample data" button puts the dataset back.
+- **The API rate limit is per visitor IP** instead of one shared bucket. Behind
+  a reverse proxy, set `TRUST_PROXY` to that proxy (hop count or IPs/CIDRs) so the
+  limit keys on the real client address; without it the socket address is used
+  and `X-Forwarded-For` is ignored, so every visitor shares the proxy's bucket.
+  Prefer the proxy's exact IP (or the compose network's own subnet) over a hop
+  count or a broad range: whatever `TRUST_PROXY` matches may set its own
+  `X-Forwarded-For`. A hop count trusts anything that connects directly, and a
+  wide range like Docker's `172.16.0.0/12` also covers the bridge gateway that
+  published-port traffic can arrive from. Either way, keep the container port
+  reachable only through the proxy (bind it with `BIND_HOST` or don't publish
+  it), or a client can rotate `X-Forwarded-For` and get unlimited buckets.
 - **No background jobs.** Rotating backups and scheduled bank sync are both
   skipped — a demo instance has nothing worth backing up and no bank to sync.
 
@@ -356,6 +368,7 @@ to the internet on `GET /api/data`.
 environment:
   DEMO_MODE: "1"
   ALLOWED_HOSTS: "demo.example.com"
+  TRUST_PROXY: "10.89.0.2"       # the reverse proxy's exact IP on the demo network
 ```
 
 ## Data persistence

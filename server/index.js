@@ -1,6 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
@@ -14,7 +14,7 @@ const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
 const { startBankSyncSchedule } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
-const { isDemoMode, makeDemoGate } = require('./demo');
+const { isDemoMode, makeDemoGate, parseTrustProxy } = require('./demo');
 const { isWindowComplete } = require('./cpiWindow');
 const { changedKeys, revertChange } = require('./revert');
 const { migrateHistory, historyStatements } = require('./history');
@@ -30,6 +30,13 @@ const DEMO_MODE = isDemoMode(process.env);
 const BUILD_SHA = process.env.BUILD_SHA || 'dev';
 
 const app = express();
+
+// A public demo is reached through a reverse proxy, so the socket address is the
+// proxy's. TRUST_PROXY names the hops/addresses to trust for X-Forwarded-For
+// (demo mode only, so a normal deployment keeps ignoring forwarded headers).
+// Never `true`: that would let any client pick its own rate-limit key.
+const TRUST_PROXY = DEMO_MODE ? parseTrustProxy(process.env.TRUST_PROXY) : undefined;
+if (TRUST_PROXY !== undefined) app.set('trust proxy', TRUST_PROXY);
 
 // Security headers. CSP is tailored to what the app actually loads: same-origin
 // scripts/assets, inline styles (Tailwind v4 + Recharts inject them), and Google
@@ -68,7 +75,12 @@ const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '')
   .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
 if (ALLOWED_HOSTS.length > 0) {
   app.use((req, res, next) => {
-    const host = (req.hostname || '').toLowerCase();
+    // The raw Host header, not req.hostname: with `trust proxy` set (demo mode)
+    // req.hostname comes from X-Forwarded-Host, which a client can spoof past
+    // this guard. Port stripped the way Express does it, IPv6-literal safe.
+    const raw = req.headers.host || '';
+    const portAt = raw.indexOf(':', raw[0] === '[' ? raw.indexOf(']') + 1 : 0);
+    const host = (portAt === -1 ? raw : raw.slice(0, portAt)).toLowerCase();
     if (host && !ALLOWED_HOSTS.includes(host)) {
       return res.status(403).json({ error: 'host not allowed' });
     }
@@ -209,8 +221,12 @@ const sessions = createSessionStore(SESSION_TTL_MS, sessionStore);
 // A generous ceiling on the whole API (only trips on a pathological flood — the
 // debounced autosave stays far below it) plus a strict guard on the auth
 // mutations to blunt password brute-forcing.
+// A public demo has many callers, so there the API ceiling is per client IP
+// (IPv6 grouped by /56 via ipKeyGenerator) instead of one bucket any visitor
+// could drain for everyone.
 const globalKey = () => 'single-user';
-const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 2000, keyGenerator: globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
+const demoIpKey = (req) => ipKeyGenerator(req.ip || '');
+const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 2000, keyGenerator: DEMO_MODE ? demoIpKey : globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, keyGenerator: globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
 app.use('/api/', apiLimiter);
 app.use(['/api/auth/login', '/api/auth/config'], authLimiter);
