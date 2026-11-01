@@ -13,7 +13,7 @@
 // balance/rate snapshot and returns resolved absolute new balances.
 import { addMonthsKey, monthsBetween } from './date';
 import type { CurrentMortgage } from './existingMortgage';
-import type { CoOwner } from '../context/FinanceContext';
+import type { CoOwner, FixedExpense } from '../context/FinanceContext';
 import { ownershipShares } from './ownership';
 
 /**
@@ -316,6 +316,44 @@ export interface PaydownExpense {
   debtId?: string;
   mortgagePaymentScope?: 'whole' | 'myShare';
   automationPaused?: boolean;
+}
+
+type StampedExpense = Pick<FixedExpense,
+  'id' | 'destinationKind' | 'debtId' | 'automationPaused' | 'lastPostedMonth' | 'uncoveredMonths'>;
+
+/**
+ * The `uncoveredMonths` for a paydown expense whose stamp moves to `month`
+ * without paying anything: it was just created, resumed from a pause, or
+ * pointed at another loan. The new stamp covers every month up to `month`, so
+ * each of those it never paid is recorded as 0, and another expense's catch-up
+ * on the same loan still charges that month's interest. `prev` is the expense
+ * before the change (absent when new); its record carries over only while it
+ * stays on the same loan. As in the runner, only months another active expense
+ * on the loan has not passed yet are kept. Undefined = nothing to record.
+ */
+export function unpaidStampMonths(
+  prev: StampedExpense | undefined,
+  next: Pick<FixedExpense, 'destinationKind' | 'debtId'>,
+  month: string,
+  expenses: readonly StampedExpense[],
+): Record<string, number> | undefined {
+  const loanOf = (e: Pick<FixedExpense, 'destinationKind' | 'debtId'>) =>
+    e.destinationKind === 'mortgage' ? 'mortgage' : e.destinationKind === 'debt' ? `debt:${e.debtId}` : undefined;
+  const loan = loanOf(next);
+  if (!loan) return undefined;
+  const sameLoan = prev !== undefined && loanOf(prev) === loan;
+  // Up to the old stamp on the same loan, the old record still says what was paid.
+  const paidThrough = sameLoan ? prev.lastPostedMonth : undefined;
+  const stamps = expenses
+    .filter(e => e.id !== prev?.id && !e.automationPaused && loanOf(e) === loan && e.lastPostedMonth !== undefined)
+    .map(e => e.lastPostedMonth!);
+  if (!stamps.length) return undefined;
+  const earliest = stamps.reduce((a, b) => (b < a ? b : a));
+  const from = paidThrough !== undefined && paidThrough > earliest ? paidThrough : earliest;
+  const unpaid = Object.fromEntries(monthsBetween(addMonthsKey(from, 1), month).map(m => [m, 0]));
+  const kept = Object.entries({ ...(sameLoan ? prev.uncoveredMonths : undefined), ...unpaid })
+    .filter(([m]) => stamps.some(s => s < m));
+  return kept.length ? Object.fromEntries(kept) : undefined;
 }
 
 /**

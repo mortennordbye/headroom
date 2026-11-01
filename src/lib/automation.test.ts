@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState } from './automation';
+import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, unpaidStampMonths, type AutomationRule, type AutomationState } from './automation';
 import { currentMortgage } from './existingMortgage';
-import type { CoOwner } from '../context/FinanceContext';
+import type { CoOwner, FixedExpense } from '../context/FinanceContext';
 
 // A co-owner holding `pct` % of the home and of the loan.
 const co = (pct: number, over: Partial<CoOwner> = {}): CoOwner => ({ id: `co-${pct}`, name: 'Co', ownershipPct: pct, ...over });
@@ -661,5 +661,58 @@ describe('monthlyPaydownPrincipal', () => {
       { amount: 3_000, destinationKind: 'debt', debtId: 'car' },
     ], { ...state, mortgage: NaN, debts: { car: { balance: NaN, rate: 12 } } }, MONTH);
     expect(Number.isFinite(p)).toBe(true);
+  });
+});
+
+describe('unpaidStampMonths — a stamp that pays nothing', () => {
+  // 1 000 000 at 5 %: 'main' last paid May; 'extra' is stamped July without paying.
+  const expense = (over: Partial<FixedExpense> = {}): FixedExpense => ({
+    id: 'extra', name: 'Extra', amount: 5000, type: 'fixed', destinationKind: 'mortgage', ...over,
+  });
+  const main = expense({ id: 'main', amount: 10_000, lastPostedMonth: '2026-05' });
+  const asRule = (e: FixedExpense): AutomationRule => ({
+    id: e.id, name: e.name, amount: e.amount, targetKind: e.destinationKind!, debtId: e.debtId,
+    startMonth: '2026-08', lastPostedMonth: e.lastPostedMonth, uncoveredMonths: e.uncoveredMonths,
+  });
+  // Main catches up June and July, each month charged its interest.
+  const r = 0.05 / 12;
+  const charged = Math.round((1_000_000 * (1 + r) - 10_000) * (1 + r) - 10_000);
+  const mainCatchUp = (stamped: FixedExpense) =>
+    computeAutomationPostings([asRule(main)], state(), '2026-07', undefined, [asRule(main), asRule(stamped)])[0].newBalance;
+
+  it("charges interest for months a newly created expense's stamp never paid", () => {
+    const created = expense({ lastPostedMonth: '2026-07' });
+    const stamped = { ...created, uncoveredMonths: unpaidStampMonths(undefined, created, '2026-07', [main, created]) };
+    expect(stamped.uncoveredMonths).toEqual({ '2026-06': 0, '2026-07': 0 });
+    expect(mainCatchUp(stamped)).toBe(charged);
+  });
+
+  it('charges interest for the months an expense resumed from a pause skipped', () => {
+    const before = expense({ lastPostedMonth: '2026-04', automationPaused: true });
+    const resumed = { ...before, automationPaused: undefined, lastPostedMonth: '2026-07' };
+    const stamped = { ...resumed, uncoveredMonths: unpaidStampMonths(before, resumed, '2026-07', [main, before]) };
+    expect(stamped.uncoveredMonths).toEqual({ '2026-06': 0, '2026-07': 0 });
+    expect(mainCatchUp(stamped)).toBe(charged);
+  });
+
+  it('charges interest for months an expense pointed at the loan never paid, dropping its old record', () => {
+    const before = expense({ destinationKind: 'debt', debtId: 'debt-1', lastPostedMonth: '2026-06', uncoveredMonths: { '2026-06': 0 } });
+    const moved = { ...before, destinationKind: 'mortgage' as const, debtId: undefined, lastPostedMonth: '2026-07' };
+    const stamped = { ...moved, uncoveredMonths: unpaidStampMonths(before, moved, '2026-07', [main, before]) };
+    expect(stamped.uncoveredMonths).toEqual({ '2026-06': 0, '2026-07': 0 });
+    expect(mainCatchUp(stamped)).toBe(charged);
+  });
+
+  it('keeps the old record on resume and adds only the paused months', () => {
+    const before = expense({ lastPostedMonth: '2026-06', automationPaused: true, uncoveredMonths: { '2026-06': 3000 } });
+    expect(unpaidStampMonths(before, before, '2026-08', [main, before])).toEqual({ '2026-06': 3000, '2026-07': 0, '2026-08': 0 });
+  });
+
+  it('records nothing when no other active expense on the loan still owes those months', () => {
+    const paused = expense({ id: 'p', lastPostedMonth: '2026-01', automationPaused: true });
+    const onDebt = expense({ id: 'd', destinationKind: 'debt', debtId: 'debt-1', lastPostedMonth: '2026-01' });
+    const upToDate = { ...main, lastPostedMonth: '2026-07' };
+    expect(unpaidStampMonths(undefined, expense(), '2026-07', [upToDate, paused, onDebt])).toBeUndefined();
+    expect(unpaidStampMonths(undefined, expense({ destinationKind: undefined }), '2026-07', [main])).toBeUndefined();
   });
 });

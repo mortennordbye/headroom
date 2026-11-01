@@ -7,6 +7,7 @@ import type { FixedExpense, Saving } from '../context/FinanceContext';
 import {
   destinationKey, resolveAllocation, type AllocationPlan, type AllocationRow, type SavingsAllocation,
 } from './savingsAllocation';
+import { unpaidStampMonths } from './automation';
 import { percentOfSavingsBase, savingsBase, savingsTargetAmount } from './savingsRate';
 
 export interface AllocationSizing {
@@ -77,7 +78,9 @@ export function sizeAllocation(
  * made with these rows' paydowns as `creating`). A savings destination becomes a
  * `Saving`, the mortgage or a debt a `FixedExpense`; each carries its row's id
  * as `allocationId`. `stamp` is the current month: the first move happens next
- * month, never retroactively.
+ * month, never retroactively. A paydown's stamp pays nothing, so the months it
+ * covers that `existing` expenses on the same loan still owe are recorded as
+ * unpaid (`unpaidStampMonths`).
  */
 export function buildActivation(
   rows: AllocationRow[],
@@ -85,19 +88,22 @@ export function buildActivation(
   stamp: string,
   labelFor: (row: AllocationRow) => string,
   newId: () => string,
+  existing: readonly FixedExpense[],
 ): { savings: Saving[]; expenses: FixedExpense[] } {
   const savings: Saving[] = [];
   const expenses: FixedExpense[] = [];
   for (const row of rows) {
     if (isPaydown(row)) {
+      const destination = { destinationKind: row.destinationKind as FixedExpense['destinationKind'], debtId: row.debtId };
+      const uncoveredMonths = unpaidStampMonths(undefined, destination, stamp, existing);
       expenses.push({
         id: newId(),
         name: labelFor(row),
         amount: row.amount,
         type: 'fixed',
-        destinationKind: row.destinationKind as FixedExpense['destinationKind'],
-        debtId: row.debtId,
+        ...destination,
         lastPostedMonth: stamp,
+        ...(uncoveredMonths ? { uncoveredMonths } : {}),
         allocationId: row.id,
       });
       continue;

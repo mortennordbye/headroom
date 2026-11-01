@@ -3,6 +3,7 @@ import { ChevronDown, Minus, ArrowLeft, Info } from 'lucide-react';
 import { ModalShell } from './ui/ModalShell';
 import { useFinance, type FixedExpense, type ExpenseType, type ExpenseDestinationKind } from '../context/FinanceContext';
 import { currentMonthKey } from '../lib/date';
+import { unpaidStampMonths } from '../lib/automation';
 import { parseLocaleNumber, isNonEmpty } from '../lib/validators';
 import { CATEGORIES, isCategoryKey } from '../lib/categories';
 import { CHART } from '../lib/chartColors';
@@ -34,7 +35,7 @@ const lbl = `${lblBare} mb-2`;
 const input = 'w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-[10px] px-3.5 py-3 text-[15px] text-[var(--text-1)] outline-none focus:border-[var(--forest)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--forest)_30%,transparent)] placeholder:text-[var(--text-3)] transition-colors';
 
 export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
-  const { t, debts, housingMode, assets, formatCurrency } = useFinance();
+  const { t, debts, housingMode, assets, formatCurrency, fixedExpenses } = useFinance();
   // With a joint mortgage the amount may be the whole instalment (paid from a
   // joint account) or only the user's share of it; the rule engine grosses a
   // share up by the debt share so the loan is paid down by the whole instalment.
@@ -85,8 +86,14 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     // back-posted — the money genuinely didn't move while it was paused.
     const sameDest = expense?.destinationKind === destinationKind && expense?.debtId === debtId;
     const resumed = !!expense?.automationPaused && !paused;
+    const restamped = !!destinationKind && (!sameDest || resumed);
     const lastPostedMonth = !destinationKind ? undefined
-      : sameDest && !resumed ? expense?.lastPostedMonth : currentMonthKey();
+      : restamped ? currentMonthKey() : expense?.lastPostedMonth;
+    // A restamp pays nothing, so the months it newly covers are recorded as
+    // unpaid and another expense on the same loan still charges their interest.
+    const uncoveredMonths = !destinationKind ? undefined
+      : restamped ? unpaidStampMonths(expense, { destinationKind, debtId }, lastPostedMonth!, fixedExpenses)
+        : expense?.uncoveredMonths;
     // Hidden without co-owners: keep whatever the rule had.
     const chosenScope = destinationKind !== 'mortgage' ? undefined : showScope ? scope : expense?.mortgagePaymentScope;
 
@@ -101,6 +108,7 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
       mortgagePaymentScope: chosenScope === 'myShare' ? 'myShare' : undefined,
       automationPaused: destinationKind && paused ? true : undefined,
       lastPostedMonth,
+      uncoveredMonths,
     });
   };
 
