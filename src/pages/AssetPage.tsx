@@ -145,12 +145,12 @@ const AssetPage: React.FC = () => {
   const wealthTax = useMemo(
     () => calcWealthTax({
       primaryHomeValue: myValue,
-      primaryHomeShare: ownershipShares(assets).own,
+      primaryHomeShare: shares.own,
       shares: assets.portfolio,
       otherAssets: assets.crypto + assets.bsu + sumSavings(assets) + assets.bufferAccount,
       debt: myDebt + totalDebt,
     }),
-    [assets, myValue, myDebt, totalDebt],
+    [assets, myValue, myDebt, totalDebt, shares.own],
   );
   // Summary "liabilities" figure: mortgage + other debt + net latent tax. Latent
   // tax can be negative (an unrealized-loss tax shield), so this can flip sign.

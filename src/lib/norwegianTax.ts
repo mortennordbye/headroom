@@ -330,8 +330,9 @@ export function calcPensionIncomeTax(
 // Gjeldsreduksjon (skatteloven § 4-19): the share of debt matching the share of
 // gross assets held in discounted shares/funds is valued at the same rate as the
 // shares. Gross assets count the primary home and shares at market value (§ 4-19
-// third ledd); for a co-owned home, the owner's share of its market value. The primary-home discount gives no reduction; a secondary home is
-// valued at 100 %, so it gives none either.
+// third ledd); for a co-owned home, the owner's share of its market value. The
+// primary-home discount gives no reduction; a secondary home is valued at 100 %,
+// so it gives none either.
 //
 // Simplification (a "good-enough" estimate, not a tax return): single-person
 // bunnfradrag (no spousal doubling).
