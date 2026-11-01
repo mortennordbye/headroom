@@ -120,6 +120,14 @@ export function sanitizePayload<T>(data: T, objectSchemas: NumericObjectSchemas)
     }
   }
 
+  // The OTP bonus share posted per year: keep finite, non-negative amounts only.
+  const pension = out.pension as Record<string, unknown> | undefined;
+  if (pension && typeof pension === 'object' && 'otpBonusPostedByYear' in pension) {
+    const raw = Array.isArray(pension.otpBonusPostedByYear) ? {} : pension.otpBonusPostedByYear;
+    const posted = Object.fromEntries(Object.entries(coerceNumberRecord(raw)).filter(([, v]) => v >= 0));
+    out.pension = { ...pension, otpBonusPostedByYear: posted };
+  }
+
   for (const key of NUMBER_RECORDS) {
     if (out[key] && typeof out[key] === 'object') {
       out[key] = coerceNumberRecord(out[key]);

@@ -419,6 +419,9 @@ export interface Pension {
   otpBonusPostedByYear?: Record<string, number>;
 }
 
+/** The number-valued `Pension` fields — the ones a numeric input may write. */
+export type NumericPensionKey = { [K in keyof Pension]-?: NonNullable<Pension[K]> extends number ? K : never }[keyof Pension];
+
 export interface LoanData {
   arslonn: number;
   eksisterendeGjeld: number;

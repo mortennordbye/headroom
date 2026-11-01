@@ -20,7 +20,7 @@ import { SliderRow } from '../components/ui/SliderRow';
 import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
 import { otpAnnualContribution as otpContribution, otpPensionableIncome, otpProjectedPensionableIncome, projectPensionWealth } from '../lib/pension';
-import { otpBonusBaseline } from '../lib/pensionAccrual';
+import { switchAutoPostOn } from '../lib/pensionAccrual';
 import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { currentMonthKey } from '../lib/date';
@@ -352,12 +352,13 @@ const PensionPage: React.FC = () => {
               checked={livePension.otpAutoPost}
               onChange={(on) => {
                 updatePension('otpAutoPost', on);
-                // First switch-on: start from this month (the first post lands next
-                // month), and count the bonus share earned so far as already in the
-                // balance. A later switch-on keeps its stamp and catches up.
-                if (on && !livePension.otpLastPostedMonth) {
-                  updatePension('otpLastPostedMonth', today);
-                  updatePension('otpBonusPostedByYear', otpBonusBaseline(pensionableIncome, bonuses, otpPct, today));
+                // Switching on starts from this month (the first post lands next
+                // month) and counts the bonus share earned so far as already in the
+                // balance; the months it was off are not caught up.
+                if (on) {
+                  const next = switchAutoPostOn(livePension, 'otp', pensionableIncome, bonuses, today);
+                  updatePension('otpLastPostedMonth', next.otpLastPostedMonth);
+                  updatePension('otpBonusPostedByYear', next.otpBonusPostedByYear);
                 }
               }}
               monthly={otpFixedMonthly}
@@ -395,7 +396,7 @@ const PensionPage: React.FC = () => {
               checked={livePension.ipsAutoPost}
               onChange={(on) => {
                 updatePension('ipsAutoPost', on);
-                if (on && !livePension.ipsLastPostedMonth) updatePension('ipsLastPostedMonth', today);
+                if (on) updatePension('ipsLastPostedMonth', switchAutoPostOn(livePension, 'ips', pensionableIncome, bonuses, today).ipsLastPostedMonth);
               }}
               monthly={ipsAnnualContribution / 12}
               lastPostedMonth={livePension.ipsLastPostedMonth}

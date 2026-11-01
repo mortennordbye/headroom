@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  pensionAccrualRules, isPensionRuleId, otpBonusBaseline, otpBonusDue, addOtpBonusPosted, type PensionAccrualInput,
+  pensionAccrualRules, isPensionRuleId, otpBonusBaseline, otpBonusDue, addOtpBonusPosted, switchAutoPostOn,
+  stampUnstampedAutoPost, type PensionAccrualInput,
 } from './pensionAccrual';
 import { computeAutomationPostings, type AutomationState } from './automation';
 import { addMonthsKey } from './date';
@@ -166,7 +167,7 @@ describe('pensionAccrualRules — OTP bonuses', () => {
   it('posts no bonus with the setting off, and none for a bonus dated after the month', () => {
     const off = pensionAccrualRules(input({ ...base, bonuses: [MARCH_BONUS], otpLastPostedMonth: '2026-03', currentMonth: '2026-04' }), LABELS)[0];
     expect(off.amountByMonth).toBeUndefined();
-    expect(off.otpBonusByYear).toBeUndefined();
+    expect(off.otpBonusByYear).toEqual({ '2026': 0 }); // tracked, nothing posted
     const early = pensionAccrualRules(input({
       ...base, otpIncludesBonuses: true, bonuses: [MARCH_BONUS], otpLastPostedMonth: '2026-01', currentMonth: '2026-02',
     }), LABELS)[0];
@@ -178,7 +179,22 @@ describe('pensionAccrualRules — OTP bonuses', () => {
       ...base, otpIncludesBonuses: 'yes' as unknown as boolean, bonuses: [MARCH_BONUS],
       otpLastPostedMonth: '2026-03', currentMonth: '2026-04',
     }), LABELS)[0];
-    expect(rule.otpBonusByYear).toBeUndefined();
+    expect(rule.otpBonusByYear).toEqual({ '2026': 0 });
+    expect(rule.amountByMonth).toBeUndefined();
+  });
+
+  it('with the setting off it keeps tracking the year, so switching on in January settles December', () => {
+    const dec: Bonus = { date: '2025-12-20', amount: 100_000, type: 'annual' };
+    // Running since mid-2025 with the setting off; the December bonus is entered
+    // in January, and the setting is switched on in January after January posted.
+    const run = simulate({
+      from: '2025-07', to: '2026-03', lastPosted: '2025-06',
+      bonusesAt: m => (m >= '2026-01' ? [dec] : []), includeAt: m => m >= '2026-02',
+    });
+    expect(run.moved['2026-01']).toBe(2_500);
+    expect(run.moved['2026-02']).toBe(2_500 + 5_000);
+    expect(run.moved['2026-03']).toBe(2_500);
+    expect(run.posted).toEqual({ '2025': 5_000, '2026': 0 });
   });
 
   it('keeps the 12G cap through a multi-month catch-up', () => {
@@ -233,5 +249,39 @@ describe('isPensionRuleId', () => {
     expect(isPensionRuleId('pension:otp')).toBe(true);
     expect(isPensionRuleId('pension:ips')).toBe(true);
     expect(isPensionRuleId('some-expense-id')).toBe(false);
+  });
+});
+
+describe('switching auto-post on', () => {
+  const pension = {
+    otpAutoPost: false, ipsAutoPost: false, otpEmployerPct: 5, otpEmployeePct: 0,
+    otpLastPostedMonth: '2026-02', ipsLastPostedMonth: '2026-02', otpBonusPostedByYear: { '2026': 0 },
+  };
+  const bonuses = [{ date: '2026-03-25', amount: 100_000, type: 'annual' as const }];
+
+  it('re-stamps to this month with a fresh bonus baseline, so the months it was off are not caught up', () => {
+    const otp = switchAutoPostOn(pension, 'otp', 600_000, bonuses, '2026-07');
+    expect(otp.otpAutoPost).toBe(true);
+    expect(otp.otpLastPostedMonth).toBe('2026-07');
+    expect(otp.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 5_000 });
+    const [rule] = pensionAccrualRules(input({
+      ...otp, ipsAutoPost: false, pensionableIncome: 600_000, otpIncludesBonuses: true, bonuses, currentMonth: '2026-08',
+    }), LABELS);
+    expect(rule.amountByMonth).toBeUndefined();
+    expect(rule.amount).toBe(2_500);
+    expect(rule.lastPostedMonth).toBe('2026-07');
+  });
+
+  it('re-stamps IPS and leaves OTP alone', () => {
+    const ips = switchAutoPostOn(pension, 'ips', 600_000, bonuses, '2026-07');
+    expect(ips.ipsLastPostedMonth).toBe('2026-07');
+    expect(ips.otpLastPostedMonth).toBe('2026-02');
+    expect(ips.otpBonusPostedByYear).toEqual({ '2026': 0 });
+  });
+
+  it('a loaded pension already stamped, or switched off, is returned unchanged', () => {
+    expect(stampUnstampedAutoPost(pension, 600_000, bonuses, '2026-07')).toBe(pension);
+    const on = { ...pension, otpAutoPost: true, ipsAutoPost: true };
+    expect(stampUnstampedAutoPost(on, 600_000, bonuses, '2026-07')).toBe(on);
   });
 });

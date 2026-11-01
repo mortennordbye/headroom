@@ -7,7 +7,7 @@ import {
   Wallet, Coins, PiggyBank, Home, TrendingUp, Bitcoin, Landmark, Briefcase,
   LayoutDashboard, LineChart, Target, CreditCard, Settings as SettingsIcon, Globe,
 } from 'lucide-react';
-import { useFinance, type NumericAssetKey, type Pension, type Language, type Region, type ExpenseType, type DebtType, type FixedExpense } from '../../context/FinanceContext';
+import { useFinance, type NumericAssetKey, type NumericPensionKey, type Language, type Region, type ExpenseType, type DebtType, type FixedExpense } from '../../context/FinanceContext';
 import { DEBT_TYPES } from '../../lib/debt';
 import PayslipImportModal from '../PayslipImportModal';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -385,7 +385,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
       case 'income': return String(Math.round(effectiveIncome));
       case 'savingsTarget': return String(savingsTargetPercent);
       case 'asset': return String(assets[f.key as NumericAssetKey] ?? 0);
-      case 'pension': return String(pension[f.key as Exclude<keyof Pension, 'otpBonusPostedByYear'>] ?? 0);
+      case 'pension': return String(pension[f.key as NumericPensionKey] ?? 0);
       case 'growthRate': return String(growthRates[f.key] ?? 0);
       case 'ownershipShare': return String(shareOpen.share);
       default: return '';
@@ -408,7 +408,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     if (f.writer === 'income') setMonthlyIncomeForMonth(monthKey, n);
     else if (f.writer === 'savingsTarget') setSavingsTargetPercent(Math.min(100, n));
     else if (f.writer === 'asset') updateAsset(f.key as NumericAssetKey, n);
-    else if (f.writer === 'pension') updatePension(f.key as keyof Pension, n);
+    else if (f.writer === 'pension') updatePension(f.key as NumericPensionKey, n);
     else if (f.writer === 'growthRate') growthSetters[f.key]?.(n);
   };
 

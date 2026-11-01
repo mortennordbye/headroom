@@ -90,9 +90,13 @@ export function pensionAccrualRules(
     const amount = fixedMonthly(m);
     if (amount !== otpMonthly) otpByMonth[m] = amount;
   }
+  // With the setting off nothing bonus-related posts, but the years stay
+  // tracked (0 added), so turning the setting on in January still settles last
+  // year's bonuses, a December one included.
+  const due = otpBonusDue(input.pensionableIncome, input.bonuses ?? [], otpPct, input.currentMonth, input.otpBonusPostedByYear);
   const bonusByYear = input.otpIncludesBonuses === true
-    ? otpBonusDue(input.pensionableIncome, input.bonuses ?? [], otpPct, input.currentMonth, input.otpBonusPostedByYear)
-    : {};
+    ? due
+    : Object.fromEntries(Object.keys(due).map(y => [y, 0]));
   const bonusDue = Object.values(bonusByYear).reduce((a, b) => a + b, 0);
   if (bonusDue > 0) otpByMonth[input.currentMonth] = otpMonthly + bonusDue;
   if (input.otpAutoPost && (otpMonthly > 0 || bonusDue > 0)) {
@@ -193,4 +197,52 @@ export function addOtpBonusPosted(
     out[String(y)] = (before ?? 0) + (add ?? 0);
   }
   return out;
+}
+
+/**
+ * A loaded pension with auto-post on but never stamped (saved before switching
+ * on stamped the month) would never post: an unstamped rule's start month is
+ * always next month. Stamp it to `month` the way switching on does, with the
+ * bonus baseline for OTP, so the first post lands next month and nothing
+ * back-posts. Anything already stamped, or switched off, is returned as is.
+ */
+export function stampUnstampedAutoPost<P extends {
+  otpAutoPost?: boolean; ipsAutoPost?: boolean; otpEmployerPct: number; otpEmployeePct: number;
+  otpLastPostedMonth?: string; ipsLastPostedMonth?: string; otpBonusPostedByYear?: Record<string, number>;
+}>(
+  pension: P,
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  month: string,
+): P {
+  const otp = pension.otpAutoPost === true && !pension.otpLastPostedMonth;
+  const ips = pension.ipsAutoPost === true && !pension.ipsLastPostedMonth;
+  if (!otp && !ips) return pension;
+  return {
+    ...pension,
+    ...(otp ? {
+      otpLastPostedMonth: month,
+      otpBonusPostedByYear: otpBonusBaseline(fixedGross, bonuses, pension.otpEmployerPct + pension.otpEmployeePct, month),
+    } : {}),
+    ...(ips ? { ipsLastPostedMonth: month } : {}),
+  };
+}
+
+/**
+ * The pension after switching `target` auto-post on in `month`. Every switch-on
+ * re-stamps to `month` (and, for OTP, takes a fresh bonus baseline), as a fixed
+ * expense does when it resumes: the months it was off are not caught up, since
+ * the balance is the user's to keep right while it is off.
+ */
+export function switchAutoPostOn<P extends Parameters<typeof stampUnstampedAutoPost>[0]>(
+  pension: P,
+  target: 'otp' | 'ips',
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  month: string,
+): P {
+  const cleared: P = target === 'otp'
+    ? { ...pension, otpAutoPost: true, otpLastPostedMonth: undefined }
+    : { ...pension, ipsAutoPost: true, ipsLastPostedMonth: undefined };
+  return stampUnstampedAutoPost(cleared, fixedGross, bonuses, month);
 }
