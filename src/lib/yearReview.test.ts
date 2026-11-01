@@ -55,6 +55,26 @@ describe('yearReview', () => {
     expect(yearReview(2025, { ...input, fixedExpenses }).totalSpending).toBe(5000);
   });
 
+  it('reconciles each month against its own fixed expenses when given per-month resolvers', () => {
+    const jan = [{ id: 'e1', name: 'Strøm', amount: 800, type: 'fixed' as const, match: 'stroem' }];
+    const feb = [{ id: 'e1', name: 'Strøm', amount: 1000, type: 'fixed' as const, match: 'stroem' }];
+    const byMonth: Record<string, typeof jan> = { '2025-01': jan, '2025-02': feb };
+    const input = baseInput({
+      nowMonthKey: '2025-02',
+      totalFixedExpenses: (m: string) => byMonth[m].reduce((s, e) => s + e.amount, 0) + 200,
+      fixedExpenses: (m: string) => byMonth[m],
+      transactions: [
+        tx({ date: '2025-01-05', amount: 700, kind: 'expense', description: 'stroem AS' }),
+        tx({ date: '2025-02-05', amount: 1100, kind: 'expense', description: 'stroem AS' }),
+      ],
+    });
+    const r = yearReview(2025, input);
+    // Jan: the 800 envelope covers the 700 payment, + 200 savings = 1000.
+    // Feb: the 1000 envelope + 100 overspend, + 200 savings = 1300.
+    expect(r.monthly.map((row) => row.expenses)).toEqual([1000, 1300]);
+    expect(r.totalSpending).toBe(2300);
+  });
+
   it('caps the current year at the current month (no future months)', () => {
     const r = yearReview(2026, baseInput({ nowMonthKey: '2026-07' }));
     expect(r.months).toEqual([
