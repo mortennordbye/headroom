@@ -71,9 +71,6 @@ in git and the CHANGELOG, not here.
 
 ## Budget and savings UI
 
-- **Savings rows are one flat list.** A goal pot, a buffer and an invested position render the same;
-  rows show the monthly amount but not the destination balance; the derived-mode caption wraps
-  badly in the narrow column. **Where**: `renderSavings` in `src/pages/BudgetPage.tsx`.
 - **`SavingsAllocationPanel` is the one place that writes both `savings` and `fixedExpenses`.**
   Correct, but the likeliest spot for a future regression. **Where**: `createExpenses` in
   `src/components/SavingsAllocationPanel.tsx`.

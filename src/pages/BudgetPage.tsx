@@ -21,6 +21,11 @@ import {
   Clock,
   Landmark,
   ArrowRight,
+  PiggyBank,
+  ShieldCheck,
+  Home,
+  TrendingUp,
+  type LucideIcon,
 } from 'lucide-react';
 import SmartRecommendations from '../components/SmartRecommendations';
 import SpendVsPlan from '../components/SpendVsPlan';
@@ -49,6 +54,7 @@ import { sumLedgerSpent } from '../lib/spentTotals';
 import { isOneOff, oneOffSpend } from '../lib/segments';
 import { formatSignedPct } from '../lib/format';
 import { incomeDiffPct, isIncomeOverrideStale } from '../lib/income';
+import { classifySaving, savingDestinationBalance, type SavingRowKind } from '../lib/savingRow';
 import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -92,6 +98,16 @@ const expenseColor = (type?: ExpenseType) => EXPENSE_TYPE_COLOR[type ?? 'fixed']
 // Money retained rather than spent. Not in the map above: a saving has no
 // expense type, and giving it one was how it kept being mistaken for a bill.
 const SAVING_COLOR = CHART.brass;
+
+// One glyph and tone per kind of savings destination, so a goal pot, the
+// buffer and an invested position don't read as the same row.
+const SAVING_KIND_STYLE: Record<SavingRowKind, { Icon: LucideIcon; color: string }> = {
+  goal: { Icon: Flag, color: 'var(--brass)' },
+  account: { Icon: PiggyBank, color: 'var(--text-2)' },
+  buffer: { Icon: ShieldCheck, color: 'var(--slate)' },
+  bsu: { Icon: Home, color: 'var(--teal)' },
+  invested: { Icon: TrendingUp, color: 'var(--positive)' },
+};
 
 // Envelope draw-down status → colour token (under = healthy, near = caution, over = alert).
 const ENVELOPE_STATUS_COLOR: Record<EnvelopeStatus, string> = {
@@ -187,7 +203,7 @@ const BudgetPage: React.FC = () => {
     savingsContributions,
     fixedExpenses,
     viewFixedExpenses,
-    savings, setSavings, viewSavings,
+    savings, setSavings, viewSavings, goals,
     fixedExpensesFromSnapshot,
     setFixedExpenses,
     debts,
@@ -816,12 +832,18 @@ const BudgetPage: React.FC = () => {
       style={{ borderLeft: `3px solid ${SAVING_COLOR}` }}
     >
       <div className="px-3.5">
-        {viewSavings.map((sv) => (
+        {viewSavings.map((sv) => {
+          const info = classifySaving(sv, goals);
+          const { Icon, color } = SAVING_KIND_STYLE[info.kind];
+          const balance = savingDestinationBalance(sv, assets);
+          const target = savingTargetLabel(sv);
+          const icon = <Icon size={12} strokeWidth={2.25} className="shrink-0" style={{ color }} aria-hidden />;
+          return (
           <div key={sv.id} className="py-4 border-b border-[var(--border)] last:border-0">
             <div className="flex items-center justify-between gap-3 group">
               {expensesReadOnly ? (
                 <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] min-w-0">
-                  <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: SAVING_COLOR }} />
+                  {icon}
                   <span className="truncate">{sv.name}</span>
                 </span>
               ) : (
@@ -831,7 +853,7 @@ const BudgetPage: React.FC = () => {
                   className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)] cursor-pointer hover:text-[var(--accent)] transition-colors min-w-0 text-left"
                   onClick={() => openSavingDialog(sv)}
                 >
-                  <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: SAVING_COLOR }} />
+                  {icon}
                   <span className="truncate">{sv.name}</span>
                 </button>
               )}
@@ -859,25 +881,42 @@ const BudgetPage: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="mt-1 pl-[15px] flex items-center gap-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-              <span aria-hidden>→</span> {savingTargetLabel(sv)}
+            {/* Where it goes, and what is there today. A goal pot names the goal
+                (the account stays in the tooltip); the balance is the
+                destination's current one, left out when it isn't known. */}
+            <div className="mt-1 pl-5 flex items-baseline justify-between gap-2 text-[10px]" style={{ color: 'var(--text-3)' }}>
+              <span className="flex items-center gap-1 uppercase tracking-wider min-w-0" title={target}>
+                <span aria-hidden>→</span>
+                <span className="truncate">
+                  {info.goal ? t.budgetPage.savingGoalPot.replace('{goal}', info.goal.name) : target}
+                </span>
+              </span>
+              {balance !== null && (
+                <span className="font-mono tabular-nums shrink-0" title={t.budgetPage.savingBalance}>
+                  <span className="sr-only">{t.budgetPage.savingBalance} </span>
+                  {formatCurrencyShort(balance)}
+                </span>
+              )}
             </div>
             {/* A derived amount is recomputed monthly, so say so — otherwise
-                next month's different figure looks like the app changed it. */}
+                next month's different figure looks like the app changed it.
+                Sentence case: in this narrow column the tracked capitals
+                wrapped into ragged lines. */}
             {(isPercentSavings(sv) || isRestSavings(sv)) && (
-              <div className="mt-0.5 pl-[15px] text-[10px] uppercase tracking-wider" style={{ color: 'var(--brass)' }}>
+              <div className="mt-0.5 pl-5 text-[10.5px] leading-snug" style={{ color: 'var(--brass)' }}>
                 {isRestSavings(sv)
                   ? t.budgetPage.savingsTakesRest
                   : t.budgetPage.savingsFollowsIncome.replace('{percent}', String(sv.percent))}
               </div>
             )}
             {sv.paused && (
-              <div className="mt-0.5 pl-[15px] text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+              <div className="mt-0.5 pl-5 text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
                 {t.expenseDestination.pausedLabel}
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
