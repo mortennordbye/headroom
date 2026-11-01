@@ -53,6 +53,7 @@ import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 import { ChartSkeleton } from '../components/ui/Skeleton';
 import { Card } from '../components/ui/Card';
+import { UndoToast } from '../components/ui/UndoToast';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { FitText } from '../components/ui/FitText';
 
@@ -84,15 +85,17 @@ interface ConfirmConfig {
   danger?: boolean;
 }
 
+const assignBtn = 'inline-flex items-center px-3 h-8 rounded-[6px] text-[12px] font-semibold border border-[var(--border)] text-[var(--text-2)] hover:text-[var(--text-1)] hover:border-[var(--text-3)] transition-colors';
+
 const SalaryPage: React.FC = () => {
   const {
     t,
     formatCurrency,
     jobs, addJob, updateJob, removeJob,
     salaries, addSalary, removeSalary,
-    bonuses, removeBonus,
-    overtime, removeOvertime,
-    hoursSnapshots, removeHoursSnapshot,
+    bonuses, updateBonus, removeBonus,
+    overtime, updateOvertime, removeOvertime,
+    hoursSnapshots, updateHoursSnapshot, removeHoursSnapshot,
     inflation, inflationStale, refreshInflation,
     wageStats, wageStatsStale, payslips,
     region, customTaxRatePct, pension, annualMortgageInterest, bsuTaxCredit,
@@ -103,6 +106,8 @@ const SalaryPage: React.FC = () => {
 
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const [confirm, setConfirm] = useState<ConfirmConfig | null>(null);
+  const [assignJobId, setAssignJobId] = useState('');
+  const [undo, setUndo] = useState<{ message: string; onUndo: () => void } | null>(null);
   const [recordEvent, setRecordEvent] = useState<{ target?: RecordEditTarget; initialType?: RecordType } | null>(null);
   // Salary-over-time card view: nominal trajectory vs real (inflation-adjusted) hourly.
   const [timelineView, setTimelineView] = useState<'nominal' | 'real'>('nominal');
@@ -1238,6 +1243,27 @@ const SalaryPage: React.FC = () => {
           ...overtime.filter(o => !o.jobId).map(overtimeEv),
           ...hoursSnapshots.filter(h => !h.jobId).map(hoursEv),
         ].sort(byDateDesc);
+        // Attribute every pre-jobId bonus/overtime/hours row to one job, with an
+        // undo that clears jobId on exactly those rows again.
+        const assignUnassigned = (job: JobEntry) => {
+          const ids = {
+            bonus: bonuses.filter(b => !b.jobId).map(b => b.id),
+            overtime: overtime.filter(o => !o.jobId).map(o => o.id),
+            hours: hoursSnapshots.filter(h => !h.jobId).map(h => h.id),
+          };
+          const apply = (jobId: string | undefined) => {
+            ids.bonus.forEach(id => updateBonus(id, { jobId }));
+            ids.overtime.forEach(id => updateOvertime(id, { jobId }));
+            ids.hours.forEach(id => updateHoursSnapshot(id, { jobId }));
+          };
+          apply(job.id);
+          setUndo({
+            message: t.salary.assignedAll
+              .replace('{count}', String(ids.bonus.length + ids.overtime.length + ids.hours.length))
+              .replace('{job}', job.employer),
+            onUndo: () => { apply(undefined); setUndo(null); },
+          });
+        };
         const latestSalaryFor = (jobId: string): SalaryEntry | null => {
           const list = sortedSalaries.filter(s => s.jobId === jobId);
           return list.length ? list[list.length - 1] : null;
@@ -1356,8 +1382,29 @@ const SalaryPage: React.FC = () => {
             {laneJobs.map(renderLane)}
             {unassignedEvents.length > 0 && (
               <div className="rounded-[8px] border p-4" style={{ borderColor: 'var(--border)' }}>
-                <div className="flex items-center gap-2 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex items-center justify-between gap-2 pb-3 border-b flex-wrap" style={{ borderColor: 'var(--border)' }}>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{t.salary.unassigned}</span>
+                  {laneJobs.length === 1 && (
+                    <button onClick={() => assignUnassigned(laneJobs[0])} className={assignBtn}>
+                      {t.salary.assignAllTo.replace('{job}', laneJobs[0].employer)}
+                    </button>
+                  )}
+                  {laneJobs.length > 1 && (() => {
+                    const target = laneJobs.find(j => j.id === assignJobId) ?? laneJobs[0];
+                    return (
+                      <div className="flex items-center gap-2">
+                        <select
+                          aria-label={t.salary.assignAllLabel}
+                          value={target.id}
+                          onChange={(e) => setAssignJobId(e.target.value)}
+                          className="h-8 max-w-[14rem] bg-[var(--bg-raised)] border border-[var(--border)] rounded-[6px] px-2 text-[12px] text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--positive)]"
+                        >
+                          {laneJobs.map(j => <option key={j.id} value={j.id}>{j.employer} — {j.role}</option>)}
+                        </select>
+                        <button onClick={() => assignUnassigned(target)} className={assignBtn}>{t.salary.assignAll}</button>
+                      </div>
+                    );
+                  })()}
                 </div>
                 {renderTimeline(unassignedEvents)}
               </div>
@@ -1368,6 +1415,15 @@ const SalaryPage: React.FC = () => {
 
       {modal && <EditModal {...modal} onCancel={closeModal} />}
       {confirm && <ConfirmModal {...confirm} onCancel={closeConfirm} />}
+      {undo && (
+        <UndoToast
+          message={undo.message}
+          undoLabel={t.budgetPage.undo}
+          dismissLabel={t.dismiss}
+          onUndo={undo.onUndo}
+          onDismiss={() => setUndo(null)}
+        />
+      )}
       {recordEvent && (
         <RecordEventModal
           target={recordEvent.target}
