@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { PlusCircle, Trash2, Landmark } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { ResponsiveContainer } from './charts/ResponsiveContainer';
-import { useFinance, type Debt, type DebtType } from '../context/FinanceContext';
+import { useFinance, type Debt, type DebtType, type FixedExpense } from '../context/FinanceContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import EditModal, { type ModalField } from './EditModal';
 import ConfirmModal from './ConfirmModal';
 import ChartTooltip from './ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
-import { amortize, planPayoff, formatMonths, DEBT_TYPES, type PayoffStrategy } from '../lib/debt';
+import { amortize, planPayoff, formatMonths, withLinkedPayments, DEBT_TYPES, type PayoffStrategy } from '../lib/debt';
 import { currentMonthKey } from '../lib/date';
 import { parseLocaleNumber, isValidYearMonth } from '../lib/validators';
 import DebtPaydownVsPlanChart from './charts/DebtPaydownVsPlanChart';
@@ -37,6 +37,9 @@ interface DebtSectionProps {
    * under another month's label.
    */
   debts?: Debt[];
+  /** The fixed expenses that pay those debts down, from the same month.
+   *  Defaults to the live ones. */
+  fixedExpenses?: FixedExpense[];
   /**
    * Drop every write affordance and the payoff planner. History is a record and a
    * projection is a computation — neither is a place to plan from, and the planner
@@ -45,9 +48,12 @@ interface DebtSectionProps {
   readOnly?: boolean;
 }
 
-export default function DebtSection({ debts: debtsProp, readOnly = false }: DebtSectionProps = {}) {
-  const { t, lang, debts: liveDebts, setDebts, formatCurrency } = useFinance();
+export default function DebtSection({ debts: debtsProp, fixedExpenses: expensesProp, readOnly = false }: DebtSectionProps = {}) {
+  const { t, lang, debts: liveDebts, fixedExpenses: liveExpenses, setDebts, formatCurrency } = useFinance();
   const debts = debtsProp ?? liveDebts;
+  // What each debt is actually paid: its linked fixed expenses, never under the
+  // minimum. The payoff figures use this; edits still write the stored debt.
+  const paidDebts = withLinkedPayments(debts, expensesProp ?? liveExpenses);
   // Summed from the rows on screen rather than read off the context, so the total
   // can never disagree with the ledger above it.
   const totalDebt = debts.reduce((s, dbt) => s + Math.max(0, dbt.balance), 0);
@@ -129,8 +135,8 @@ export default function DebtSection({ debts: debtsProp, readOnly = false }: Debt
     onSave: v => { const parsed = validate(v); if (!parsed) return err(); setDebts(debts.map(x => x.id === debt.id ? { ...x, ...parsed } : x)); setModal(null); },
   });
 
-  const plan = planPayoff(debts, extra, strategy, nowKey);
-  const baseline = planPayoff(debts, 0, strategy, nowKey);
+  const plan = planPayoff(paidDebts, extra, strategy, nowKey);
+  const baseline = planPayoff(paidDebts, 0, strategy, nowKey);
   const interestSaved = isFinite(baseline.totalInterest) && isFinite(plan.totalInterest)
     ? Math.max(0, baseline.totalInterest - plan.totalInterest) : 0;
   const fmtAxis = (v: number) => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v));
@@ -155,9 +161,10 @@ export default function DebtSection({ debts: debtsProp, readOnly = false }: Debt
         <>
           {/* Ledger */}
           <div className="space-y-0">
-            {debts.map(debt => {
+            {debts.map((debt, i) => {
               const deferred = isDeferred(debt);
-              const a = debt.revolving || deferred ? null : amortize(debt.balance, debt.rate, debt.minPayment);
+              const payment = paidDebts[i].minPayment;
+              const a = debt.revolving || deferred ? null : amortize(debt.balance, debt.rate, payment);
               return (
                 <div key={debt.id} className="flex items-center justify-between group py-3 border-b border-[var(--border)] last:border-0 gap-3">
                   <button
@@ -181,7 +188,7 @@ export default function DebtSection({ debts: debtsProp, readOnly = false }: Debt
                         d.revolvingBadge
                       ) : (
                         <>
-                          {debt.rate.toFixed(1)}% · {formatCurrency(debt.minPayment)}/{t.common.moAbbr}
+                          {debt.rate.toFixed(1)}% · {formatCurrency(payment)}/{t.common.moAbbr}
                           {' · '}
                           {a.feasible
                             ? `${d.payoffIn} ${formatMonths(a.months, lang)} · ${formatCurrency(Math.round(a.totalInterest))} ${d.interestLabel}`

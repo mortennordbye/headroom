@@ -14,24 +14,22 @@ in git and the CHANGELOG, not here.
   app models one person. **Unblock**: an issue covering a marital-status field. **Where**:
   `src/lib/norwegianTax.ts`, `annualMortgageInterest` in `src/context/FinanceContext.tsx` and
   `mcp/derive.ts`.
-- **Linked debts amortize at their minimum in projections.** A debt that a fixed expense pays
-  down (`destinationKind: 'debt'`) is projected at its `minPayment`, not at the expense amount,
-  so the two can disagree when they differ. Left out of the fix for debts the payment can't keep
-  up with (#355), which only changed the growth. **Unblock**: decide whether the projection should
-  use the linked expense's amount, and how a paused expense counts. **Where**:
-  `calcDebtBalanceByYear` in `src/lib/debt.ts`.
+- **Deferred studielån with a linked expense.** While `interestFreeUntil` is in the future, the
+  projections hold a student loan flat, but the paydown automation has no notion of deferment and
+  posts a linked expense's payment into it every month, so the Assets balance falls while the
+  projection doesn't. Predates the linked-payment projection fix and was left out to keep that
+  change small. **Unblock**: decide which side is right (voluntary payments during deferment are
+  allowed, so likely the projection should pay a linked expense from month 0 while the minimum
+  still waits). **Where**: `simulatePayoff` in `src/lib/debt.ts`, `AutomationState.debts` and the
+  debt paydown in `src/lib/automation.ts`.
 - **OTP base, remaining gaps.** Bonuses and overtime are per-user settings and the scheme can
   be linked to one job, but on-call is always counted, the § 5-5 annet ledd bokstav b variant
   (last year's pay as the base) is not modelled, and the job link only narrows bonuses and
-  overtime, not fixed salary. Bonus and overtime shares also share one posted record per year
-  (`otpBonusPostedByYear`), so turning overtime on (bonuses off) while OTP auto-post runs, with bonuses earned
-  before auto-post was switched on, holds back that year's overtime posts by the bonus share.
-  Deferred to keep the overtime and job-link fix small. **Unblock**: an issue deciding whether to
-  expose on-call and a last-year base as plan options, whether the job link should narrow fixed
-  pay (it would zero the base after a job change unless relinked), and whether the posted record
-  should split per kind. **Where**: `otpCountedPay`, `otpPensionableIncome` and
-  `otpBonusShareToDate` in `src/lib/pension.ts`, `stampUnstampedAutoPost` in
-  `src/lib/pensionAccrual.ts`, `src/pages/PensionPage.tsx`, `pensionSummary` in `mcp/derive.ts`.
+  overtime, not fixed salary. Deferred to keep the overtime and job-link fix small. **Unblock**:
+  an issue deciding whether to expose on-call and a last-year base as plan options, and whether
+  the job link should narrow fixed pay (it would zero the base after a job change unless
+  relinked). **Where**: `otpCountedPay` and `otpPensionableIncome` in `src/lib/pension.ts`,
+  `src/pages/PensionPage.tsx`, `pensionSummary` in `mcp/derive.ts`.
 - **Not audited yet**: bank import and categorisation.
 
 ## Income and salary

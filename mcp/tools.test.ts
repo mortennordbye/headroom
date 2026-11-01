@@ -153,6 +153,35 @@ describe('derive (pure, no server)', () => {
     expect(d.interestSaved).toBeGreaterThan(0);
   });
 
+  // The same 5 000/mo expense either paying the student loan (d1, 2 000/mo
+  // minimum) or going nowhere, so the budget is identical and only the debt
+  // payment differs.
+  const withPayment = (linked: boolean, over: Partial<ExportPayload['fixedExpenses'][number]> = {}): ExportPayload => ({
+    ...blob,
+    fixedExpenses: [
+      ...blob.fixedExpenses,
+      { id: 'pay-d1', name: 'Loan payment', amount: 5000, type: 'fixed', ...(linked ? { destinationKind: 'debt', debtId: 'd1' } : {}), ...over },
+    ],
+  });
+
+  it('debt: a linked expense sets the baseline payment, the extra goes on top', () => {
+    const unlinked = derive.debtAnalysis(withPayment(false), 3000, 'avalanche', MONTH);
+    const linked = derive.debtAnalysis(withPayment(true), 3000, 'avalanche', MONTH);
+    expect(linked.baseline.months).toBeLessThan(unlinked.baseline.months);
+    expect(linked.withExtra.months).toBeLessThan(linked.baseline.months);
+    // A paused expense pays nothing, so the debt falls back to its minimum.
+    expect(derive.debtAnalysis(withPayment(true, { automationPaused: true }), 3000, 'avalanche', MONTH).baseline)
+      .toEqual(unlinked.baseline);
+  });
+
+  it('what-if extra debt payment: starts from the linked payment, not the minimum', () => {
+    // 200 000 at 0 %: 40 months at 5 000, 25 with 3 000 extra; 100 at the 2 000 minimum.
+    const linked = derive.whatIfExtraDebtPayment(withPayment(true), 'd1', 3000);
+    expect(linked.baseMonths).toBe(40);
+    expect(linked.extraMonths).toBe(25);
+    expect(derive.whatIfExtraDebtPayment(withPayment(false), 'd1', 3000).baseMonths).toBe(100);
+  });
+
   it('savings & goals: exposes both emergency-fund measures and goal progress', () => {
     const g = derive.savingsAndGoals(blob, MONTH);
     expect(g.emergencyFund.vsEssentialRunway.monthsCovered).toBeCloseTo(120000 / 15200, 4);
@@ -414,6 +443,22 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const g = derive.forecast(blob, { years: 5, returnPct: 4 }, MONTH);
     expect(g.scenario).toMatchObject({ years: 5, returnPct: 4 });
     expect(g.projection[g.projection.length - 1].yearIndex).toBe(5);
+  });
+
+  it('forecast: a linked expense pays the debt down faster than its minimum', () => {
+    // fullFixture's d1 (student loan, 2 000/mo minimum, interest-free until
+    // 2027-01). The same expense either pays it or goes nowhere, so only the debt differs.
+    const payment = (linked: boolean): ExportPayload => ({
+      ...blob,
+      fixedExpenses: [
+        ...blob.fixedExpenses,
+        { id: 'pay-d1', name: 'Loan payment', amount: 5000, type: 'fixed', ...(linked ? { destinationKind: 'debt', debtId: 'd1' } : {}) },
+      ],
+    });
+    const min = derive.forecast(payment(false), { years: 5 }, MONTH).projection;
+    const paid = derive.forecast(payment(true), { years: 5 }, MONTH).projection;
+    expect(paid[0].netWorth).toBe(min[0].netWorth);
+    expect(paid[3].netWorth).toBeGreaterThan(min[3].netWorth);
   });
 
   it('mortgage: the homeowner loan amortizes to zero over its term', () => {

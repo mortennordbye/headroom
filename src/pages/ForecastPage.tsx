@@ -27,13 +27,14 @@ import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { formatAxisInt } from '../lib/format';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import { allSalariedJobsEnded } from '../lib/salary';
+import { withLinkedPayments } from '../lib/debt';
 
 const ForecastPage: React.FC = () => {
   const {
     t, totalFixedExpenses, salaries, jobs, bonuses, overtime, loan, income,
     formatCurrency, region, customTaxRatePct, pension,
     planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, currentMortgage, bsuTaxCredit,
-    assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
+    assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts, fixedExpenses,
     forecastAssumptions: fa, setForecastAssumptions, holidaySurplusFor, employerCostConfig,
   } = useFinance();
   const reduced = useReducedMotion();
@@ -187,9 +188,9 @@ const ForecastPage: React.FC = () => {
     houseGrowthPct: houseGrowthRate,
     startShares: netInvestment,
     startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
-    debts,
+    debts: withLinkedPayments(debts, fixedExpenses),
     monthKey: today,
-  }), [currentGross, startYear, startHolidaySurplus, feriepengesatsPct, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
+  }), [currentGross, startYear, startHolidaySurplus, feriepengesatsPct, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, fixedExpenses, today]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),

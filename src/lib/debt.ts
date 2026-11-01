@@ -2,7 +2,7 @@
 // (avalanche / snowball with a shared extra-payment budget). Pure functions so
 // they can be unit-tested and reused by the UI without React.
 
-import type { Debt, DebtType, BalanceSnapshot } from '../context/FinanceContext';
+import type { Debt, DebtType, BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
 
 const MAX_MONTHS = 600; // 50 years — anything beyond this counts as "never pays off"
 const EPS = 0.005;      // treat sub-øre balances as zero
@@ -230,6 +230,27 @@ function simulatePayoff(
 }
 
 /**
+ * The debts with each one's payment set to what is actually paid: the combined
+ * amount of the fixed expenses that pay it down (`destinationKind: 'debt'`),
+ * never less than its `minPayment`, since the lender wants the minimum either
+ * way. A paused expense (`automationPaused`) moves nothing, so it doesn't
+ * count; a debt with no active linked expense keeps its `minPayment`.
+ */
+export function withLinkedPayments(debts: Debt[], fixedExpenses: FixedExpense[]): Debt[] {
+  const linked = new Map<string, number>();
+  for (const e of fixedExpenses) {
+    if (e.destinationKind !== 'debt' || !e.debtId || e.automationPaused) continue;
+    const amount = finite(e.amount);
+    if (amount > 0) linked.set(e.debtId, (linked.get(e.debtId) ?? 0) + amount);
+  }
+  if (linked.size === 0) return debts;
+  return debts.map(d => {
+    const paid = linked.get(d.id);
+    return paid ? { ...d, minPayment: Math.max(finite(d.minPayment), paid) } : d;
+  });
+}
+
+/**
  * Total non-mortgage debt remaining at the end of each year, index 0..years
  * (year 0 = today). Amortizing debts pay down at their minimum payments with
  * the rollover method (freed minimums accelerate the rest, no extra budget);
@@ -237,8 +258,10 @@ function simulatePayoff(
  * payment can't cover its interest keeps being paid and grows by the interest
  * the payment leaves unpaid. A debt with a payment ≤ 0 has no known payment
  * (often a fixed expense pays it), so it is held flat, takes no rollover, and
- * accrues nothing. Mirrors `calcMortgageBalanceByYear` on
- * the mortgage side, for netting debt out of net-worth projections.
+ * accrues nothing. Pass the debts through `withLinkedPayments` first so a debt
+ * a fixed expense pays down is projected at that payment. Mirrors
+ * `calcMortgageBalanceByYear` on the mortgage side, for netting debt out of
+ * net-worth projections.
  */
 export function calcDebtBalanceByYear(debts: Debt[], years: number, nowMonthKey?: string): number[] {
   const revolving = debts.reduce((s, d) => (d.revolving ? s + Math.max(0, d.balance) : s), 0);
