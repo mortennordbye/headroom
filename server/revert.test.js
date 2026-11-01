@@ -61,18 +61,37 @@ describe('revertChange', () => {
     expect(revertChange(current, after, before, changedKeys(before, after)).conflicts).toEqual(['assets.houseDebt']);
   });
 
-  it('refuses an old edit to a balance copy that left houseDebt unchanged', () => {
-    // Drifted old data: only the homeowner copy changed, so undo can't restore it through assets.
-    const before = { assets: { houseDebt: 2_310_000 }, homeowner: { currentMortgageBalance: 2_270_000, currentMortgageBalanceAsOf: '2026-01' } };
-    const after = { assets: { houseDebt: 2_310_000 }, homeowner: { currentMortgageBalance: 2_250_000, currentMortgageBalanceAsOf: '2026-04' } };
-    const current = { assets: { houseDebt: 2_250_000 }, homeowner: { currentMortgageBalanceAsOf: '2026-04' } };
-    expect(revertChange(current, after, before, changedKeys(before, after)).conflicts).toEqual(['homeowner.currentMortgageBalance']);
+  it('undoes an old edit to the balance shown that left the hidden assets copy unchanged', () => {
+    // Drifted old data: homeowner mode showed the homeowner copy, and only that copy changed.
+    const before = { housingMode: 'homeowner', assets: { houseDebt: 2_310_000 }, homeowner: { currentMortgageBalance: 2_270_000, currentMortgageBalanceAsOf: '2026-01' } };
+    const after = { housingMode: 'homeowner', assets: { houseDebt: 2_310_000 }, homeowner: { currentMortgageBalance: 2_250_000, currentMortgageBalanceAsOf: '2026-04' } };
+    const current = { housingMode: 'homeowner', assets: { houseDebt: 2_250_000 }, homeowner: { currentMortgageBalanceAsOf: '2026-04' } };
+    expect(revertChange(current, after, before, changedKeys(before, after)).blob).toEqual(
+      { housingMode: 'homeowner', assets: { houseDebt: 2_270_000 }, homeowner: { currentMortgageBalanceAsOf: '2026-01' } },
+    );
   });
 
-  it('still restores the copies in a blob that was never migrated', () => {
-    const before = { homeowner: { currentMortgageBalance: 1 } };
-    const after = { homeowner: { currentMortgageBalance: 2 } };
-    expect(revertChange(after, after, before, ['homeowner']).blob).toEqual(before);
+  it('treats an edit to the hidden assets copy as no change', () => {
+    const before = { housingMode: 'homeowner', assets: { houseDebt: 2_310_000 }, homeowner: { currentMortgageBalance: 2_250_000, currentMortgageBalanceAsOf: '2026-04' } };
+    const after = { housingMode: 'homeowner', assets: { houseDebt: 2_330_000 }, homeowner: { currentMortgageBalance: 2_250_000, currentMortgageBalanceAsOf: '2026-04' } };
+    const current = { housingMode: 'homeowner', assets: { houseDebt: 2_250_000 }, homeowner: { currentMortgageBalanceAsOf: '2026-04' } };
+    expect(revertChange(current, after, before, changedKeys(before, after)).blob).toEqual(current);
+  });
+
+  it('does not count a balance date only the load stamped as an edit', () => {
+    // Undo of a restore: the restored revision had no date, the load after it stamped one.
+    const before = { housingMode: 'homeowner', assets: { houseDebt: 1_800_000 }, homeowner: { currentMortgageBalanceAsOf: '2026-06' } };
+    const after = { housingMode: 'homeowner', assets: { houseDebt: 1_700_000 }, homeowner: { currentMortgageBalance: 1_700_000 } };
+    const current = { housingMode: 'homeowner', assets: { houseDebt: 1_700_000 }, homeowner: { currentMortgageBalanceAsOf: '2026-10' } };
+    expect(revertChange(current, after, before, changedKeys(before, after)).blob).toEqual(before);
+  });
+
+  it('migrates a blob that was never migrated, undoing through assets', () => {
+    const before = { housingMode: 'homeowner', homeowner: { currentMortgageBalance: 1, currentMortgageBalanceAsOf: '2026-01' } };
+    const after = { housingMode: 'homeowner', homeowner: { currentMortgageBalance: 2, currentMortgageBalanceAsOf: '2026-01' } };
+    expect(revertChange(after, after, before, ['homeowner']).blob).toEqual(
+      { housingMode: 'homeowner', assets: { houseDebt: 1 }, homeowner: { currentMortgageBalanceAsOf: '2026-01' } },
+    );
   });
 
   it('refuses when the value changed again since', () => {

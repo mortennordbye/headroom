@@ -9,6 +9,8 @@
 // per row / element / field, so undoing one transaction edit survives a later
 // bank sync adding other rows. Pure: no DB, no Express — tested in revert.test.js.
 
+const { isMonthKey, migrateMortgageBalance } = require('./mortgageSlices');
+
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isScalar = (v) => v === null || ['string', 'number', 'boolean'].includes(typeof v);
 
@@ -107,42 +109,35 @@ function revertValue(path, current, after, before) {
  * (paths changed since) without touching anything.
  */
 function revertChange(currentBlob, afterBlob, beforeBlob, keys) {
-  // The mortgage balance is stored once, in assets.houseDebt; the homeowner and
-  // transition copies older saves held are dropped on load. Once the current
-  // blob has dropped a copy, the copy is left out of the merge on both sides of
-  // the revision: undoing the save that dropped it must not bring back a stale
-  // balance (which would win over houseDebt on the next load), and undoing an
-  // older revision must not report the missing copy as a conflict. Those older
-  // revisions changed houseDebt along with the copies, so their undo restores
-  // the balance through assets.
-  // A revision that changed a copy while houseDebt stayed put (drifted old
-  // data) can't be undone through assets, so it is refused rather than
-  // reported as undone with the balance left as it is.
-  const after = { ...afterBlob };
-  const before = { ...beforeBlob };
-  const unrepresentable = [];
-  const debtOf = (b) => (isObj(b.assets) ? b.assets.houseDebt : undefined);
-  for (const slice of ['homeowner', 'transition']) {
-    const cur = currentBlob[slice];
-    if (!isObj(cur) || 'currentMortgageBalance' in cur) continue;
-    const a = isObj(after[slice]) ? after[slice] : undefined;
-    const bf = isObj(before[slice]) ? before[slice] : undefined;
-    if (a && bf && 'currentMortgageBalance' in a && 'currentMortgageBalance' in bf
-      && !deepEqual(a.currentMortgageBalance, bf.currentMortgageBalance) && deepEqual(debtOf(after), debtOf(before))) {
-      unrepresentable.push(`${slice}.currentMortgageBalance`);
-    }
-    for (const side of [after, before]) {
-      if (isObj(side[slice]) && 'currentMortgageBalance' in side[slice]) {
-        const { currentMortgageBalance: _legacy, ...rest } = side[slice];
-        side[slice] = rest;
-      }
-    }
-  }
-  if (unrepresentable.length) return { conflicts: unrepresentable };
-  const out = { ...currentBlob };
+  // Undo works on revisions as the app shows them: all three blobs go through
+  // the load migration of the mortgage balance first (server/mortgageSlices.js).
+  // A balance the migration rewrote (old homeowner/transition copies, a drifted
+  // Assets copy nobody saw) is then compared as the user saw it, so hidden
+  // copies never conflict and undo restores the balance that was shown. Keys
+  // the migration alone makes differ (the balance moving into assets) join the
+  // change.
+  // The balance date the migration stamps on an undated balance is not a user
+  // edit, so the stamp is taken back out: a date missing before the revision
+  // stays missing (the next load stamps it again), and a date missing in what
+  // the revision saved matches whatever date the current blob holds, which is
+  // the one the load after that save stamped.
+  const stampOf = (b) => (isObj(b.homeowner) ? b.homeowner.currentMortgageBalanceAsOf : undefined);
+  const migrate = (raw, stamp) => {
+    // The migration reads the slices as objects; leave a malformed blob as it is.
+    if (!['assets', 'homeowner', 'transition'].every((k) => raw[k] == null || typeof raw[k] === 'object')) return raw;
+    const b = migrateMortgageBalance(raw, 'stamp'); // any stamp it writes is replaced next
+    if (!isObj(b.homeowner) || b.homeowner.currentMortgageBalanceAsOf === stamp) return b;
+    const { currentMortgageBalanceAsOf: _stamp, ...rest } = b.homeowner;
+    return { ...b, homeowner: stamp === undefined ? rest : { ...rest, currentMortgageBalanceAsOf: stamp } };
+  };
+  const current = migrate(currentBlob, stampOf(currentBlob));
+  const before = migrate(beforeBlob, stampOf(beforeBlob));
+  const after = migrate(afterBlob, isMonthKey(stampOf(afterBlob)) ? stampOf(afterBlob) : stampOf(currentBlob));
+  const allKeys = [...new Set([...keys, ...changedKeys(before, after)])];
+  const out = { ...current };
   const conflicts = [];
-  for (const k of keys) {
-    const r = revertValue(k, currentBlob[k], after[k], before[k]);
+  for (const k of allKeys) {
+    const r = revertValue(k, current[k], after[k], before[k]);
     if (r.conflicts.length) {
       conflicts.push(...r.conflicts);
       continue;

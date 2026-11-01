@@ -177,24 +177,6 @@ const valueAt = (b: Blob, path: string) => {
 };
 const same = (a: unknown, b: unknown) => changedPaths({ v: a } as Blob, { v: b } as Blob).length === 0;
 
-// Real bugs these tests found, left failing on purpose (it.fails) until fixed in
-// server/revert.js. Keyed by fixture name and step.
-const DRIFTED = 'homeowner, drifted copies';
-const PLACEHOLDER = 'homeowner, untouched placeholder until a balance is entered on Assets';
-const KNOWN_BUGS: Record<string, string> = {
-  // A legacy edit that changed only the homeowner copy: houseDebt did not move,
-  // so the undo can't restore it through assets and is refused (a conflict).
-  [`${DRIFTED}|undo 2`]: 'undo of a homeowner-copy-only balance edit is refused',
-  // An edit to the Assets copy the homeowner mode did not show: the load moved
-  // houseDebt to the shown balance, so the undo reports a conflict nobody made.
-  [`${DRIFTED}|undo 4`]: 'undo of a hidden assets.houseDebt edit conflicts with the migration',
-  // Undoing the migration save puts the stale Assets copy back as the balance.
-  [`${DRIFTED}|undo 5`]: 'undo of the migration save of a drifted blob shows the stale assets.houseDebt',
-  // Undoing a restore conflicts with what the load after the restore migrated.
-  ...Object.fromEntries([0, 1, 2, 3, 4].map((k) => [`${DRIFTED}|undo restore ${k}`, 'undo of a restore conflicts on the migrated assets.houseDebt'])),
-  ...Object.fromEntries([0, 1, 2].map((k) => [`${PLACEHOLDER}|undo restore ${k}`, 'undo of a restore conflicts on the balance date the load stamped'])),
-};
-
 describe.each(FIXTURES)('persisted shape round trip: $name', (f) => {
   const H = f.history;
   const n = H.length;
@@ -204,7 +186,6 @@ describe.each(FIXTURES)('persisted shape round trip: $name', (f) => {
   const M = L[n - 1];
   const revisions = [...H, M];
   const views = [...L, M];
-  const test = (step: string) => (KNOWN_BUGS[`${f.name}|${step}`] ? it.fails : it);
 
   it('every revision loads to the balance the app showed then, in the new shape', () => {
     L.forEach((view, k) => {
@@ -221,7 +202,7 @@ describe.each(FIXTURES)('persisted shape round trip: $name', (f) => {
   });
 
   for (let k = 1; k < revisions.length; k++) {
-    test(`undo ${k}`)(`undo of revision ${k} applies cleanly or conflicts only on a field changed since`, () => {
+    it(`undo of revision ${k} applies cleanly or conflicts only on a field changed since`, () => {
       const r = undoRevision(M, revisions, k);
       // Fields that revision changed, as the user saw them, and which of those
       // the user changed again afterwards.
@@ -251,7 +232,7 @@ describe.each(FIXTURES)('persisted shape round trip: $name', (f) => {
       expect(shownBalance(restored)).toBe(f.shown[k]);
     });
 
-    test(`undo restore ${k}`)(`undo of the restore of revision ${k} goes back to the state before it`, () => {
+    it(`undo of the restore of revision ${k} goes back to the state before it`, () => {
       const restored = loadAndSave(H[k]);
       // Undo the restore revision (M → H[k]) against the autosaved state.
       const r = revertChange(restored, H[k], M, changedKeys(M, H[k]));

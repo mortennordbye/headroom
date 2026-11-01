@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { migrateImportedMortgage, migrateMortgageBalance, type MortgageSliceFields } from './mortgageSlices';
 import { changedKeys, deepEqual, revertChange } from '../../server/revert.js';
+import { migrateMortgageBalance as serverMigrate } from '../../server/mortgageSlices.js';
 import {
   NOW, hasLegacyCopies, importAndSave, loadAndSave, shownBalance, type Blob,
 } from './persistedRoundTrip.testHelpers';
@@ -84,6 +85,12 @@ describe('migrateMortgageBalance (property)', () => {
     }), RUNS);
   });
 
+  it('agrees with its server twin (server/mortgageSlices.js)', () => {
+    fc.assert(fc.property(legacyBlob, (raw) => {
+      expect(serverMigrate(raw, NOW)).toEqual(migrateMortgageBalance(asSlices(raw), NOW));
+    }), RUNS);
+  });
+
   it('writes houseDebt only as a finite, non-negative number', () => {
     fc.assert(fc.property(legacyBlob, (raw) => {
       const out = migrateMortgageBalance(asSlices(raw), NOW) as Blob;
@@ -147,16 +154,21 @@ describe('migrateImportedMortgage (property)', () => {
 });
 
 describe('revertChange (property)', () => {
-  it('never throws, and either applies or names conflicts under the keys it was given', () => {
+  it('never throws, and either applies or names conflicts under the keys it was given or the mortgage slices', () => {
+    // Undo compares revisions as the load migrates them, so the mortgage slices
+    // may move (or conflict) even when the revision's own keys did not name them.
+    const SLICES = ['assets', 'homeowner', 'transition'];
     fc.assert(fc.property(legacyBlob, legacyBlob, legacyBlob, (current, after, before) => {
       const keys = changedKeys(before, after);
       const r = revertChange(current, after, before, keys);
+      const allowed = [...keys, ...SLICES];
       if (r.conflicts) {
         expect(r.conflicts.length).toBeGreaterThan(0);
-        for (const c of r.conflicts) expect(keys.some((k) => c === k || c.startsWith(`${k}.`) || c.startsWith(`${k}[`)), c).toBe(true);
+        for (const c of r.conflicts) expect(allowed.some((k) => c === k || c.startsWith(`${k}.`) || c.startsWith(`${k}[`)), c).toBe(true);
       } else {
         // Keys the revision did not touch are left exactly as they are now.
-        for (const k of Object.keys(current)) if (!keys.includes(k)) expect(r.blob[k]).toBe(current[k]);
+        for (const k of Object.keys(current)) if (!allowed.includes(k)) expect(r.blob[k]).toBe(current[k]);
+        expect(hasLegacyCopies(r.blob)).toBe(false);
       }
     }), RUNS);
   });
@@ -210,9 +222,7 @@ describe('revertChange (property)', () => {
     }), RUNS);
   });
 
-  // Known bug (server/revert.js): undoing the migration save of a drifted legacy
-  // blob shows the stale assets.houseDebt instead of the balance the app showed.
-  it.fails('undoing the migration save of any legacy blob keeps the balance shown', () => {
+  it('undoing the migration save of any legacy blob keeps the balance shown', () => {
     fc.assert(fc.property(storedLegacyBlob, (legacy) => {
       const migrated = loadAndSave(legacy);
       const r = revertChange(migrated, migrated, legacy, changedKeys(legacy, migrated));

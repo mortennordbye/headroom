@@ -8,6 +8,10 @@ import { coerceNumber } from './sanitizePayload';
 // too, with a 3 000 000 placeholder default. This file reads those once, picks
 // the balance the app showed, writes it to `assets.houseDebt` and drops the old
 // fields (migrateMortgageBalance / migrateImportedMortgage).
+//
+// TWIN: migrateMortgageBalance and the helpers it uses are copied in
+// server/mortgageSlices.js (CJS, for the revision undo), which can't import
+// from src/. Change both or neither; a property test checks they agree.
 
 /** The balance the old homeowner and transition slices started with before
  *  anyone entered a mortgage. Untouched, it meant "not set". Only legacy data
