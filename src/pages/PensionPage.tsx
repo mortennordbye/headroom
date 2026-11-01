@@ -19,7 +19,8 @@ import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
 import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
-import { otpAnnualContribution as otpContribution, projectPensionWealth } from '../lib/pension';
+import { otpAnnualContribution as otpContribution, otpPensionableIncome, otpProjectedPensionableIncome, projectPensionWealth } from '../lib/pension';
+import { switchAutoPostOn } from '../lib/pensionAccrual';
 import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { currentMonthKey } from '../lib/date';
@@ -70,7 +71,7 @@ const AutoPostToggle: React.FC<{
 };
 
 const PensionPage: React.FC = () => {
-  const { t, pension: livePension, updatePension, salaries, jobs, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang, holidaySurplusFor } = useFinance();
+  const { t, pension: livePension, updatePension, salaries, jobs, bonuses, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang, holidaySurplusFor } = useFinance();
   const pa = t.pensionAutomation;
   const reduced = useReducedMotion();
 
@@ -97,7 +98,16 @@ const PensionPage: React.FC = () => {
     [salaries, jobs, asOfMonth],
   );
 
-  const otpAnnualContribution = otpContribution(pensionableIncome, pension.otpEmployerPct + pension.otpEmployeePct, TAX_YEAR);
+  // OTP base: the fixed pay above, plus the year's bonuses when the scheme counts
+  // them. The projection uses a recurring estimate instead (last year's bonuses,
+  // no signing bonus), and the monthly auto-post moves the fixed part each month.
+  const otpPct = pension.otpEmployerPct + pension.otpEmployeePct;
+  const asOfYear = Number(asOfMonth.slice(0, 4));
+  const otpAnnualContribution = otpContribution(
+    otpPensionableIncome(pensionableIncome, bonuses, asOfYear, pension.otpIncludesBonuses), otpPct, TAX_YEAR);
+  const otpProjectedContribution = otpContribution(
+    otpProjectedPensionableIncome(pensionableIncome, bonuses, asOfYear, pension.otpIncludesBonuses), otpPct, TAX_YEAR);
+  const otpFixedMonthly = otpContribution(pensionableIncome, otpPct, TAX_YEAR) / 12;
   const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
   // IPS lowers alminnelig inntekt, taxed at 22% in Norway. Under the generic
   // region there's no fixed rate, so the saving is the user's own marginal rate.
@@ -108,13 +118,13 @@ const PensionPage: React.FC = () => {
   const projection = useMemo(() => projectPensionWealth({
     otpBalance: pension.otpBalance,
     ipsBalance: pension.ipsBalance,
-    otpAnnualContribution,
+    otpAnnualContribution: otpProjectedContribution,
     ipsAnnualContribution,
     otpGrowthRate: pension.otpGrowthRate,
     ipsGrowthRate: pension.ipsGrowthRate,
     yearsToRetire,
     startYear: currentYear,
-  }), [pension, yearsToRetire, otpAnnualContribution, ipsAnnualContribution, currentYear]);
+  }), [pension, yearsToRetire, otpProjectedContribution, ipsAnnualContribution, currentYear]);
 
   const atRetirement = projection.length > 0 ? projection[projection.length - 1] : null;
   const totalNow = pension.otpBalance + pension.ipsBalance;
@@ -325,15 +335,33 @@ const PensionPage: React.FC = () => {
             <SliderRow label={t.otpEmployeePct} value={pension.otpEmployeePct} onChange={(v) => updatePension('otpEmployeePct', v)} min={0} max={5} step={0.5} suffix="%" />
             <SliderRow label={t.otpGrowthRate} value={pension.otpGrowthRate} onChange={(v) => updatePension('otpGrowthRate', v)} min={0} max={12} step={0.5} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(pension.otpGrowthRate, DEFAULT_PENSION.otpGrowthRate)} />} />
           </div>
+          <div className="mt-5">
+            <ToggleRow
+              label={t.pensionPage.otpIncludesBonusesLabel}
+              checked={pension.otpIncludesBonuses === true}
+              onChange={(on) => updatePension('otpIncludesBonuses', on)}
+              hint={t.pensionPage.otpIncludesBonusesHint}
+            />
+          </div>
           <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
+            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${pension.otpIncludesBonuses === true ? t.pensionPage.otpNoteMidBonuses : t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
           </p>
           {hist.isLive && (
             <AutoPostToggle
               label={pa.otpToggle}
               checked={livePension.otpAutoPost}
-              onChange={(on) => updatePension('otpAutoPost', on)}
-              monthly={otpAnnualContribution / 12}
+              onChange={(on) => {
+                updatePension('otpAutoPost', on);
+                // Switching on starts from this month (the first post lands next
+                // month) and counts the bonus share earned so far as already in the
+                // balance; the months it was off are not caught up.
+                if (on) {
+                  const next = switchAutoPostOn(livePension, 'otp', pensionableIncome, bonuses, today);
+                  updatePension('otpLastPostedMonth', next.otpLastPostedMonth);
+                  updatePension('otpBonusPostedByYear', next.otpBonusPostedByYear);
+                }
+              }}
+              monthly={otpFixedMonthly}
               lastPostedMonth={livePension.otpLastPostedMonth}
               blockedReason={otpAnnualContribution > 0 ? null : pa.otpNeedsIncome}
             />
@@ -366,7 +394,10 @@ const PensionPage: React.FC = () => {
             <AutoPostToggle
               label={pa.ipsToggle}
               checked={livePension.ipsAutoPost}
-              onChange={(on) => updatePension('ipsAutoPost', on)}
+              onChange={(on) => {
+                updatePension('ipsAutoPost', on);
+                if (on) updatePension('ipsLastPostedMonth', switchAutoPostOn(livePension, 'ips', pensionableIncome, bonuses, today).ipsLastPostedMonth);
+              }}
               monthly={ipsAnnualContribution / 12}
               lastPostedMonth={livePension.ipsLastPostedMonth}
               blockedReason={ipsAnnualContribution > 0 ? null : pa.ipsNeedsContribution}

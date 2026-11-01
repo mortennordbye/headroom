@@ -20,9 +20,15 @@ in git and the CHANGELOG, not here.
   up with (#355), which only changed the growth. **Unblock**: decide whether the projection should
   use the linked expense's amount, and how a paused expense counts. **Where**:
   `calcDebtBalanceByYear` in `src/lib/debt.ts`.
-- **OTP base excludes bonuses.** `otpAnnualContribution` is capped at 12G but uses base + on-call
-  only; a real OTP base may include bonuses. **Where**: `src/lib/pension.ts`,
-  `src/pages/PensionPage.tsx`.
+- **OTP base, remaining gaps.** Bonuses are now a per-user setting, but the rest of the base is
+  fixed: overtime is always left out (it counts under innskuddspensjonsloven § 5-5 første ledd
+  unless the plan excludes it), on-call is always counted, the § 5-5 annet ledd bokstav b
+  variant (last year's pay as the base) is not modelled, and bonuses are summed across all jobs
+  instead of only the scheme's employer. Deferred to keep the bonus fix small. **Unblock**: an
+  issue deciding which plan options to expose (likely one "counts overtime" setting and a job
+  link for the scheme). **Where**: `otpPensionableIncome` and `otpBonusShareToDate` in
+  `src/lib/pension.ts`, `src/lib/pensionAccrual.ts`, `src/pages/PensionPage.tsx`,
+  `pensionSummary` in `mcp/derive.ts`.
 - **Not audited yet**: bank import and categorisation.
 
 ## Income and salary

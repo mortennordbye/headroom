@@ -86,6 +86,7 @@ export function getDemoData(): Partial<ExportPayload> {
     otpEmployerPct: 5,
     otpEmployeePct: 0,
     otpGrowthRate: 5,
+    otpIncludesBonuses: false,
     ipsBalance: 48000,
     ipsAnnualContribution: 15000,
     ipsGrowthRate: 7,

@@ -4,6 +4,7 @@
 // year-by-year recurrence `next = prev * (1 + r) + contribution`.
 
 import { folketrygdParamsFor } from './folketrygd';
+import type { BonusEntry } from '../context/FinanceContext';
 
 /** OTP contributions are calculated on pay up to 12G (innskuddspensjonsloven § 5-2). */
 export const OTP_CONTRIBUTION_CAP_G = 12;
@@ -20,6 +21,85 @@ export function otpContributionCap(year: number): number {
 export function otpAnnualContribution(pensionableIncome: number, totalPct: number, year: number): number {
   const base = Math.min(Math.max(0, pensionableIncome), otpContributionCap(year));
   return base * totalPct / 100;
+}
+
+type OtpBonus = Pick<BonusEntry, 'date' | 'amount' | 'type'>;
+
+/**
+ * Sum of the bonuses dated with `prefix` ('yyyy-' or 'yyyy-MM'), skipping
+ * `skip` types and entries with no date or a non-positive/NaN amount.
+ */
+function sumBonuses(bonuses: readonly OtpBonus[], prefix: string, skip: readonly string[]): number {
+  return bonuses.reduce(
+    (s, b) => (typeof b.date === 'string' && b.date.startsWith(prefix) && !skip.includes(b.type) && b.amount > 0
+      ? s + b.amount
+      : s),
+    0,
+  );
+}
+
+/** Holiday pay is not a bonus, and the fixed salary already stands for it. */
+const NOT_BONUS: readonly string[] = ['holiday_pay'];
+/** A signing bonus is paid once, so it is not expected to come back next year. */
+const NOT_RECURRING: readonly string[] = ['holiday_pay', 'signing'];
+
+/**
+ * The pay an OTP contribution is calculated on for `year`. By law the base is
+ * all pay received in the contribution year (innskuddspensjonsloven § 5-5 første
+ * ledd), but a scheme may leave out varying or temporary supplements (§ 5-5
+ * annet ledd bokstav a), and many base it on fixed salary. So bonuses paid in
+ * `year` count only when `includeBonuses` says the user's scheme includes them.
+ * Holiday-pay entries are left out because `fixedGross` already covers that pay
+ * and they are not bonuses, not because the law excludes them. The 12G cap is
+ * applied later, by `otpAnnualContribution`.
+ */
+export function otpPensionableIncome(
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  year: number,
+  includeBonuses: boolean,
+): number {
+  const base = Math.max(0, fixedGross);
+  if (includeBonuses !== true) return base;
+  return base + sumBonuses(bonuses, `${year}-`, NOT_BONUS);
+}
+
+/**
+ * The yearly OTP base to project forward from `year` until retirement. One
+ * year's bonuses are not a promise of the same every year, so the recurring
+ * estimate is the previous full calendar year's bonuses, leaving out signing
+ * bonuses (one-off) and holiday pay (covered by `fixedGross`). Only when
+ * `includeBonuses` says the scheme counts bonuses.
+ */
+export function otpProjectedPensionableIncome(
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  year: number,
+  includeBonuses: boolean,
+): number {
+  const base = Math.max(0, fixedGross);
+  if (includeBonuses !== true) return base;
+  return base + sumBonuses(bonuses, `${year - 1}-`, NOT_RECURRING);
+}
+
+/**
+ * The bonus part of the year's OTP contribution earned up to and including
+ * `month` ('yyyy-MM'): `totalPct` of the bonuses dated in that year up to the
+ * month, counted only for the room left under that year's 12G once the full
+ * year's `fixedGross` is in. Added to twelve fixed twelfths it gives
+ * `otpAnnualContribution(otpPensionableIncome(...))` for the year.
+ */
+export function otpBonusShareToDate(
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  totalPct: number,
+  month: string,
+): number {
+  const year = Number(month.slice(0, 4));
+  const fixed = Math.max(0, fixedGross);
+  const toDate = bonuses.filter(b => typeof b.date === 'string' && b.date.slice(0, 7) <= month);
+  const bonusTotal = sumBonuses(toDate, `${year}-`, NOT_BONUS);
+  return otpAnnualContribution(fixed + bonusTotal, totalPct, year) - otpAnnualContribution(fixed, totalPct, year);
 }
 
 /**

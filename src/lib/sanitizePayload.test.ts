@@ -79,6 +79,26 @@ describe('sanitizePayload', () => {
     expect((out.dailyTransactions as Record<string, unknown>[])[0].amount).toBe(1.5);
   });
 
+  it('keeps only finite, non-negative OTP bonus amounts posted per year', () => {
+    const out = sanitizePayload(
+      { pension: { otpBalance: 1, otpBonusPostedByYear: { '2025': '1 200', '2026': 300, a: -5, b: 'x', c: null, d: Infinity } } },
+      SCHEMAS,
+    );
+    expect((out.pension as Record<string, unknown>).otpBonusPostedByYear).toEqual({ '2025': 1200, '2026': 300 });
+    const arr = sanitizePayload({ pension: { otpBonusPostedByYear: [5] } }, SCHEMAS);
+    expect((arr.pension as Record<string, unknown>).otpBonusPostedByYear).toEqual({});
+  });
+
+  it('coerces bonus amounts, so a string amount reaches the OTP base as a number', () => {
+    const out = sanitizePayload(
+      { bonuses: [{ id: 'b1', date: '2026-03-15', type: 'annual', amount: '30 000' }, { id: 'b2', type: 'other', amount: 'x' }] },
+      SCHEMAS,
+    );
+    const bonuses = out.bonuses as Record<string, unknown>[];
+    expect(bonuses[0].amount).toBe(30000);
+    expect(bonuses[1].amount).toBe(0);
+  });
+
   it('coerces debts numeric fields and leaves non-numeric item fields alone', () => {
     const out = sanitizePayload(
       { debts: [{ id: 'd1', name: 'Card', type: 'credit_card', balance: '12 000', rate: '21,9', minPayment: 500 }] },

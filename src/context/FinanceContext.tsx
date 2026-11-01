@@ -46,7 +46,7 @@ import {
   computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
-import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
+import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, stampLoadedPension, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
@@ -389,7 +389,10 @@ export interface Pension {
   otpEmployerPct: number;              // % of gross salary employer pays (typ 2–7)
   otpEmployeePct: number;              // optional employee top-up % (0 default)
   otpGrowthRate: number;               // annual return % (default 5%)
-  ipsBalance: number;                  // IPS (voluntary) current balance in kr
+  /** The scheme counts bonuses paid in the year in the OTP base. Off by default:
+   *  many schemes use fixed salary only (innskuddspensjonsloven § 5-5 annet ledd a). */
+  otpIncludesBonuses: boolean;
+  ipsBalance: number;                 // IPS (voluntary) current balance in kr
   ipsAnnualContribution: number;       // kr/year (NAV cap 15 000 in 2025)
   ipsGrowthRate: number;               // annual return % (default 7%)
   birthYear: number;                   // 0 = unset
@@ -410,7 +413,14 @@ export interface Pension {
    *  guard, mirroring `FixedExpense.lastPostedMonth`. */
   otpLastPostedMonth?: string;
   ipsLastPostedMonth?: string;
+  /** 'yyyy' → kr of bonus OTP share already in the balance (posted, or earned
+   *  before auto-post was switched on). Only this year and last are kept. Lets a
+   *  bonus entered after its month was posted catch up without posting twice. */
+  otpBonusPostedByYear?: Record<string, number>;
 }
+
+/** The number-valued `Pension` fields — the ones a numeric input may write. */
+export type NumericPensionKey = { [K in keyof Pension]-?: NonNullable<Pension[K]> extends number ? K : never }[keyof Pension];
 
 export interface LoanData {
   arslonn: number;
@@ -705,6 +715,7 @@ export const DEFAULT_PENSION: Pension = {
   otpEmployerPct: 5,
   otpEmployeePct: 0,
   otpGrowthRate: 5,
+  otpIncludesBonuses: false,
   ipsBalance: 0,
   ipsAnnualContribution: 0,
   ipsGrowthRate: 7,
@@ -1522,7 +1533,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     raw: Partial<ExportPayload> | null,
     resetMissing: boolean,
     // Import only: the state the payload overlays, for the mortgage reconcile.
-    current?: Pick<ExportPayload, 'housingMode' | 'assets' | 'homeowner' | 'transition'>,
+    // Also the pay and bonuses an import keeps, for the pension auto-post stamp.
+    current?: Pick<ExportPayload, 'housingMode' | 'assets' | 'homeowner' | 'transition' | 'pension' | 'salaries' | 'jobs' | 'bonuses'>,
   ) => {
     if (raw == null) return; // first-run (null DB) / no snapshot → keep current state
     const sanitized = sanitizePayload(raw, {
@@ -1582,6 +1594,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
     // A term saved before the countdown existed counts down from now.
     if (resetMissing && data.homeowner) data.homeowner = stampLegacyTerm(data.homeowner, currentMonthKey());
+    // Pension auto-post switched on before switching on stamped the month starts
+    // from now; nothing back-posts.
+    data = stampLoadedPension(data, resetMissing ? undefined : current, DEFAULT_PENSION, currentMonthKey());
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
 
@@ -2756,10 +2771,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         otpLastPostedMonth: pension.otpLastPostedMonth,
         ipsLastPostedMonth: pension.ipsLastPostedMonth,
         pensionableIncome: calcActiveGrossAnnual(salaries, jobs, nowKey),
+        otpIncludesBonuses: pension.otpIncludesBonuses,
+        otpBonusPostedByYear: pension.otpBonusPostedByYear,
+        bonuses,
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, t, assets.departedPaydowns]);
+  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, bonuses, t, assets.departedPaydowns]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
@@ -2854,10 +2872,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
     const otp = ids.has(PENSION_OTP_RULE_ID);
     const ips = ids.has(PENSION_IPS_RULE_ID);
+    // The bonus share the OTP posting carried (always in its newest month, which
+    // every applied posting includes), added to what is recorded per year.
+    const otpBonus = posted.find(p => p.rule.id === PENSION_OTP_RULE_ID)?.rule.otpBonusByYear;
     if (otp || ips) {
       setPension(prev => ({
         ...prev,
         ...(otp ? { otpLastPostedMonth: month } : {}),
+        ...(otp && otpBonus ? { otpBonusPostedByYear: addOtpBonusPosted(prev.otpBonusPostedByYear, otpBonus, month) } : {}),
         ...(ips ? { ipsLastPostedMonth: month } : {}),
       }));
     }

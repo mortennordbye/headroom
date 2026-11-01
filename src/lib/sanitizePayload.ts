@@ -75,6 +75,7 @@ const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
   fixedExpenses: { amount: 0 },
   savings: { amount: 0, percent: 0, bufferTargetAmount: 0, postedAmount: 0 },
   dailyTransactions: { amount: 0 },
+  bonuses: { amount: 0 },
   // A percentage row carries its share here; an imported "50" as a string must
   // coerce, or the resolver reads it as absent and the row silently freezes.
   savingsAllocations: { percent: 0, amount: 0 },
@@ -117,6 +118,14 @@ export function sanitizePayload<T>(data: T, objectSchemas: NumericObjectSchemas)
     if (out[key] && typeof out[key] === 'object' && !Array.isArray(out[key])) {
       out[key] = coerceBySchema(out[key], schema);
     }
+  }
+
+  // The OTP bonus share posted per year: keep finite, non-negative amounts only.
+  const pension = out.pension as Record<string, unknown> | undefined;
+  if (pension && typeof pension === 'object' && 'otpBonusPostedByYear' in pension) {
+    const raw = Array.isArray(pension.otpBonusPostedByYear) ? {} : pension.otpBonusPostedByYear;
+    const posted = Object.fromEntries(Object.entries(coerceNumberRecord(raw)).filter(([, v]) => v >= 0));
+    out.pension = { ...pension, otpBonusPostedByYear: posted };
   }
 
   for (const key of NUMBER_RECORDS) {

@@ -42,7 +42,7 @@ const defLoan: LoanData = {
   termingebyr: 9, etableringsgebyr: 9, betingetLaan: 9, kjoepesum: 9, gyldigTil: 'x',
 };
 const defPension: Pension = {
-  otpBalance: 9, otpEmployerPct: 9, otpEmployeePct: 9, otpGrowthRate: 9,
+  otpBalance: 9, otpEmployerPct: 9, otpEmployeePct: 9, otpGrowthRate: 9, otpIncludesBonuses: false,
   ipsBalance: 9, ipsAnnualContribution: 9, ipsGrowthRate: 9, birthYear: 9, retirementAge: 9,
   folketrygdBeholdning: 9, folketrygdSingle: true, pensionPayoutYears: 9, afpEligible: false,
   otpAutoPost: false, ipsAutoPost: false,
@@ -80,10 +80,11 @@ const canonicalLoan: LoanData = {
   termingebyr: 60, etableringsgebyr: 2, betingetLaan: 2000000, kjoepesum: 3000000, gyldigTil: '1. jan 2030',
 };
 const canonicalPension: Pension = {
-  otpBalance: 100, otpEmployerPct: 6, otpEmployeePct: 1, otpGrowthRate: 4,
+  otpBalance: 100, otpEmployerPct: 6, otpEmployeePct: 1, otpGrowthRate: 4, otpIncludesBonuses: true,
   ipsBalance: 200, ipsAnnualContribution: 300, ipsGrowthRate: 6, birthYear: 1988, retirementAge: 68,
   folketrygdBeholdning: 850000, folketrygdSingle: false, pensionPayoutYears: 12, afpEligible: true,
-  otpAutoPost: true, ipsAutoPost: true,
+  otpAutoPost: true, ipsAutoPost: true, otpLastPostedMonth: '2026-05', ipsLastPostedMonth: '2026-05',
+  otpBonusPostedByYear: { '2025': 1200, '2026': 0 },
 };
 const canonicalHomeowner: HomeownerData = {
   originalLoanAmount: 2600000, rente: 5, nedbetalingstid: 22, termingebyr: 55,

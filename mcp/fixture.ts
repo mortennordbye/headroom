@@ -54,10 +54,10 @@ const TRANSITION: TransitionData = {
 };
 
 const PENSION: Pension = {
-  otpBalance: 250000, otpEmployerPct: 5, otpEmployeePct: 0, otpGrowthRate: 5,
+  otpBalance: 250000, otpEmployerPct: 5, otpEmployeePct: 0, otpGrowthRate: 5, otpIncludesBonuses: false,
   ipsBalance: 40000, ipsAnnualContribution: 15000, ipsGrowthRate: 5, birthYear: 1990, retirementAge: 67,
   folketrygdBeholdning: 0, folketrygdSingle: true, pensionPayoutYears: 10, afpEligible: false,
-  otpAutoPost: false, ipsAutoPost: false,
+  otpAutoPost: false, ipsAutoPost: false, otpBonusPostedByYear: {},
 };
 
 export function fullFixture(): ExportPayload {
