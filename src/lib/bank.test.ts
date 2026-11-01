@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest';
 // so it ships in the production image; it's tested here via Vitest.
 import { mapEBTransaction, mapEBTransactions, mergeTransactions, evictSupersededPending, dropStaleBareTwins, normalizeAccount, carryAccountKeys } from '../../server/bank.js';
 import type { MappedTransaction } from '../../server/bank';
+import { dedupeBankTransactions } from './bankDedup';
+import type { DailyTransaction } from '../context/FinanceContext';
 
 interface EBTransaction {
   entry_reference?: string;
@@ -406,7 +408,7 @@ describe('dropStaleBareTwins', () => {
   it('rescues a manual category from the dropped bare twin onto its survivor', () => {
     const out = dropStaleBareTwins([
       row({ id: 'eb-999', category: 'groceries', categorySource: 'manual' }),
-      row({ id: 'eb-aaaaaaaa-999', account: 'x', category: 'other', categorySource: 'auto' }),
+      row({ id: 'eb-aaaaaaaa-999', account: 'aaaaaaaa:acc', category: 'other', categorySource: 'auto' }),
     ]);
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe('eb-aaaaaaaa-999');
@@ -415,9 +417,35 @@ describe('dropStaleBareTwins', () => {
   });
 
   it('keeps a legacy bare row that has no prefixed twin, manual rows, and is idempotent', () => {
-    const clean = [row({ id: 'eb-onlylegacy' }), row({ id: 'eb-cccc3333-other', account: 'x' }), row({ id: 'manual-2' })];
+    const clean = [row({ id: 'eb-onlylegacy' }), row({ id: 'eb-cccc3333-other', account: 'cccc3333:acc' }), row({ id: 'manual-2' })];
     expect(dropStaleBareTwins(clean)).toHaveLength(3);
     expect(dropStaleBareTwins(dropStaleBareTwins(clean))).toHaveLength(3);
+  });
+  it('treats eb-<8hex>-<rest> as bare when no connection has that prefix', () => {
+    const out = dropStaleBareTwins([row({ id: 'eb-deadbeef-5678' }), row({ id: 'eb-5678' })]);
+    expect(out.map((t) => t.id)).toEqual(['eb-deadbeef-5678', 'eb-5678']);
+  });
+
+  it('still reads a real prefixed id as prefixed, from its account key or a connection prefix', () => {
+    const byAccount = dropStaleBareTwins([row({ id: 'eb-a1b2c3d4-5678', account: 'a1b2c3d4:acc' }), row({ id: 'eb-5678' })]);
+    expect(byAccount.map((t) => t.id)).toEqual(['eb-a1b2c3d4-5678']);
+    const byConnection = dropStaleBareTwins([row({ id: 'eb-a1b2c3d4-5678' }), row({ id: 'eb-5678' })], ['eb-a1b2c3d4-']);
+    expect(byConnection.map((t) => t.id)).toEqual(['eb-a1b2c3d4-5678']);
+  });
+
+  it('agrees with its client twin (dedupeBankTransactions)', () => {
+    const cases: [MappedTransaction[], string[]?][] = [
+      [[row({ id: 'eb-1' }), row({ id: 'eb-e8a81f8a-1', account: 'e8a81f8a:a' })]],
+      [[row({ id: 'eb-aaaa1111-r', account: 'aaaa1111:a' }), row({ id: 'eb-bbbb2222-r', account: 'bbbb2222:b' })]],
+      [[row({ id: 'eb-9', category: 'groceries', categorySource: 'manual', segment: 'oneOff' }), row({ id: 'eb-aaaaaaaa-9', account: 'aaaaaaaa:a' })]],
+      [[row({ id: 'eb-deadbeef-5678' }), row({ id: 'eb-5678' }), row({ id: 'manual-1' })]],
+      [[row({ id: 'eb-deadbeef-5678' }), row({ id: 'eb-aaaa1111-deadbeef-5678', account: 'aaaa1111:a' })]],
+      [[row({ id: 'eb-A1B2C3D4-5678' }), row({ id: 'eb-5678' })], ['eb-a1b2c3d4-']],
+      [[row({ id: 'eb-a1b2c3d4-5678' }), row({ id: 'eb-5678' })], ['eb-', 'eb-a1b2c3d4-']],
+    ];
+    for (const [rows, prefixes] of cases) {
+      expect(dropStaleBareTwins(rows, prefixes)).toEqual(dedupeBankTransactions(rows as DailyTransaction[], prefixes));
+    }
   });
 });
 

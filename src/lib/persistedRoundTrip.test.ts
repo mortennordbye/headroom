@@ -293,3 +293,27 @@ describe("a fixed expense's uncovered months (optional field)", () => {
     expect(loadAndSave(saved)).toEqual(saved);
   });
 });
+
+// A saving or paydown expense created from the savings allocation carries the
+// plan row's id, which is what "Sync amounts" matches on. Losing it on any path
+// would quietly turn an allocation-made transfer into a hand-made one.
+describe('allocationId on savings and fixed expenses', () => {
+  const blob = fullBlob({
+    income: 41_000,
+    dailyTransactions: [],
+    savings: [{ id: 'sv-a', name: 'Fond', amount: 3_000, mode: 'amount', destinationKind: 'portfolio', allocationId: 'al-1' }],
+    fixedExpenses: [{ id: 'fx-a', name: 'Lån', amount: 800, type: 'fixed', destinationKind: 'mortgage', allocationId: 'al-2' }],
+  });
+  const ids = (b: Blob) => [
+    (b.savings as { allocationId?: string }[])[0].allocationId,
+    (b.fixedExpenses as { allocationId?: string }[])[0].allocationId,
+  ];
+
+  it('survives load and autosave', () => {
+    expect(ids(loadAndSave(blob))).toEqual(['al-1', 'al-2']);
+  });
+
+  it('survives import', () => {
+    expect(ids(importAndSave(FULL, blob))).toEqual(['al-1', 'al-2']);
+  });
+});

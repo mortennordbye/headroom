@@ -43,10 +43,11 @@ export function mapEBTransactions(txs: any[], opts?: MapOptions): MappedTransact
 // A deleted row's fingerprint (DeletedBankTombstone in src/context/FinanceContext.tsx).
 export type DeletedRowFingerprint = Pick<MappedTransaction, 'id' | 'date' | 'amount' | 'description'>
   & Partial<Pick<MappedTransaction, 'account' | 'kind' | 'pending'>>;
-export function mergeTransactions(a: MappedTransaction[], b: MappedTransaction[], deletedIds?: string[], tombstones?: DeletedRowFingerprint[]): MappedTransaction[];
+export function mergeTransactions(a: MappedTransaction[], b: MappedTransaction[], deletedIds?: string[], tombstones?: DeletedRowFingerprint[], knownConnectionPrefixes?: string[]): MappedTransaction[];
 export function dropRelinkFormatTwins(existing: MappedTransaction[], incoming: MappedTransaction[]): MappedTransaction[];
 export function evictSupersededPending(txs: MappedTransaction[]): MappedTransaction[];
-export function dropStaleBareTwins(txs: MappedTransaction[]): MappedTransaction[];
+export function dropStaleBareTwins(txs: MappedTransaction[], connectionPrefixes?: string[]): MappedTransaction[];
+export function connectionPrefixes(): string[];
 export function lastSyncAgeMs(nowMs?: number): number;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string; iban?: string };

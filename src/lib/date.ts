@@ -24,6 +24,21 @@ export function currentMonthKey(): string {
   return format(new Date(), 'yyyy-MM');
 }
 
+const OSLO_YEAR_MONTH = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit',
+});
+
+/**
+ * `d`'s month as a 'yyyy-MM' key in Europe/Oslo time. For code that runs on a
+ * host whose zone may be UTC (the MCP in Docker), so it agrees with a browser
+ * in Norway around midnight at month end. Browser code uses `currentMonthKey`.
+ */
+export function osloMonthKey(d: Date = new Date()): string {
+  const parts = OSLO_YEAR_MONTH.formatToParts(d);
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}`;
+}
+
 /** A specific date as a 'yyyy-MM' key, in LOCAL time. */
 export function monthKeyFromDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;

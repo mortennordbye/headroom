@@ -6,6 +6,7 @@ import {
 } from '../lib/snapshots';
 import { projectSnapshotBalances, type ProjectionRates } from '../lib/projectBalances';
 import { snapshotCoOwners } from '../lib/ownership';
+import { currentMonthKey } from '../lib/date';
 
 export interface BalanceHistory {
   /** The month being shown ('yyyy-MM'). For a past month the freely-picked header
@@ -44,7 +45,7 @@ export function useBalanceHistory(): BalanceHistory {
     currentMonth, projectionIncludeGrowth,
     savingsTargetPercent, growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
   } = useFinanceSettings();
-  const nowKey = format(new Date(), 'yyyy-MM');
+  const nowKey = currentMonthKey();
   const viewKey = format(currentMonth, 'yyyy-MM');
 
   const recordedKeys = useMemo(

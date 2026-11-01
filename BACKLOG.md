@@ -57,9 +57,6 @@ in git and the CHANGELOG, not here.
   tombstones (and their ids) older than it. **Where**: `fetchMappedTransactions` / `startLink` /
   `removeConnection` in `server/bank.js`, `deletedBankIds` / `deletedBankTombstones` in
   `src/context/FinanceContext.tsx`.
-- **Bank-id dedup regex ambiguity.** A legacy bare id whose ref starts with 8 hex chars + `-` is
-  classified as connection-prefixed. **Unblock**: converge the id format, or a secondary key.
-  **Where**: `src/lib/bankDedup.ts`, `dropStaleBareTwins` in `server/bank.js`.
 - **Heuristics to tune.** The keyword table (`src/lib/categorize.ts`), transfer detection
   (`src/lib/transfers.ts`, could use own-IBAN matching), transfer-suggestion thresholds
   (`src/lib/transferSuggestions.ts`, tuned on one dataset), envelope name hints (`NAME_HINTS` in
@@ -80,12 +77,21 @@ in git and the CHANGELOG, not here.
 - **`SavingsAllocationPanel` is the one place that writes both `savings` and `fixedExpenses`.**
   Correct, but the likeliest spot for a future regression. **Where**: `createExpenses` in
   `src/components/SavingsAllocationPanel.tsx`.
-- **Editing an allocation percentage doesn't update the expenses it created.** **Unblock**: agree
-  the allocation is authoritative, then a "sync amounts" button. **Where**:
-  `src/components/SavingsAllocationPanel.tsx`.
 - **The savings target shrinks as you automate, by construction** (it's a share of the
   uncommitted residual). Surfaced in the panel rather than changed. **Where**:
   `calcRecommendations` in `src/lib/calculations.ts`.
+- **The allocation panel's target and the budget's savings target disagree once a paydown row is
+  active.** The panel (`sizeAllocation`) leaves the plan's own mortgage/debt paydowns out of
+  spending so activating and syncing them can't shift the target; `calcRecommendations` /
+  `plannedMonthlySaving` still count them as spending, so the Budget Saving pill, its
+  "unallocated" note and the Dashboard read lower. Surfaced with a caption in the panel. **Why
+  deferred**: counting a linked paydown as saving in `plannedMonthlySaving` spreads into the
+  Dashboard and Forecast projections (which already amortize the loan, so the paydown would count
+  twice), the savings-rate chart (`paydownPrincipal`), the pill split and the MCP's own copy in
+  `mcp/derive.ts`. **Unblock**: decide whether a plan-linked paydown is saving or spending
+  everywhere. **Where**: `src/lib/allocationSync.ts`, `src/lib/calculations.ts`,
+  `src/context/FinanceContext.tsx`, `src/components/SmartRecommendations.tsx`,
+  `src/pages/DashboardPage.tsx`, `mcp/derive.ts`.
 - **CashflowChart shows savings transfers as money out** (a literal cashflow view), so it disagrees
   with the savings-rate chart. **Where**: `src/components/charts/CashflowChart.tsx`.
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
@@ -104,8 +110,6 @@ in git and the CHANGELOG, not here.
 - **History before debt historization is equity-only**, and history months stored only as a total
   aren't split by co-owner share. Can be hand-corrected in the History manager. **Where**:
   `netWorthSeriesFrom` in `src/lib/netWorth.ts`, `src/lib/ownership.ts`.
-- **`recommendedInvestment` on Assets is month-coupled** (derives from the viewed month's income).
-  **Where**: `calcRecommendations(effectiveIncome, …)` in `src/context/FinanceContext.tsx`.
 - **Scenario bands only on the Forecast chart.** The Assets growth and Dashboard projections are
   stacked, so a band needs a design decision. **Where**: `src/pages/AssetPage.tsx`,
   `src/pages/DashboardPage.tsx`, `src/lib/scenarioBands.ts`.
@@ -121,9 +125,8 @@ in git and the CHANGELOG, not here.
   paying it, so another expense's catch-up on the same loan pays that month as principal only.
   **Why deferred**: out of scope for the declined catch-up fix (#338). **What would unblock**: record
   those stamped-but-unpaid months in `uncoveredMonths` (as 0) too. **Where**: `src/components/ExpenseDialog.tsx`,
-  `src/components/SavingsAllocationPanel.tsx`, `computeAutomationPostings` in `src/lib/automation.ts`.
-- **MCP server clock vs browser clock** can disagree for a few hours at month end. **Where**:
-  `currentMonthKey` in `src/lib/date.ts`, `mcp/derive.ts`.
+  `src/components/SavingsAllocationPanel.tsx`, `src/lib/allocationSync.ts`, `computeAutomationPostings`
+  in `src/lib/automation.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank
   schedule import), no rate-change history. **Where**: `src/lib/calculations.ts`.
 - **Residence history isn't linked to the current home**, and Kjøpe & selge doesn't write the move
