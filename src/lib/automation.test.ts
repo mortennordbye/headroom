@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState } from './automation';
 import { currentMortgage } from './existingMortgage';
+import type { CoOwner } from '../context/FinanceContext';
+
+// A co-owner holding `pct` % of the home and of the loan.
+const co = (pct: number, over: Partial<CoOwner> = {}): CoOwner => ({ id: `co-${pct}`, name: 'Co', ownershipPct: pct, ...over });
 
 const rule = (over: Partial<AutomationRule> = {}): AutomationRule => ({
   id: 'a1',
@@ -218,7 +222,7 @@ describe('computeAutomationPostings — co-owned mortgage scope', () => {
   // 1 000 000 at 5 %: one month's interest is 4 166.67.
 
   it("'whole' (and absent) pays the amount as-is, whatever the share", () => {
-    const s = state({ mortgageDebtShare: 0.5 });
+    const s = state({ coOwners: [co(50)] });
     const [whole] = computeAutomationPostings([m({ mortgagePaymentScope: 'whole' })], s, '2026-07');
     const [absent] = computeAutomationPostings([m()], s, '2026-07');
     expect(whole.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 5000));
@@ -226,7 +230,7 @@ describe('computeAutomationPostings — co-owned mortgage scope', () => {
   });
 
   it("'myShare' grosses the amount up by the debt share", () => {
-    const [p] = computeAutomationPostings([m({ mortgagePaymentScope: 'myShare' })], state({ mortgageDebtShare: 0.5 }), '2026-07');
+    const [p] = computeAutomationPostings([m({ mortgagePaymentScope: 'myShare' })], state({ coOwners: [co(50)] }), '2026-07');
     expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 10_000));
   });
 
@@ -237,13 +241,38 @@ describe('computeAutomationPostings — co-owned mortgage scope', () => {
 
   it("stamps a 'myShare' rule without moving the loan while the user carries none of it", () => {
     const [p] = computeAutomationPostings(
-      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-01' })], state({ mortgageDebtShare: 0 }), '2026-07');
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-01' })], state({ coOwners: [co(100)] }), '2026-07');
     expect(p).toMatchObject({ noChange: true, newBalance: 1_000_000, newLastPostedMonth: '2026-07' });
+  });
+
+  // Balance after each month's payment at 5 % (interest, then the payment).
+  const amortized = (payments: number[]) =>
+    Math.round(payments.reduce((bal, pay) => bal + bal * 0.05 / 12 - pay, 1_000_000));
+
+  it("a 'myShare' catch-up grosses each month up by the share in force that month", () => {
+    // Co-owner leaves after April: Mar-Apr the user pays half the instalment, May-Jun all of it.
+    const [left] = computeAutomationPostings(
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-02' })],
+      state({ coOwners: [co(50, { since: '2025-01', until: '2026-04' })] }), '2026-06');
+    expect(left.newBalance).toBe(amortized([10_000, 10_000, 5000, 5000]));
+    // Co-owner joins in May: the reverse.
+    const [joined] = computeAutomationPostings(
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-02' })],
+      state({ coOwners: [co(50, { since: '2026-05' })] }), '2026-06');
+    expect(joined.newBalance).toBe(amortized([5000, 5000, 10_000, 10_000]));
+  });
+
+  it("a 'myShare' catch-up skips only the months the user carried none of the loan", () => {
+    const [p] = computeAutomationPostings(
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-02' })],
+      state({ coOwners: [co(100, { until: '2026-04' })] }), '2026-06');
+    expect(p.noChange).toBeUndefined();
+    expect(p.newBalance).toBe(amortized([5000, 5000]));
   });
 
   it('never grosses up a savings rule aimed at the mortgage (an extra payment)', () => {
     // Saving rules carry no scope, so the debt share doesn't touch them.
-    const [p] = computeAutomationPostings([m({ id: 'sv1' })], state({ mortgageDebtShare: 0.25 }), '2026-07');
+    const [p] = computeAutomationPostings([m({ id: 'sv1' })], state({ coOwners: [co(75)] }), '2026-07');
     expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 5000));
   });
 });
@@ -350,12 +379,20 @@ describe('monthlyPaydownPrincipal', () => {
   });
 
   it('counts the mortgage at the user\'s debt share, for either payment scope', () => {
-    const half = { ...state, mortgageDebtShare: 0.5 };
+    const half = { ...state, coOwners: [co(50)] };
     // 'whole': the loan gets 15 000; half the principal is the user's.
     expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], half, MONTH))
       .toBe(Math.round((15_000 - 10_000) * 0.5));
     // 'myShare': 7 500 is half the instalment, so the loan again gets 15 000.
     expect(monthlyPaydownPrincipal([{ amount: 7_500, destinationKind: 'mortgage', mortgagePaymentScope: 'myShare' }], half, MONTH))
+      .toBe(Math.round((15_000 - 10_000) * 0.5));
+  });
+
+  it('counts the mortgage at the share in force in the month asked about', () => {
+    const left = { ...state, coOwners: [co(50, { until: '2026-09' })] };
+    expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], left, MONTH))
+      .toBe(15_000 - 10_000);
+    expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], left, '2026-09'))
       .toBe(Math.round((15_000 - 10_000) * 0.5));
   });
 

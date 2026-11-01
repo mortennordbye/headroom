@@ -13,6 +13,8 @@
 // balance/rate snapshot and returns resolved absolute new balances.
 import { addMonthsKey, monthsBetween } from './date';
 import type { CurrentMortgage } from './existingMortgage';
+import type { CoOwner } from '../context/FinanceContext';
+import { ownershipShares } from './ownership';
 
 /**
  * Targets that are one plain scalar balance grown by the monthly amount. They
@@ -64,12 +66,18 @@ export interface AutomationState {
   scalars: Record<ScalarTargetKind, number>;
   mortgage: number;                                      // the whole loan (automationMortgage)
   mortgageRate: number;                                  // annual %, the current loan's (automationMortgage)
-  /** The user's share (0..1) of the joint mortgage; absent = 1. */
-  mortgageDebtShare?: number;
+  /** The home's co-owners (`assets.coOwners`). The user's share of the joint
+   *  mortgage is read per month from it, so a co-owner's since/until counts in
+   *  every month a catch-up or projection applies; absent = the whole loan. */
+  coOwners?: CoOwner[];
   /** By debtId; rate is annual %. `revolving` marks a card cleared every month. */
   debts: Record<string, { balance: number; rate: number; revolving?: boolean }>;
   housingMode: HousingMode;
 }
+
+/** The user's share (0..1) of the joint mortgage in `month`. */
+const debtShareAt = (state: Pick<AutomationState, 'coOwners'>, month: string): number =>
+  ownershipShares(state, month).debt;
 
 /** The runner's mortgage balance and rate, from the shared resolver: the whole
  *  loan, at the current loan's rate in both owner modes (the planned purchase
@@ -101,19 +109,20 @@ export interface ResolvedPosting {
  * balance can't shrink — reported as `infeasible` and left unchanged (we never
  * grow a debt from an under-funded expense). `interestCharged[i]` marks a month
  * whose interest another payment to the same loan already charged, so that
- * month's payment is all principal.
+ * month's payment is all principal. `payment` may be one amount per month.
  */
 export function applyAmortization(
-  balance: number, annualRatePct: number, payment: number, months: number,
+  balance: number, annualRatePct: number, payment: number | readonly number[], months: number,
   interestCharged: readonly boolean[] = [],
 ): { balance: number; infeasible: boolean } {
   if (!(balance > 0)) return { balance: 0, infeasible: false };
   const r = annualRatePct / 1200;
-  if (r > 0 && !interestCharged[0] && payment <= balance * r) return { balance, infeasible: true };
+  const pay = (i: number) => (typeof payment === 'number' ? payment : payment[i] ?? 0);
+  if (r > 0 && !interestCharged[0] && pay(0) <= balance * r) return { balance, infeasible: true };
   let bal = balance;
   for (let i = 0; i < months && bal > 0; i++) {
     const interest = interestCharged[i] ? 0 : bal * r;
-    bal = Math.max(0, bal + interest - Math.min(payment, bal + interest));
+    bal = Math.max(0, bal + interest - Math.min(pay(i), bal + interest));
   }
   return { balance: bal, infeasible: false };
 }
@@ -169,12 +178,13 @@ export function computeAutomationPostings(
     const appliedMonths = dueMonths.slice(due - monthsDue);
     // What a balance-growing target gains over them, each at its own month's amount.
     const added = appliedMonths.reduce((sum, m) => sum + (rule.amountByMonth?.[m] ?? rule.amount), 0);
-    const amortize = (loan: string, balance: number, rate: number, payment: number) => {
+    const amortize = (loan: string, balance: number, rate: number, payment: number | number[],
+      months: string[] = appliedMonths) => {
       const seen = (charged[loan] ??= new Set());
       const through = postedThrough[loan];
-      const res = applyAmortization(balance, rate, payment, monthsDue,
-        appliedMonths.map(m => seen.has(m) || (through !== undefined && m <= through)));
-      if (!res.infeasible) appliedMonths.forEach(m => seen.add(m));
+      const res = applyAmortization(balance, rate, payment, months.length,
+        months.map(m => seen.has(m) || (through !== undefined && m <= through)));
+      if (!res.infeasible) months.forEach(m => seen.add(m));
       return res;
     };
 
@@ -193,17 +203,18 @@ export function computeAutomationPostings(
     } else if (rule.targetKind === 'mortgage') {
       if (state.housingMode === 'first_buyer') continue; // no mortgage exists in this mode
       // A 'myShare' amount is the user's part of the joint instalment: the loan
-      // receives the whole instalment. A catch-up uses today's share for every
-      // month it applies.
-      const share = state.mortgageDebtShare ?? 1;
-      if (rule.mortgagePaymentScope === 'myShare' && !(share > 0)) {
-        // Carries none of the loan, so none of this payment reaches it. Stamp
-        // the months anyway, or they would pile up into one catch-up later.
+      // receives the whole instalment, at the share in force each month. A
+      // month the user carries none of the loan moves nothing.
+      const myShare = rule.mortgagePaymentScope === 'myShare';
+      const paying = myShare ? appliedMonths.filter(m => debtShareAt(state, m) > 0) : appliedMonths;
+      if (paying.length === 0) {
+        // None of this payment reaches the loan. Stamp the months anyway, or
+        // they would pile up into one catch-up later.
         newBalance = Math.round(mortgage);
         noChange = true;
       } else {
-        const payment = rule.mortgagePaymentScope === 'myShare' ? rule.amount / share : rule.amount;
-        const res = amortize(loanOf(rule)!, mortgage, state.mortgageRate, payment);
+        const payment = myShare ? paying.map(m => rule.amount / debtShareAt(state, m)) : rule.amount;
+        const res = amortize(loanOf(rule)!, mortgage, state.mortgageRate, payment, paying);
         newBalance = Math.round(res.balance);
         infeasible = res.infeasible;
         mortgage = newBalance;
@@ -247,7 +258,7 @@ export interface PaydownExpense {
  * instead of leaving as interest. Runs the same amortisation as the runner
  * (`computeAutomationPostings`) for exactly `month`, from today's balances.
  *
- * The mortgage counts at the user's debt share whatever the payment scope: a
+ * The mortgage counts at the user's debt share in `month`, whatever the payment scope: a
  * 'myShare' payment reaches the loan grossed up by the share, and a 'whole'
  * payment also pays down the co-owners' part, which is not the user's to keep.
  * A paused expense moves nothing, and a payment that can't cover the interest
@@ -256,7 +267,7 @@ export interface PaydownExpense {
  */
 export function monthlyPaydownPrincipal(
   expenses: readonly PaydownExpense[],
-  state: Pick<AutomationState, 'mortgage' | 'mortgageRate' | 'mortgageDebtShare' | 'debts' | 'housingMode'>,
+  state: Pick<AutomationState, 'mortgage' | 'mortgageRate' | 'coOwners' | 'debts' | 'housingMode'>,
   month: string,
 ): number {
   const prev = addMonthsKey(month, -1);
@@ -279,7 +290,7 @@ export function monthlyPaydownPrincipal(
     else if (p.targetKind === 'debt' && p.debtId) debtAfter[p.debtId] = p.newBalance;
   }
   const finite = (n: number | undefined) => (Number.isFinite(n) ? (n as number) : 0);
-  const share = Number.isFinite(state.mortgageDebtShare) ? Math.min(1, Math.max(0, state.mortgageDebtShare!)) : 1;
+  const share = debtShareAt(state, month);
   let total = mortgageAfter === undefined ? 0 : Math.max(0, finite(state.mortgage) - mortgageAfter) * share;
   for (const [id, after] of Object.entries(debtAfter)) total += Math.max(0, finite(state.debts[id]?.balance) - after);
   return Math.round(total);
