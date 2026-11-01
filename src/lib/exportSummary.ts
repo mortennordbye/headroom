@@ -25,7 +25,7 @@ export interface SummarySection {
 
 const len = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
 const keys = (v: unknown): number =>
-  v && typeof v === 'object' ? Object.keys(v as object).length : 0;
+  v && typeof v === 'object' ? Object.keys(v).length : 0;
 
 /**
  * Project an export payload into a human-facing, categorised breakdown of

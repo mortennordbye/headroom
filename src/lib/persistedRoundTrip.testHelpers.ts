@@ -56,7 +56,7 @@ const SCHEMAS = {
   employerCostConfig: DEFAULT_EMPLOYER_COST_CONFIG, billingConfig: DEFAULT_BILLING_CONFIG,
 };
 
-const viaJson = (v: unknown): Blob => JSON.parse(JSON.stringify(v));
+const viaJson = (v: unknown): Blob => JSON.parse(JSON.stringify(v)) as Blob;
 
 /** applyPayload's tail: write `data` into `state` through the registry, then
  *  build the autosave payload from the state. */
@@ -127,8 +127,8 @@ export function changedPaths(a: Blob, b: Blob): string[] {
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
     if (same(a[k], b[k])) continue;
     if (isObj(a[k]) && isObj(b[k])) {
-      const x = a[k] as Blob;
-      const y = b[k] as Blob;
+      const x = a[k];
+      const y = b[k];
       for (const f of new Set([...Object.keys(x), ...Object.keys(y)])) if (!same(x[f], y[f])) out.push(`${k}.${f}`);
     } else out.push(k);
   }

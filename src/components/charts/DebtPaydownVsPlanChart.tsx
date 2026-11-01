@@ -25,7 +25,7 @@ export default function DebtPaydownVsPlanChart() {
   const result = useMemo(() => debtPaydownVsPlan(balanceSnapshots), [balanceSnapshots]);
 
   const data = useMemo(() => {
-    const recorded = result.points.map(p => ({ key: p.monthKey, actual: Math.round(p.actual) as number | null, plan: p.plan as number | null }));
+    const recorded = result.points.map((p): { key: string; actual: number | null; plan: number | null } => ({ key: p.monthKey, actual: Math.round(p.actual), plan: p.plan }));
     const filled = fillMonthGaps(recorded, r => r.key, k => ({ key: k, actual: null, plan: null }));
     return filled.map(r => ({
       month: format(parse(r.key, 'yyyy-MM', new Date()), 'MMM yy', { locale: dateLocale }),

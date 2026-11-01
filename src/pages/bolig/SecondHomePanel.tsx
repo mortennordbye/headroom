@@ -28,7 +28,6 @@ import {
   summarizeScenario,
   calcRealBorrowingCapacity,
   type SecondHomeScenario,
-  type SecondHomeStrategy,
 } from '../../lib/secondHome';
 import { Card } from '../../components/ui/Card';
 import { SectionLabel } from '../../components/ui/SectionLabel';
@@ -263,7 +262,7 @@ const SecondHomePanel: React.FC = () => {
                 return (
                   <button
                     key={id}
-                    onClick={() => set({ strategy: id as SecondHomeStrategy })}
+                    onClick={() => set({ strategy: id })}
                     role="radio"
                     aria-checked={active}
                     className="flex items-center gap-2 px-4 h-8 rounded-[6px] text-[12px] font-medium transition-colors"

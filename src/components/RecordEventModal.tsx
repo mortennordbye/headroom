@@ -67,7 +67,7 @@ export default function RecordEventModal({ target, initialType, onClose, onNewJo
     if (target) return target.kind;
     return initialType ?? 'raise';
   });
-  const entity: Entity = editing ? target!.kind : entityOf(selType);
+  const entity: Entity = editing ? target.kind : entityOf(selType);
 
   const sTarget = target?.kind === 'salary' ? target.entry : undefined;
   const bTarget = target?.kind === 'bonus' ? target.entry : undefined;

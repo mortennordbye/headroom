@@ -251,7 +251,7 @@ describe('payloadRegistry — exhaustiveness', () => {
 describe('payloadRegistry — co-owners', () => {
   it('leaves coOwners absent when the stored blob has none (a plain load stays clean)', () => {
     const { coOwners: _drop, ...noCo } = canonicalAssets;
-    const state = roundTrip({ ...fullPayload(), assets: noCo as Assets }, true);
+    const state = roundTrip({ ...fullPayload(), assets: noCo }, true);
     expect('coOwners' in (state.assets as Assets)).toBe(false);
   });
 });
@@ -262,7 +262,7 @@ describe('payloadRegistry — BSU total deposited', () => {
 
   it('leaves bsuTotalDeposited absent when the stored blob has none (older blobs stay unchanged)', () => {
     const { bsuTotalDeposited: _drop, ...noDeposited } = canonicalAssets;
-    const state = roundTrip({ ...fullPayload(), assets: noDeposited as Assets }, true);
+    const state = roundTrip({ ...fullPayload(), assets: noDeposited }, true);
     expect('bsuTotalDeposited' in (state.assets as Assets)).toBe(false);
   });
 

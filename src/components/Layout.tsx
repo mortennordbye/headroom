@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { NavLink, Outlet, useLocation, useNavigationType, useSearchParams } from 'react-router';
+import { NavLink, NavigationType, Outlet, useLocation, useNavigationType, useSearchParams } from 'react-router';
 import {
   ChevronLeft,
   ChevronRight,
@@ -63,7 +63,7 @@ const Layout: React.FC = () => {
   // browser, which restores where you were.
   const navigationType = useNavigationType();
   useLayoutEffect(() => {
-    if (navigationType !== 'POP') window.scrollTo(0, 0);
+    if (navigationType !== NavigationType.Pop) window.scrollTo(0, 0);
   }, [location.pathname, navigationType]);
   const moreActive = MORE_ROUTES.includes(navPath);
   // The group owning the current route drives the sub-tab strip; the tab bars
@@ -223,6 +223,8 @@ const Layout: React.FC = () => {
           </button>
           {showPicker ? (
             <>
+              {/* The arrow keys bubble up from the stepper buttons inside the group. */}
+              {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
               <div
                 role="group"
                 aria-label={t.monthPicker}
@@ -455,6 +457,7 @@ const Layout: React.FC = () => {
       {moreOpen && (
         <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
           <div
+            role="presentation"
             className="absolute inset-0 animate-fade-in"
             style={{ background: 'rgba(0,0,0,0.55)' }}
             onClick={() => setMoreOpen(false)}

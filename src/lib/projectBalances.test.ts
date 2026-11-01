@@ -6,7 +6,7 @@ import type { SnapshotBalances } from './snapshots';
 const NOW = '2026-08';
 
 const base = (over: Partial<SnapshotBalances> = {}): SnapshotBalances => ({
-  savingsAccounts: [{ id: 'sav-1', name: 'Ferie', balance: 10_000 } as SnapshotBalances['savingsAccounts'][number]],
+  savingsAccounts: [{ id: 'sav-1', name: 'Ferie', balance: 10_000 }],
   bsu: 50_000,
   bufferAccount: 20_000,
   portfolio: 656_009,

@@ -382,6 +382,8 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
 
       {/* Full-size preview lightbox — own focus trap so Escape closes it first */}
       {preview && ReactDOM.createPortal(
+        // The dialog fills the screen, so a click on it is a backdrop click; Escape closes it too.
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
         <div
           ref={lightboxRef}
           role="dialog"
@@ -397,7 +399,7 @@ export default function PayslipImportModal({ onClose }: { onClose: () => void })
           >
             <X size={20} />
           </button>
-          <div className="flex flex-col gap-4 items-center" onClick={e => e.stopPropagation()}>
+          <div role="presentation" className="flex flex-col gap-4 items-center" onClick={e => e.stopPropagation()}>
             {preview.url ? (
               <img src={preview.url} alt={im.preview} className="max-w-full sm:max-w-2xl rounded-[4px] shadow-lg" />
             ) : (

@@ -183,7 +183,7 @@ export function fullFixture(): ExportPayload {
     assumptionsNudgeDismissed: false,
     incomeReminderDismissedMonth: '2026-05',
     conservativeNudgeDismissedMonth: '2026-04',
-  } as ExportPayload;
+  };
 }
 
 /** Top-level keys present in the full fixture — used to assert preservation. */

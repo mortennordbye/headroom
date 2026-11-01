@@ -38,13 +38,13 @@ describe('coerceNumber', () => {
 
 describe('sanitizePayload', () => {
   it('coerces a stringified top-level number (the backlog NaN case)', () => {
-    const out = sanitizePayload({ income: '55000' } as Record<string, unknown>, SCHEMAS);
+    const out = sanitizePayload({ income: '55000' }, SCHEMAS);
     expect(out.income).toBe(55000);
   });
 
   it('coerces a stringified nested numeric field but leaves string fields alone', () => {
     const out = sanitizePayload(
-      { assets: { portfolio: '5000', taxRate: 22 }, loan: { laanebelop: '2000000', gyldigTil: '2026-12-31' } } as Record<string, unknown>,
+      { assets: { portfolio: '5000', taxRate: 22 }, loan: { laanebelop: '2000000', gyldigTil: '2026-12-31' } },
       SCHEMAS,
     );
     expect((out.assets as Record<string, unknown>).portfolio).toBe(5000);
@@ -54,14 +54,14 @@ describe('sanitizePayload', () => {
   });
 
   it('drops an unparseable numeric field so the merge can restore the default', () => {
-    const out = sanitizePayload({ assets: { portfolio: 'oops', houseValue: 1000 } } as Record<string, unknown>, SCHEMAS);
+    const out = sanitizePayload({ assets: { portfolio: 'oops', houseValue: 1000 } }, SCHEMAS);
     expect('portfolio' in (out.assets as object)).toBe(false); // dropped → default fills it
     expect((out.assets as Record<string, unknown>).houseValue).toBe(1000);
   });
 
   it('sanitizes number records, dropping bad entries', () => {
     const out = sanitizePayload(
-      { monthlyIncomes: { '2026-01': '50000', '2026-02': 'x', '2026-03': 48000 } } as Record<string, unknown>,
+      { monthlyIncomes: { '2026-01': '50000', '2026-02': 'x', '2026-03': 48000 } },
       SCHEMAS,
     );
     expect(out.monthlyIncomes).toEqual({ '2026-01': 50000, '2026-03': 48000 });
@@ -72,7 +72,7 @@ describe('sanitizePayload', () => {
       {
         fixedExpenses: [{ id: 'a', name: 'Rent', amount: '5 000' }],
         dailyTransactions: [{ id: 't1', date: '2026-07-01', description: 'Coffee', amount: '1,5' }],
-      } as Record<string, unknown>,
+      },
       SCHEMAS,
     );
     expect((out.fixedExpenses as Record<string, unknown>[])[0].amount).toBe(5000);
@@ -81,7 +81,7 @@ describe('sanitizePayload', () => {
 
   it('coerces debts numeric fields and leaves non-numeric item fields alone', () => {
     const out = sanitizePayload(
-      { debts: [{ id: 'd1', name: 'Card', type: 'credit_card', balance: '12 000', rate: '21,9', minPayment: 500 }] } as Record<string, unknown>,
+      { debts: [{ id: 'd1', name: 'Card', type: 'credit_card', balance: '12 000', rate: '21,9', minPayment: 500 }] },
       SCHEMAS,
     );
     const debt = (out.debts as Record<string, unknown>[])[0];
@@ -97,7 +97,7 @@ describe('sanitizePayload', () => {
       {
         fixedExpenses: [{ id: 'a', name: 'Rent', amount: 'oops' }],
         debts: [{ id: 'd1', name: 'Loan', type: 'other', balance: 'x', rate: NaN, minPayment: 100 }],
-      } as Record<string, unknown>,
+      },
       SCHEMAS,
     );
     expect((out.fixedExpenses as Record<string, unknown>[])[0].amount).toBe(0);
@@ -109,7 +109,7 @@ describe('sanitizePayload', () => {
 
   it('leaves array items with missing numeric fields and non-object entries untouched', () => {
     const out = sanitizePayload(
-      { fixedExpenses: [{ id: 'a', name: 'No amount yet' }, 'junk'] } as Record<string, unknown>,
+      { fixedExpenses: [{ id: 'a', name: 'No amount yet' }, 'junk'] },
       SCHEMAS,
     );
     const items = out.fixedExpenses as unknown[];
@@ -127,7 +127,7 @@ describe('sanitizePayload', () => {
             housingMode: 'first_buyer',
           },
         },
-      } as Record<string, unknown>,
+      },
       SCHEMAS,
     );
     const snap = (out.balanceSnapshots as Record<string, Record<string, unknown>>)['2026-06'];
@@ -148,7 +148,7 @@ describe('sanitizePayload', () => {
             debts: [{ id: 'd1', name: 'Lån', balance: '5 000', rate: 'bad', minPayment: 100 }],
           },
         },
-      } as Record<string, unknown>,
+      },
       SCHEMAS,
     );
     const snap = (out.balanceSnapshots as Record<string, Record<string, unknown>>)['2026-06'];
@@ -171,7 +171,7 @@ describe('sanitizePayload', () => {
             categoryBudgets: { groceries: '4 000', transport: 'nope' },
           },
         },
-      } as Record<string, unknown>,
+      },
       SCHEMAS,
     );
     const snap = (out.balanceSnapshots as Record<string, Record<string, unknown>>)['2026-06'];
@@ -197,13 +197,13 @@ describe('sanitizePayload', () => {
         },
       },
     };
-    const out = sanitizePayload({ ...v1 } as Record<string, unknown>, SCHEMAS);
+    const out = sanitizePayload({ ...v1 }, SCHEMAS);
     expect(out.balanceSnapshots).toEqual(v1.balanceSnapshots);
   });
 
   it('leaves unrelated fields and clean data untouched', () => {
     const clean = { income: 50000, lang: 'nb', region: 'no', fixedExpenses: [{ id: 'a', amount: 100 }] };
-    expect(sanitizePayload({ ...clean } as Record<string, unknown>, SCHEMAS)).toEqual(clean);
+    expect(sanitizePayload({ ...clean }, SCHEMAS)).toEqual(clean);
   });
 
   it('passes through null / non-object input (first-run guard is the caller\'s job)', () => {
@@ -216,13 +216,13 @@ describe('sanitizePayload: mortgage term stamps', () => {
   it('keeps both asOf months on an imported homeowner slice', () => {
     const out = sanitizePayload({
       homeowner: { currentMortgageBalance: 3000000, nedbetalingstid: 24.25, nedbetalingstidAsOf: '2026-05', currentMortgageBalanceAsOf: '2026-04' },
-    } as Record<string, unknown>, schemas) as { homeowner: Record<string, unknown> };
+    }, schemas) as { homeowner: Record<string, unknown> };
     expect(out.homeowner).toMatchObject({ nedbetalingstidAsOf: '2026-05', currentMortgageBalanceAsOf: '2026-04' });
   });
   it('a numeric asOf from a bad import does not crash the term readers', () => {
     const out = sanitizePayload({
       homeowner: { currentMortgageBalance: 3000000, nedbetalingstid: 25, nedbetalingstidAsOf: 202605, currentMortgageBalanceAsOf: 202604 },
-    } as Record<string, unknown>, schemas) as { homeowner: Record<string, unknown> };
+    }, schemas) as { homeowner: Record<string, unknown> };
     expect(effectiveRemainingMonths(out.homeowner, '2030-01')).toBe(300);
     expect(paymentTermMonths(out.homeowner)).toBe(300);
   });

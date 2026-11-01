@@ -62,12 +62,12 @@ export function goalPace(
 
   const hasDeadline = deadlineMonthsFromNow != null;
   const monthsAheadOrBehind =
-    hasDeadline && monthsToTarget != null ? (deadlineMonthsFromNow as number) - monthsToTarget : null;
+    hasDeadline && monthsToTarget != null ? deadlineMonthsFromNow - monthsToTarget : null;
   const onTrack =
-    hasDeadline && monthsToTarget != null ? monthsToTarget <= (deadlineMonthsFromNow as number) : null;
+    hasDeadline && monthsToTarget != null ? monthsToTarget <= deadlineMonthsFromNow : null;
   const requiredMonthly =
-    hasDeadline && (deadlineMonthsFromNow as number) > 0 && rem > 0
-      ? rem / (deadlineMonthsFromNow as number)
+    hasDeadline && deadlineMonthsFromNow > 0 && rem > 0
+      ? rem / deadlineMonthsFromNow
       : null;
 
   return { monthlyPace, monthsToTarget, monthsAheadOrBehind, onTrack, requiredMonthly };

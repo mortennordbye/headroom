@@ -186,7 +186,7 @@ describe('derive (pure, no server)', () => {
       region: 'generic',
       customTaxRatePct: 30,
       homeowner: { ...blob.homeowner!, rente: 4 },
-      loan: { ...blob.loan!, rente: 6 },
+      loan: { ...blob.loan, rente: 6 },
       assets: { ...blob.assets, taxRate: 37.84 },
     };
     const page = prepayVsInvestFor({
@@ -477,7 +477,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
 
   it('rentefradrag: none for a first buyer, the current loan when transitioning', () => {
     const b = fullFixture();
-    b.loan!.laanebelop = 4000000; // the planned purchase loan
+    b.loan.laanebelop = 4000000; // the planned purchase loan
     b.assets.houseDebt = 1800000;
     b.housingMode = 'first_buyer';
     expect(derive.salaryAndTax(b, '2026-07').annualMortgageInterestDeduction).toBe(0);
@@ -501,7 +501,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const b = fullFixture();
     b.housingMode = 'first_buyer';
     b.assets = { ...b.assets, houseValue: 4800000, houseDebt: 3400000, coOwners: [] };
-    b.loan = { ...b.loan!, rente: 5.65, nedbetalingstid: 25 };
+    b.loan = { ...b.loan, rente: 5.65, nedbetalingstid: 25 };
     const rows = derive.forecast(b, { years: 10 }, MONTH).projection;
     expect(rows.every((r) => r.homeDebt === 3400000)).toBe(true);
     expect(rows.every((r) => r.mortgage === 0)).toBe(true);
@@ -511,7 +511,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const b = fullFixture();
     b.housingMode = 'transitioning';
     b.homeowner = { ...b.homeowner!, rente: 4 };
-    b.loan = { ...b.loan!, rente: 5.65, nedbetalingstid: 20 };
+    b.loan = { ...b.loan, rente: 5.65, nedbetalingstid: 20 };
     const rows = derive.forecast(b, { years: 10 }, MONTH).projection;
     expect(rows.map((r) => r.homeDebt)).toEqual(calcMortgageBalanceByYear(2500000, 4, 25, 10));
     // The mortgage tile is the same series.
@@ -600,15 +600,15 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const m = derive.mortgage(b, MONTH);
     // Existing fields still describe the planned loan: the Bolig page's new loan
     // need after the sale ("Nytt lånebehov"), not the stored laanebelop.
-    const need = calcTransitionNewLoan(b.transition!, b.assets.houseDebt, b.loan!, ownershipShares(b.assets, MONTH));
-    expect(need.newLoanNeeded).not.toBe(b.loan!.laanebelop);
+    const need = calcTransitionNewLoan(b.transition!, b.assets.houseDebt, b.loan, ownershipShares(b.assets, MONTH));
+    expect(need.newLoanNeeded).not.toBe(b.loan.laanebelop);
     expect(m.loanKind).toBe('planned');
     expect(m.balance).toBe(Math.round(need.newLoanNeeded));
     expect(m.monthlyPayment).toBe(Math.round(need.newMonthlyPayment));
     const c = currentMortgage('transitioning', b.assets, b.homeowner, b.transition, MONTH);
     expect(m.current).toMatchObject({ balance: 2500000, ratePct: 4, remainingMonths: c.remainingMonths, balanceAsOf: '2026-06' });
     expect(m.planned).toMatchObject({
-      balance: Math.round(need.newLoanNeeded), ratePct: b.loan!.rente, monthlyPayment: Math.round(need.newMonthlyPayment),
+      balance: Math.round(need.newLoanNeeded), ratePct: b.loan.rente, monthlyPayment: Math.round(need.newMonthlyPayment),
     });
     b.housingMode = 'homeowner';
     expect(derive.mortgage(b, MONTH)).toMatchObject({ current: null, planned: null });
@@ -621,7 +621,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     b.transition = { currentHouseValue: value } as typeof b.transition;
     // The app merges a stored transition slice over its defaults on load.
     const app = { currentHouseValue: value, agentFeePercent: 3, documentFee: 7500, otherSaleCosts: 0, bridgeMonths: 2, bridgeLoanRate: 6.5 };
-    const need = calcTransitionNewLoan(app, b.assets.houseDebt, b.loan!, ownershipShares(b.assets, MONTH));
+    const need = calcTransitionNewLoan(app, b.assets.houseDebt, b.loan, ownershipShares(b.assets, MONTH));
     expect(need.equityFromSale).toBeGreaterThan(0);
     expect(derive.mortgage(b, MONTH).balance).toBe(Math.round(need.newLoanNeeded));
   });
@@ -690,7 +690,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     // May recorded a smaller list: only the 14 000 mortgage line.
     b.balanceSnapshots = {
       ...b.balanceSnapshots,
-      '2026-05': { ...b.balanceSnapshots!['2026-06'], fixedExpenses: [b.fixedExpenses![0]] },
+      '2026-05': { ...b.balanceSnapshots!['2026-06'], fixedExpenses: [b.fixedExpenses[0]] },
     };
     const live = derive.budgetSummary(b, MONTH);
     // Same formula as CashflowChart: the month's own list plus its own savings,
@@ -737,7 +737,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     b.monthlyIncomes = {};
     b.housingMode = 'homeowner';
     const before = derive.budgetSummary(b, MONTH);
-    b.fixedExpenses = b.fixedExpenses!.map((e) => (e.id === 'f1' ? { ...e, destinationKind: 'mortgage' as const } : e));
+    b.fixedExpenses = b.fixedExpenses.map((e) => (e.id === 'f1' ? { ...e, destinationKind: 'mortgage' as const } : e));
     const after = derive.budgetSummary(b, MONTH);
     // 14 000 a month against the fixture's 2 500 000 at 5.5 %.
     const principal = 14000 - 2_500_000 * 0.055 / 12;
@@ -751,7 +751,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const b = fullFixture();
     b.monthlyIncomes = {};
     b.debts = [{ id: 'card', name: 'Card', type: 'credit_card', balance: 15000, rate: 0, minPayment: 0, revolving: true }];
-    b.fixedExpenses = [...b.fixedExpenses!, { id: 'fc', name: 'Card', amount: 15000 }];
+    b.fixedExpenses = [...b.fixedExpenses, { id: 'fc', name: 'Card', amount: 15000 }];
     const plain = derive.budgetSummary(b, MONTH).savingsRateTargetOfIncomePct;
     b.fixedExpenses = b.fixedExpenses.map((e) => (e.id === 'fc' ? { ...e, destinationKind: 'debt' as const, debtId: 'card' } : e));
     expect(derive.budgetSummary(b, MONTH).savingsRateTargetOfIncomePct).toBe(plain);

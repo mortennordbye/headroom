@@ -17,7 +17,7 @@ import {
   inRange, listingMetrics, saleOverAskingPct, saleTotalPerSqm, sortRows,
   type MarketListing, type SortDir,
 } from '../../lib/marketListings';
-import { parseMarketFile, saleFromForm, type SaleFormKey } from '../../lib/marketImport';
+import { parseMarketFile, saleFromForm } from '../../lib/marketImport';
 import { Card } from '../../components/ui/Card';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { Button } from '../../components/ui/Button';
@@ -260,7 +260,7 @@ const MarketPanel: React.FC = () => {
   const pos = (v: number) => `${((v - lo) / (hi - lo || 1)) * 100}%`;
 
   const onSaveSale = async (values: Record<string, string>) => {
-    const r = saleFromForm(values as Partial<Record<SaleFormKey, string>>);
+    const r = saleFromForm(values);
     if ('error' in r) {
       setSaleError(mk.addSale.errors[r.error]);
       return;

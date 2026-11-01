@@ -56,7 +56,7 @@ describe('resolveAllocation', () => {
 
   it('treats a NaN or negative percent as 0 rather than poisoning the total', () => {
     const plan = resolveAllocation(
-      [alloc(NaN as number), alloc(-10, { destinationKind: 'bsu' }), alloc(40, { destinationKind: 'bufferAccount' })],
+      [alloc(NaN), alloc(-10, { destinationKind: 'bsu' }), alloc(40, { destinationKind: 'bufferAccount' })],
       10_000,
     );
     expect(plan.rows.map(r => r.amount)).toEqual([0, 0, 4000]);

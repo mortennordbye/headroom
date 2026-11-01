@@ -175,7 +175,7 @@ const valueAt = (b: Blob, path: string) => {
   const [k, f] = path.split('.');
   return f === undefined ? b[k] : (b[k] as Blob | undefined)?.[f];
 };
-const same = (a: unknown, b: unknown) => changedPaths({ v: a } as Blob, { v: b } as Blob).length === 0;
+const same = (a: unknown, b: unknown) => changedPaths({ v: a }, { v: b }).length === 0;
 
 describe.each(FIXTURES)('persisted shape round trip: $name', (f) => {
   const H = f.history;

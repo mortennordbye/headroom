@@ -19,7 +19,7 @@ function fakeHost() {
     go(delta: number) { traversals.push(delta); },
   };
   const host: HistoryHost = {
-    history: history as unknown as HistoryHost['history'],
+    history: history,
     addEventListener: (_type, fn) => listeners.push(fn),
     queueMicrotask: (fn) => microtasks.push(fn),
   };

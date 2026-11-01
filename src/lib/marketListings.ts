@@ -99,5 +99,5 @@ export function inRange(v: number | null | undefined, min?: number | null, max?:
   const hasMax = max != null && Number.isFinite(max);
   if (!hasMin && !hasMax) return true;
   if (v == null || !Number.isFinite(v)) return false;
-  return (!hasMin || v >= (min as number)) && (!hasMax || v <= (max as number));
+  return (!hasMin || v >= min) && (!hasMax || v <= max);
 }

@@ -54,8 +54,8 @@ export function ModalShell({
   // EditModal form) stays reachable top to bottom instead of being clipped by a
   // fixed, vertically centred flex box. Short panels still sit centred.
   const content = (
-    <div className="fixed inset-0 bg-black/60 z-50 overflow-y-auto overscroll-contain" onClick={onBackdrop}>
-      <div className="flex min-h-full items-end sm:items-center justify-center sm:p-4" onClick={onBackdrop}>
+    <div role="presentation" className="fixed inset-0 bg-black/60 z-50 overflow-y-auto overscroll-contain" onClick={onBackdrop}>
+      <div role="presentation" className="flex min-h-full items-end sm:items-center justify-center sm:p-4" onClick={onBackdrop}>
         <div
           ref={dialogRef}
           role="dialog"

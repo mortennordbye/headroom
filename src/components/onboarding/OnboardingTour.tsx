@@ -7,7 +7,7 @@ import {
   Wallet, Coins, PiggyBank, Home, TrendingUp, Bitcoin, Landmark, Briefcase,
   LayoutDashboard, LineChart, Target, CreditCard, Settings as SettingsIcon, Globe,
 } from 'lucide-react';
-import { useFinance, type Assets, type NumericAssetKey, type Pension, type Language, type Region, type ExpenseType, type DebtType, type FixedExpense } from '../../context/FinanceContext';
+import { useFinance, type NumericAssetKey, type Pension, type Language, type Region, type ExpenseType, type DebtType, type FixedExpense } from '../../context/FinanceContext';
 import { DEBT_TYPES } from '../../lib/debt';
 import PayslipImportModal from '../PayslipImportModal';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -103,7 +103,7 @@ function OnboardingHub() {
   useEffect(() => {
     clearHighlight();
     if (!topic) return;
-    if (topic.route !== location.pathname) navigate(topic.route);
+    if (topic.route !== location.pathname) void navigate(topic.route);
     if (!topic.target) return;
     let raf = 0;
     let tries = 0;
@@ -203,7 +203,7 @@ function OnboardingHub() {
       {/* Leave-confirmation. Own layer above the sheet (z-70) so it reads as a
           decision on top of setup rather than replacing it. */}
       {confirmClose && (
-        <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={e => { if (e.target === e.currentTarget) setConfirmClose(false); }}>
+        <div role="presentation" className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={e => { if (e.target === e.currentTarget) setConfirmClose(false); }}>
           <div role="alertdialog" aria-modal="true" aria-label={t.onboarding.leaveTitle} className="w-full sm:w-[380px] sm:max-w-full rounded-t-[14px] sm:rounded-[12px] border p-5" style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}>
             <h3 className="font-serif text-[20px] font-medium leading-tight mb-1.5" style={{ color: 'var(--text-1)' }}>{t.onboarding.leaveTitle}</h3>
             <p className="text-[13px] leading-[1.5] mb-4" style={{ color: 'var(--text-2)' }}>{t.onboarding.leaveBody}</p>
@@ -342,7 +342,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
       case 'region': return region;
       case 'income': return String(Math.round(effectiveIncome));
       case 'savingsTarget': return String(savingsTargetPercent);
-      case 'asset': return String(assets[f.key as keyof Assets] ?? 0);
+      case 'asset': return String(assets[f.key as NumericAssetKey] ?? 0);
       case 'pension': return String(pension[f.key as keyof Pension] ?? 0);
       case 'growthRate': return String(growthRates[f.key] ?? 0);
       default: return '';

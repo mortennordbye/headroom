@@ -511,7 +511,7 @@ const SalaryPage: React.FC = () => {
             jobId: newJobId,
             effectiveDate: vals.startDate,
             grossAnnual: initialSalaryNum,
-            changeType: 'initial' as SalaryChangeType,
+            changeType: 'initial',
           });
         }
         // A new current job usually means you left the previous one — end any

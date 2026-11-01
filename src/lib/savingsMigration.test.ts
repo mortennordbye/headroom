@@ -27,7 +27,7 @@ describe('migrateSavingsAccounts', () => {
   it('migrates a nonzero legacy scalar when the array is absent OR empty', () => {
     expect(migrateSavingsAccounts({ ...base, savings: 5000, savingsAccounts: [] }))
       .toEqual([{ id: expect.any(String), name: 'Sparekonto', balance: 5000 }]);
-    expect(migrateSavingsAccounts({ ...base, savings: 5000, savingsAccounts: undefined as unknown as [] }))
+    expect(migrateSavingsAccounts({ ...base, savings: 5000, savingsAccounts: undefined }))
       .toEqual([{ id: expect.any(String), name: 'Sparekonto', balance: 5000 }]);
   });
 
@@ -59,7 +59,7 @@ describe('partitionSavings', () => {
   // A stored row from before the split: it may carry any of the savings-only
   // fields, which no longer exist on `FixedExpense`.
   const row = (over: Record<string, unknown>): FixedExpense =>
-    ({ id: 'x', name: 'x', amount: 100, ...over }) as FixedExpense;
+    ({ id: 'x', name: 'x', amount: 100, ...over });
 
   it('files a savings destination stored as a spending type under savings', () => {
     const { expenses, savings } = partitionSavings([

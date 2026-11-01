@@ -38,7 +38,7 @@ function fillSeries(monthKeys: string[], values: (number | null)[]): NetWorthPoi
   const anchorIdx = values.flatMap((v, i) => (v !== null ? [i] : []));
 
   return monthKeys.map((monthKey, i) => {
-    if (values[i] !== null) return { monthKey, value: values[i] as number, estimated: false };
+    if (values[i] !== null) return { monthKey, value: values[i], estimated: false };
 
     const prev = anchorIdx.filter(a => a < i).pop();
     const next = anchorIdx.find(a => a > i);

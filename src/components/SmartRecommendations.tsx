@@ -53,6 +53,7 @@ function EditablePill({ label, value, roleColor, formatCurrency, onCommit, hint,
 
   return (
     <div
+      role="presentation"
       className={`flex flex-col justify-center gap-1.5 rounded-[6px] border p-3 md:p-4 ${readOnly ? '' : 'cursor-pointer'} ${bg}`}
       onClick={() => { if (!editing && !readOnly) startEditing(); }}
     >
@@ -73,10 +74,19 @@ function EditablePill({ label, value, roleColor, formatCurrency, onCommit, hint,
           className="text-[13px] md:text-[15px] font-bold font-mono bg-transparent border-b outline-none w-full"
           style={{ color: roleColor, borderColor: roleColor }}
         />
-      ) : (
+      ) : readOnly ? (
         <span className="text-[13px] md:text-[15px] font-bold font-mono tracking-tight" style={{ color: roleColor }}>
           {formatCurrency(value)}
         </span>
+      ) : (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); startEditing(); }}
+          className="text-left text-[13px] md:text-[15px] font-bold font-mono tracking-tight"
+          style={{ color: roleColor }}
+        >
+          {formatCurrency(value)}
+        </button>
       )}
       {note && (
         <span className="text-[10px] text-[var(--text-3)] leading-tight">{note}</span>
@@ -315,6 +325,7 @@ export default function SmartRecommendations() {
               return (
                 <div
                   key={i}
+                  role="presentation"
                   className="relative flex items-center justify-center font-mono text-[10px] transition-opacity"
                   style={{
                     width: `${pct}%`,

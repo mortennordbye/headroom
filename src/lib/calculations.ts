@@ -539,13 +539,13 @@ export function calcNetWorthProjectionByBucket(
     // deduct the mortgage again as part of total debt.
     let wt = 0;
     if (wtOn) {
-      const mortgage = Math.max(0, wealthTax!.mortgageByYear[y] ?? 0);
+      const mortgage = Math.max(0, wealthTax.mortgageByYear[y] ?? 0);
       wt = calcWealthTax({
-        primaryHomeValue: primaryHomeWealthValueOfShare(Math.max(0, houseVal + mortgage), wealthTax!.ownShare ?? 1, wealthTax!.year),
+        primaryHomeValue: primaryHomeWealthValueOfShare(Math.max(0, houseVal + mortgage), wealthTax.ownShare ?? 1, wealthTax.year),
         shares: Math.max(0, stocks),
         otherAssets: Math.max(0, cash + crypto),
         debt: Math.max(0, mortgage + debtVal),
-      }, wealthTax!.year).tax;
+      }, wealthTax.year).tax;
     }
     result.push({
       year: currentYear + y,
