@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.14.0](https://github.com/mortennordbye/headroom/compare/v3.13.0...v3.14.0) (2026-11-01)
+
+
+### Features
+
+* sync allocation-made transfers to the edited split ([#333](https://github.com/mortennordbye/headroom/issues/333)) ([bd32332](https://github.com/mortennordbye/headroom/commit/bd3233202c20f6770610e0cad20012147f97a563))
+
+
+### Bug Fixes
+
+* charge interest for months a declined catch-up skipped ([#338](https://github.com/mortennordbye/headroom/issues/338)) ([6684d50](https://github.com/mortennordbye/headroom/commit/6684d506c49770a8ba64df28183b9a20d91391f3))
+
 ## [3.13.0](https://github.com/mortennordbye/headroom/compare/v3.12.1...v3.13.0) (2026-11-01)
 
 
