@@ -31,7 +31,8 @@ import {
 import { planPayoff, extraPaymentSavings, sumDebtByType, lendingDebtTotal, withLinkedPayments, type PayoffStrategy } from '../src/lib/debt';
 import { essentialMonthlyExpenses, fixedExpenseTotalsByType } from '../src/lib/fixedExpenseTotals';
 import { monthlyCashflow } from '../src/lib/monthlyCashflow';
-import { savingsRateStatus, savingsContributionsForMonth } from '../src/lib/savingsRate';
+import { savingsRateStatus } from '../src/lib/savingsRate';
+import { cashflowSavingsForMonth } from '../src/lib/savingsMatch';
 import { spendByCategory, categoryMoM, budgetProgress } from '../src/lib/categoryStats';
 import { topSpendInsight } from '../src/lib/insights';
 import { detectRecurring } from '../src/lib/recurring';
@@ -392,7 +393,7 @@ export function budgetSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
   // Cashflow, as CashflowChart: transfers netted out, budgeted bills reconciled
   // against their imported payments, each month against its own fixed expenses.
   // Each month's own savings are reported apart as `saved`, not as spending.
-  const { fixedFor, fixedTotalFor, savedFor } = perMonthFixed(blob, osloMonthKey());
+  const { fixedFor, fixedTotalFor, savings } = perMonthFixed(blob, osloMonthKey());
   const rows = monthlyCashflow(
     months,
     nonTransferTransactions(blob),
@@ -401,7 +402,7 @@ export function budgetSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
     fixedTotalFor,
     seasonal,
     fixedFor,
-    savedFor,
+    savings,
   );
   const health = savingsRateHealth(blob, monthKey, v);
   return {
@@ -426,8 +427,8 @@ export function budgetSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
 /** Per-month fixed-expense resolvers, as CashflowChart and YearReviewPage build them:
  *  a past month's recorded list when it has one, else the live list, and that
  *  month's own savings (resolved against the month's effective income).
- *  `totalFor` is fixed plus savings (YearReviewPage); `fixedTotalFor` and
- *  `savedFor` keep them apart (CashflowChart). */
+ *  `savings` carries each month's savings and the netted transfer rows, so a
+ *  one-legged savings transfer is matched the same way in both. */
 function perMonthFixed(blob: ExportPayload, nowKey: string) {
   const snapshots = blob.balanceSnapshots ?? {};
   const live = blob.fixedExpenses ?? [];
@@ -440,10 +441,13 @@ function perMonthFixed(blob: ExportPayload, nowKey: string) {
   };
   const fixedFor = (month: string) => fixedExpensesForMonth(snapshots, live, month, nowKey);
   const fixedTotalFor = (month: string) => fixedFor(month).reduce((sum, item) => sum + item.amount, 0);
-  const savedFor = (month: string) =>
-    savingsContributionsForMonth(savingsData, month, nowKey, effectiveIncome(blob, month));
-  const totalFor = (month: string) => fixedTotalFor(month) + savedFor(month);
-  return { fixedFor, fixedTotalFor, savedFor, totalFor };
+  const txs = blob.dailyTransactions ?? [];
+  const excluded = excludedTransferIds(txs, blob.transferRules ?? []);
+  const savings = {
+    forMonth: (month: string) => cashflowSavingsForMonth(savingsData, month, nowKey, effectiveIncome(blob, month)),
+    netted: txs.filter((tx) => excluded.has(tx.id)),
+  };
+  return { fixedFor, fixedTotalFor, savings };
 }
 
 /** Transactions with internal (own-account) transfers netted out, mirroring the
@@ -497,12 +501,13 @@ export function yearReviewSummary(
     incomeByMonth[m] = blob.monthlyIncomes?.[m] ?? netMonthlyFor(blob, m);
   }
 
-  const { fixedFor, totalFor } = perMonthFixed(blob, monthKey);
+  const { fixedFor, fixedTotalFor, savings } = perMonthFixed(blob, monthKey);
   const review = yearReview(targetYear, {
     transactions: txs,
     incomeByMonth,
-    totalFixedExpenses: totalFor,
+    totalFixedExpenses: fixedTotalFor,
     fixedExpenses: fixedFor,
+    savings,
     payslips,
     snapshots,
     netWorthHistory: history,
