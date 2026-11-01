@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.10.8](https://github.com/mortennordbye/headroom/compare/v3.10.7...v3.10.8) (2026-11-01)
+
+
+### Bug Fixes
+
+* close mortgage edge cases from old or hand-made data ([#309](https://github.com/mortennordbye/headroom/issues/309)) ([c507a39](https://github.com/mortennordbye/headroom/commit/c507a392a726f6124052a3ea53232ec3e3992215))
+* measure last month's spend against that month's fixed expenses ([#306](https://github.com/mortennordbye/headroom/issues/306)) ([5d7ebb2](https://github.com/mortennordbye/headroom/commit/5d7ebb23257645e485916b7c80d5c8a07c83b67a))
+* reconcile each cashflow chart month against its own fixed expenses ([#310](https://github.com/mortennordbye/headroom/issues/310)) ([9e66679](https://github.com/mortennordbye/headroom/commit/9e666794bab3f9082473c3291b916fa281d326ae))
+* serve the SPA fallback when the install path has a dot-directory ([#308](https://github.com/mortennordbye/headroom/issues/308)) ([5e9582d](https://github.com/mortennordbye/headroom/commit/5e9582de85c81b23bb631f83b44ced3f1b440e7b))
+
 ## [3.10.7](https://github.com/mortennordbye/headroom/compare/v3.10.6...v3.10.7) (2026-11-01)
 
 
