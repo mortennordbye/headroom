@@ -178,6 +178,9 @@ const AssetPage: React.FC = () => {
       { key: 'crypto', label: t.bucketCrypto, color: 'var(--rust)' },
       { key: 'cash', label: t.bucketCash, color: 'var(--slate)' },
       { key: 'house', label: t.bucketHouse, color: 'var(--teal)' },
+      // Not buckets: the net-worth line (assets less all debt) and the band around it.
+      { key: 'total', label: t.assetPage.projectionTotal, color: 'var(--text-1)' },
+      { key: 'band', label: t.forecastPage.band, color: 'var(--accent)', swatchOpacity: 0.25 },
     ];
 
     // `allowNegative` is for unrealized gain/loss fields: a loss is a legitimate
@@ -269,8 +272,8 @@ const AssetPage: React.FC = () => {
     () => calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, projMortgageTerm, 15),
     [mortgage.balance, mortgage.ratePct, projMortgageTerm],
   );
-  // Stacked buckets plus a bear/bull band around the total (same return spread
-  // as the Forecast band, rerun through this chart's own model).
+  // Stacked buckets plus a bear/bull band around the total (the Forecast's
+  // ±3 pp spread, rerun through this chart's own model per leg).
   const projectionData = useMemo(
     () => {
       const rates = { stocks: projGrowthReturn, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: projHouseGrowth };
@@ -827,9 +830,14 @@ const AssetPage: React.FC = () => {
               <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('cash')} type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke={CHART.slate} fill="url(#cashGrad)" />
               <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('crypto')} type="monotone" dataKey="crypto" stackId="1" name={t.bucketCrypto} stroke={CHART.rust} fill="url(#cryptoGrad)" />
               <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('stocks')} type="monotone" dataKey="stocks" stackId="1" name={t.bucketStocks} stroke={CHART.forestLight} fill="url(#stocksGrad)" />
-              {/* Uncertainty band around the total (bear to bull), on top of the stack.
-                  It brackets the full total, so it hides while any bucket is toggled off. */}
-              <Area hide={hiddenBuckets.size > 0} type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={false} activeDot={false} legendType="none" />
+              {/* The plotted total is net of all debt, so it can sit below the stack top
+                  when there is consumer debt. The band wraps this line, not the stack:
+                  a light fill plus dashed bear/bull edges so the lower half stays
+                  readable over the near-opaque stack. */}
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={false} activeDot={false} legendType="none" />
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey={(p: { band: [number, number] }) => p.band[0]} stroke="var(--accent)" strokeOpacity={0.6} strokeWidth={1.25} strokeDasharray="4 3" fill="none" isAnimationActive={false} activeDot={false} legendType="none" tooltipType="none" />
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey={(p: { band: [number, number] }) => p.band[1]} stroke="var(--accent)" strokeOpacity={0.6} strokeWidth={1.25} strokeDasharray="4 3" fill="none" isAnimationActive={false} activeDot={false} legendType="none" tooltipType="none" />
+              <Area hide={hiddenBuckets.has('total')} type="monotone" dataKey="total" name={t.assetPage.projectionTotal} stroke="var(--text-1)" strokeWidth={1.75} fill="none" isAnimationActive={false} legendType="none" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -846,12 +854,11 @@ const AssetPage: React.FC = () => {
                 className="flex items-center gap-1.5 transition-opacity hover:opacity-100"
                 style={{ opacity: off ? 0.4 : 1 }}
               >
-                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: b.color }} />
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: b.color, opacity: b.swatchOpacity }} />
                 <span style={off ? { textDecoration: 'line-through' } : undefined}>{b.label}</span>
               </button>
             );
           })}
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)', opacity: 0.25 }} />{t.forecastPage.band}</div>
         </div>
 
         <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>

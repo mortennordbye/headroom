@@ -76,3 +76,35 @@ describe('withTotalBand', () => {
     expect(out[0].band).toEqual([0, 0]);
   });
 });
+
+describe('withTotalBand with debt', () => {
+  const rates = { stocks: 6, crypto: 10, cash: 3, house: 2 };
+
+  it('wraps the plotted total (net of debt), not the stack of assets', () => {
+    const start = { stocks: 50000, crypto: 0, cash: 30000, house: 400000 };
+    const debt = Array.from({ length: 11 }, (_, y) => Math.max(0, 400000 - y * 40000));
+    const run = (r: typeof rates) => calcNetWorthProjectionByBucket(start, 0, r, 10, undefined, debt);
+    const out = withTotalBand(run(rates), rates, BAND_DELTA_PP, run);
+    out.forEach(p => {
+      expect(p.band[0]).toBeLessThanOrEqual(p.total);
+      expect(p.band[1]).toBeGreaterThanOrEqual(p.total);
+    });
+    // Year 1: the stack top (assets) sits well above the band, which hugs the total.
+    const y1 = out[1];
+    expect(y1.stocks + y1.crypto + y1.cash + y1.house).toBeGreaterThan(y1.band[1]);
+  });
+
+  it('contains a negative total when debt exceeds assets', () => {
+    const start = { stocks: 20000, crypto: 0, cash: 10000, house: 0 };
+    const debt = Array(6).fill(300000);
+    const run = (r: typeof rates) => calcNetWorthProjectionByBucket(start, 0, r, 5, undefined, debt);
+    const out = withTotalBand(run(rates), rates, BAND_DELTA_PP, run);
+    out.forEach(p => {
+      expect(p.total).toBeLessThan(0);
+      expect(p.band[0]).toBeLessThanOrEqual(p.total);
+      expect(p.band[1]).toBeGreaterThanOrEqual(p.total);
+      expect(p.band.every(Number.isFinite)).toBe(true);
+    });
+    expect(out[5].band[0]).toBeLessThan(out[5].band[1]);
+  });
+});
