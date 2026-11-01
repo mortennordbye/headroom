@@ -727,8 +727,8 @@ const AssetPage: React.FC = () => {
             <SectionLabel>{t.growthProjection}</SectionLabel>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-mono flex-wrap" style={{ color: 'var(--text-2)' }}>
-            <RateChip label={t.bucketStocks} value={growthReturnRate} onClick={() => editRate(t.settings.growthReturnRate, growthReturnRate, setGrowthReturnRate)} />
-            <RateChip label={t.bucketHouse} value={houseGrowthRate} onClick={() => editRate(t.settings.houseGrowthRate, houseGrowthRate, setHouseGrowthRate)} />
+            <RateChip label={t.bucketStocks} value={projGrowthReturn} onClick={() => editRate(t.settings.growthReturnRate, growthReturnRate, setGrowthReturnRate)} />
+            <RateChip label={t.bucketHouse} value={projHouseGrowth} onClick={() => editRate(t.settings.houseGrowthRate, houseGrowthRate, setHouseGrowthRate)} />
             <RateChip label={t.bucketCash} value={cashGrowthRate} onClick={() => editRate(t.settings.cashGrowthRate, cashGrowthRate, setCashGrowthRate)} />
             <RateChip label={t.bucketCrypto} value={cryptoGrowthRate} onClick={() => editRate(t.settings.cryptoGrowthRate, cryptoGrowthRate, setCryptoGrowthRate)} />
             <RestoreDefaultsButton label={t.settings.restoreDefaults} onRestore={restoreGrowthRateDefaults} />
