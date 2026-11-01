@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.13.0](https://github.com/mortennordbye/headroom/compare/v3.12.1...v3.13.0) (2026-11-01)
+
+
+### Features
+
+* count BSU lifetime room against total deposited ([#334](https://github.com/mortennordbye/headroom/issues/334)) ([ddad8e9](https://github.com/mortennordbye/headroom/commit/ddad8e90eed8d38b9b39017b08eb0ca3b5b73fac))
+
+
+### Bug Fixes
+
+* let the history grid open a month's editor ([#335](https://github.com/mortennordbye/headroom/issues/335)) ([daea8ae](https://github.com/mortennordbye/headroom/commit/daea8aee2c6d9028ef23e6b5b7792b9d6e91b1f3))
+* read an eb-&lt;8hex&gt;- id as connection-prefixed only for a known connection ([#337](https://github.com/mortennordbye/headroom/issues/337)) ([2395807](https://github.com/mortennordbye/headroom/commit/2395807d95aa2beabd3501fc325756bfc155c357))
+* use Oslo time for the current month on the server and MCP, and decouple the Assets saving plan ([#332](https://github.com/mortennordbye/headroom/issues/332)) ([92480e4](https://github.com/mortennordbye/headroom/commit/92480e49b58aa8abff6c075ee3217c76ec50df72))
+
 ## [3.12.1](https://github.com/mortennordbye/headroom/compare/v3.12.0...v3.12.1) (2026-11-01)
 
 
