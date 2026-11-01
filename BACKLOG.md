@@ -116,13 +116,6 @@ in git and the CHANGELOG, not here.
 
 ## Housing
 
-- **Stamps that pay nothing still count as interest-charged.** Creating a paydown expense, resuming
-  it from a pause, or changing its destination sets `lastPostedMonth` to the current month without
-  paying it, so another expense's catch-up on the same loan pays that month as principal only.
-  **Why deferred**: out of scope for the declined catch-up fix (#338). **What would unblock**: record
-  those stamped-but-unpaid months in `uncoveredMonths` (as 0) too. **Where**: `src/components/ExpenseDialog.tsx`,
-  `src/components/SavingsAllocationPanel.tsx`, `src/lib/allocationSync.ts`, `computeAutomationPostings`
-  in `src/lib/automation.ts`.
 - **Catch-up order still moves a loan by a few kroner.** With two expenses on one loan, the runner
   amortizes one expense over all its months before the next, so whose principal lands first changes
   the interest that compounds. Answering the catch-up prompts in the other order gives a slightly

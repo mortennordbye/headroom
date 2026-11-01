@@ -82,6 +82,23 @@ describe('allocationSyncPlan', () => {
   });
 });
 
+describe('buildActivation paydowns', () => {
+  it("records the months a new paydown's stamp covers but another expense on the loan still owes", () => {
+    const rows = [row({ id: 'm', amount: 4000, destinationKind: 'mortgage' })];
+    const existing: FixedExpense[] = [
+      { id: 'main', name: 'Lån', amount: 10_000, type: 'fixed', destinationKind: 'mortgage', lastPostedMonth: '2026-09' },
+    ];
+    const { expenses } = buildActivation(rows, sz(rows, 0), '2026-11', () => 'Extra', () => 'new', existing);
+    expect(expenses[0]).toMatchObject({ lastPostedMonth: '2026-11', uncoveredMonths: { '2026-10': 0, '2026-11': 0 } });
+  });
+
+  it('records nothing when no other expense pays that loan', () => {
+    const rows = [row({ id: 'm', amount: 4000, destinationKind: 'mortgage' })];
+    const { expenses } = buildActivation(rows, sz(rows, 0), '2026-11', () => 'Extra', () => 'new', []);
+    expect(expenses[0]).not.toHaveProperty('uncoveredMonths');
+  });
+});
+
 describe('allocationSyncPlan over-allocation', () => {
   it('offers nothing when the plan is over-allocated', () => {
     const rows = [row({ id: 'a', amount: 0, destinationKind: 'portfolio' })];
@@ -139,7 +156,7 @@ describe('allocation activate/sync properties', () => {
       ...s.fixed.filter(e => e.destinationKind).map(e => destinationKey({ destinationKind: e.destinationKind!, debtId: e.debtId })),
     ]);
     const creatable = plan.rows.filter(r => isCreatableRow(r, [], []) && !committed.has(destinationKey(r)));
-    const made = buildActivation(creatable, size(s, new Set(creatable.map(r => r.id))), '2026-11', () => 'x', newId);
+    const made = buildActivation(creatable, size(s, new Set(creatable.map(r => r.id))), '2026-11', () => 'x', newId, s.fixed);
     return { ...s, savings: [...s.savings, ...made.savings], fixed: [...s.fixed, ...made.expenses] };
   }
   // Mirrors the panel's syncAmounts.

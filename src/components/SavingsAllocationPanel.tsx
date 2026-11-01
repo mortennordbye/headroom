@@ -179,6 +179,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
       currentMonthKey(),
       labelFor,
       () => crypto.randomUUID(),
+      fixedExpenses,
     );
     if (made.savings.length) setSavings([...savings, ...made.savings]);
     if (made.expenses.length) setFixedExpenses([...fixedExpenses, ...made.expenses]);
