@@ -14,9 +14,10 @@ import { join } from 'node:path';
 import type { ExportPayload } from '../src/context/FinanceContext';
 import { fullFixture, topLevelKeys } from './fixture';
 import { setCategoryBudget, deleteTransaction } from './mutations';
+import { freePort } from './freePort';
 
-const PORT = 3987;
-const BASE = `http://localhost:${PORT}`;
+let PORT: number;
+let BASE: string;
 
 let proc: ChildProcess;
 let client: typeof import('./client');
@@ -54,6 +55,8 @@ async function getBlob(): Promise<ExportPayload> {
 }
 
 beforeAll(async () => {
+  PORT = await freePort();
+  BASE = `http://localhost:${PORT}`;
   process.env.HEADROOM_URL = BASE;
   const dir = mkdtempSync(join(tmpdir(), 'hr-mcp-'));
   proc = spawn('node', ['server/index.js'], {
