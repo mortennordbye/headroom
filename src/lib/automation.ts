@@ -62,6 +62,10 @@ export interface AutomationRule {
    *  skipped, or what it paid toward a month's interest it couldn't cover.
    *  Absent = it covered every month its stamp covers. */
   uncoveredMonths?: Record<string, number>;
+  /** A rule that never posts: a paused paydown expense, or what the expenses
+   *  that left a loan had paid (`departedPaydowns`). Its stamp still says which
+   *  months' interest it charged, so no other rule charges them again. */
+  paused?: boolean;
 }
 
 /** Live balances/rates the runner needs to resolve absolute new values. */
@@ -148,7 +152,15 @@ export function applyAmortization(
  * resumes cleanly if the target reappears. `others` are rules not posted in this
  * call whose stamps still count: a month another rule already paid into the
  * same loan has had its interest charged, unless that rule lists the month in
- * `uncoveredMonths` (a declined catch-up, or a payment below the interest).
+ * `uncoveredMonths` (a declined catch-up, or a payment below the interest). A
+ * `paused` rule, in either list, never posts and counts only through its stamp.
+ *
+ * Each loan steps month by month across every rule paying it in this call: a
+ * month's interest is charged once, then each rule's payment for that month,
+ * so the order the rules come in never changes the balance. A month an earlier
+ * call already charged was charged on a balance without this call's payments
+ * from the months before it, so the interest on those is given back. That keeps
+ * the balance the same whichever catch-up prompt is answered first.
  */
 export function computeAutomationPostings(
   rules: AutomationRule[],
@@ -157,28 +169,23 @@ export function computeAutomationPostings(
   capMonths?: number,
   others: AutomationRule[] = [],
 ): ResolvedPosting[] {
-  // Working copies so two expenses pointed at the same target stack rather than
-  // clobber (each posting's newBalance already includes the earlier ones).
+  // Working copies so two rules pointed at the same savings target stack rather
+  // than clobber (each posting's newBalance already includes the earlier ones).
   const savings = { ...state.savings };
   const scalars = { ...state.scalars };
-  const debts: Record<string, { balance: number; rate: number }> =
-    Object.fromEntries(Object.entries(state.debts).map(([id, d]) => [id, { ...d }]));
-  let mortgage = state.mortgage;
-  // Per loan ('mortgage' or a debt id), what this call has paid of each month's
-  // interest: Infinity once a payment covered it, so the next is all principal.
-  const paidInCall: Record<string, Record<string, number>> = {};
   const loanOf = (r: AutomationRule) =>
     r.targetKind === 'mortgage' ? 'mortgage' : r.targetKind === 'debt' ? `debt:${r.debtId}` : undefined;
+  const participants = [...rules, ...others];
   // Every rule on each loan, as stamped before this call.
   const loanRules: Record<string, AutomationRule[]> = {};
-  for (const r of [...rules, ...others]) {
+  for (const r of participants) {
     const loan = loanOf(r);
     if (loan) (loanRules[loan] ??= []).push(r);
   }
-  // How much of a month's interest is already paid: all of it once a rule whose
-  // stamp covers the month covered it, else what the rules that fell short put in.
-  const interestPaid = (loan: string, m: string) => {
-    let paid = paidInCall[loan]?.[m] ?? 0;
+  // How much of a month's interest earlier calls paid: all of it once a rule
+  // whose stamp covers the month covered it, else what the rules that fell short put in.
+  const paidBefore = (loan: string, m: string) => {
+    let paid = 0;
     for (const r of loanRules[loan] ?? []) {
       if (r.lastPostedMonth === undefined || m > r.lastPostedMonth) continue;
       const part = r.uncoveredMonths?.[m];
@@ -187,11 +194,6 @@ export function computeAutomationPostings(
     }
     return paid;
   };
-  // The largest payment to a loan goes first, so a small extra payment is never
-  // judged alone against the month's whole interest. Stable, so every other
-  // rule keeps its order.
-  const loanPayment = (r: AutomationRule) => (loanOf(r) ? r.amount : 0);
-  const ordered = [...rules].sort((a, b) => loanPayment(b) - loanPayment(a));
 
   const monthsOf = (rule: AutomationRule) => {
     const fromMonth = rule.lastPostedMonth ? addMonthsKey(rule.lastPostedMonth, 1) : rule.startMonth;
@@ -203,41 +205,46 @@ export function computeAutomationPostings(
   };
   const isMyShare = (r: AutomationRule) => r.targetKind === 'mortgage' && r.mortgagePaymentScope === 'myShare';
   // A month a 'myShare' rule skips because the user carried none of the loan:
-  // the co-owners paid its interest. Once that rule is stamped past the month
-  // its stamp counts it as charged (it is never in uncoveredMonths), so it
-  // counts as charged for every other rule now too, whether the 'myShare' rule
-  // posts in this call, in a later prompt (`others`), or was capped. Otherwise
-  // the order the prompts are answered in would change the balance.
-  for (const r of [...rules, ...others].filter(isMyShare)) {
-    for (const m of monthsOf(r).dueMonths) if (!(debtShareAt(state, m) > 0)) (paidInCall.mortgage ??= {})[m] = Infinity;
-  }
+  // the co-owners paid its interest, so no rule charges it, whether the
+  // 'myShare' rule posts in this call, in a later prompt (`others`), was capped
+  // or is already stamped past it. Otherwise the order the prompts are answered
+  // in would change the balance. A paused 'myShare' rule counts only up to its stamp.
+  const coOwnersPaid = (m: string) => !(debtShareAt(state, m) > 0) && participants.some(r => isMyShare(r)
+    && ((r.lastPostedMonth !== undefined && m <= r.lastPostedMonth) || (!r.paused && monthsOf(r).dueMonths.includes(m))));
 
-  const out: ResolvedPosting[] = [];
+  // The largest payment to a loan comes first. Stable, so every other rule
+  // keeps its order (two rules on one savings target stack in input order).
+  const loanPayment = (r: AutomationRule) => (loanOf(r) ? r.amount : 0);
+  const ordered = rules.filter(r => !r.paused).sort((a, b) => loanPayment(b) - loanPayment(a));
+  const resolved = new Map<AutomationRule, ResolvedPosting>();
+  const post = (rule: AutomationRule, monthsDue: number, newBalance: number, extra: Partial<ResolvedPosting> = {}) =>
+    resolved.set(rule, {
+      rule,
+      monthsDue,
+      targetKind: rule.targetKind,
+      savingsAccountId: rule.savingsAccountId,
+      debtId: rule.debtId,
+      newBalance,
+      newLastPostedMonth: currentMonth,
+      infeasible: false,
+      ...extra,
+    });
+
+  // Balance-growing targets post one rule at a time; loan rules are gathered per loan.
+  const byLoan = new Map<string, AutomationRule[]>();
   for (const rule of ordered) {
-    const { dueMonths, due, monthsDue, appliedMonths } = monthsOf(rule);
+    const { due, monthsDue, appliedMonths } = monthsOf(rule);
     if (due <= 0) continue;
-    // What a balance-growing target gains over them, each at its own month's amount.
+    const loan = loanOf(rule);
+    if (loan) {
+      if (rule.targetKind === 'mortgage' && state.housingMode === 'first_buyer') continue; // no mortgage exists in this mode
+      if (rule.targetKind === 'debt' && (!rule.debtId || !(rule.debtId in state.debts))) continue;
+      byLoan.set(loan, [...(byLoan.get(loan) ?? []), rule]);
+      continue;
+    }
+    // What the target gains over them, each at its own month's amount.
     const added = appliedMonths.reduce((sum, m) => sum + (rule.amountByMonth?.[m] ?? rule.amount), 0);
-    // Months whose interest this payment couldn't cover → what it put toward it.
-    const short: Record<string, number> = {};
-    // `months` are the months this payment reaches the loan (a 'myShare' rule
-    // leaves out months the user carried none of it), with `payment` one amount
-    // or one per month; indices below are into `months`.
-    const amortize = (loan: string, balance: number, rate: number, payment: number | number[],
-      months: string[] = appliedMonths) => {
-      const paid = (paidInCall[loan] ??= {});
-      const res = applyAmortization(balance, rate, payment, months.length, months.map(m => interestPaid(loan, m)));
-      months.forEach((m, i) => {
-        const p = typeof payment === 'number' ? payment : payment[i];
-        if (res.shortMonths.includes(i)) { short[m] = p; paid[m] = (paid[m] ?? 0) + p; }
-        else paid[m] = Infinity;
-      });
-      return res;
-    };
-
     let newBalance: number;
-    let infeasible = false;
-    let noChange = false;
     if (rule.targetKind === 'savingsAccount') {
       if (!rule.savingsAccountId || !(rule.savingsAccountId in savings)) continue;
       newBalance = Math.round(savings[rule.savingsAccountId] + added);
@@ -247,66 +254,75 @@ export function computeAutomationPostings(
       // like a savings account, no id needed.
       newBalance = Math.round(scalars[rule.targetKind] + added);
       scalars[rule.targetKind] = newBalance;
-    } else if (rule.targetKind === 'mortgage') {
-      if (state.housingMode === 'first_buyer') continue; // no mortgage exists in this mode
+    } else continue;
+    post(rule, monthsDue, newBalance);
+  }
+
+  // Each loan, month by month across the rules paying it.
+  for (const [loan, due] of byLoan) {
+    const debt = loan === 'mortgage' ? undefined : state.debts[due[0].debtId!];
+    const balance = debt ? debt.balance : state.mortgage;
+    // Nothing owed on a balance at or below 0 (or a broken one), as in applyAmortization.
+    const start = balance > 0 ? balance : 0;
+    const ratePct = debt ? debt.rate : state.mortgageRate;
+    const plans = due.map(rule => {
       // A 'myShare' amount is the user's part of the joint instalment: the loan
       // receives the whole instalment, at the share in force each month. A
       // month the user carries none of the loan moves nothing.
       const myShare = isMyShare(rule);
-      const paying = myShare ? appliedMonths.filter(m => debtShareAt(state, m) > 0) : appliedMonths;
-      if (paying.length === 0) {
-        // None of this payment reaches the loan. Stamp the months anyway, or
-        // they would pile up into one catch-up later.
-        newBalance = Math.round(mortgage);
-        noChange = true;
-      } else {
-        const payment = myShare ? paying.map(m => rule.amount / debtShareAt(state, m)) : rule.amount;
-        const res = amortize(loanOf(rule)!, mortgage, state.mortgageRate, payment, paying);
-        newBalance = Math.round(res.balance);
-        infeasible = res.infeasible;
-        mortgage = newBalance;
-      }
-    } else {
-      if (!rule.debtId || !(rule.debtId in debts)) continue;
-      const d = debts[rule.debtId];
-      const res = amortize(loanOf(rule)!, d.balance, d.rate, rule.amount);
-      newBalance = Math.round(res.balance);
-      infeasible = res.infeasible;
-      d.balance = newBalance;
-    }
-
-    // A capped loan catch-up skips its earliest months, and a short payment
-    // leaves part of a month's interest. Remember the ones another rule on the
-    // loan may still pay, so that payment charges what is left. Months every
-    // other rule's stamp has passed are dropped.
-    const loan = loanOf(rule);
-    const monthsShort = Object.keys(short).length;
-    let uncoveredMonths: Record<string, number> | undefined;
-    if (loan && (monthsDue < due || monthsShort > 0)) {
-      const otherNeeds = (m: string) => (loanRules[loan] ?? []).some(r =>
-        r.id !== rule.id && r.lastPostedMonth !== undefined && r.lastPostedMonth < m);
-      // A 'myShare' rule's months at a 0 % share are not uncovered: the co-owners paid them.
-      const skipped = Object.fromEntries(dueMonths.slice(0, due - monthsDue)
-        .filter(m => !isMyShare(rule) || debtShareAt(state, m) > 0).map(m => [m, 0]));
-      uncoveredMonths = Object.fromEntries(Object.entries({ ...rule.uncoveredMonths, ...skipped, ...short })
-        .filter(([m]) => otherNeeds(m)));
-    }
-
-    out.push({
-      rule,
-      monthsDue,
-      targetKind: rule.targetKind,
-      savingsAccountId: rule.savingsAccountId,
-      debtId: rule.debtId,
-      newBalance,
-      newLastPostedMonth: currentMonth,
-      ...(uncoveredMonths ? { uncoveredMonths } : {}),
-      infeasible,
-      ...(monthsShort > 0 ? { monthsShort } : {}),
-      ...(noChange ? { noChange } : {}),
+      const months = monthsOf(rule);
+      const paying = new Set(myShare ? months.appliedMonths.filter(m => debtShareAt(state, m) > 0) : months.appliedMonths);
+      const pay = (m: string) => (myShare ? rule.amount / debtShareAt(state, m) : rule.amount);
+      // Months whose interest this payment couldn't cover → what it put toward it.
+      const short: Record<string, number> = {};
+      return { rule, ...months, paying, pay, short };
     });
+    let bal = start;
+    for (const m of [...new Set(plans.flatMap(p => [...p.paying]))].sort()) {
+      if (!(bal > 0)) break;
+      const free = loan === 'mortgage' && coOwnersPaid(m);
+      let paid = free ? Infinity : paidBefore(loan, m);
+      // Charged by an earlier call, on a balance this call's payments had not
+      // yet reduced: give back the interest on what they moved.
+      if (!free && paid === Infinity) bal = Math.max(0, bal - (start - bal) * ratePct / 1200);
+      // The largest payment first, so a small extra payment is never judged
+      // alone against the month's whole interest.
+      const payers = plans.filter(p => p.paying.has(m)).sort((a, b) => b.pay(m) - a.pay(m));
+      for (const p of payers) {
+        const amount = p.pay(m);
+        const res = applyAmortization(bal, ratePct, amount, 1, [paid]);
+        if (res.infeasible) { p.short[m] = amount; paid += amount; } else { bal = res.balance; paid = Infinity; }
+      }
+    }
+    const newBalance = Math.round(bal);
+
+    for (const { rule, dueMonths, due: dueCount, monthsDue, paying, short } of plans) {
+      // A capped loan catch-up skips its earliest months, and a short payment
+      // leaves part of a month's interest. Remember the ones another rule on the
+      // loan may still pay, so that payment charges what is left. Months every
+      // other active rule's stamp has passed are dropped.
+      const monthsShort = Object.keys(short).length;
+      let uncoveredMonths: Record<string, number> | undefined;
+      if (monthsDue < dueCount || monthsShort > 0) {
+        const otherNeeds = (m: string) => (loanRules[loan] ?? []).some(r =>
+          r.id !== rule.id && !r.paused && r.lastPostedMonth !== undefined && r.lastPostedMonth < m);
+        // A 'myShare' rule's months at a 0 % share are not uncovered: the co-owners paid them.
+        const skipped = Object.fromEntries(dueMonths.slice(0, dueCount - monthsDue)
+          .filter(m => !isMyShare(rule) || debtShareAt(state, m) > 0).map(m => [m, 0]));
+        uncoveredMonths = Object.fromEntries(Object.entries({ ...rule.uncoveredMonths, ...skipped, ...short })
+          .filter(([m]) => otherNeeds(m)));
+      }
+      // A payment that reaches the loan in none of its months still stamps
+      // them, or they would pile up into one catch-up later.
+      post(rule, monthsDue, paying.size ? newBalance : Math.round(balance), {
+        ...(uncoveredMonths ? { uncoveredMonths } : {}),
+        infeasible: monthsShort > 0,
+        ...(monthsShort > 0 ? { monthsShort } : {}),
+        ...(paying.size === 0 ? { noChange: true } : {}),
+      });
+    }
   }
-  return out;
+  return ordered.filter(r => resolved.has(r)).map(r => resolved.get(r)!);
 }
 
 /** The fixed-expense fields `monthlyPaydownPrincipal` reads. */
@@ -320,6 +336,10 @@ export interface PaydownExpense {
 
 type StampedExpense = Pick<FixedExpense,
   'id' | 'destinationKind' | 'debtId' | 'automationPaused' | 'lastPostedMonth' | 'uncoveredMonths'>;
+
+/** The loan a paydown expense pays ('mortgage' or 'debt:<id>'), as the runner keys it. */
+const expenseLoan = (e: Pick<FixedExpense, 'destinationKind' | 'debtId'>) =>
+  e.destinationKind === 'mortgage' ? 'mortgage' : e.destinationKind === 'debt' ? `debt:${e.debtId}` : undefined;
 
 /**
  * The `uncoveredMonths` for a paydown expense whose stamp moves to `month`
@@ -337,15 +357,13 @@ export function unpaidStampMonths(
   month: string,
   expenses: readonly StampedExpense[],
 ): Record<string, number> | undefined {
-  const loanOf = (e: Pick<FixedExpense, 'destinationKind' | 'debtId'>) =>
-    e.destinationKind === 'mortgage' ? 'mortgage' : e.destinationKind === 'debt' ? `debt:${e.debtId}` : undefined;
-  const loan = loanOf(next);
+  const loan = expenseLoan(next);
   if (!loan) return undefined;
-  const sameLoan = prev !== undefined && loanOf(prev) === loan;
+  const sameLoan = prev !== undefined && expenseLoan(prev) === loan;
   // Up to the old stamp on the same loan, the old record still says what was paid.
   const paidThrough = sameLoan ? prev.lastPostedMonth : undefined;
   const stamps = expenses
-    .filter(e => e.id !== prev?.id && !e.automationPaused && loanOf(e) === loan && e.lastPostedMonth !== undefined)
+    .filter(e => e.id !== prev?.id && !e.automationPaused && expenseLoan(e) === loan && e.lastPostedMonth !== undefined)
     .map(e => e.lastPostedMonth!);
   if (!stamps.length) return undefined;
   const earliest = stamps.reduce((a, b) => (b < a ? b : a));
@@ -354,6 +372,94 @@ export function unpaidStampMonths(
   const kept = Object.entries({ ...(sameLoan ? prev.uncoveredMonths : undefined), ...unpaid })
     .filter(([m]) => stamps.some(s => s < m));
   return kept.length ? Object.fromEntries(kept) : undefined;
+}
+
+/**
+ * The stamp a paydown expense carries after the edit dialog saves it. A new
+ * destination, or a resume from a pause, restamps it to `month` without paying
+ * anything (so the first move is next month and paused months are never
+ * back-posted), recording the months it newly covers as unpaid
+ * (`unpaidStampMonths`). An unchanged destination keeps the stamp and its
+ * record; no destination clears both.
+ */
+export function paydownStampOnSave(
+  prev: StampedExpense | undefined,
+  next: Pick<FixedExpense, 'destinationKind' | 'debtId' | 'automationPaused'>,
+  month: string,
+  expenses: readonly StampedExpense[],
+): Pick<FixedExpense, 'lastPostedMonth' | 'uncoveredMonths'> {
+  if (!next.destinationKind) return { lastPostedMonth: undefined, uncoveredMonths: undefined };
+  const sameDest = prev?.destinationKind === next.destinationKind && prev?.debtId === next.debtId;
+  const resumed = !!prev?.automationPaused && !next.automationPaused;
+  if (sameDest && !resumed) return { lastPostedMonth: prev?.lastPostedMonth, uncoveredMonths: prev?.uncoveredMonths };
+  return { lastPostedMonth: month, uncoveredMonths: unpaidStampMonths(prev, next, month, expenses) };
+}
+
+/** What paydown expenses that left a loan had paid on it: their merged stamp. */
+export interface PaydownStamp {
+  lastPostedMonth: string;
+  /** As on a fixed expense: months up to the stamp whose interest was not covered. */
+  uncoveredMonths?: Record<string, number>;
+}
+
+/**
+ * Two stamps on one loan as one: a month counts as charged when either
+ * charged it; otherwise what each put toward its interest adds up.
+ */
+export function mergePaydownStamps(a: PaydownStamp | undefined, b: PaydownStamp): PaydownStamp {
+  if (!a) return b;
+  const [later, earlier] = a.lastPostedMonth >= b.lastPostedMonth ? [a, b] : [b, a];
+  const uncovered = Object.entries(later.uncoveredMonths ?? {}).flatMap(([m, kr]): [string, number][] => {
+    if (m > earlier.lastPostedMonth) return [[m, kr]];
+    const part = earlier.uncoveredMonths?.[m];
+    return part === undefined ? [] : [[m, kr + part]];
+  });
+  return { lastPostedMonth: later.lastPostedMonth, ...(uncovered.length ? { uncoveredMonths: Object.fromEntries(uncovered) } : {}) };
+}
+
+/**
+ * `record` (by loan, as the runner keys it) with the stamps of the paydown
+ * expenses that left a loan between `prev` and `next`: deleted, pointed at
+ * another loan, or with the destination cleared. The months such an expense
+ * paid had their interest charged, and without its stamp another expense's
+ * catch-up would charge them again. A stamp is kept only while another active
+ * expense on the loan is stamped before it, so that catch-up is still to come.
+ * Returns `record` itself when nothing that matters left a loan.
+ */
+export function recordDepartedPaydowns(
+  record: Record<string, PaydownStamp> | undefined,
+  prev: readonly StampedExpense[],
+  next: readonly StampedExpense[],
+): Record<string, PaydownStamp> | undefined {
+  let out = record;
+  for (const e of prev) {
+    const loan = expenseLoan(e);
+    const stamp = e.lastPostedMonth;
+    if (!loan || stamp === undefined) continue;
+    const now = next.find(n => n.id === e.id);
+    if (now && expenseLoan(now) === loan) continue;
+    const behind = next.some(n => n.id !== e.id && !n.automationPaused && expenseLoan(n) === loan
+      && n.lastPostedMonth !== undefined && n.lastPostedMonth < stamp);
+    if (!behind) continue;
+    const left: PaydownStamp = { lastPostedMonth: stamp, ...(e.uncoveredMonths ? { uncoveredMonths: e.uncoveredMonths } : {}) };
+    out = { ...out, [loan]: mergePaydownStamps(out?.[loan], left) };
+  }
+  return out;
+}
+
+/** The departed stamps as runner rules that never post but whose stamps count. */
+export function departedPaydownRules(record: Record<string, PaydownStamp> | undefined): AutomationRule[] {
+  return Object.entries(record ?? {}).map(([loan, stamp]) => ({
+    id: `departed:${loan}`,
+    name: '',
+    amount: 0,
+    targetKind: loan === 'mortgage' ? 'mortgage' as const : 'debt' as const,
+    ...(loan === 'mortgage' ? {} : { debtId: loan.slice('debt:'.length) }),
+    startMonth: stamp.lastPostedMonth,
+    lastPostedMonth: stamp.lastPostedMonth,
+    ...(stamp.uncoveredMonths ? { uncoveredMonths: stamp.uncoveredMonths } : {}),
+    paused: true,
+  }));
 }
 
 /**

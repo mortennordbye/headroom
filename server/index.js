@@ -512,6 +512,11 @@ app.get('/api/data', (req, res) => {
 // row with junk (`[]`, `42`, undefined body from a missing JSON content-type).
 // Not a full schema — just enough to reject anything that clearly isn't the
 // finance blob. Acts as a corruption firewall.
+const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+// 'yyyy-MM' → kr a loan payment put toward a month's interest it did not cover.
+const isUncoveredMonths = (v) => isPlainObject(v)
+  && Object.values(v).every((kr) => typeof kr === 'number' && Number.isFinite(kr) && kr >= 0);
+
 function isValidFinancePayload(body) {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
   // Expect the core domain keys the client always persists.
@@ -523,12 +528,17 @@ function isValidFinancePayload(body) {
       typeof body.assets.bsuTotalDeposited === 'number'
       && Number.isFinite(body.assets.bsuTotalDeposited) && body.assets.bsuTotalDeposited >= 0
     )) &&
+    // Optional; older blobs don't carry it. By loan: a stamp and its uncovered months.
+    (body.assets.departedPaydowns === undefined || (
+      isPlainObject(body.assets.departedPaydowns)
+      && Object.values(body.assets.departedPaydowns).every((s) => isPlainObject(s)
+        && typeof s.lastPostedMonth === 'string' && /^\d{4}-\d{2}$/.test(s.lastPostedMonth)
+        && (s.uncoveredMonths === undefined || isUncoveredMonths(s.uncoveredMonths)))
+    )) &&
     Array.isArray(body.fixedExpenses) &&
     // Optional per expense; older blobs don't carry it.
-    body.fixedExpenses.every((e) => typeof e !== 'object' || e === null || e.uncoveredMonths === undefined || (
-      typeof e.uncoveredMonths === 'object' && e.uncoveredMonths !== null && !Array.isArray(e.uncoveredMonths)
-      && Object.values(e.uncoveredMonths).every((kr) => typeof kr === 'number' && Number.isFinite(kr) && kr >= 0)
-    )) &&
+    body.fixedExpenses.every((e) => typeof e !== 'object' || e === null || e.uncoveredMonths === undefined
+      || isUncoveredMonths(e.uncoveredMonths)) &&
     Array.isArray(body.dailyTransactions) &&
     (body.deletedBankTombstones === undefined || (
       Array.isArray(body.deletedBankTombstones)

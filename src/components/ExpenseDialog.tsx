@@ -3,7 +3,7 @@ import { ChevronDown, Minus, ArrowLeft, Info } from 'lucide-react';
 import { ModalShell } from './ui/ModalShell';
 import { useFinance, type FixedExpense, type ExpenseType, type ExpenseDestinationKind } from '../context/FinanceContext';
 import { currentMonthKey } from '../lib/date';
-import { unpaidStampMonths } from '../lib/automation';
+import { paydownStampOnSave } from '../lib/automation';
 import { parseLocaleNumber, isNonEmpty } from '../lib/validators';
 import { CATEGORIES, isCategoryKey } from '../lib/categories';
 import { CHART } from '../lib/chartColors';
@@ -80,20 +80,9 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
     if (flow === 'debt' && debtTarget === 'mortgage') destinationKind = 'mortgage';
     else if (flow === 'debt' && debtTarget.startsWith('debt:')) { destinationKind = 'debt'; debtId = debtTarget.slice(5); }
 
-    // Stamp lastPostedMonth to now when a destination is newly assigned (so the
-    // first move happens next month); keep it when the destination is unchanged.
-    // Resuming from a pause restamps too, so the paused months are never
-    // back-posted — the money genuinely didn't move while it was paused.
-    const sameDest = expense?.destinationKind === destinationKind && expense?.debtId === debtId;
-    const resumed = !!expense?.automationPaused && !paused;
-    const restamped = !!destinationKind && (!sameDest || resumed);
-    const lastPostedMonth = !destinationKind ? undefined
-      : restamped ? currentMonthKey() : expense?.lastPostedMonth;
-    // A restamp pays nothing, so the months it newly covers are recorded as
-    // unpaid and another expense on the same loan still charges their interest.
-    const uncoveredMonths = !destinationKind ? undefined
-      : restamped ? unpaidStampMonths(expense, { destinationKind, debtId }, lastPostedMonth!, fixedExpenses)
-        : expense?.uncoveredMonths;
+    const automationPaused = destinationKind && paused ? true : undefined;
+    const { lastPostedMonth, uncoveredMonths } = paydownStampOnSave(
+      expense, { destinationKind, debtId, automationPaused }, currentMonthKey(), fixedExpenses);
     // Hidden without co-owners: keep whatever the rule had.
     const chosenScope = destinationKind !== 'mortgage' ? undefined : showScope ? scope : expense?.mortgagePaymentScope;
 
@@ -106,7 +95,7 @@ export default function ExpenseDialog({ expense, onSave, onClose }: Props) {
       destinationKind,
       debtId,
       mortgagePaymentScope: chosenScope === 'myShare' ? 'myShare' : undefined,
-      automationPaused: destinationKind && paused ? true : undefined,
+      automationPaused,
       lastPostedMonth,
       uncoveredMonths,
     });

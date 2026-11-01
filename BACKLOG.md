@@ -114,14 +114,21 @@ in git and the CHANGELOG, not here.
 
 ## Housing
 
-- **Catch-up order still moves a loan by a few kroner.** With two expenses on one loan, the runner
-  amortizes one expense over all its months before the next, so whose principal lands first changes
-  the interest that compounds. Answering the catch-up prompts in the other order gives a slightly
-  different balance (tens of kroner over a few months), with or without co-owners. **Why deferred**:
-  found while fixing the co-owner order gap in #340; closing it needs the runner to step month by
-  month across all rules on a loan, a redesign of the #338 interest tracking. **What would unblock**:
-  agreeing to rework `computeAutomationPostings` to interleave rules per month. **Where**:
-  `computeAutomationPostings` and `applyAmortization` in `src/lib/automation.ts`.
+- **A declined or short catch-up can still make prompt order move a loan by tens of kroner.** Full
+  catch-ups now give the same balance in any order. When an earlier prompt was declined (or paid
+  less than the interest), the months it left uncharged come before months it did charge, and the
+  later prompt charges them on today's balance, which already holds the earlier prompt's later
+  payments, instead of on the balance in that month. **Why deferred**: the runner keeps only the
+  current balance, so the balance in a past month isn't known. **What would unblock**: a per-loan
+  balance by month (or the payment history) the runner can rewind to. **Where**:
+  `computeAutomationPostings` in `src/lib/automation.ts`.
+- **Deleting a paydown expense through MCP doesn't keep its stamp on the loan.** The app records it
+  in `assets.departedPaydowns` (`recordDepartedPaydowns`), so another expense's catch-up doesn't
+  charge the months it paid again; `delete_fixed_expense` doesn't, so the double charge can still
+  happen that way. **Why deferred**: MCP builders touch exactly one top-level key, and this needs
+  `fixedExpenses` and `assets`. **What would unblock**: deciding to allow that second key as a
+  documented exception, like `deleteTransaction`. **Where**: `deleteFixedExpense` in
+  `mcp/mutations.ts`, `recordDepartedPaydowns` in `src/lib/automation.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank
   schedule import), no rate-change history. **Where**: `src/lib/calculations.ts`.
 - **Residence history isn't linked to the current home**, and Kjøpe & selge doesn't write the move
