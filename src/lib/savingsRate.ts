@@ -4,6 +4,7 @@
 import type { BalanceSnapshot, FixedExpense, Saving } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 import { fixedExpensesForMonth } from './snapshots';
+import { planPaydownTotal, type SavingsAllocation } from './savingsAllocation';
 
 /** Finite-and-non-negative guard against a hand-edited undefined/NaN amount. */
 const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
@@ -78,13 +79,20 @@ export function savingsTargetAmount(base: number, savingsTargetPercent: number):
  *
  * Returns the same array (and the same row objects) when there is nothing to
  * resolve, so callers memoized on identity don't churn.
+ *
+ * `paydown` is the plan's own loan paydowns (`planPaydownTotal`). They are
+ * saving, so they are out of the spending the target is a share of and they
+ * already fill part of it: a 'rest' row takes what is left after them too. A
+ * '%' row stays a share of `base`, the pool it was activated against.
  */
 export function resolveSavingsAmounts(
   savings: Saving[],
   base: number,
   savingsTargetPercent: number,
+  paydown: number = 0,
 ): Saving[] {
-  return resolveAgainstTarget(savings, base, savingsTargetAmount(base, savingsTargetPercent));
+  const paid = amount(paydown);
+  return resolveAgainstTarget(savings, base, Math.max(0, savingsTargetAmount(base + paid, savingsTargetPercent) - paid));
 }
 
 function resolveAgainstTarget(savings: Saving[], base: number, target: number): Saving[] {
@@ -147,14 +155,18 @@ export function draftSavingsRows(
  * others leave of it, and when the other transfers alone are more than it they
  * are cut down to fit (see `capSavingsToTotal`). So a month set to 0 kr moves
  * nothing, and the plan itself is untouched for every other month.
+ *
+ * The adjustment is what the savings TRANSFERS move. The plan's loan paydowns
+ * are fixed expenses an adjustment never cuts, so they come on top of it.
  */
 export function resolveSavingsForMonth(
   savings: Saving[],
   base: number,
   savingsTargetPercent: number,
   monthSaving: number | undefined,
+  paydown: number = 0,
 ): Saving[] {
-  if (monthSaving === undefined) return resolveSavingsAmounts(savings, base, savingsTargetPercent);
+  if (monthSaving === undefined) return resolveSavingsAmounts(savings, base, savingsTargetPercent, paydown);
   const target = amount(Math.round(monthSaving));
   return capSavingsToTotal(resolveAgainstTarget(savings, base, target), target);
 }
@@ -183,6 +195,8 @@ export interface MonthSavingsInput {
   savingsMonthOverrides: Record<string, number>;
   balanceSnapshots: Record<string, BalanceSnapshot>;
   fixedExpenses: FixedExpense[];
+  /** The plan rows, so the month's own loan paydowns count toward its target. */
+  savingsAllocations?: SavingsAllocation[];
 }
 
 /**
@@ -204,8 +218,9 @@ export function savingsForMonth(
     const plan = recorded.savings ?? [];
     return monthSaving === undefined ? plan : capSavingsToTotal(plan, monthSaving);
   }
-  const pool = savingsBase(income, fixedExpensesForMonth(data.balanceSnapshots, data.fixedExpenses, monthKey, nowKey));
-  return resolveSavingsForMonth(data.savings, pool, data.savingsTargetPercent, monthSaving);
+  const fixed = fixedExpensesForMonth(data.balanceSnapshots, data.fixedExpenses, monthKey, nowKey);
+  return resolveSavingsForMonth(data.savings, savingsBase(income, fixed), data.savingsTargetPercent, monthSaving,
+    planPaydownTotal(data.savingsAllocations, fixed));
 }
 
 /** What `monthKey` moved into savings: the total of `savingsForMonth`. */

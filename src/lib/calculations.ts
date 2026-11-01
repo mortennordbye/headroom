@@ -152,6 +152,10 @@ export const CONSERVATIVE_FLOOR_RATIO = 0.30;
  * unallocated after the automations already running. Automate the whole target
  * and it converges to 0 instead of regenerating.
  *
+ * The plan's own loan paydowns (`planPaydownTotal`) are passed in
+ * `savingsContributions` too: extra principal is saving, so it fills part of
+ * the target rather than shrinking the base the target is a share of.
+ *
  * `savingsContributions` defaults to 0, which reproduces the previous behaviour
  * exactly for callers that do not track it.
  */
@@ -192,19 +196,26 @@ export function calcRecommendations(
 }
 
 /**
- * The whole month's planned saving: what already moves automatically
+ * The month's planned CASH saving: what already moves automatically
  * (`planContributions`) plus whatever of the target is still unallocated.
  * `consumption` is the fixed expenses alone, without the savings transfers.
  * Income stability only drives the conservative *suggestion*, never the plan,
  * so no income history is needed here.
+ *
+ * `planPaydown` is the plan's own loan paydowns (`planPaydownTotal`), a part of
+ * `consumption`. They are saving, so they fill part of the target, but they are
+ * left out of the result: a projection amortizes the loan with them, and adding
+ * them to its cash too would count them twice.
  */
 export function planMonthlySavingFor(
   income: number,
   consumption: number,
   planContributions: number,
   savingsTargetPercent: number,
+  planPaydown: number = 0,
 ): number {
-  const r = calcRecommendations(income, income, consumption + planContributions, 0, savingsTargetPercent, planContributions);
+  const r = calcRecommendations(income, income, consumption + planContributions, 0, savingsTargetPercent,
+    planContributions + planPaydown);
   return planContributions + Math.max(0, r.recommendedInvestment);
 }
 

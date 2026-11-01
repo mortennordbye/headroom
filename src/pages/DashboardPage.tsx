@@ -65,6 +65,7 @@ const DashboardPage: React.FC = () => {
     currentMonthSpending,
     recommendedSpending,
     plannedMonthlySaving,
+    planPaydown,
     planMonthlySaving,
     monthSavingsTargetPercent,
     savingsMonthOverrides,
@@ -253,15 +254,21 @@ const DashboardPage: React.FC = () => {
     // expense, so subtracting it here too would take the share of a pool the
     // saving had already been removed from (see calcRecommendations `base`).
     // Fixed expenses aren't historized, so the current total is the best proxy.
-    const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions);
+    // The plan's own loan paydowns are saving too (see planPaydownTotal).
+    const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions - planPaydown);
     const investFrom = (monthlyIncome: number) =>
       Math.max(0, monthlyIncome - spendFixed) * (savingsTargetPercent / 100);
-    // A month the user adjusted shows what it actually set aside.
+    // A month the user adjusted shows what it actually set aside: the adjusted
+    // transfers plus the paydowns, which an adjustment never cuts.
+    const adjustedFor = (m: string) => {
+      const kr = savingsMonthOverrides[m];
+      return kr === undefined ? undefined : kr + planPaydown;
+    };
     const months: { key: string; label: string; value: number; projected?: boolean }[] =
       incomeSeries.map(({ month, value }) => ({
         key: month,
         label: fmtDate(parse(month, 'yyyy-MM', new Date()), 'MMM', { locale: dateLocale }),
-        value: Math.round(savingsMonthOverrides[month] ?? investFrom(value)),
+        value: Math.round(adjustedFor(month) ?? investFrom(value)),
       }));
     // 2 projected months ahead
     const last = incomeSeries[incomeSeries.length - 1];
@@ -270,12 +277,12 @@ const DashboardPage: React.FC = () => {
       for (let i = 1; i <= 2; i++) {
         const d = parse(last.month, 'yyyy-MM', new Date());
         d.setMonth(d.getMonth() + i);
-        const adjusted = savingsMonthOverrides[fmtDate(d, 'yyyy-MM')];
+        const adjusted = adjustedFor(fmtDate(d, 'yyyy-MM'));
         months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM', { locale: dateLocale }), value: Math.round(adjusted ?? baseVal * PROJECTED_INCOME_GROWTH ** i), projected: true });
       }
     }
     return months;
-  }, [incomeSeries, savingsTargetPercent, savingsMonthOverrides, totalFixedExpenses, savingsContributions, dateLocale]);
+  }, [incomeSeries, savingsTargetPercent, savingsMonthOverrides, totalFixedExpenses, savingsContributions, planPaydown, dateLocale]);
 
   // ─── Insight 2: top categories MoM (shared categoryMoM math; localize at render) ───
   const categoryDeltas = useMemo(() => {
@@ -704,7 +711,7 @@ const DashboardPage: React.FC = () => {
               </div>
               <SectionLabel>{t.dashboardPage.monthlyInvestment}</SectionLabel>
               <div className="text-[24px] font-bold tracking-[-0.02em] leading-none mt-2">
-                {formatCurrency(plannedMonthlySaving)}
+                {formatCurrency(plannedMonthlySaving + planPaydown)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
                 {format(currentMonth, 'MMM', { locale: dateLocale })} · {Math.round(monthSavingsTargetPercent)}% {t.dashboardPage.savingsRate}

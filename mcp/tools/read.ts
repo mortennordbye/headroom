@@ -124,7 +124,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Recommendations',
       description:
-        'Budget plan (recommended spend vs invest, conservative-mode flag), plannedMonthlySaving (automated transfers plus the unallocated target), savings-rate health vs savingsRateTargetOfIncomePct, and history-based insights (mortgage/debt ahead-of-plan, equity change).',
+        'Budget plan (recommended spend vs invest, conservative-mode flag), plannedMonthlySaving (automated transfers, the allocation plan loan paydowns as planLoanPaydown, plus the unallocated target), savings-rate health vs savingsRateTargetOfIncomePct, and history-based insights (mortgage/debt ahead-of-plan, equity change).',
       inputSchema: {},
       annotations: { title: 'Recommendations', ...readOnly },
     },

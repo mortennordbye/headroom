@@ -224,11 +224,6 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
         </span>
       </div>
       <p className="mt-3 text-[12px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{sa.intro}</p>
-      {/* The budget's target still counts a paydown as spending (see
-          sizeAllocation), so say why the two figures can differ. */}
-      {savingsAllocations.some(a => a.destinationKind === 'mortgage' || a.destinationKind === 'debt') && (
-        <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{sa.paydownNote}</p>
-      )}
       {/* Says out loud what the per-row switch does. The difference between the
           two modes is the whole feature, and a two-letter toggle can't carry it. */}
       <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-2)' }}>

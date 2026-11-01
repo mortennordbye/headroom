@@ -22,6 +22,17 @@ in git and the CHANGELOG, not here.
   allowed, so likely the projection should pay a linked expense from month 0 while the minimum
   still waits). **Where**: `simulatePayoff` in `src/lib/debt.ts`, `AutomationState.debts` and the
   debt paydown in `src/lib/automation.ts`.
+- **Projections ignore an extra mortgage paydown.** A plan-linked paydown now counts as saving
+  and is kept out of the cash a projection saves, because the projection is meant to amortize the
+  loan with it. Debts do (`withLinkedPayments`), but the mortgage is still projected at its
+  scheduled annuity from today's balance, so the extra principal shows up only as the real
+  balance falls month by month. Predates the paydown-as-saving change, which made it a little
+  more visible (that cash share is now part of the paydown). **Unblock**: let the mortgage
+  projection take the linked paydown expenses as extra monthly principal, the way
+  `withLinkedPayments` does for debts. **Where**: `calcHouseEquityByYear` /
+  `calcMortgageBalanceByYear` in `src/lib/calculations.ts`, `forecastMortgage` in
+  `src/lib/forecastProjection.ts`, `src/pages/DashboardPage.tsx`, `src/pages/ForecastPage.tsx`,
+  `src/pages/AssetPage.tsx`, `forecast` in `mcp/derive.ts`.
 - **OTP base, remaining gaps.** Bonuses are now a per-user setting, but the rest of the base is
   fixed: overtime is always left out (it counts under innskuddspensjonsloven § 5-5 første ledd
   unless the plan excludes it), on-call is always counted, the § 5-5 annet ledd bokstav b
@@ -95,18 +106,6 @@ in git and the CHANGELOG, not here.
 - **The savings target shrinks as you automate, by construction** (it's a share of the
   uncommitted residual). Surfaced in the panel rather than changed. **Where**:
   `calcRecommendations` in `src/lib/calculations.ts`.
-- **The allocation panel's target and the budget's savings target disagree once a paydown row is
-  active.** The panel (`sizeAllocation`) leaves the plan's own mortgage/debt paydowns out of
-  spending so activating and syncing them can't shift the target; `calcRecommendations` /
-  `plannedMonthlySaving` still count them as spending, so the Budget Saving pill, its
-  "unallocated" note and the Dashboard read lower. Surfaced with a caption in the panel. **Why
-  deferred**: counting a linked paydown as saving in `plannedMonthlySaving` spreads into the
-  Dashboard and Forecast projections (which already amortize the loan, so the paydown would count
-  twice), the savings-rate chart (`paydownPrincipal`), the pill split and the MCP's own copy in
-  `mcp/derive.ts`. **Unblock**: decide whether a plan-linked paydown is saving or spending
-  everywhere. **Where**: `src/lib/allocationSync.ts`, `src/lib/calculations.ts`,
-  `src/context/FinanceContext.tsx`, `src/components/SmartRecommendations.tsx`,
-  `src/pages/DashboardPage.tsx`, `mcp/derive.ts`.
 - **A one-legged savings transfer counts as spending and as savings in the cashflow.** When
   only the outgoing leg of a savings transfer is imported (the savings account isn't connected)
   and it isn't marked as a transfer, `monthlyCashflow` adds it to `expenses` as unenveloped spend
