@@ -88,6 +88,19 @@ describe('projectSnapshotBalances — contributions only', () => {
     expect(out.ipsBalance).toBe(100_000 + 1_000 * 2);
   });
 
+  it("uses each month's loan share: a co-owner leaving mid-projection changes it from then", () => {
+    // Half the loan through October: the user's 'myShare' payment reaches the
+    // loan doubled until then, and as-is after.
+    const out = projectSnapshotBalances(
+      base(),
+      [rule({ targetKind: 'mortgage', amount: 10_000, mortgagePaymentScope: 'myShare' })],
+      state({ coOwners: [{ id: 'c', name: 'Co', ownershipPct: 50, since: '2020-01', until: '2026-10' }] }),
+      '2026-12', NOW);
+    const expected = [20_000, 20_000, 10_000, 10_000]
+      .reduce((bal, pay) => bal + bal * 0.05 / 12 - pay, 2_000_000);
+    expect(out.houseDebt).toBe(Math.round(expected));
+  });
+
   it('amortizes a mortgage payment down rather than adding it up', () => {
     const out = projectSnapshotBalances(
       base(), [rule({ targetKind: 'mortgage', amount: 20_000 })], state(), '2026-09', NOW);

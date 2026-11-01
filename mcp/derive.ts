@@ -365,7 +365,7 @@ function paydownPrincipal(blob: ExportPayload, monthKey: string): number {
   const m = mortgageOwed(blob, monthKey);
   return monthlyPaydownPrincipal(blob.fixedExpenses ?? [], {
     ...automationMortgage(m),
-    mortgageDebtShare: ownershipShares(blob.assets, monthKey).debt,
+    coOwners: blob.assets.coOwners,
     debts: Object.fromEntries((blob.debts ?? []).map((d) => [d.id, { balance: d.balance, rate: d.rate, revolving: d.revolving }])),
     housingMode: blob.housingMode ?? 'first_buyer',
   }, monthKey);
@@ -834,7 +834,7 @@ export function pensionSummary(blob: ExportPayload, monthKey = osloMonthKey(), i
  */
 const DEFAULT_TRANSITION: TransitionData = {
   currentHouseValue: 4500000, agentFeePercent: 3, documentFee: 7500,
-  otherSaleCosts: 0, bridgeMonths: 2, bridgeLoanRate: 6.5,
+  otherSaleCosts: 0, bridgeMonths: 2, bridgeLoanRate: 6.5, nextHomeOwnershipPct: 100,
 };
 
 /**

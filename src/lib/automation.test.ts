@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState } from './automation';
 import { currentMortgage } from './existingMortgage';
+import type { CoOwner } from '../context/FinanceContext';
+
+// A co-owner holding `pct` % of the home and of the loan.
+const co = (pct: number, over: Partial<CoOwner> = {}): CoOwner => ({ id: `co-${pct}`, name: 'Co', ownershipPct: pct, ...over });
 
 const rule = (over: Partial<AutomationRule> = {}): AutomationRule => ({
   id: 'a1',
@@ -218,7 +222,7 @@ describe('computeAutomationPostings — co-owned mortgage scope', () => {
   // 1 000 000 at 5 %: one month's interest is 4 166.67.
 
   it("'whole' (and absent) pays the amount as-is, whatever the share", () => {
-    const s = state({ mortgageDebtShare: 0.5 });
+    const s = state({ coOwners: [co(50)] });
     const [whole] = computeAutomationPostings([m({ mortgagePaymentScope: 'whole' })], s, '2026-07');
     const [absent] = computeAutomationPostings([m()], s, '2026-07');
     expect(whole.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 5000));
@@ -226,7 +230,7 @@ describe('computeAutomationPostings — co-owned mortgage scope', () => {
   });
 
   it("'myShare' grosses the amount up by the debt share", () => {
-    const [p] = computeAutomationPostings([m({ mortgagePaymentScope: 'myShare' })], state({ mortgageDebtShare: 0.5 }), '2026-07');
+    const [p] = computeAutomationPostings([m({ mortgagePaymentScope: 'myShare' })], state({ coOwners: [co(50)] }), '2026-07');
     expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 10_000));
   });
 
@@ -237,13 +241,38 @@ describe('computeAutomationPostings — co-owned mortgage scope', () => {
 
   it("stamps a 'myShare' rule without moving the loan while the user carries none of it", () => {
     const [p] = computeAutomationPostings(
-      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-01' })], state({ mortgageDebtShare: 0 }), '2026-07');
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-01' })], state({ coOwners: [co(100)] }), '2026-07');
     expect(p).toMatchObject({ noChange: true, newBalance: 1_000_000, newLastPostedMonth: '2026-07' });
+  });
+
+  // Balance after each month's payment at 5 % (interest, then the payment).
+  const amortized = (payments: number[]) =>
+    Math.round(payments.reduce((bal, pay) => bal + bal * 0.05 / 12 - pay, 1_000_000));
+
+  it("a 'myShare' catch-up grosses each month up by the share in force that month", () => {
+    // Co-owner leaves after April: Mar-Apr the user pays half the instalment, May-Jun all of it.
+    const [left] = computeAutomationPostings(
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-02' })],
+      state({ coOwners: [co(50, { since: '2025-01', until: '2026-04' })] }), '2026-06');
+    expect(left.newBalance).toBe(amortized([10_000, 10_000, 5000, 5000]));
+    // Co-owner joins in May: the reverse.
+    const [joined] = computeAutomationPostings(
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-02' })],
+      state({ coOwners: [co(50, { since: '2026-05' })] }), '2026-06');
+    expect(joined.newBalance).toBe(amortized([5000, 5000, 10_000, 10_000]));
+  });
+
+  it("a 'myShare' catch-up skips only the months the user carried none of the loan", () => {
+    const [p] = computeAutomationPostings(
+      [m({ mortgagePaymentScope: 'myShare', lastPostedMonth: '2026-02' })],
+      state({ coOwners: [co(100, { until: '2026-04' })] }), '2026-06');
+    expect(p.noChange).toBeUndefined();
+    expect(p.newBalance).toBe(amortized([5000, 5000]));
   });
 
   it('never grosses up a savings rule aimed at the mortgage (an extra payment)', () => {
     // Saving rules carry no scope, so the debt share doesn't touch them.
-    const [p] = computeAutomationPostings([m({ id: 'sv1' })], state({ mortgageDebtShare: 0.25 }), '2026-07');
+    const [p] = computeAutomationPostings([m({ id: 'sv1' })], state({ coOwners: [co(75)] }), '2026-07');
     expect(p.newBalance).toBe(Math.round(1_000_000 + 1_000_000 * 0.05 / 12 - 5000));
   });
 });
@@ -414,6 +443,124 @@ describe('computeAutomationPostings — two payments to one loan', () => {
   });
 });
 
+describe('computeAutomationPostings — co-owner share changes with a second payment to the loan', () => {
+  // 1 000 000 at 5 %. Co-owner A holds half through February; co-owner B holds
+  // all of March only. So the user carries half the loan in February, none in
+  // March, and all of it from April.
+  const coOwners = [
+    co(50, { id: 'a', since: '2025-01', until: '2026-02' }),
+    co(100, { id: 'b', since: '2026-03', until: '2026-03' }),
+  ];
+  const r = 0.05 / 12;
+  const mine = (over: Partial<AutomationRule>) => rule({
+    id: 'mine', targetKind: 'mortgage', savingsAccountId: undefined, mortgagePaymentScope: 'myShare',
+    lastPostedMonth: '2026-01', ...over,
+  });
+  const extra = (over: Partial<AutomationRule>) => rule({
+    id: 'extra', targetKind: 'mortgage', savingsAccountId: undefined, ...over,
+  });
+
+  it("charges each month's interest once against a declined catch-up's uncovered months", () => {
+    // `extra` declined its catch-up in May: it paid May only, so Feb-Apr are uncovered.
+    const declined = extra({ amount: 2000, lastPostedMonth: '2026-05', uncoveredMonths: { '2026-02': 0, '2026-03': 0, '2026-04': 0 } });
+    const [p] = computeAutomationPostings([mine({ amount: 5000 })], state({ coOwners }), '2026-05', undefined, [declined]);
+    let bal = 1_000_000;
+    bal = bal + bal * r - 10_000; // Feb: interest charged here, payment grossed up by the half share
+    //                               Mar: skipped, the co-owner paid it; no interest, no payment
+    bal = bal + bal * r - 5000;   // Apr: interest charged here
+    bal = bal - 5000;             // May: `extra` already charged it, so all principal
+    expect(p.newBalance).toBe(Math.round(bal));
+    expect(p.noChange).toBeUndefined();
+    expect(p.uncoveredMonths).toBeUndefined();
+  });
+
+  it('records the grossed short payments by month and the other rule charges only what is left', () => {
+    // A small 'myShare' payment can't cover the interest; `extra` hasn't caught up yet.
+    const pending = extra({ amount: 10_000, lastPostedMonth: '2026-01' });
+    const [short] = computeAutomationPostings([mine({ amount: 2000 })], state({ coOwners }), '2026-04', undefined, [pending]);
+    expect(short.newBalance).toBe(1_000_000);
+    expect(short.monthsShort).toBe(2);
+    // February's payment is grossed up to 4 000; March (0 % share) is never recorded.
+    expect(short.uncoveredMonths).toEqual({ '2026-02': 4000, '2026-04': 2000 });
+
+    const stamped = mine({ amount: 2000, lastPostedMonth: '2026-04', uncoveredMonths: short.uncoveredMonths });
+    const [p] = computeAutomationPostings([pending], state({ coOwners }), '2026-04', undefined, [stamped]);
+    let bal = 1_000_000;
+    bal = bal + (bal * r - 4000) - 10_000; // Feb: only the interest left after the 4 000
+    bal = bal - 10_000;                    // Mar: the co-owner covered it, all principal
+    bal = bal + (bal * r - 2000) - 10_000; // Apr: only the interest left after the 2 000
+    expect(p.newBalance).toBe(Math.round(bal));
+  });
+
+  describe('a co-owner carrying the whole loan through September', () => {
+    const s = state({ coOwners: [co(100, { id: 'x', until: '2026-09' })] });
+    const A = mine({ id: 'A', amount: 9000, lastPostedMonth: '2026-07' });
+    const B = extra({ id: 'B', amount: 1000, lastPostedMonth: '2026-07' });
+    const NOW = '2026-11';
+    // Post `first` (the other rule waits as `others`), then the other with `first` stamped.
+    const inTurn = (first: AutomationRule, second: AutomationRule, cap?: number) => {
+      const [p1] = computeAutomationPostings([first], s, NOW, cap, [second]);
+      const stamped = { ...first, lastPostedMonth: NOW, uncoveredMonths: p1.uncoveredMonths };
+      const [p2] = computeAutomationPostings([second], { ...s, mortgage: p1.newBalance }, NOW, undefined, [stamped]);
+      return { p1, p2 };
+    };
+
+    it("the co-owners' months count as paid whichever catch-up prompt is answered first", () => {
+      const aThenB = inTurn(A, B).p2.newBalance;
+      const both = computeAutomationPostings([A, B], s, NOW);
+      expect(both[both.length - 1].newBalance).toBe(aThenB);
+      // A charges Oct-Nov interest (Aug-Sep was the co-owners'); B's four
+      // payments are all principal.
+      let ab = 1_000_000;
+      ab = ab + ab * r - 9000;
+      ab = ab + ab * r - 9000;
+      expect(aThenB).toBe(Math.round(ab - 4 * 1000));
+
+      // B first: Aug-Sep are principal (not charged interest, which was the
+      // 2 000 kr order gap), and its 1 000 goes toward Oct-Nov interest, which
+      // A then charges only the rest of.
+      const bThenA = inTurn(B, A);
+      expect(bThenA.p1.newBalance).toBe(1_000_000 - 2000);
+      expect(bThenA.p1.uncoveredMonths).toEqual({ '2026-10': 1000, '2026-11': 1000 });
+      let ba = 1_000_000 - 2000;
+      ba = ba + (ba * r - 1000) - 9000;
+      ba = ba + (ba * r - 1000) - 9000;
+      expect(bThenA.p2.newBalance).toBe(Math.round(ba));
+      // What is left between the orders is the runner amortizing one rule at a
+      // time (B's Aug-Sep principal lands before or after A's interest), which
+      // two plain rules on a loan with no co-owners show too.
+      expect(Math.abs(bThenA.p2.newBalance - aThenB)).toBeLessThan(50);
+    });
+
+    it('a declined catch-up never records 0 % months as uncovered', () => {
+      // A declined: it pays November only. October (a month the user carried
+      // the loan) stays uncovered; August and September were the co-owners'.
+      const { p1, p2 } = inTurn(A, B, 1);
+      expect(p1.uncoveredMonths).toEqual({ '2026-10': 0 });
+      let bal = 1_000_000;
+      bal = bal + bal * r - 9000; // A: November only
+      // B: Aug, Sep and Nov are principal. October's interest is still due and
+      // B's 1 000 can't cover it, so October moves nothing and is B's short month.
+      expect(p2.newBalance).toBe(Math.round(bal - 3 * 1000));
+      expect(p2.monthsShort).toBe(1);
+    });
+  });
+
+  it('a 0 % month skipped in one call counts as charged for the other rule in that call', () => {
+    const both = computeAutomationPostings(
+      [mine({ amount: 5000 }), extra({ amount: 6000, lastPostedMonth: '2026-01' })], state({ coOwners }), '2026-04');
+    const last = both[both.length - 1];
+    let bal = 1_000_000;
+    // `extra` (largest payment) goes first and charges each month's interest, but March's is the co-owner's.
+    bal = bal + bal * r - 6000;
+    bal = bal - 6000;
+    bal = bal + bal * r - 6000;
+    // Then `mine`, all principal: 10 000 in Feb, nothing in Mar, 5 000 in Apr.
+    bal = bal - 10_000 - 5000;
+    expect(last.newBalance).toBe(Math.round(bal));
+  });
+});
+
 describe('computeAutomationPostings — mixed batch', () => {
   it('resolves several rules in one call', () => {
     const savings = rule({ id: 's1', lastPostedMonth: '2026-06' });
@@ -470,12 +617,20 @@ describe('monthlyPaydownPrincipal', () => {
   });
 
   it('counts the mortgage at the user\'s debt share, for either payment scope', () => {
-    const half = { ...state, mortgageDebtShare: 0.5 };
+    const half = { ...state, coOwners: [co(50)] };
     // 'whole': the loan gets 15 000; half the principal is the user's.
     expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], half, MONTH))
       .toBe(Math.round((15_000 - 10_000) * 0.5));
     // 'myShare': 7 500 is half the instalment, so the loan again gets 15 000.
     expect(monthlyPaydownPrincipal([{ amount: 7_500, destinationKind: 'mortgage', mortgagePaymentScope: 'myShare' }], half, MONTH))
+      .toBe(Math.round((15_000 - 10_000) * 0.5));
+  });
+
+  it('counts the mortgage at the share in force in the month asked about', () => {
+    const left = { ...state, coOwners: [co(50, { until: '2026-09' })] };
+    expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], left, MONTH))
+      .toBe(15_000 - 10_000);
+    expect(monthlyPaydownPrincipal([{ amount: 15_000, destinationKind: 'mortgage' }], left, '2026-09'))
       .toBe(Math.round((15_000 - 10_000) * 0.5));
   });
 

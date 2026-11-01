@@ -12,7 +12,7 @@ import { calcRecommendations, planMonthlySavingFor } from '../lib/calculations';
 import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, savingsForMonth } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
-import { ownershipShares, rewriteSnapshotCoOwners, snapshotCoOwners } from '../lib/ownership';
+import { rewriteSnapshotCoOwners, snapshotCoOwners } from '../lib/ownership';
 import { markGainReview } from '../lib/gainReview';
 import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
@@ -483,6 +483,8 @@ export interface TransitionData {
   otherSaleCosts: number;
   bridgeMonths: number;
   bridgeLoanRate: number;
+  /** The user's ownership share of the next home, in percent; absent = 100. */
+  nextHomeOwnershipPct?: number;
 }
 
 // --- Salary tracker types ---
@@ -676,6 +678,7 @@ const DEFAULT_TRANSITION: TransitionData = {
   otherSaleCosts: 0,
   bridgeMonths: 2,
   bridgeLoanRate: 6.5,
+  nextHomeOwnershipPct: 100,
 };
 
 const DEFAULT_LOAN: LoanData = {
@@ -2743,7 +2746,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     },
     // The current loan in both owner modes (first_buyer posts nothing).
     ...automationMortgage(currentMortgageNow),
-    mortgageDebtShare: ownershipShares({ coOwners: assets.coOwners }).debt,
+    coOwners: assets.coOwners,
     debts: Object.fromEntries(debts.map(d => [d.id, { balance: d.balance, rate: d.rate, revolving: d.revolving }])),
     housingMode,
   }), [assets.savingsAccounts, assets.bufferAccount, assets.portfolio, assets.bsu, assets.coOwners,

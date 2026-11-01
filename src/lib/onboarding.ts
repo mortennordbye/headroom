@@ -9,8 +9,12 @@
  * Field `writer` tells the shell how to persist a value; `key` is the argument
  * (an Assets/Pension key, or a sentinel for the special writers).
  */
+import type { CoOwner } from '../context/FinanceContext';
+import { withOwnershipShare } from './ownership';
+import { parseLocaleNumber } from './validators';
 
-export type OnboardingWriter = 'lang' | 'region' | 'income' | 'savingsTarget' | 'asset' | 'pension' | 'growthRate';
+export type OnboardingWriter = 'lang' | 'region' | 'income' | 'savingsTarget' | 'asset' | 'pension' | 'growthRate'
+  | 'ownershipShare';
 
 export type OnboardingGroup = 'essentials' | 'wealth' | 'learn';
 
@@ -152,6 +156,8 @@ export const ONBOARDING_TOPICS: OnboardingTopic[] = [
     fields: [
       { key: 'houseValue', writer: 'asset', labelKey: 'houseValue', kind: 'number' },
       { key: 'houseDebt', writer: 'asset', labelKey: 'houseDebt', kind: 'number' },
+      // The user's share of the home, written as co-owners (assets.coOwners) like the Bolig page.
+      { key: 'ownershipShare', writer: 'ownershipShare', labelKey: 'ownershipShare', kind: 'percent' },
     ],
   },
   {
@@ -247,4 +253,27 @@ export function nextTopic(id: string): OnboardingTopic | null {
   const i = topicIndex(id);
   if (i < 0 || i >= ONBOARDING_TOPICS.length - 1) return null;
   return ONBOARDING_TOPICS[i + 1];
+}
+
+/** What committing the ownership-share answer does (see `planOwnershipShare`). */
+export type OwnershipSharePlan =
+  | { kind: 'none' }
+  | { kind: 'write'; coOwners: CoOwner[] }
+  | { kind: 'elsewhere' };
+
+/**
+ * The ownership-share answer, committed once (on blur or on leaving the step)
+ * and always planned from `open`, the co-owner list as it was when the step
+ * opened, so answers never stack on each other: going back to the starting
+ * share plans `open` itself. A draft that isn't a share 0-100 does nothing; a
+ * setup the question can't express is 'elsewhere' (the shell points to the
+ * Bolig page).
+ */
+export function planOwnershipShare(
+  raw: string, open: CoOwner[], month: string, newRow: Pick<CoOwner, 'id' | 'name'>, moveIn?: string,
+): OwnershipSharePlan {
+  const n = parseLocaleNumber(raw);
+  if (isNaN(n) || n < 0 || n > 100) return { kind: 'none' };
+  const next = withOwnershipShare(open, n, month, newRow, moveIn);
+  return next === null ? { kind: 'elsewhere' } : { kind: 'write', coOwners: next };
 }

@@ -324,10 +324,13 @@ export function calcBridgeLoanCost(
  * A transitioning user's sale and next purchase: the user's share of the sale
  * plus the equity set aside, and the new loan the purchase still needs ("Nytt
  * lånebehov" on the Bolig page; also the MCP's planned loan in this mode).
+ * A next home bought with others (`nextHomeOwnershipPct` < 100) is financed
+ * per buyer: the user's equity goes into their share of the price, and the new
+ * loan and payment are the user's own. Absent or non-finite = 100 %.
  */
 export function calcTransitionNewLoan(
   transition: Pick<TransitionData, 'currentHouseValue' | 'agentFeePercent'
-    | 'documentFee' | 'otherSaleCosts' | 'bridgeLoanRate' | 'bridgeMonths'>,
+    | 'documentFee' | 'otherSaleCosts' | 'bridgeLoanRate' | 'bridgeMonths' | 'nextHomeOwnershipPct'>,
   /** The whole mortgage on the home being sold (`assets.houseDebt`). */
   mortgageBalance: number,
   loan: Pick<LoanData, 'kjoepesum' | 'egenkapital' | 'rente' | 'nedbetalingstid' | 'termingebyr'>,
@@ -344,10 +347,16 @@ export function calcTransitionNewLoan(
   const mySale = mySaleProceeds(saleProceeds.netProceeds, mortgageBalance, shares);
   const equityFromSale = Math.max(0, mySale);
   const totalEquityNew = equityFromSale + loan.egenkapital;
-  const newLoanNeeded = Math.max(0, loan.kjoepesum - totalEquityNew);
+  const pct = transition.nextHomeOwnershipPct;
+  const nextHomeShare = typeof pct === 'number' && Number.isFinite(pct) ? Math.min(1, Math.max(0, pct / 100)) : 1;
+  const myPurchasePrice = loan.kjoepesum * nextHomeShare;
+  const newLoanNeeded = Math.max(0, myPurchasePrice - totalEquityNew);
   const newMonthlyPayment = calcMonthlyPayment(newLoanNeeded, loan.rente, loan.nedbetalingstid) + loan.termingebyr;
   const totalTransactionCosts = saleProceeds.agentCost + transition.documentFee + transition.otherSaleCosts + bridgeCost;
-  return { saleProceeds, bridgeCost, mySale, equityFromSale, totalEquityNew, newLoanNeeded, newMonthlyPayment, totalTransactionCosts };
+  return {
+    saleProceeds, bridgeCost, mySale, equityFromSale, totalEquityNew, nextHomeShare, myPurchasePrice,
+    newLoanNeeded, newMonthlyPayment, totalTransactionCosts,
+  };
 }
 
 export interface HomeownerStatus {
