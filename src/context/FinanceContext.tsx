@@ -9,7 +9,7 @@ import {
   subMonths
 } from 'date-fns';
 import { calcRecommendations } from '../lib/calculations';
-import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, capSavingsToTotal } from '../lib/savingsRate';
+import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, savingsForMonth } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { ownershipShares, rewriteSnapshotCoOwners, snapshotCoOwners } from '../lib/ownership';
@@ -2090,16 +2090,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     () => (fixedExpensesFromSnapshot ? (balanceSnapshots[monthKey].savings ?? []) : liveSavings),
     [fixedExpensesFromSnapshot, balanceSnapshots, monthKey, liveSavings],
   );
-  // The selected month's own saving, when the user adjusted it. A recorded month
-  // is only capped (its snapshot is never re-resolved); a live one is resolved
-  // against the adjustment so a 'rest' row gives way first.
+  // The selected month's savings, honouring its own adjustment when the user set
+  // one. A recorded month is only capped (its snapshot is never re-resolved); a
+  // live one is resolved against the adjustment so a 'rest' row gives way first.
+  // The same resolver gives every other month its own savings (CashflowChart,
+  // YearReviewPage, the MCP summaries).
   const monthSaving = savingsMonthOverrides[monthKey];
-  const viewSavings = useMemo(() => {
-    if (monthSaving === undefined) return planViewSavings;
-    return fixedExpensesFromSnapshot
-      ? capSavingsToTotal(planViewSavings, monthSaving)
-      : resolveSavingsForMonth(savings, savingsPool, savingsTargetPercent, monthSaving);
-  }, [monthSaving, planViewSavings, fixedExpensesFromSnapshot, savings, savingsPool, savingsTargetPercent]);
+  const viewSavings = useMemo(
+    () => savingsForMonth(
+      { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses },
+      monthKey, currentMonthKey(), effectiveIncome,
+    ),
+    [savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, monthKey, effectiveIncome],
+  );
 
   // What moves into savings rather than being spent. Budgeting treats it like a
   // fixed expense (it does leave free-to-spend), but the savings rate must add it

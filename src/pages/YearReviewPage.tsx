@@ -10,12 +10,13 @@ import { yearReview, availableReportYears } from '../lib/yearReview';
 import { isCategoryKey, categoryMeta } from '../lib/categories';
 import { monthsBetween, yearOf, currentMonthKey } from '../lib/date';
 import { fixedExpensesForMonth } from '../lib/snapshots';
+import { savingsContributionsForMonth } from '../lib/savingsRate';
 
 const YearReviewPage: React.FC = () => {
   const {
     t, lang, formatCurrency,
     nonTransferTransactions, monthlyIncomes, derivedNetMonthlyFor,
-    fixedExpenses, savingsContributions, payslips, balanceSnapshots, netWorthHistory, netWorth,
+    fixedExpenses, savings, savingsTargetPercent, savingsMonthOverrides, payslips, balanceSnapshots, netWorthHistory, netWorth,
   } = useFinance();
   const ty = t.yearReview;
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -37,17 +38,19 @@ const YearReviewPage: React.FC = () => {
     for (const m of monthsBetween(`${year}-01`, `${year}-12`)) {
       incomeByMonth[m] = monthlyIncomes[m] ?? derivedNetMonthlyFor(m);
     }
-    // Each month is reconciled against its own fixed expenses, as CashflowChart does.
+    // Each month is reconciled against its own fixed expenses and savings, as CashflowChart does.
+    const savingsData = { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses };
     const fixedFor = (month: string) => fixedExpensesForMonth(balanceSnapshots, fixedExpenses, month, nowMonthKey);
     const totalFor = (month: string) =>
-      fixedFor(month).reduce((sum, item) => sum + item.amount, 0) + savingsContributions;
+      fixedFor(month).reduce((sum, item) => sum + item.amount, 0)
+      + savingsContributionsForMonth(savingsData, month, nowMonthKey, incomeByMonth[month]);
     return yearReview(year, {
       transactions: nonTransferTransactions, incomeByMonth, totalFixedExpenses: totalFor,
       fixedExpenses: fixedFor,
       payslips, snapshots: balanceSnapshots, netWorthHistory,
       currentNetWorth: netWorth, nowMonthKey,
     });
-  }, [year, nonTransferTransactions, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savingsContributions, payslips, balanceSnapshots, netWorthHistory, netWorth, nowMonthKey]);
+  }, [year, nonTransferTransactions, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savings, savingsTargetPercent, savingsMonthOverrides, payslips, balanceSnapshots, netWorthHistory, netWorth, nowMonthKey]);
 
   const hasData = review.months.length > 0 && (review.totalIncome > 0 || review.totalSpending > 0);
   const monthLabel = (m: string) => format(new Date(`${m}-01T00:00:00`), 'MMM', { locale: dateLocale });

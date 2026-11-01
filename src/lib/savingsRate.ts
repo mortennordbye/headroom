@@ -1,8 +1,9 @@
 // Trailing savings-rate health, derived from the same `monthlyCashflow` rows
 // that feed SavingsRateChart. Pure + unit-tested so the Budget page can flag a
 // slipping rate without re-deriving the money math in a component.
-import type { FixedExpense, Saving } from '../context/FinanceContext';
+import type { BalanceSnapshot, FixedExpense, Saving } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
+import { fixedExpensesForMonth } from './snapshots';
 
 /** Finite-and-non-negative guard against a hand-edited undefined/NaN amount. */
 const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
@@ -173,6 +174,48 @@ export function capSavingsToTotal(savings: Saving[], cap: number): Saving[] {
   // the month adds up to the cap exactly.
   let extra = limit - savingsContributionTotal(scaled);
   return scaled.map((s, i) => (!s.paused && amount(savings[i].amount) > 0 && extra-- > 0 ? { ...s, amount: s.amount + 1 } : s));
+}
+
+/** The persisted state a month's savings are derived from. */
+export interface MonthSavingsInput {
+  savings: Saving[];
+  savingsTargetPercent: number;
+  savingsMonthOverrides: Record<string, number>;
+  balanceSnapshots: Record<string, BalanceSnapshot>;
+  fixedExpenses: FixedExpense[];
+}
+
+/**
+ * The savings that applied in `monthKey`, resolved to kroner. A past month with a
+ * recorded snapshot reads that month's savings as captured (never re-resolved,
+ * only capped by a month adjustment); any other month resolves the live plan
+ * against its own pool, `income` minus that month's fixed expenses, honouring
+ * the month's adjustment. `income` is that month's effective net income.
+ */
+export function savingsForMonth(
+  data: MonthSavingsInput,
+  monthKey: string,
+  nowKey: string,
+  income: number,
+): Saving[] {
+  const monthSaving = data.savingsMonthOverrides[monthKey];
+  const recorded = monthKey < nowKey ? data.balanceSnapshots[monthKey] : undefined;
+  if (recorded?.fixedExpenses !== undefined) {
+    const plan = recorded.savings ?? [];
+    return monthSaving === undefined ? plan : capSavingsToTotal(plan, monthSaving);
+  }
+  const pool = savingsBase(income, fixedExpensesForMonth(data.balanceSnapshots, data.fixedExpenses, monthKey, nowKey));
+  return resolveSavingsForMonth(data.savings, pool, data.savingsTargetPercent, monthSaving);
+}
+
+/** What `monthKey` moved into savings: the total of `savingsForMonth`. */
+export function savingsContributionsForMonth(
+  data: MonthSavingsInput,
+  monthKey: string,
+  nowKey: string,
+  income: number,
+): number {
+  return savingsContributionTotal(savingsForMonth(data, monthKey, nowKey, income));
 }
 
 /** A saving driven by a share of the base rather than a fixed amount. */
