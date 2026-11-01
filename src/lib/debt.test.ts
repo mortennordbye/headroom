@@ -151,6 +151,25 @@ describe('calcDebtBalanceByYear', () => {
     expect(out[5]).toBe(581_670);
   });
 
+  it('holds a debt with a zero or negative payment flat (payment unknown)', () => {
+    const zero = debt({ balance: 100_000, rate: 10, minPayment: 0 });
+    expect(calcDebtBalanceByYear([zero], 40).every(b => b === 100_000)).toBe(true);
+    const negative = debt({ balance: 100_000, rate: 10, minPayment: -500 });
+    expect(calcDebtBalanceByYear([negative], 5)).toEqual([100_000, 100_000, 100_000, 100_000, 100_000, 100_000]);
+    // Alongside a paying debt, the flat one neither grows nor takes the freed rollover.
+    const paying = debt({ id: 'p', balance: 12_000, rate: 0, minPayment: 1_000 });
+    expect(calcDebtBalanceByYear([zero, paying], 2)).toEqual([112_000, 100_000, 100_000]);
+  });
+
+  it("rolls a cleared debt's payment onto a debt that still falls short", () => {
+    // A: 12k @ 0 % at 1 000/mo, cleared in month 12. B: 500k @ 12 % at 4 000/mo,
+    // 400 000 + 100 000·1.01^n → 512 682.50 in year 1. In year 2 it gets 5 000/mo,
+    // still under its interest: 512 682.50·1.01^12 − 5 000·(1.01^12 − 1)/0.01 = 514 290.96.
+    const a = debt({ id: 'a', balance: 12_000, rate: 0, minPayment: 1_000 });
+    const b = debt({ id: 'b', balance: 500_000, rate: 12, minPayment: 4_000 });
+    expect(calcDebtBalanceByYear([a, b], 2)).toEqual([512_000, 512_683, 514_291]);
+  });
+
   it('still reports such a debt as never paid off on the debt page', () => {
     const d = debt({ balance: 500_000, rate: 12, minPayment: 4_000 });
     const plan = planPayoff([d], 0, 'avalanche');

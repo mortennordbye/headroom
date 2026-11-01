@@ -124,7 +124,8 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
  * The rollover loop behind `planPayoff` and `calcDebtBalanceByYear`. With
  * `stopWhenInfeasible` it gives up (planPayoff's "never") as soon as the budget
  * can't cover a month's interest; without it the loop keeps paying for
- * `maxMonths` and the unpaid interest compounds onto the balance.
+ * `maxMonths` and the unpaid interest compounds onto the balance. A debt
+ * with a payment ≤ 0 is then held flat instead (payment unknown).
  */
 function simulatePayoff(
   debts: Debt[], extraMonthly: number, strategy: PayoffStrategy, nowMonthKey: string | undefined,
@@ -146,8 +147,12 @@ function simulatePayoff(
   const payoffMonth = active.map(() => 0);
   // Months each debt is still interest-free / deferred (Lånekassen studielån):
   // while `month < defer[i]` it accrues no interest, takes no payment, and its
-  // minimum isn't part of the budget yet — the balance sits flat.
-  const defer = active.map(d => defermentMonths(d, nowMonthKey));
+  // minimum isn't part of the budget yet — the balance sits flat. Without
+  // `stopWhenInfeasible`, a debt with no positive payment is a payment we don't
+  // know (often a fixed expense pays it): it is held flat the same way, for good,
+  // rather than compounding without bound.
+  const defer = active.map(d =>
+    !stopWhenInfeasible && !(d.minPayment > 0) ? Infinity : defermentMonths(d, nowMonthKey));
 
   const order = active
     .map((_, i) => i)
@@ -228,9 +233,11 @@ function simulatePayoff(
  * Total non-mortgage debt remaining at the end of each year, index 0..years
  * (year 0 = today). Amortizing debts pay down at their minimum payments with
  * the rollover method (freed minimums accelerate the rest, no extra budget);
- * revolving balances never amortize and are carried flat. A debt whose payment
- * can't cover its interest keeps being paid and grows by the interest the
- * payment leaves unpaid. Mirrors `calcMortgageBalanceByYear` on
+ * revolving balances never amortize and are carried flat. A debt whose positive
+ * payment can't cover its interest keeps being paid and grows by the interest
+ * the payment leaves unpaid. A debt with a payment ≤ 0 has no known payment
+ * (often a fixed expense pays it), so it is held flat, takes no rollover, and
+ * accrues nothing. Mirrors `calcMortgageBalanceByYear` on
  * the mortgage side, for netting debt out of net-worth projections.
  */
 export function calcDebtBalanceByYear(debts: Debt[], years: number, nowMonthKey?: string): number[] {
