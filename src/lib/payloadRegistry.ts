@@ -152,6 +152,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
       read: (data) => (data.dailyTransactions ? dedupeBankTransactions(data.dailyTransactions) : ABSENT),
     },
     deletedBankIds: { group: 'reset', demo: 'preference', read: whenDefined('deletedBankIds'), default: [] },
+    deletedBankTombstones: { group: 'reset', demo: 'preference', read: whenDefined('deletedBankTombstones'), default: [] },
     accountLabels: { group: 'reset', demo: 'personal', read: whenDefined('accountLabels'), default: {} },
     categoryRules: { group: 'reset', demo: 'personal', read: whenDefined('categoryRules'), default: [] },
     labelRules: { group: 'reset', demo: 'personal', read: whenDefined('labelRules'), default: [] },

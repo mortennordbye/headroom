@@ -13,6 +13,8 @@ const API_BASE = 'https://api.enablebanking.com';
 const ENV_APP_ID = process.env.EB_APP_ID || '';
 const COUNTRY = process.env.EB_COUNTRY || 'NO';
 const DAYS = Number(process.env.EB_DAYS || 90);
+// How far before the last sync each later sync starts, to catch late-booked rows.
+const RESYNC_OVERLAP_DAYS = 7;
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
 const KEY_PATH = process.env.EB_KEY_PATH || path.join(DATA_DIR, 'eb-key.pem');
@@ -537,21 +539,27 @@ function refFormat(ref) {
 
 // A bank can switch reference formats between consents (Handelsbanken went from
 // `2026-08-03-0` to `enc!!…` on a re-link), so the first sync after a re-link
-// refetches the 7-day overlap under new ids and imports it again. On that sync
-// only (fetchMappedTransactions stamps `relinkPrefix` on the rows), drop an
+// refetches the 7-day overlap under new ids and imports it again. On the syncs
+// whose window still reaches back to the re-link (fetchMappedTransactions stamps
+// `relinkPrefix` on the rows while `relinked` is set; recordSync clears it), drop an
 // incoming row that matches a stored row of the same account on date, amount,
 // direction and description when the two refs are in *different* formats. Two
 // rows in the same format are never matched: that is two genuine identical
 // purchases. Each stored row absorbs at most one incoming row, and the stored
-// row is kept as is, so its category and segment survive. Pure.
+// row is kept as is, so its category and segment survive. `existing` also
+// carries the fingerprints of rows the user deleted (deletedBankTombstones), so
+// a deleted row isn't imported again under its new id. Pure.
 function dropRelinkFormatTwins(existing, incoming) {
   if (!incoming.some((t) => t.relinkPrefix)) return incoming;
   const incomingIds = new Set(incoming.map((t) => t.id));
+  const existingIds = new Set(existing.map((e) => e.id));
   const claimed = new Set();
   const refOf = (id, prefix) => (id.startsWith(prefix) ? id.slice(prefix.length) : null);
   return incoming.filter((t) => {
     const prefix = t.relinkPrefix;
-    if (!prefix) return true;
+    // A row already stored under this id is a plain re-sync of it; it must not
+    // claim a stored twin, or the row that twin really belongs to slips through.
+    if (!prefix || existingIds.has(t.id)) return true;
     const ref = refOf(t.id, prefix);
     if (ref == null) return true;
     const twin = existing.find((e) => {
@@ -571,12 +579,13 @@ function dropRelinkFormatTwins(existing, incoming) {
   });
 }
 
-function mergeTransactions(existing, incoming, deletedIds = []) {
+function mergeTransactions(existing, incoming, deletedIds = [], tombstones = []) {
   const deleted = new Set(deletedIds);
   // A row the user soft-deleted in the UI must not come back on the next sync.
   const byId = new Map(existing.filter((t) => !deleted.has(t.id)).map((t) => [t.id, t]));
+  const deletedRows = tombstones.filter((t) => t && typeof t.id === 'string' && !byId.has(t.id));
   // `relinkPrefix` is a sync-only marker; it never reaches the stored ledger.
-  incoming = dropRelinkFormatTwins([...byId.values()], incoming)
+  incoming = dropRelinkFormatTwins([...byId.values(), ...deletedRows], incoming)
     .map((t) => {
       if (!('relinkPrefix' in t)) return t;
       const row = { ...t };
@@ -816,7 +825,7 @@ async function fetchMappedTransactions() {
       }
     }
     const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
-    const fromMs = lastSync ? lastSync - 7 * 864e5 : Date.now() - DAYS * 864e5;
+    const fromMs = lastSync ? lastSync - RESYNC_OVERLAP_DAYS * 864e5 : Date.now() - DAYS * 864e5;
     const from = new Date(fromMs).toISOString().slice(0, 10);
     try {
       for (const acc of c.accounts || []) {
@@ -883,19 +892,22 @@ function appendSyncLog(log, entry, max = SYNC_LOG_MAX) {
 }
 
 /**
- * Record a sync outcome: on success, stamp `last_sync` on every live connection
- * (clearing its relink flag); always append a rolling log entry (ok or error) so
- * the Settings card can show whether a cron sync ran and what it pulled.
+ * Record a sync outcome: on success, stamp `last_sync` on every live connection;
+ * always append a rolling log entry (ok or error) so the Settings card can show
+ * whether a cron sync ran and what it pulled. The relink flag stays until the
+ * next sync's window (`last_sync` minus the overlap) starts after the re-link
+ * day: until then the bank can still resend pre-re-link rows under new ids.
  */
 function recordSync(outcome = {}) {
   const store = readStore();
   const now = new Date().toISOString();
   if (outcome.ok !== false) {
+    const nextFrom = new Date(Date.parse(now) - RESYNC_OVERLAP_DAYS * 864e5).toISOString().slice(0, 10);
     for (const c of store.connections) {
       if (sessionValid(c)) {
         c.last_sync = now;
         c.needs_relink = false;
-        delete c.relinked;
+        if (!c.linked_at || nextFrom > String(c.linked_at).slice(0, 10)) delete c.relinked;
       }
     }
   }

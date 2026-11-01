@@ -22,8 +22,8 @@ export const IMPORT_SECTION_KEYS: Record<ImportSectionKey, PersistedKey[]> = {
     'jobs', 'salaries', 'bonuses', 'overtime', 'hoursSnapshots', 'taxCard',
   ],
   budget: [
-    'fixedExpenses', 'savings', 'savingsMonthOverrides', 'dailyTransactions', 'deletedBankIds', 'accountLabels',
-    'categoryRules', 'labelRules', 'transferRules', 'categoryBudgets', 'recurringTemplates',
+    'fixedExpenses', 'savings', 'savingsMonthOverrides', 'dailyTransactions', 'deletedBankIds', 'deletedBankTombstones',
+    'accountLabels', 'categoryRules', 'labelRules', 'transferRules', 'categoryBudgets', 'recurringTemplates',
   ],
   assetsDebt: [
     'debts', 'netWorthHistory', 'balanceSnapshots', 'goals', 'savingsAllocations', 'residences', 'secondHomeScenarios',

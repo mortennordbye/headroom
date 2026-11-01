@@ -144,6 +144,13 @@ describe('the server is a backstop: a data-losing write cannot destroy stored da
     expect(await getBlob()).toEqual(fullFixture());
   });
 
+  it('a malformed deletedBankTombstones is rejected (400) and stored data is untouched', async () => {
+    await expect(
+      client.applyMutation((b) => ({ ...b, deletedBankTombstones: 'eb-1' as unknown as ExportPayload['deletedBankTombstones'] })),
+    ).rejects.toThrow(/400/);
+    expect(await getBlob()).toEqual(fullFixture());
+  });
+
   it('a stale write is rejected with 409 and the current rev', async () => {
     const rev = await currentRev();
     const stale = await fetch(`${BASE}/api/data`, {
@@ -332,6 +339,7 @@ describe('revision history (in-volume undo net)', () => {
     const after = await getBlob();
     expect(after.dailyTransactions.some((t) => t.id === 'eb-undo-1')).toBe(true);
     expect(after.deletedBankIds).toEqual(fullFixture().deletedBankIds);
+    expect(after.deletedBankTombstones).toEqual(fullFixture().deletedBankTombstones);
   });
 
   it('restoring a non-existent revision fails cleanly', async () => {
@@ -362,6 +370,7 @@ describe('deleting a bank-imported transaction', () => {
     const after = await getBlob();
     expect(after.dailyTransactions.some((t) => t.id === id)).toBe(false);
     expect(after.deletedBankIds).toContain(id);
+    expect(after.deletedBankTombstones?.some((t) => t.id === id)).toBe(true);
   });
 });
 

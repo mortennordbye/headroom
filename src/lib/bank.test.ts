@@ -296,6 +296,46 @@ describe('mergeTransactions after a re-link (reference format change)', () => {
     const merged = mergeTransactions(stored, refetched);
     expect(merged).toHaveLength(2);
   });
+
+  // The stored row was deleted by the user: only its id (deletedBankIds) and
+  // its fingerprint (deletedBankTombstones) remain.
+  const tombstone = { id: stored[0].id, date: stored[0].date, amount: stored[0].amount, account: stored[0].account, description: stored[0].description, kind: stored[0].kind };
+
+  it('does not bring back a deleted row under its new-format id', () => {
+    expect(mergeTransactions([], relinked(refetched), [stored[0].id], [tombstone])).toHaveLength(0);
+  });
+
+  it('keeps a new-format row the tombstone does not match', () => {
+    const other = mapEBTransactions([tx({ entry_reference: 'enc!!CCCC', transaction_amount: { currency: 'NOK', amount: '39.00' } })], opts);
+    expect(mergeTransactions([], relinked(other), [stored[0].id], [tombstone])).toHaveLength(1);
+  });
+
+  it('keeps dropping the twins on a second marked sync (stored row and deleted row)', () => {
+    const deletedRow = mapEBTransactions([tx({ entry_reference: '2026-10-27-1', transaction_amount: { currency: 'NOK', amount: '55.00' } })], opts)[0];
+    const deletedTomb = { id: deletedRow.id, date: deletedRow.date, amount: deletedRow.amount, account: deletedRow.account, description: deletedRow.description, kind: deletedRow.kind };
+    const overlap = mapEBTransactions([
+      tx({ entry_reference: 'enc!!Q2hvY29sYXRl' }),
+      tx({ entry_reference: 'enc!!RGVsZXRlZA', transaction_amount: { currency: 'NOK', amount: '55.00' } }),
+    ], opts);
+    const s1 = mergeTransactions(stored, relinked(overlap), [deletedRow.id], [deletedTomb]);
+    const s2 = mergeTransactions(s1, relinked(overlap), [deletedRow.id], [deletedTomb]);
+    expect(s2.map((t) => t.id)).toEqual([`${prefix}2026-10-27-0`]);
+  });
+
+  it('does not let an already-stored new-format row claim a stored twin (order flips between syncs)', () => {
+    // Two identical purchases: one stored old-format, the other first seen under
+    // the new format. The second marked sync sends them in the other order.
+    const n1 = mapEBTransactions([tx({ entry_reference: 'enc!!AAAA' })], opts);
+    const n2 = mapEBTransactions([tx({ entry_reference: 'enc!!BBBB' })], opts);
+    const s1 = mergeTransactions(stored, relinked([...n1, ...n2]));
+    expect(s1).toHaveLength(2);
+    const s2 = mergeTransactions(s1, relinked([...n2, ...n1]));
+    expect(s2.map((t) => t.id).sort()).toEqual(s1.map((t) => t.id).sort());
+  });
+
+  it('ignores tombstones on a normal sync', () => {
+    expect(mergeTransactions([], refetched, [stored[0].id], [tombstone])).toHaveLength(1);
+  });
 });
 
 // evictSupersededPending is the CJS twin of the same function in

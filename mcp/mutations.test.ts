@@ -195,7 +195,7 @@ const cases: {
     },
   },
   {
-    name: 'delete_transaction (manual row leaves deletedBankIds alone)',
+    name: 'delete_transaction (manual row leaves deletedBankIds and deletedBankTombstones alone)',
     touched: ['dailyTransactions'],
     mutate: (b) => deleteTransaction(b, { id: 't1' }),
     assertChange: (b) => expect(b.dailyTransactions.some((t) => t.id === 't1')).toBe(false),
@@ -463,19 +463,21 @@ describe('delete_transaction on a bank-imported row', () => {
     return blob;
   }
 
-  it('removes the row and records its id in deletedBankIds', () => {
+  it('removes the row and records its id in deletedBankIds and its fingerprint in deletedBankTombstones', () => {
     const blob = withBankRow();
     const changes = deleteTransaction(blob, { id: 'eb-abc12345-1' });
     expect(blob.dailyTransactions.some((t) => t.id === 'eb-abc12345-1')).toBe(false);
     expect(blob.deletedBankIds).toEqual(['eb-old-1', 'eb-abc12345-1']);
-    expect(changes.map((c) => c.field)).toEqual(['dailyTransactions[eb-abc12345-1]', 'deletedBankIds']);
+    expect(blob.deletedBankTombstones?.map((t) => t.id)).toEqual(['eb-old-1', 'eb-abc12345-1']);
+    expect(blob.deletedBankTombstones?.[1]).toMatchObject({ date: '2026-06-11', amount: 300, description: 'Card purchase' });
+    expect(changes.map((c) => c.field)).toEqual(['dailyTransactions[eb-abc12345-1]', 'deletedBankIds', 'deletedBankTombstones']);
   });
 
-  it('touches only dailyTransactions and deletedBankIds', () => {
+  it('touches only dailyTransactions, deletedBankIds and deletedBankTombstones', () => {
     const after = withBankRow();
     const before = structuredClone(after);
     deleteTransaction(after, { id: 'eb-abc12345-1' });
-    expectPreserved(before, after, ['dailyTransactions', 'deletedBankIds']);
+    expectPreserved(before, after, ['dailyTransactions', 'deletedBankIds', 'deletedBankTombstones']);
     expectJsonStable(after);
   });
 

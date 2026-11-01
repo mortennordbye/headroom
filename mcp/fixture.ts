@@ -86,6 +86,7 @@ export function fullFixture(): ExportPayload {
       { id: 't3', date: '2026-05-04', description: 'Grocery store', amount: 4500, category: 'groceries', kind: 'expense' },
     ],
     deletedBankIds: ['eb-old-1'],
+    deletedBankTombstones: [{ id: 'eb-old-1', date: '2026-05-20', amount: 120, description: 'Old bank row', kind: 'expense' }],
     categoryBudgets: { groceries: 6000, dining: 2500 },
     recurringTemplates: [{ id: 'rt1', description: 'Coffee', amount: 45, category: 'dining' }],
     accountLabels: { '1234.56.78901': 'Everyday account' },

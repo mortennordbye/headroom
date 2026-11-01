@@ -519,7 +519,11 @@ function isValidFinancePayload(body) {
     typeof body.income === 'number' &&
     typeof body.assets === 'object' && body.assets !== null &&
     Array.isArray(body.fixedExpenses) &&
-    Array.isArray(body.dailyTransactions)
+    Array.isArray(body.dailyTransactions) &&
+    (body.deletedBankTombstones === undefined || (
+      Array.isArray(body.deletedBankTombstones)
+      && body.deletedBankTombstones.every((t) => typeof t === 'object' && t !== null && typeof t.id === 'string')
+    ))
   );
 }
 
@@ -566,7 +570,7 @@ function preserveUserFields(incoming) {
   if (!blob) return incoming;
   const stored = blob.content;
   const out = { ...incoming };
-  for (const field of ['accountLabels', 'categoryRules', 'labelRules', 'transferRules', 'categoryBudgets', 'deletedBankIds']) {
+  for (const field of ['accountLabels', 'categoryRules', 'labelRules', 'transferRules', 'categoryBudgets', 'deletedBankIds', 'deletedBankTombstones']) {
     const hasStored = stored[field] && (Array.isArray(stored[field]) ? stored[field].length : Object.keys(stored[field]).length);
     if (incoming[field] === undefined && hasStored) {
       console.log(`[data] preserving stored ${field} (incoming payload omitted it)`);
@@ -1126,7 +1130,8 @@ async function runBankSync() {
     const before = existing.length;
     const existingIds = new Set(existing.map((tx) => tx.id));
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
-    blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds);
+    const tombstones = Array.isArray(blob.deletedBankTombstones) ? blob.deletedBankTombstones : [];
+    blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds, tombstones);
     // Bump rev so *other* open tabs see the change and refetch the freshly-synced
     // rows. The caller returns the new rev so the tab that triggered the sync can
     // adopt it and not treat its own sync as a conflicting external change.
