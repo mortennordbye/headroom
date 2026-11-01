@@ -81,7 +81,7 @@ export interface ForecastInputs {
    *    compounding at the return plus savings minus wealth tax;
    *  - the home (`startHomeValue − mortgage.balance`, the user's share), growing
    *    at `houseGrowthPct` while the mortgage amortises, as `calcHouseEquityByYear`;
-   *  - non-mortgage `debts`, paid down at their minimums (`calcDebtBalanceByYear`).
+   *  - non-mortgage `debts`, paid down at their payments (`calcDebtBalanceByYear`).
    * Shares vs other assets is split by today's ratio for the wealth tax's 80 %
    * share valuation. Wealth tax is skipped outside the Norwegian region.
    */
@@ -93,7 +93,8 @@ export interface ForecastInputs {
   houseGrowthPct: number;
   startShares: number;
   startOtherAssets: number;
-  /** Non-mortgage debts, projected with `calcDebtBalanceByYear` from `monthKey`. */
+  /** Non-mortgage debts, projected with `calcDebtBalanceByYear` from `monthKey`.
+   *  Pass them through `withLinkedPayments` so a linked expense sets the payment. */
   debts: Debt[];
   monthKey?: string;
   /** Holiday pay above salary in `startYear` (`holidaySurplusFor`), taxed with

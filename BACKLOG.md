@@ -14,12 +14,14 @@ in git and the CHANGELOG, not here.
   app models one person. **Unblock**: an issue covering a marital-status field. **Where**:
   `src/lib/norwegianTax.ts`, `annualMortgageInterest` in `src/context/FinanceContext.tsx` and
   `mcp/derive.ts`.
-- **Linked debts amortize at their minimum in projections.** A debt that a fixed expense pays
-  down (`destinationKind: 'debt'`) is projected at its `minPayment`, not at the expense amount,
-  so the two can disagree when they differ. Left out of the fix for debts the payment can't keep
-  up with (#355), which only changed the growth. **Unblock**: decide whether the projection should
-  use the linked expense's amount, and how a paused expense counts. **Where**:
-  `calcDebtBalanceByYear` in `src/lib/debt.ts`.
+- **Deferred studielån with a linked expense.** While `interestFreeUntil` is in the future, the
+  projections hold a student loan flat, but the paydown automation has no notion of deferment and
+  posts a linked expense's payment into it every month, so the Assets balance falls while the
+  projection doesn't. Predates the linked-payment projection fix and was left out to keep that
+  change small. **Unblock**: decide which side is right (voluntary payments during deferment are
+  allowed, so likely the projection should pay a linked expense from month 0 while the minimum
+  still waits). **Where**: `simulatePayoff` in `src/lib/debt.ts`, `AutomationState.debts` and the
+  debt paydown in `src/lib/automation.ts`.
 - **OTP base, remaining gaps.** Bonuses are now a per-user setting, but the rest of the base is
   fixed: overtime is always left out (it counts under innskuddspensjonsloven § 5-5 første ledd
   unless the plan excludes it), on-call is always counted, the § 5-5 annet ledd bokstav b

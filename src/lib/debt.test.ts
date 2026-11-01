@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, creditFrameBreakdown, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings } from './debt';
+import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, creditFrameBreakdown, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings, withLinkedPayments } from './debt';
 import { calcMonthlyPayment } from './calculations';
-import type { Debt, BalanceSnapshot } from '../context/FinanceContext';
+import type { Debt, BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
 
 const debt = (over: Partial<Debt> = {}): Debt => ({
   id: 'd1',
@@ -185,6 +185,47 @@ describe('calcDebtBalanceByYear', () => {
     expect(out[1]).toBe(300_000); // still studying
     expect(out[2]).toBe(300_000); // deferment ends this month
     expect(out[3]).toBeLessThan(300_000); // now repaying
+  });
+});
+
+describe('withLinkedPayments', () => {
+  const link = (over: Partial<FixedExpense> = {}): FixedExpense =>
+    ({ id: 'e', name: 'Avdrag', amount: 2_000, destinationKind: 'debt', debtId: 'd', ...over });
+
+  it('projects a linked debt at the expense amount, not its minimum', () => {
+    // 24k @ 0 %: 1 000/mo minimum clears it in two years, the 2 000/mo expense in one.
+    const d = debt({ id: 'd', balance: 24_000, rate: 0, minPayment: 1_000 });
+    expect(calcDebtBalanceByYear(withLinkedPayments([d], [link()]), 2)).toEqual([24_000, 0, 0]);
+  });
+
+  it('sums several linked expenses and ignores other destinations', () => {
+    const d = debt({ id: 'd', balance: 36_000, rate: 0, minPayment: 0 });
+    const out = withLinkedPayments([d], [
+      link({ id: 'a' }),
+      link({ id: 'b', amount: 1_000 }),
+      link({ id: 'c', debtId: 'other' }),
+      link({ id: 'm', destinationKind: 'mortgage', debtId: undefined }),
+      link({ id: 'n', destinationKind: undefined, debtId: undefined }),
+    ]);
+    expect(out[0].minPayment).toBe(3_000);
+    expect(calcDebtBalanceByYear(out, 1)).toEqual([36_000, 0]);
+  });
+
+  it('never pays less than the minimum', () => {
+    const d = debt({ id: 'd', balance: 24_000, rate: 0, minPayment: 2_000 });
+    expect(withLinkedPayments([d], [link({ amount: 500 })])[0].minPayment).toBe(2_000);
+  });
+
+  it('falls back to the minimum when the linked expense is paused', () => {
+    const d = debt({ id: 'd', balance: 24_000, rate: 0, minPayment: 1_000 });
+    const out = withLinkedPayments([d], [link({ automationPaused: true })]);
+    expect(out[0].minPayment).toBe(1_000);
+    expect(calcDebtBalanceByYear(out, 2)).toEqual([24_000, 12_000, 0]);
+  });
+
+  it('ignores a non-finite or non-positive expense amount', () => {
+    const d = debt({ id: 'd', balance: 24_000, rate: 0, minPayment: 1_000 });
+    expect(withLinkedPayments([d], [link({ amount: NaN }), link({ amount: -5 })])[0].minPayment).toBe(1_000);
   });
 });
 

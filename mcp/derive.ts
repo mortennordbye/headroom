@@ -28,7 +28,7 @@ import {
   calcMonthlyPayment,
   calcTransitionNewLoan,
 } from '../src/lib/calculations';
-import { planPayoff, extraPaymentSavings, sumDebtByType, lendingDebtTotal, type PayoffStrategy } from '../src/lib/debt';
+import { planPayoff, extraPaymentSavings, sumDebtByType, lendingDebtTotal, withLinkedPayments, type PayoffStrategy } from '../src/lib/debt';
 import { essentialMonthlyExpenses, fixedExpenseTotalsByType } from '../src/lib/fixedExpenseTotals';
 import { monthlyCashflow } from '../src/lib/monthlyCashflow';
 import { savingsRateStatus, savingsContributionsForMonth } from '../src/lib/savingsRate';
@@ -518,7 +518,7 @@ export function debtAnalysis(
   strategy: PayoffStrategy = 'avalanche',
   monthKey = osloMonthKey(),
 ) {
-  const debts = blob.debts ?? [];
+  const debts = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []);
   const baseline = planPayoff(debts, 0, strategy, monthKey);
   const withExtra = planPayoff(debts, extraMonthly, strategy, monthKey);
   return {
@@ -651,8 +651,9 @@ export function whatIfExtraDebtPayment(
   debtId: string,
   extraMonthly: number,
 ) {
-  const debt = (blob.debts ?? []).find((d) => d.id === debtId);
+  const debt = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []).find((d) => d.id === debtId);
   if (!debt) throw new Error(`no debt with id "${debtId}"`);
+  // The linked expenses' payment (never under the minimum); the extra goes on top.
   const basePayment = debt.minPayment;
   return {
     debt: { id: debt.id, name: debt.name, balance: debt.balance, rate: debt.rate },
@@ -945,7 +946,7 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,
       startOtherAssets: eq.netCrypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
-      debts: blob.debts ?? [],
+      debts: withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []),
       monthKey,
       startHolidaySurplus,
       feriepengesatsPct,
