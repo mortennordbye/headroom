@@ -294,6 +294,43 @@ describe('computeAutomationPostings — two payments to one loan', () => {
     expect(p.newBalance).toBe(1_000_000 - 4000);
   });
 
+  it("charges the interest of months another rule's declined catch-up skipped", () => {
+    // Both rules last paid May. 'main' declined its catch-up in July: it paid
+    // July only, so June's interest is still to charge when 'extra' catches up.
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-07', unpaidMonths: ['2026-06'] });
+    const extra = loanRule({ id: 'extra', amount: 5000, lastPostedMonth: '2026-05' });
+    const [p] = computeAutomationPostings([extra], state(), '2026-07', undefined, [main, extra]);
+    const june = 1_000_000 + 1_000_000 * 0.05 / 12 - 5000;
+    expect(p.newBalance).toBe(Math.round(june - 5000));
+  });
+
+  it('records the months a declined loan catch-up skipped while another rule still owes them', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-04' });
+    const extra = loanRule({ id: 'extra', amount: 5000, lastPostedMonth: '2026-04' });
+    const [p] = computeAutomationPostings([main], state(), '2026-07', 1, [main, extra]);
+    expect(p.monthsDue).toBe(1);
+    expect(p.unpaidMonths).toEqual(['2026-05', '2026-06']);
+  });
+
+  it('drops skipped months every other rule on the loan has already passed', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-04', unpaidMonths: ['2026-02'] });
+    const extra = loanRule({ id: 'extra', amount: 5000, lastPostedMonth: '2026-05' });
+    const [p] = computeAutomationPostings([main], state(), '2026-07', 1, [main, extra]);
+    expect(p.unpaidMonths).toEqual(['2026-06']);
+  });
+
+  it('records no skipped months for a declined catch-up on a loan no other rule pays', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-04' });
+    const [p] = computeAutomationPostings([main], state(), '2026-07', 1, [main]);
+    expect(p.unpaidMonths).toEqual([]);
+  });
+
+  it('leaves the skipped months alone on a posting that is not capped', () => {
+    const main = loanRule({ id: 'main', amount: 10_000, lastPostedMonth: '2026-06', unpaidMonths: ['2026-05'] });
+    const [p] = computeAutomationPostings([main], state(), '2026-07');
+    expect(p).not.toHaveProperty('unpaidMonths');
+  });
+
   it('charges each debt its own interest', () => {
     const s = state({ debts: { 'debt-1': { balance: 50_000, rate: 12 }, 'debt-2': { balance: 50_000, rate: 12 } } });
     const a = loanRule({ id: 'a', targetKind: 'debt', debtId: 'debt-1', amount: 5000 });
@@ -331,6 +368,11 @@ describe('applyAmortization', () => {
 
   it('reports infeasible when the payment cannot cover the interest', () => {
     expect(applyAmortization(100_000, 12, 500, 6)).toEqual({ balance: 100_000, infeasible: true });
+  });
+
+  it('never grows the debt when a later month still owes interest the payment cannot cover', () => {
+    // Month one's interest is already charged; month two's is not, and 500 can't cover it.
+    expect(applyAmortization(100_000, 12, 500, 2, [true, false])).toEqual({ balance: 100_000, infeasible: true });
   });
 });
 

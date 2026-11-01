@@ -126,6 +126,10 @@ export interface FixedExpense {
    *  guard. Set to the current month when a destination is first assigned, so the
    *  first move happens the NEXT month. */
   lastPostedMonth?: string;
+  /** 'yyyy-MM' months up to `lastPostedMonth` this expense never paid, because
+   *  a catch-up was declined. Another payment to the same loan still charges
+   *  their interest. Absent = every stamped month was paid. */
+  unpaidMonths?: string[];
 }
 
 // The paydown destinations reachable from a fixed expense. A strict subset of
@@ -2681,6 +2685,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         mortgagePaymentScope: e.mortgagePaymentScope,
         startMonth: addMonthsKey(nowKey, 1),
         lastPostedMonth: e.lastPostedMonth,
+        unpaidMonths: e.unpaidMonths,
       }));
     return [
       ...savingRules,
@@ -2778,11 +2783,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // What each saving moved for `month`, so an adjustment made later in the
     // month can correct the balance by the difference.
     const moved = new Map(posted.map(p => [p.rule.id, p.rule.amountByMonth?.[month] ?? p.rule.amount]));
+    // A declined loan catch-up rewrites the months it skipped; an empty list drops the field.
+    const unpaid = new Map(posted.filter(p => p.unpaidMonths).map(p => [p.rule.id, p.unpaidMonths!]));
     if (rowIds.size) {
       setSavings(prev => prev.map(sv => (rowIds.has(sv.id)
         ? { ...sv, lastPostedMonth: month, postedAmount: moved.get(sv.id) }
         : sv)));
-      setFixedExpenses(prev => prev.map(e => (rowIds.has(e.id) ? { ...e, lastPostedMonth: month } : e)));
+      setFixedExpenses(prev => prev.map(e => {
+        if (!rowIds.has(e.id)) return e;
+        if (!unpaid.has(e.id)) return { ...e, lastPostedMonth: month };
+        const { unpaidMonths: _old, ...rest } = e;
+        const months = unpaid.get(e.id)!;
+        return { ...rest, lastPostedMonth: month, ...(months.length ? { unpaidMonths: months } : {}) };
+      }));
     }
     const otp = ids.has(PENSION_OTP_RULE_ID);
     const ips = ids.has(PENSION_IPS_RULE_ID);

@@ -116,8 +116,6 @@ in git and the CHANGELOG, not here.
   `until` (`src/lib/automation.ts`, `src/lib/projectBalances.ts`); buy-and-sell treats the next home
   as the user's alone (`calcTransitionNewLoan`); onboarding doesn't ask the ownership share
   (`src/lib/onboarding.ts`).
-- **A declined catch-up counts its skipped months as interest-charged.** Needs per-loan "interest
-  charged through" state. **Where**: `computeAutomationPostings` in `src/lib/automation.ts`.
 - **MCP server clock vs browser clock** can disagree for a few hours at month end. **Where**:
   `currentMonthKey` in `src/lib/date.ts`, `mcp/derive.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank
