@@ -48,7 +48,7 @@ import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors'
 import { calcTaxByRegion, calcMarginalTaxRate } from '../lib/norwegianTax';
 import { restskattEstimate } from '../lib/restskatt';
 import { monthKeyFromDate, addMonthsKey, monthsBetween, yearOf } from '../lib/date';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, activeJobBreakdown, salaryVsCpiYoy, jobOverlapRanges, allSalariedJobsEnded, type JobOverlapRange } from '../lib/salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, activeJobBreakdown, salaryVsCpiYoy, jobOverlapRanges, allSalariedJobsEnded, jobIdForHoursSnapshot, type JobOverlapRange } from '../lib/salary';
 import { formatSignedPct, formatAxisInt } from '../lib/format';
 import { isValidYearMonth, isOptionalYearMonth, isNonNegativeNumber, isNonEmpty, parseLocaleNumber } from '../lib/validators';
 import { ChartSkeleton } from '../components/ui/Skeleton';
@@ -1243,25 +1243,30 @@ const SalaryPage: React.FC = () => {
           ...overtime.filter(o => !o.jobId).map(overtimeEv),
           ...hoursSnapshots.filter(h => !h.jobId).map(hoursEv),
         ].sort(byDateDesc);
-        // Attribute every pre-jobId bonus/overtime/hours row to one job, with an
-        // undo that clears jobId on exactly those rows again.
+        // Attribute every pre-jobId bonus/overtime row to the chosen job. Hours
+        // snapshots feed hoursAt, so each goes to the job active at its month
+        // instead (left unassigned if none was) and hourly figures don't move.
+        // Undo clears jobId on exactly the rows that were moved.
         const assignUnassigned = (job: JobEntry) => {
-          const ids = {
-            bonus: bonuses.filter(b => !b.jobId).map(b => b.id),
-            overtime: overtime.filter(o => !o.jobId).map(o => o.id),
-            hours: hoursSnapshots.filter(h => !h.jobId).map(h => h.id),
-          };
-          const apply = (jobId: string | undefined) => {
-            ids.bonus.forEach(id => updateBonus(id, { jobId }));
-            ids.overtime.forEach(id => updateOvertime(id, { jobId }));
-            ids.hours.forEach(id => updateHoursSnapshot(id, { jobId }));
-          };
-          apply(job.id);
+          const bonusIds = bonuses.filter(b => !b.jobId).map(b => b.id);
+          const overtimeIds = overtime.filter(o => !o.jobId).map(o => o.id);
+          const hoursMoves = hoursSnapshots
+            .filter(h => !h.jobId)
+            .map(h => ({ id: h.id, jobId: jobIdForHoursSnapshot(h, sortedSalaries) }))
+            .filter((m): m is { id: string; jobId: string } => m.jobId != null);
+          const count = bonusIds.length + overtimeIds.length + hoursMoves.length;
+          if (count === 0) return;
+          bonusIds.forEach(id => updateBonus(id, { jobId: job.id }));
+          overtimeIds.forEach(id => updateOvertime(id, { jobId: job.id }));
+          hoursMoves.forEach(m => updateHoursSnapshot(m.id, { jobId: m.jobId }));
           setUndo({
-            message: t.salary.assignedAll
-              .replace('{count}', String(ids.bonus.length + ids.overtime.length + ids.hours.length))
-              .replace('{job}', job.employer),
-            onUndo: () => { apply(undefined); setUndo(null); },
+            message: t.salary.assignedAll.replace('{count}', String(count)),
+            onUndo: () => {
+              bonusIds.forEach(id => updateBonus(id, { jobId: undefined }));
+              overtimeIds.forEach(id => updateOvertime(id, { jobId: undefined }));
+              hoursMoves.forEach(m => updateHoursSnapshot(m.id, { jobId: undefined }));
+              setUndo(null);
+            },
           });
         };
         const latestSalaryFor = (jobId: string): SalaryEntry | null => {
