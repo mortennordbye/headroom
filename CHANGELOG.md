@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.7](https://github.com/mortennordbye/headroom/compare/v3.10.6...v3.10.7) (2026-11-01)
+
+
+### Bug Fixes
+
+* recover taps that iOS never turns into a click, for every button ([#303](https://github.com/mortennordbye/headroom/issues/303)) ([879167a](https://github.com/mortennordbye/headroom/commit/879167a59cf52e33e93c640d1b0ef1ecfb807422))
+* smooth page switches: no skeleton flash, scroll to top, fade in ([#305](https://github.com/mortennordbye/headroom/issues/305)) ([8b92057](https://github.com/mortennordbye/headroom/commit/8b920576939db6a34a90371b3421d255a7718525))
+
 ## [3.10.6](https://github.com/mortennordbye/headroom/compare/v3.10.5...v3.10.6) (2026-11-01)
 
 
