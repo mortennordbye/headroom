@@ -126,6 +126,9 @@ export interface FixedExpense {
    *  guard. Set to the current month when a destination is first assigned, so the
    *  first move happens the NEXT month. */
   lastPostedMonth?: string;
+  /** Id of the savings-allocation row that created this expense; absent on
+   *  expenses made by hand. "Sync amounts" only ever touches linked rows. */
+  allocationId?: string;
 }
 
 // The paydown destinations reachable from a fixed expense. A strict subset of
@@ -186,6 +189,9 @@ export interface Saving {
    *  guard. Set to the current month on creation, so the first move happens the
    *  NEXT month. */
   lastPostedMonth?: string;
+  /** Id of the savings-allocation row that created this saving; absent on
+   *  savings made by hand. "Sync amounts" only ever touches linked rows. */
+  allocationId?: string;
   /** Kroner the automation moved for `lastPostedMonth`; absent when that stamp
    *  came from creating or resuming the saving (nothing moved). Lets a month
    *  adjusted after it was posted correct the balance by the difference. */
