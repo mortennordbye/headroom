@@ -8,7 +8,8 @@
 //
 // Two documented exceptions, both mirroring what the app itself does:
 // - deleteTransaction on a bank-imported (`eb-`) row also appends the id to
-//   `deletedBankIds`, or the server's reconcileBankTransactions re-adds it.
+//   `deletedBankIds`, or the server's reconcileBankTransactions re-adds it,
+//   and its fingerprint to `deletedBankTombstones`.
 // - updateAsset on houseValue also mirrors it into `transition`, and houseDebt
 //   stamps its month on `homeowner` (when present), as FinanceContext.updateAsset
 //   does.
@@ -36,6 +37,7 @@ import { currentMonthKey } from '../src/lib/date';
 import { isValidTermParts, yearsFromParts } from '../src/lib/loanTerm';
 import { rewriteSnapshotCoOwners, sanitizeCoOwners, validateCoOwners, type CoOwnerError } from '../src/lib/ownership';
 import { currentResidence } from '../src/lib/property';
+import { addDeletedBankTombstones } from '../src/lib/bankDedup';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -288,10 +290,12 @@ export function updateTransaction(
 
 /**
  * Delete a transaction. A bank-imported row (`eb-` id) is also soft-deleted in
- * `deletedBankIds`, or the server's reconcile resurrects it on the next write.
- * This is the one builder besides updateAsset that touches two top-level keys.
+ * `deletedBankIds`, or the server's reconcile resurrects it on the next write,
+ * and its fingerprint goes to `deletedBankTombstones`.
+ * This is the one builder besides updateAsset that touches several top-level keys.
  */
 export function deleteTransaction(blob: ExportPayload, args: { id: string }): FieldChange[] {
+  const removed = (blob.dailyTransactions ?? []).find((t) => t.id === args.id);
   const { list, changes } = removeById(blob.dailyTransactions ?? [], args.id, 'dailyTransactions', 'transaction');
   blob.dailyTransactions = list;
   if (args.id.startsWith(BANK_ID_PREFIX)) {
@@ -299,6 +303,14 @@ export function deleteTransaction(blob: ExportPayload, args: { id: string }): Fi
     if (!before.includes(args.id)) {
       blob.deletedBankIds = [...before, args.id];
       changes.push(diff('deletedBankIds', before, blob.deletedBankIds));
+    }
+    // The fingerprint lets the first sync after a re-link spot the row under a
+    // new reference format (see addDeletedBankTombstones).
+    const tombBefore = blob.deletedBankTombstones ?? [];
+    const tombAfter = addDeletedBankTombstones(tombBefore, removed ? [removed] : []);
+    if (tombAfter !== tombBefore) {
+      blob.deletedBankTombstones = tombAfter;
+      changes.push(diff('deletedBankTombstones', tombBefore, tombAfter));
     }
   }
   return changes;

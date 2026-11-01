@@ -543,7 +543,9 @@ function refFormat(ref) {
 // direction and description when the two refs are in *different* formats. Two
 // rows in the same format are never matched: that is two genuine identical
 // purchases. Each stored row absorbs at most one incoming row, and the stored
-// row is kept as is, so its category and segment survive. Pure.
+// row is kept as is, so its category and segment survive. `existing` also
+// carries the fingerprints of rows the user deleted (deletedBankTombstones), so
+// a deleted row isn't imported again under its new id. Pure.
 function dropRelinkFormatTwins(existing, incoming) {
   if (!incoming.some((t) => t.relinkPrefix)) return incoming;
   const incomingIds = new Set(incoming.map((t) => t.id));
@@ -571,12 +573,13 @@ function dropRelinkFormatTwins(existing, incoming) {
   });
 }
 
-function mergeTransactions(existing, incoming, deletedIds = []) {
+function mergeTransactions(existing, incoming, deletedIds = [], tombstones = []) {
   const deleted = new Set(deletedIds);
   // A row the user soft-deleted in the UI must not come back on the next sync.
   const byId = new Map(existing.filter((t) => !deleted.has(t.id)).map((t) => [t.id, t]));
+  const deletedRows = tombstones.filter((t) => t && typeof t.id === 'string' && !byId.has(t.id));
   // `relinkPrefix` is a sync-only marker; it never reaches the stored ledger.
-  incoming = dropRelinkFormatTwins([...byId.values()], incoming)
+  incoming = dropRelinkFormatTwins([...byId.values(), ...deletedRows], incoming)
     .map((t) => {
       if (!('relinkPrefix' in t)) return t;
       const row = { ...t };

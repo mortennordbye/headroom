@@ -1,4 +1,4 @@
-import type { DailyTransaction } from '../context/FinanceContext';
+import type { DailyTransaction, DeletedBankTombstone } from '../context/FinanceContext';
 import type { TransactionSegment } from './segments';
 
 // Remove duplicate bank rows created when the Enable-Banking id format changed.
@@ -105,4 +105,23 @@ export function evictSupersededPending(txs: DailyTransaction[]): DailyTransactio
       if (s && !t.segment) row = { ...row, segment: s };
       return row;
     });
+}
+
+// Remember what a deleted bank (eb-) row looked like, next to its id in
+// `deletedBankIds`. After a re-link the bank may resend that row under a new
+// reference format, which the id alone can't catch; the server matches these
+// fingerprints the way it matches stored rows (`dropRelinkFormatTwins` in
+// server/bank.js). Returns `prev` unchanged when nothing new was removed.
+export function addDeletedBankTombstones(prev: DeletedBankTombstone[], removed: DailyTransaction[]): DeletedBankTombstone[] {
+  const have = new Set(prev.map((t) => t.id));
+  const added: DeletedBankTombstone[] = [];
+  for (const t of removed) {
+    if (typeof t.id !== 'string' || !t.id.startsWith('eb-') || have.has(t.id)) continue;
+    have.add(t.id);
+    added.push({
+      id: t.id, date: t.date, amount: t.amount, account: t.account, description: t.description, kind: t.kind,
+      ...(t.pending ? { pending: true } : {}),
+    });
+  }
+  return added.length ? [...prev, ...added] : prev;
 }

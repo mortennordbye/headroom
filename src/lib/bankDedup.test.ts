@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { DailyTransaction } from '../context/FinanceContext';
-import { dedupeBankTransactions, evictSupersededPending } from './bankDedup';
+import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones } from './bankDedup';
 
 const tx = (over: Partial<DailyTransaction>): DailyTransaction => ({
   id: 'x', date: '2026-06-28', description: 'REMA 1000', amount: 100, kind: 'expense', ...over,
@@ -111,5 +111,23 @@ describe('evictSupersededPending', () => {
     expect(out).toHaveLength(1);
     expect(out[0].category).toBe('groceries');
     expect(out[0].categorySource).toBe('manual');
+  });
+});
+
+describe('addDeletedBankTombstones', () => {
+  it("records a deleted bank row's fingerprint, without category or other display fields", () => {
+    const row = tx({ id: 'eb-aaaa1111-2026-10-27-0', account: 'aaaa1111:1', category: 'groceries', merchant: 'REMA' });
+    expect(addDeletedBankTombstones([], [row])).toEqual([
+      { id: 'eb-aaaa1111-2026-10-27-0', date: '2026-06-28', amount: 100, account: 'aaaa1111:1', description: 'REMA 1000', kind: 'expense' },
+    ]);
+  });
+
+  it('keeps the pending flag so a pending tombstone never matches', () => {
+    expect(addDeletedBankTombstones([], [tx({ id: 'eb-p', pending: true })])[0].pending).toBe(true);
+  });
+
+  it('skips manual rows and ids it already holds, and returns the same array when nothing is added', () => {
+    const prev = addDeletedBankTombstones([], [tx({ id: 'eb-1' })]);
+    expect(addDeletedBankTombstones(prev, [tx({ id: 'eb-1' }), tx({ id: 'manual-1' })])).toBe(prev);
   });
 });

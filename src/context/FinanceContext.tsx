@@ -49,7 +49,7 @@ import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
-import { dedupeBankTransactions, evictSupersededPending } from '../lib/bankDedup';
+import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones } from '../lib/bankDedup';
 import { activeJobBreakdown } from '../lib/salary';
 import { stableStringify } from '../lib/stableStringify';
 import { sanitizePayload } from '../lib/sanitizePayload';
@@ -1134,12 +1134,28 @@ export interface BalanceSnapshot {
   source?: 'auto' | 'manual';
 }
 
+/**
+ * What a deleted bank row looked like, kept beside its id in `deletedBankIds` so
+ * the first sync after a re-link can recognise it under a new reference format
+ * (server/bank.js `dropRelinkFormatTwins`).
+ */
+export interface DeletedBankTombstone {
+  id: string;
+  date: string;
+  amount: number;
+  account?: string;
+  description: string;
+  kind?: 'income' | 'expense';
+  pending?: boolean;
+}
+
 export interface ExportPayload {
   income: number;
   fixedExpenses: FixedExpense[];
   savings: Saving[];
   dailyTransactions: DailyTransaction[];
   deletedBankIds?: string[];
+  deletedBankTombstones?: DeletedBankTombstone[];
   /** User-chosen friendly names for connected accounts, keyed by account key. */
   accountLabels?: Record<string, string>;
   /** User-defined categorization rules (merchant/text → category). */
@@ -1287,6 +1303,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Ids of bank-imported (eb-) rows the user deleted. Persisted so the server's
   // sync/reconcile can't resurrect them (see server/bank.js mergeTransactions).
   const [deletedBankIds, setDeletedBankIds] = useState<string[]>([]);
+  // Fingerprints of those deleted rows, for the re-link match (addDeletedBankTombstones).
+  const [deletedBankTombstones, setDeletedBankTombstones] = useState<DeletedBankTombstone[]>([]);
   // Friendly names for connected accounts, keyed by the transaction `account`
   // key (e.g. 'ab12:uid-1'). Empty string clears back to the bank-provided name.
   const [accountLabels, setAccountLabels] = useState<Record<string, string>>({});
@@ -1404,10 +1422,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const setDailyTransactionsTracked = useCallback((val: DailyTransaction[]) => {
     const nextIds = new Set(val.map((t) => t.id));
     const removedEb = dailyTransactions
-      .filter((t) => typeof t.id === 'string' && t.id.startsWith('eb-') && !nextIds.has(t.id))
-      .map((t) => t.id);
+      .filter((t) => typeof t.id === 'string' && t.id.startsWith('eb-') && !nextIds.has(t.id));
     if (removedEb.length) {
-      setDeletedBankIds((ids) => Array.from(new Set([...ids, ...removedEb])));
+      setDeletedBankIds((ids) => Array.from(new Set([...ids, ...removedEb.map((t) => t.id)])));
+      setDeletedBankTombstones((prev) => addDeletedBankTombstones(prev, removedEb));
     }
     setDailyTransactions(val);
   }, [dailyTransactions]);
@@ -1420,7 +1438,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // key type is `BuiltPayload` — omitting any persisted field FAILS TO COMPILE.
   const buildPayload = useCallback((): ExportPayload => derivePayload(PAYLOAD_REGISTRY, {
     income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, savings,
-    dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, deletedBankTombstones, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang,
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
@@ -1431,7 +1449,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
     projectionIncludeGrowth,
   }), [income, monthlyIncomes, payslips, netWorthHistory, balanceSnapshots, fixedExpenses, savings,
-    dailyTransactions, deletedBankIds, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
+    dailyTransactions, deletedBankIds, deletedBankTombstones, accountLabels, categoryRules, labelRules, transferRules, categoryBudgets, debts, assets, loan, pension, recurringTemplates,
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
@@ -1468,7 +1486,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       income: setIncome, monthlyIncomes: setMonthlyIncomes, payslips: setPayslips,
       netWorthHistory: setNetWorthHistory, balanceSnapshots: setBalanceSnapshots,
       fixedExpenses: setFixedExpenses, savings: setSavings, dailyTransactions: setDailyTransactions,
-      deletedBankIds: setDeletedBankIds, accountLabels: setAccountLabels, categoryRules: setCategoryRules,
+      deletedBankIds: setDeletedBankIds, deletedBankTombstones: setDeletedBankTombstones, accountLabels: setAccountLabels, categoryRules: setCategoryRules,
       labelRules: setLabelRules, transferRules: setTransferRules, categoryBudgets: setCategoryBudgets, debts: setDebts, assets: setAssets,
       loan: setLoan, pension: setPension, recurringTemplates: setRecurringTemplates,
       housingMode: setHousingMode, homeowner: setHomeowner, transition: setTransition, residences: setResidences,
@@ -3042,6 +3060,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setDebts([]);
     setDailyTransactions([]);
     setDeletedBankIds([]);
+    setDeletedBankTombstones([]);
     setAccountLabels({});
     setCategoryRules([]);
     setLabelRules([]);

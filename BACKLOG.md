@@ -63,17 +63,24 @@ in git and the CHANGELOG, not here.
 
 ## Bank import
 
-- **A row deleted before a re-link can come back.** The first sync after a re-link drops overlap
-  rows whose reference changed format by matching them against stored rows (`dropRelinkFormatTwins`).
-  A row the user had deleted is no longer stored, and `deletedBankIds` holds its old id, so its
-  new-format twin is imported again. **Unblock**: keep date, amount, account and description with
-  each deleted id so the re-link match can check against them too. **Where**:
-  `dropRelinkFormatTwins` / `mergeTransactions` in `server/bank.js`, `deletedBankIds` in
+- **`deletedBankIds` and `deletedBankTombstones` grow unbounded.** Neither of the obvious prunes is
+  safe. Dropping a connection's entries when it is removed would resurrect its deleted rows on a
+  re-add, because `startLink` reuses a removed connection's id prefix and the re-add refetches
+  `EB_DAYS` of history. An age rule has no fixed bound: a live connection fetches from
+  `last_sync - 7d`, which can be arbitrarily old after a long gap (a re-link keeps `last_sync`), and
+  `EB_DAYS` is an env var. Legacy `deletedBankIds` entries also carry no date. **Unblock**: a
+  persisted per-connection "oldest date any future sync can fetch" on the bank store, then prune
+  tombstones (and their ids) older than it. **Where**: `fetchMappedTransactions` / `startLink` /
+  `removeConnection` in `server/bank.js`, `deletedBankIds` / `deletedBankTombstones` in
   `src/context/FinanceContext.tsx`.
-- **`deletedBankIds` grows unbounded.** No prune is provably safe without knowing the bank's sync
-  window. **Unblock**: a server-side retention rule keyed to that window, or drop ids when their
-  connection is removed. **Where**: `src/context/FinanceContext.tsx`, `mergeTransactions` in
-  `server/bank.js`.
+- **The second sync after a re-link can re-import the overlap.** `dropRelinkFormatTwins` runs only on
+  the first sync after a re-link (`relinked` is cleared by `recordSync`). If the re-link came less
+  than 7 days after the last sync, the next sync's window (`last_sync - 7d`) still reaches rows
+  dated before the old `last_sync`, now under new-format ids, and imports them beside their stored
+  old-format twins (or, for a deleted row, despite its tombstone). **Unblock**: keep the re-link
+  check on until the window has moved past the old `last_sync`, or record the dropped new-format
+  ids so later syncs skip them. **Where**: `fetchMappedTransactions` / `recordSync` /
+  `dropRelinkFormatTwins` in `server/bank.js`.
 - **Bank-id dedup regex ambiguity.** A legacy bare id whose ref starts with 8 hex chars + `-` is
   classified as connection-prefixed. **Unblock**: converge the id format, or a secondary key.
   **Where**: `src/lib/bankDedup.ts`, `dropStaleBareTwins` in `server/bank.js`.

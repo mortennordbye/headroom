@@ -125,8 +125,9 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 Notes on a few of them:
 
 - `delete_transaction` on a bank-imported row (`eb-` id) also adds the id to
-  `deletedBankIds`, as the app does, so the server's bank reconcile does not bring
-  the row back.
+  `deletedBankIds` and its date, amount, account and description to
+  `deletedBankTombstones`, as the app does, so neither the server's bank reconcile
+  nor the first sync after a re-link brings the row back.
 - `update_asset`: `houseDebt` is the one stored mortgage balance and stamps its
   month on the `homeowner` slice; `houseValue` is mirrored into the `transition`
   slice, as the app does.

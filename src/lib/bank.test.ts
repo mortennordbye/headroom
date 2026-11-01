@@ -296,6 +296,23 @@ describe('mergeTransactions after a re-link (reference format change)', () => {
     const merged = mergeTransactions(stored, refetched);
     expect(merged).toHaveLength(2);
   });
+
+  // The stored row was deleted by the user: only its id (deletedBankIds) and
+  // its fingerprint (deletedBankTombstones) remain.
+  const tombstone = { id: stored[0].id, date: stored[0].date, amount: stored[0].amount, account: stored[0].account, description: stored[0].description, kind: stored[0].kind };
+
+  it('does not bring back a deleted row under its new-format id', () => {
+    expect(mergeTransactions([], relinked(refetched), [stored[0].id], [tombstone])).toHaveLength(0);
+  });
+
+  it('keeps a new-format row the tombstone does not match', () => {
+    const other = mapEBTransactions([tx({ entry_reference: 'enc!!CCCC', transaction_amount: { currency: 'NOK', amount: '39.00' } })], opts);
+    expect(mergeTransactions([], relinked(other), [stored[0].id], [tombstone])).toHaveLength(1);
+  });
+
+  it('ignores tombstones on a normal sync', () => {
+    expect(mergeTransactions([], refetched, [stored[0].id], [tombstone])).toHaveLength(1);
+  });
 });
 
 // evictSupersededPending is the CJS twin of the same function in
