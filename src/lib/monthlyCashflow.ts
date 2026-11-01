@@ -2,9 +2,9 @@
 // SavingsRateChart. Pure + unit-tested. Income for a month is its manual
 // override when set, else an estimate: the flat fallback (the current effective
 // income), optionally reshaped by the Norwegian June/December salary swings when
-// a `seasonal` config is supplied (see feriepenger.ts). Fixed expenses aren't
-// snapshotted, so the same current total is applied to every month and past
-// months are approximate.
+// a `seasonal` config is supplied (see feriepenger.ts). Fixed expenses are
+// either one list/total for every month or resolved per month, so a past month
+// can be measured against the fixed expenses it recorded.
 import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 import { reconcile } from './envelopes';
@@ -37,15 +37,16 @@ export function monthlyCashflow(
   txs: DailyTransaction[],
   monthlyIncomes: Record<string, number>,
   fallbackIncome: number,
-  totalFixedExpenses: number,
+  totalFixedExpenses: number | ((month: string) => number),
   // When set (Norwegian salary), un-overridden months are shaped by the June
   // feriepenger spike and December half-trekk instead of the flat fallback.
   seasonal?: FeriepengerConfig | null,
   // The fixed-expense rows behind `totalFixedExpenses`. When supplied, a
   // budgeted line whose real payment was also imported is charged once instead
   // of twice — see the envelope reconciliation below. Must be the same list
-  // `totalFixedExpenses` was summed from, or the two disagree.
-  fixedExpenses?: FixedExpense[],
+  // `totalFixedExpenses` was summed from, or the two disagree. Pass functions
+  // for both to resolve each month's own fixed expenses.
+  fixedExpenses?: FixedExpense[] | ((month: string) => FixedExpense[]),
 ): MonthlyCashflowRow[] {
   const spendByMonth = new Map<string, number>();
   const countByMonth = new Map<string, number>();
@@ -63,11 +64,13 @@ export function monthlyCashflow(
     // double-charges any bill that is both budgeted and imported. With them,
     // an enveloped bill costs max(budgeted, actual) — the budget is reserved and
     // its own transactions draw it down — and only unenveloped spend adds on top.
-    let expenses = totalFixedExpenses + variable;
-    if (fixedExpenses?.length) {
-      const { totals } = reconcile(fixedExpenses, txs, month);
+    const fixedTotal = typeof totalFixedExpenses === 'function' ? totalFixedExpenses(month) : totalFixedExpenses;
+    const fixedRows = typeof fixedExpenses === 'function' ? fixedExpenses(month) : fixedExpenses;
+    let expenses = fixedTotal + variable;
+    if (fixedRows?.length) {
+      const { totals } = reconcile(fixedRows, txs, month);
       const unenveloped = Math.max(0, variable - totals.actual);
-      expenses = totalFixedExpenses + unenveloped + totals.overspent;
+      expenses = fixedTotal + unenveloped + totals.overspent;
     }
     const rate = income > 0 ? Math.round(((income - expenses) / income) * 1000) / 10 : 0;
     return {

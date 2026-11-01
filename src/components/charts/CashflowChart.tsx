@@ -9,25 +9,28 @@ import { useFinance } from '../../context/FinanceContext';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import ChartTooltip from '../ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../../lib/chartColors';
-import { lastNMonthKeys } from '../../lib/date';
+import { lastNMonthKeys, currentMonthKey } from '../../lib/date';
 import { formatAxisInt } from '../../lib/format';
 import { monthlyCashflow } from '../../lib/monthlyCashflow';
+import { fixedExpensesForMonth } from '../../lib/snapshots';
 
 /**
  * Monthly cashflow for the last 12 months: money in (income) vs money out
  * (fixed expenses + logged expense transactions), with a net-surplus line.
  * Income uses the manual override for a month when set, else the current
  * effective income as an estimate — reshaped by the June feriepenger spike and
- * December half-trekk for Norwegian salary; fixed expenses use the current total
- * for every month (they aren't snapshotted), so past months are approximate.
+ * December half-trekk for Norwegian salary. Each month's fixed expenses are its
+ * recorded snapshot copy when it has one, else the live list; the savings
+ * contribution is the viewed month's for every month.
  */
 export default function CashflowChart() {
   const {
-    t, lang, currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses,
+    t, lang, currentMonth, monthlyIncomes, effectiveIncome, savingsContributions,
+    balanceSnapshots, fixedExpenses,
     region, grossAnnualIncome, employerCostConfig,
     // Whole-finance cashflow: net out internal transfers, but not per-account (income
     // isn't account-scoped), so use nonTransferTransactions.
-    nonTransferTransactions: dailyTransactions, viewFixedExpenses,
+    nonTransferTransactions: dailyTransactions,
   } = useFinance();
   const reduced = useReducedMotion();
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -39,13 +42,18 @@ export default function CashflowChart() {
       : null;
     // Savings automations stay in "money out" here — this is literal cashflow,
     // not retention — but reconcile so a budgeted bill isn't counted twice once
-    // its real payment is imported.
-    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFixedExpenses, seasonal, viewFixedExpenses)
+    // its real payment is imported. Each month is reconciled against its own
+    // fixed expenses, not the viewed month's.
+    const nowKey = currentMonthKey();
+    const fixedFor = (month: string) => fixedExpensesForMonth(balanceSnapshots, fixedExpenses, month, nowKey);
+    const totalFor = (month: string) =>
+      fixedFor(month).reduce((sum, item) => sum + item.amount, 0) + savingsContributions;
+    return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFor, seasonal, fixedFor)
       .map(({ month, income, expenses, net }) => ({
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
         income, expenses, net,
       }));
-  }, [currentMonth, monthlyIncomes, effectiveIncome, totalFixedExpenses, viewFixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, savingsContributions, balanceSnapshots, fixedExpenses, dailyTransactions, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   return (
     <div role="img" aria-label={t.charts.aria.cashflow} className="w-full h-full">
