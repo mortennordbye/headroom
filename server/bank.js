@@ -552,11 +552,14 @@ function refFormat(ref) {
 function dropRelinkFormatTwins(existing, incoming) {
   if (!incoming.some((t) => t.relinkPrefix)) return incoming;
   const incomingIds = new Set(incoming.map((t) => t.id));
+  const existingIds = new Set(existing.map((e) => e.id));
   const claimed = new Set();
   const refOf = (id, prefix) => (id.startsWith(prefix) ? id.slice(prefix.length) : null);
   return incoming.filter((t) => {
     const prefix = t.relinkPrefix;
-    if (!prefix) return true;
+    // A row already stored under this id is a plain re-sync of it; it must not
+    // claim a stored twin, or the row that twin really belongs to slips through.
+    if (!prefix || existingIds.has(t.id)) return true;
     const ref = refOf(t.id, prefix);
     if (ref == null) return true;
     const twin = existing.find((e) => {
