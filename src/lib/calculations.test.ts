@@ -16,8 +16,6 @@ import {
   calcHomeownerMortgageStatus,
   calcNetWorthProjectionByBucket,
 } from './calculations';
-import { calcDebtByYear } from './debt';
-import type { Debt } from '../context/FinanceContext';
 
 describe('calcMonthlyPayment', () => {
   it('returns 0 for a zero or negative term (no schedule)', () => {
@@ -477,46 +475,15 @@ describe('calcNetWorthProjectionByBucket', () => {
     expect(p.map(pt => pt.house)).toEqual(houseByYear);
   });
 
-  it('nets the debt balance out of total so the projection starts at net worth', () => {
-    const balance = [100_000, 60_000, 0];
-    const p = calcNetWorthProjectionByBucket(start, 0, rates, 2, undefined, { balance, payments: [0, 0, 0] });
-    expect(p.map(pt => pt.debt)).toEqual(balance);
+  it('nets debtByYear out of total so the projection starts at net worth', () => {
+    const debtByYear = [100_000, 60_000, 0];
+    const p = calcNetWorthProjectionByBucket(start, 0, rates, 2, undefined, debtByYear);
+    expect(p.map(pt => pt.debt)).toEqual(debtByYear);
     expect(p[0].total).toBe(1_170_000 - 100_000);
     expect(p[1].total).toBe(p[1].stocks + p[1].crypto + p[1].cash + p[1].house - 60_000);
   });
 
-  describe('debt repayments', () => {
-    const zero = { stocks: 0, crypto: 0, cash: 0, house: 0 };
-    const cashOnly = { stocks: 0, crypto: 0, cash: 1_000_000, house: 0 };
-    const consumer = (minPayment: number): Debt =>
-      ({ id: 'd', name: 'Loan', type: 'consumer', balance: 400_000, rate: 12, minPayment });
-
-    it('costs the assets the whole payment while the debt falls by principal', () => {
-      // 1M cash, 400k @ 12 % (1 %/mo) at 40k/mo, no growth or saving. Cleared in
-      // month 11 for 423 593.95 in all (see debt.test), so from year 1 net worth is
-      // 1M − 423 594 = 576 406, not the 1M a free repayment would leave.
-      const p = calcNetWorthProjectionByBucket(cashOnly, 0, zero, 5, undefined, calcDebtByYear([consumer(40_000)], 5));
-      expect(p[0].total).toBe(600_000);
-      expect(p[1]).toMatchObject({ cash: 576_406, debt: 0, total: 576_406 });
-      expect(p[5].total).toBe(576_406);
-    });
-
-    it('nets a slower repayment year by year', () => {
-      // 5k/mo: B_n = 500k − 100k·1.01^n. Year 1: 387 317.50 owed, 60 000 paid →
-      // 940 000 − 387 317 = 552 683. Year 5: 318 330.33 owed, 300 000 paid → 381 670.
-      const p = calcNetWorthProjectionByBucket(cashOnly, 0, zero, 5, undefined, calcDebtByYear([consumer(5_000)], 5));
-      expect(p[1]).toMatchObject({ cash: 940_000, debt: 387_317, total: 552_683 });
-      expect(p[5]).toMatchObject({ cash: 700_000, debt: 318_330, total: 381_670 });
-    });
-
-    it('pays from stocks, then cash, then crypto, and an uncovered rest still leaves as negative cash', () => {
-      const pot = { stocks: 10_000, crypto: 5_000, cash: 20_000, house: 0 };
-      const p = calcNetWorthProjectionByBucket(pot, 0, zero, 1, undefined, { balance: [0, 0], payments: [0, 50_000] });
-      expect(p[1]).toMatchObject({ stocks: 0, cash: -15_000, crypto: 0, total: -15_000 });
-    });
-  });
-
-  it('defaults debt to 0 when no debt is provided', () => {
+  it('defaults debt to 0 when debtByYear is not provided', () => {
     const p = calcNetWorthProjectionByBucket(start, 0, rates, 1);
     expect(p.every(pt => pt.debt === 0)).toBe(true);
     expect(p[0].total).toBe(1_170_000);
@@ -575,7 +542,7 @@ describe('calcNetWorthProjectionByBucket', () => {
     it('recovers the home market value from equity + mortgage', () => {
       // 17M equity + 3M mortgage = 20M market value → valued 10M×25% + 10M×70% = 9.5M,
       // less 3M debt = 6.5M net wealth; 4.74M above the 2025 bunnfradrag × 1.0% = 47 400.
-      const p = calcNetWorthProjectionByBucket(zero, 0, zero, 0, [17_000_000], { balance: [0], payments: [0] }, {
+      const p = calcNetWorthProjectionByBucket(zero, 0, zero, 0, [17_000_000], [0], {
         mortgageByYear: [3_000_000], region: 'no', year: 2025,
       });
       expect(p[0].wealthTax).toBe(47_400);

@@ -1,7 +1,6 @@
 import { calcWealthTax, type Region } from './norwegianTax';
 import type { LoanData, TransitionData } from '../context/FinanceContext';
 import { mySaleProceeds } from './ownership';
-import type { DebtByYear } from './debt';
 
 export function calcMonthlyPayment(principal: number, annualRate: number, years: number): number {
   const monthlyRate = annualRate / 100 / 12;
@@ -413,7 +412,7 @@ export interface BucketProjectionPoint {
   crypto: number;
   cash: number;
   house: number;
-  /** Non-mortgage debt remaining that year (0 unless `debt` is passed). */
+  /** Non-mortgage debt remaining that year (0 unless `debtByYear` is passed). */
   debt: number;
   /** Estimated formuesskatt assessed that year (0 unless a wealth-tax config is
    *  passed or the household stays under the bunnfradrag). The tax is paid out of
@@ -517,11 +516,9 @@ export function calcMortgageBalanceByYear(
  * appreciation + mortgage paydown; without it, the house bucket simply
  * compounds `start.house` at `rates.house`.
  *
- * Pass `debt` (see `calcDebtByYear`) to net non-mortgage debt out of `total`, so
- * the projection starts at true net worth instead of asset equity, and to pay
- * each year's `debt.payments` out of the liquid buckets (stocks → cash →
- * crypto): a repayment costs the assets the whole payment while the debt falls
- * only by its principal. Without it, debt is 0 and `total` is the asset sum.
+ * Pass `debtByYear` (see `calcDebtBalanceByYear`) to net non-mortgage debt
+ * paydown out of `total`, so the projection starts at true net worth instead
+ * of asset equity; without it, debt is 0 and `total` is the asset sum.
  *
  * Pass `wealthTax` to subtract an estimated annual formuesskatt: each year the
  * tax is computed from that year's composition (home valued at 25%/70%, listed
@@ -535,7 +532,7 @@ export function calcNetWorthProjectionByBucket(
   rates: BucketRates,
   years: number,
   houseByYear?: number[],
-  debt?: DebtByYear,
+  debtByYear?: number[],
   wealthTax?: WealthTaxProjectionConfig
 ): BucketProjectionPoint[] {
   const result: BucketProjectionPoint[] = [];
@@ -545,7 +542,7 @@ export function calcNetWorthProjectionByBucket(
 
   for (let y = 0; y <= years; y++) {
     const houseVal = houseByYear ? houseByYear[y] ?? house : house;
-    const debtVal = debt?.balance[y] ?? 0;
+    const debtVal = debtByYear ? debtByYear[y] ?? 0 : 0;
     // Formuesskatt on the wealth entering this year. The house bucket is *equity*,
     // so add the mortgage back for the market value the tax is assessed on, and
     // deduct the mortgage again as part of total debt.
@@ -581,14 +578,6 @@ export function calcNetWorthProjectionByBucket(
     const fromStocks = Math.min(Math.max(0, stocks), owed); stocks -= fromStocks; owed -= fromStocks;
     const fromCash = Math.min(Math.max(0, cash), owed); cash -= fromCash; owed -= fromCash;
     const fromCrypto = Math.min(Math.max(0, crypto), owed); crypto -= fromCrypto;
-    // Next year's debt payments leave the same pot. Unlike the tax, a payment the
-    // pot can't cover is still paid: the shortfall shows as negative cash, so net
-    // worth always falls by the whole payment.
-    let pay = debt?.payments[y + 1] ?? 0;
-    const payStocks = Math.min(Math.max(0, stocks), pay); stocks -= payStocks; pay -= payStocks;
-    const payCash = Math.min(Math.max(0, cash), pay); cash -= payCash; pay -= payCash;
-    const payCrypto = Math.min(Math.max(0, crypto), pay); crypto -= payCrypto; pay -= payCrypto;
-    cash -= pay;
   }
   return result;
 }
