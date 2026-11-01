@@ -6,14 +6,6 @@ in git and the CHANGELOG, not here.
 
 ## Calculations and money figures
 
-- **Undo misreads drifted legacy mortgage history.** With an old blob whose Assets copy of the
-  balance differed from the homeowner/transition copy, undo of the migration save shows the stale
-  Assets value; undo of a legacy edit to only the homeowner copy is refused as a conflict; undo
-  of an edit to the hidden Assets copy, and undo of a restore whose load migrated or stamped the
-  balance, report conflicts nobody made. **Why deferred**: found by tests only; the fix in
-  `revertChange` needs a decision on how undo treats values the load migration rewrote.
-  **Unblock**: that decision, then flip the `it.fails` cases to `it`. **Where**: `server/revert.js`,
-  `KNOWN_BUGS` in `src/lib/persistedRoundTrip.test.ts`, `src/lib/persistedShape.property.test.ts`.
 - **BSU lifetime room is measured against the balance.** The 300k cap counts deposits, but only the
   balance (with interest) is stored, so the room shown is a floor. **Unblock**: agree a persisted
   "total deposited" field and its backfill. **Where**: `src/lib/bsu.ts`, payload sites in
