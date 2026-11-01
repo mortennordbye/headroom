@@ -5,12 +5,12 @@
 // a `seasonal` config is supplied (see feriepenger.ts). Fixed expenses are
 // either one list/total for every month or resolved per month, so a past month
 // can be measured against the fixed expenses it recorded.
-import type { DailyTransaction, FixedExpense, Saving } from '../context/FinanceContext';
+import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 import { envelopeKeyForTx, reconcile } from './envelopes';
 import { isSpend } from './spend';
 import { savingsContributionTotal } from './savingsRate';
-import { matchSavingsToTransactions } from './savingsMatch';
+import { matchSavingsToTransactions, type CashflowSavings } from './savingsMatch';
 
 // Re-exported so existing importers keep working; the definition lives in
 // spend.ts so envelopes.ts can use it too (this module imports envelopes).
@@ -19,19 +19,19 @@ export { isSpend } from './spend';
 export interface MonthlyCashflowRow {
   month: string; // 'yyyy-MM'
   income: number;
-  variable: number; // logged expense transactions in the month
+  variable: number; // logged expense transactions in the month, less rows matched to a saving
   expenses: number; // fixedExpenses + variable (spending; never the savings below)
   /**
-   * What the month moved into savings, when the caller passes `savingsFor`; else
+   * What the month moved into savings, when the caller passes `savings`; else
    * 0. Kept out of `expenses`: a saving is still the user's money, not spending.
    * A saving matched to its imported outgoing row counts that row's amount once,
-   * here, and the row leaves `expenses` (see savingsMatch.ts).
+   * here, and the row leaves `variable` and `expenses` (see savingsMatch.ts).
    */
   saved: number;
   net: number; // income - expenses - saved: what is left after spending and saving
   /**
    * Savings rate as a percent of income, (income - expenses) / income. With
-   * `savingsFor`, savings sit outside `expenses` and count as retained; without
+   * `savings`, savings sit outside `expenses` and count as retained; without
    * it, whatever savings the caller put in `totalFixedExpenses` count as spent.
    * 0 when income ≤ 0.
    */
@@ -44,6 +44,11 @@ export interface MonthlyCashflowRow {
    * visually break these rather than plot them next to measured months.
    */
   measured: boolean;
+}
+
+/** Share of income not spent, in percent to one decimal; 0 when income ≤ 0. */
+export function cashflowRate(income: number, expenses: number): number {
+  return income > 0 ? Math.round(((income - expenses) / income) * 1000) / 10 : 0;
 }
 
 export function monthlyCashflow(
@@ -61,12 +66,12 @@ export function monthlyCashflow(
   // `totalFixedExpenses` was summed from, or the two disagree. Pass functions
   // for both to resolve each month's own fixed expenses.
   fixedExpenses?: FixedExpense[] | ((month: string) => FixedExpense[]),
-  // Each month's savings (`savingsForMonth`). Must NOT also be inside
+  // Each month's savings (`cashflowSavingsForMonth`). Must NOT also be inside
   // `totalFixedExpenses`: they are reported as `saved`, apart from spending, so
   // the cashflow classifies savings the same way as the savings rate. Each one is
   // matched against the month's spend rows so a one-legged savings transfer that
   // isn't marked as a transfer counts once, as saved, not also as spending.
-  savingsFor?: (month: string) => Saving[],
+  savings?: CashflowSavings,
 ): MonthlyCashflowRow[] {
   const spendByMonth = new Map<string, number>();
   const countByMonth = new Map<string, number>();
@@ -79,7 +84,6 @@ export function monthlyCashflow(
   return months.map((month) => {
     const estimated = seasonal ? feriepengerMonthlyNet(month, fallbackIncome, seasonal) : fallbackIncome;
     const income = monthlyIncomes[month] ?? estimated;
-    const variable = spendByMonth.get(month) ?? 0;
     // Without the fixed-expense rows we can only add the two totals, which
     // double-charges any bill that is both budgeted and imported. With them,
     // an enveloped bill costs max(budgeted, actual) — the budget is reserved and
@@ -87,22 +91,29 @@ export function monthlyCashflow(
     const fixedTotal = typeof totalFixedExpenses === 'function' ? totalFixedExpenses(month) : totalFixedExpenses;
     const fixedRows = typeof fixedExpenses === 'function' ? fixedExpenses(month) : fixedExpenses;
     const rec = fixedRows?.length ? reconcile(fixedRows, txs, month) : null;
-    const monthSavings = savingsFor ? savingsFor(month) : [];
+    const { savings: monthSavings, matchable } = savings ? savings.forMonth(month) : { savings: [], matchable: false };
     // A row a fixed-expense envelope already owns can't also be a saving.
-    const matches = matchSavingsToTransactions(monthSavings, txs, month, rec ? (tx) => envelopeKeyForTx(tx, rec) !== undefined : undefined);
+    const matches = matchable
+      ? matchSavingsToTransactions(monthSavings, txs, month, {
+        netted: savings?.netted,
+        isClaimed: rec ? (tx) => envelopeKeyForTx(tx, rec) !== undefined : undefined,
+      })
+      : [];
     const matchedIds = new Set(matches.map((m) => m.savingId));
     const matchedSpend = matches.reduce((sum, m) => sum + m.amount, 0);
-    let expenses = fixedTotal + variable - matchedSpend;
+    // A matched row is the saving, not spending: it leaves `variable` too.
+    const variable = (spendByMonth.get(month) ?? 0) - matchedSpend;
+    let expenses = fixedTotal + variable;
     if (rec) {
-      const unenveloped = Math.max(0, variable - rec.totals.actual - matchedSpend);
+      const unenveloped = Math.max(0, variable - rec.totals.actual);
       expenses = fixedTotal + unenveloped + rec.totals.overspent;
     }
     // A matched saving counts what its row actually moved; the rest, as planned.
     const saved = savingsContributionTotal(monthSavings.filter((s) => !matchedIds.has(s.id))) + matchedSpend;
-    const rate = income > 0 ? Math.round(((income - expenses) / income) * 1000) / 10 : 0;
     return {
-      month, income, variable, expenses, saved, net: income - expenses - saved, rate,
-      measured: (countByMonth.get(month) ?? 0) > 0,
+      month, income, variable, expenses, saved, net: income - expenses - saved, rate: cashflowRate(income, expenses),
+      // A month whose only rows are matched savings legs logged no spending.
+      measured: (countByMonth.get(month) ?? 0) - matches.length > 0,
     };
   });
 }

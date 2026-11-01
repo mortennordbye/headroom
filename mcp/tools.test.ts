@@ -787,18 +787,38 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(review.monthly.find((r) => r.month === '2026-06')!.expenses).toBe(june.expenses + june.saved);
   });
 
-  it('budget summary counts a one-legged savings transfer once, as saved', () => {
-    const b = fullFixture();
-    const before = derive.budgetSummary(b, MONTH).cashflowLast12.find((r) => r.month === '2026-06')!;
-    // Only the outgoing leg of the 2 000 kr saving is imported, not marked as a transfer.
-    b.dailyTransactions = [
-      ...b.dailyTransactions,
-      { id: 't-save', date: '2026-06-25', description: 'Til: 9876.54.32109', amount: 2000, kind: 'expense', account: 'acc-1' },
-    ];
-    const after = derive.budgetSummary(b, MONTH).cashflowLast12.find((r) => r.month === '2026-06')!;
-    expect(after.saved).toBe(2000);
-    expect(after.expenses).toBe(before.expenses);
-    expect(after.net).toBe(before.net);
+  it('budget summary and year review count a one-legged savings transfer once, as saved', () => {
+    // June is the current month, so its savings list is the one that applied.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-28T12:00:00Z'));
+    try {
+      const june = (blob: ExportPayload) => ({
+        budget: derive.budgetSummary(blob, MONTH).cashflowLast12.find((r) => r.month === MONTH)!,
+        review: derive.yearReviewSummary(blob, 2026, MONTH).monthly.find((r) => r.month === MONTH)!,
+      });
+      const withRow = (description: string) => {
+        const b = fullFixture();
+        b.dailyTransactions = [
+          ...b.dailyTransactions,
+          { id: 't-save', date: '2026-06-25', description, amount: 2000, kind: 'expense', account: 'acc-1' },
+        ];
+        return june(b);
+      };
+      const before = june(fullFixture());
+      // Only the outgoing leg of the 2 000 kr "Emergency fund" saving is imported.
+      const matched = withRow('Til: 9876.54.32109 Emergency fund');
+      expect(matched.budget.saved).toBe(2000);
+      expect(matched.budget.expenses).toBe(before.budget.expenses);
+      expect(matched.budget.variable).toBe(before.budget.variable);
+      expect(matched.review.expenses).toBe(before.review.expenses);
+      expect(matched.review.expenses).toBe(matched.budget.expenses + matched.budget.saved);
+      // A same-sized transfer that doesn't name the saving stays spending, in both.
+      const other = withRow('Nettgiro til: 9876.54.32109 snekker');
+      expect(other.budget.expenses).toBe(before.budget.expenses + 2000);
+      expect(other.review.expenses).toBe(before.review.expenses + 2000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('recommendations and budget summary agree on savings-rate health', () => {

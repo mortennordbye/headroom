@@ -107,15 +107,6 @@ in git and the CHANGELOG, not here.
   everywhere. **Where**: `src/lib/allocationSync.ts`, `src/lib/calculations.ts`,
   `src/context/FinanceContext.tsx`, `src/components/SmartRecommendations.tsx`,
   `src/pages/DashboardPage.tsx`, `mcp/derive.ts`.
-- **The year review still counts a one-legged savings transfer twice.** The cashflow chart and
-  `budgetSummary` now match each planned saving against its imported outgoing row
-  (`savingsMatch.ts`), but the year review folds savings into `totalFixedExpenses` and passes no
-  `savingsFor`, so an unmarked outgoing savings leg is still unenveloped spend on top of the
-  planned saving. **Why deferred**: kept the fix to the cashflow path the entry named; the year
-  review's "money out" includes savings by design, so the change needs its own look. **Unblock**:
-  pass `savingsFor` from `yearReview` and add `saved` back into its money-out total.
-  **Where**: `src/lib/yearReview.ts`, `src/pages/YearReviewPage.tsx`, `mcp/derive.ts`
-  (`yearReviewSummary`), `src/lib/monthlyCashflow.ts`.
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
   `src/lib/envelopes.ts`, `src/context/FinanceContext.tsx`.
 

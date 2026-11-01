@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isSpend, monthlyCashflow } from './monthlyCashflow';
+import type { CashflowSavings } from './savingsMatch';
 import type { DailyTransaction, FixedExpense, Saving } from '../context/FinanceContext';
 
 const tx = (over: Partial<DailyTransaction>): DailyTransaction => ({
@@ -16,6 +17,12 @@ const saving = (over: Partial<Saving>): Saving => ({
   amount: 0,
   destinationKind: 'savingsAccount',
   ...over,
+});
+
+/** Savings for `monthlyCashflow`: matchable every month, nothing netted unless given. */
+const plan = (forMonth: (m: string) => Saving[], netted: DailyTransaction[] = []): CashflowSavings => ({
+  forMonth: (m) => ({ savings: forMonth(m), matchable: true }),
+  netted,
 });
 
 describe('isSpend', () => {
@@ -136,7 +143,7 @@ describe('monthlyCashflow — per-month fixed expenses', () => {
   it('keeps savings out of spending when passed as savingsFor instead of in the total', () => {
     const txs = [tx({ date: '2026-06-05', amount: 1100, kind: 'expense', description: 'stroem AS' })];
     const fixedOnly = (m: string) => byMonth[m].reduce((s, e) => s + e.amount, 0);
-    const rows = monthlyCashflow(['2026-05', '2026-06'], txs, {}, 40000, fixedOnly, null, listFor, () => [saving({ amount: 200 })]);
+    const rows = monthlyCashflow(['2026-05', '2026-06'], txs, {}, 40000, fixedOnly, null, listFor, plan(() => [saving({ amount: 200 })]));
     // June: the 1000 envelope plus 100 overspend is spending; the 200 is saved.
     expect(rows[1].expenses).toBe(1100);
     expect(rows[1].saved).toBe(200);
@@ -154,7 +161,7 @@ describe('monthlyCashflow — savings as their own series', () => {
   ];
 
   it('reports savings apart from spending when savingsFor is given', () => {
-    const rows = monthlyCashflow(months, txs, {}, 40000, 10000, undefined, undefined, (m) => (m === '2026-06' ? [saving({ amount: 3000 })] : []));
+    const rows = monthlyCashflow(months, txs, {}, 40000, 10000, undefined, undefined, plan((m) => (m === '2026-06' ? [saving({ amount: 3000 })] : [])));
     // June: spending stays 10000 + 500; the 3000 saved is its own figure.
     expect(rows[1].expenses).toBe(10500);
     expect(rows[1].saved).toBe(3000);
@@ -167,7 +174,7 @@ describe('monthlyCashflow — savings as their own series', () => {
 
   it('reports zero saved without savingsFor, and guards a NaN or negative saving', () => {
     expect(monthlyCashflow(months, txs, {}, 40000, 10000).every(r => r.saved === 0)).toBe(true);
-    const rows = monthlyCashflow(months, txs, {}, 40000, 10000, undefined, undefined, (m) => [saving({ amount: m === '2026-05' ? NaN : -50 })]);
+    const rows = monthlyCashflow(months, txs, {}, 40000, 10000, undefined, undefined, plan((m) => [saving({ amount: m === '2026-05' ? NaN : -50 })]));
     expect(rows.map(r => r.saved)).toEqual([0, 0]);
     expect(rows[1].net).toBe(29500);
   });
@@ -175,72 +182,60 @@ describe('monthlyCashflow — savings as their own series', () => {
 
 describe('monthlyCashflow — a one-legged savings transfer', () => {
   const month = ['2026-06'];
-  const plan = [saving({ id: 's1', name: 'Buffer', amount: 3000 })];
+  const buffer = [saving({ id: 's1', name: 'Buffer', amount: 3000 })];
   const leg = (over: Partial<DailyTransaction> = {}) =>
-    tx({ date: '2026-06-25', amount: 3000, kind: 'expense', account: 'brukskonto', description: 'Til: 1234.56.78901', ...over });
-  const run = (txs: DailyTransaction[], savings: Saving[] = plan, fixed?: FixedExpense[]) =>
-    monthlyCashflow(month, txs, {}, 40000, fixed ? fixed.reduce((s, e) => s + e.amount, 0) : 10000, null, fixed, () => savings)[0];
+    tx({ date: '2026-06-25', amount: 3000, kind: 'expense', account: 'brukskonto', description: 'Til: 1234.56.78901 Buffer', ...over });
+  const shop = tx({ date: '2026-06-03', amount: 500, kind: 'expense', description: 'Kiwi' });
+  const run = (txs: DailyTransaction[], savings: CashflowSavings = plan(() => buffer), fixed?: FixedExpense[]) =>
+    monthlyCashflow(month, txs, {}, 40000, fixed ? fixed.reduce((s, e) => s + e.amount, 0) : 10000, null, fixed, savings)[0];
 
-  it('counts the outgoing leg once, as saved, not also as spending', () => {
-    const row = run([leg(), tx({ date: '2026-06-03', amount: 500, kind: 'expense', description: 'Kiwi' })]);
+  it('counts the outgoing leg once, as saved, and keeps expenses = fixed + variable', () => {
+    const row = run([leg(), shop]);
+    expect(row.variable).toBe(500);
     expect(row.expenses).toBe(10500);
     expect(row.saved).toBe(3000);
     expect(row.net).toBe(40000 - 10500 - 3000);
   });
 
-  it('counts what the row actually moved when it is within the tolerance', () => {
+  it('does not count a month whose only rows are matched legs as measured', () => {
+    expect(run([leg()]).measured).toBe(false);
+    expect(run([leg(), shop]).measured).toBe(true);
+  });
+
+  it('counts what the row actually moved when it is within 1 %', () => {
     const row = run([leg({ amount: 2990 })]);
     expect(row.expenses).toBe(10000);
     expect(row.saved).toBe(2990);
   });
 
-  it('matches on the saving name when the row has no transfer signal', () => {
-    const row = run([leg({ description: 'Overføring buffer' })]);
-    expect(row.expenses).toBe(10000);
-    expect(row.saved).toBe(3000);
-  });
-
-  it('leaves a same-sized purchase with no hint as spending', () => {
-    const row = run([leg({ description: 'Elkjøp' })]);
+  it('leaves the row as spending when the month is not matchable', () => {
+    const guess: CashflowSavings = { forMonth: () => ({ savings: buffer, matchable: false }), netted: [] };
+    const row = run([leg()], guess);
     expect(row.expenses).toBe(13000);
     expect(row.saved).toBe(3000);
   });
 
-  it('ignores a row in another month or outside the tolerance', () => {
-    expect(run([leg({ date: '2026-05-25' })]).expenses).toBe(10000);
-    expect(run([leg({ amount: 3100 })]).expenses).toBe(13100);
-  });
-
-  it('matches none when two rows could be the one saving', () => {
-    const row = run([leg({ id: 'a' }), leg({ id: 'b', date: '2026-06-26' })]);
-    expect(row.expenses).toBe(16000);
+  it('does not let a netted leg claim a second same-sized row', () => {
+    // The saving's real leg was netted as a transfer; a carpenter paid by
+    // nettgiro the same month must stay spending.
+    const netted = [leg({ id: 'n1', description: 'Til: 1234.56.78901 Buffer' })];
+    const carpenter = leg({ id: 'c1', description: 'Nettgiro til: 9999.88.77777 Buffer snekker' });
+    const row = run([carpenter], plan(() => buffer, netted));
+    expect(row.expenses).toBe(13000);
     expect(row.saved).toBe(3000);
-  });
-
-  it('matches none when one row could be either of two savings', () => {
-    const two = [saving({ id: 's1', name: 'Buffer', amount: 3000 }), saving({ id: 's2', name: 'Ferie', amount: 3000 })];
-    const row = run([leg()], two);
-    expect(row.expenses).toBe(13000);
-    expect(row.saved).toBe(6000);
-  });
-
-  it('never matches a paused saving', () => {
-    const row = run([leg()], [saving({ id: 's1', name: 'Buffer', amount: 3000, paused: true })]);
-    expect(row.expenses).toBe(13000);
-    expect(row.saved).toBe(0);
   });
 
   it('leaves a row a fixed-expense envelope owns to that envelope', () => {
     const fixed: FixedExpense[] = [{ id: 'e1', name: 'Husleie', amount: 3000, type: 'fixed', match: '1234.56.78901' }];
-    const row = run([leg()], plan, fixed);
-    // The rent envelope covers the row; the saving stays planned and apart.
+    const row = run([leg()], plan(() => buffer), fixed);
     expect(row.expenses).toBe(3000);
     expect(row.saved).toBe(3000);
   });
 
   it('reconciles alongside fixed-expense envelopes without double counting', () => {
     const fixed: FixedExpense[] = [{ id: 'e1', name: 'Strøm', amount: 1000, type: 'fixed', match: 'stroem' }];
-    const row = run([leg(), tx({ date: '2026-06-05', amount: 900, kind: 'expense', description: 'stroem AS' })], plan, fixed);
+    const row = run([leg(), tx({ date: '2026-06-05', amount: 900, kind: 'expense', description: 'stroem AS' })], plan(() => buffer), fixed);
+    expect(row.variable).toBe(900);
     expect(row.expenses).toBe(1000);
     expect(row.saved).toBe(3000);
   });
