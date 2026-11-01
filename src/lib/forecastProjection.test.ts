@@ -118,8 +118,9 @@ describe('projectForecast', () => {
   });
 
   it('nets non-mortgage debt out of net worth and the wealth-tax base', () => {
-    // 4M listed shares and a 1M student loan: today's net worth is 3M, and the
-    // year-1 wealth tax is on 4M × 80 % − 1M = 2.2M, 0.3M above the bunnfradrag.
+    // 4M listed shares and a 1M student loan: today's net worth is 3M. All assets
+    // are shares, so gjeldsreduksjon values the debt at 80 % too: the year-1 wealth
+    // tax is on 4M × 80 % − 1M × 80 % = 2.4M, 0.5M above the bunnfradrag.
     const withDebt: ForecastInputs = {
       ...inputs, region: 'no', mortgage: NO_MORTGAGE,
       startHomeValue: 0, startShares: 4_000_000, startOtherAssets: 0,
@@ -127,9 +128,9 @@ describe('projectForecast', () => {
     };
     const rows = projectForecast(withDebt, scenario({ returnPct: 0, savingsPct: 0, years: 2 }));
     expect(rows[0].netWorth).toBe(3_000_000);
-    expect(rows[1].wealthTax).toBe(3_000);
+    expect(rows[1].wealthTax).toBe(5_000);
     // The loan is paid down at its minimums, so net worth rises net of the tax.
-    expect(rows[1].netWorth).toBeGreaterThan(rows[0].netWorth - 3_000);
+    expect(rows[1].netWorth).toBeGreaterThan(rows[0].netWorth - 5_000);
   });
 
   it('pays the mortgage down toward zero and never below', () => {

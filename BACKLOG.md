@@ -18,9 +18,9 @@ in git and the CHANGELOG, not here.
   balance (with interest) is stored, so the room shown is a floor. **Unblock**: agree a persisted
   "total deposited" field and its backfill. **Where**: `src/lib/bsu.ts`, payload sites in
   `src/context/FinanceContext.tsx`.
-- **Wealth tax simplifications.** No gjeldsreduksjon (debt deducted in full), single-person
-  bunnfradrag (no spousal doubling), the forecast splits financial assets by today's
-  shares-vs-other ratio, and Pengestrøm shows no wealth-tax line. Documented in code. **Where**:
+- **Wealth tax simplifications.** Single-person bunnfradrag (no spousal doubling), the forecast
+  splits financial assets by today's shares-vs-other ratio, and Pengestrøm shows no wealth-tax
+  line. Documented in code. **Where**:
   `calcWealthTax` in `src/lib/norwegianTax.ts`, `src/lib/forecastProjection.ts`.
 - **Spouses.** Married co-owners get a doubled bunnfradrag and can split rentefradrag freely; the
   app models one person. **Unblock**: an issue covering a marital-status field. **Where**:

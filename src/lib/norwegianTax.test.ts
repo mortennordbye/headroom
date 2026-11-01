@@ -218,19 +218,37 @@ describe('calcWealthTax (formuesskatt)', () => {
 
   // The cases below pin 2025 so their hand-worked figures don't move each year.
 
-  it('golden case: valuation discounts + bunnfradrag on a typical household', () => {
-    // home 8.0M ×0.25 = 2.0M; shares 5.0M ×0.80 = 4.0M; other 1.0M ×1.0 = 1.0M
-    // valued 7.0M − debt 2.0M = net 5.0M; taxed slice 5.0M − 1.76M = 3.24M × 1.0%
+  it('golden case: valuation discounts + gjeldsreduksjon + bunnfradrag on a typical household', () => {
+    // home 8.0M ×0.25 = 2.0M; shares 5.0M ×0.80 = 4.0M; other 1.0M ×1.0 = 1.0M → valued 7.0M.
+    // Gjeldsreduksjon (skatteloven § 4-19): shares are 5M of 14M gross (home counted at full
+    // market value), so that slice of the 2.0M debt is valued at 80 %:
+    // 2.0M × 5/14 × (1 − 0.80) = 142 857.14 → deductible debt 1 857 142.86.
+    // net 7.0M − 1 857 142.86 = 5 142 857.14; taxed slice − 1.76M = 3 382 857.14 × 1.0%
     const r = calcWealthTax({ primaryHomeValue: 8_000_000, shares: 5_000_000, otherAssets: 1_000_000, debt: 2_000_000 }, 2025);
     expect(r.valuedAssets).toBeCloseTo(7_000_000, 2);
-    expect(r.netWealth).toBeCloseTo(5_000_000, 2);
-    expect(r.taxableBase).toBeCloseTo(3_240_000, 2);
-    expect(r.tax).toBeCloseTo(32_400, 2);
+    expect(r.netWealth).toBeCloseTo(5_142_857.14, 1);
+    expect(r.taxableBase).toBeCloseTo(3_382_857.14, 1);
+    expect(r.tax).toBeCloseTo(33_828.57, 1);
+  });
+
+  it('gives no gjeldsreduksjon for the primary home discount', () => {
+    // § 4-19 lists sekundærbolig, næringseiendom, shares and driftsmidler, not primærbolig:
+    // home-only wealth deducts the debt in full. 12M ×0.25 = 3.0M + other 2.0M = 5.0M − 1.0M.
+    const r = calcWealthTax({ primaryHomeValue: 12_000_000, shares: 0, otherAssets: 2_000_000, debt: 1_000_000 }, 2026);
+    expect(r.netWealth).toBeCloseTo(4_000_000, 2);
+  });
+
+  it('reduces debt by the 20 % share discount when only shares are held', () => {
+    // shares 10M ×0.80 = 8.0M; all assets are shares, so debt 3.0M is valued at 80 % = 2.4M.
+    const r = calcWealthTax({ primaryHomeValue: 0, shares: 10_000_000, otherAssets: 0, debt: 3_000_000 }, 2026);
+    expect(r.netWealth).toBeCloseTo(5_600_000, 2);
+    expect(r.tax).toBeCloseTo((5_600_000 - 1_900_000) * 0.010, 2);
   });
 
   it('is zero below the bunnfradrag (discounts keep most households out)', () => {
     const r = calcWealthTax({ primaryHomeValue: 4_000_000, shares: 1_000_000, otherAssets: 500_000, debt: 2_000_000 });
-    expect(r.netWealth).toBeCloseTo(300_000, 2); // 1.0M + 0.8M + 0.5M − 2.0M
+    // 1.0M + 0.8M + 0.5M − (2.0M − 2.0M × 1/5.5 × 0.20 gjeldsreduksjon)
+    expect(r.netWealth).toBeCloseTo(372_727.27, 1);
     expect(r.taxableBase).toBe(0);
     expect(r.tax).toBe(0);
   });

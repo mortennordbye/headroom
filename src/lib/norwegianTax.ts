@@ -327,10 +327,14 @@ export function calcPensionIncomeTax(
 // market value (70% on the part above the year's threshold), listed shares/funds at 80%, and
 // everything else (deposits, crypto, BSU, buffer) at full value.
 //
-// Simplifications (a "good-enough" estimate, not a tax return): single-person
-// bunnfradrag (no spousal doubling), and full debt is deducted (the proportional
-// gjeldsreduksjon for discount-valued assets is not modelled, so this slightly
-// over-states deductible debt / under-states tax for the wealthy).
+// Gjeldsreduksjon (skatteloven § 4-19): the share of debt matching the share of
+// gross assets held in discounted shares/funds is valued at the same rate as the
+// shares. Gross assets count the primary home and shares at market value (§ 4-19
+// third ledd). The primary-home discount gives no reduction; a secondary home is
+// valued at 100 %, so it gives none either.
+//
+// Simplification (a "good-enough" estimate, not a tax return): single-person
+// bunnfradrag (no spousal doubling).
 
 export interface WealthTaxParams {
   /** Personal deduction per person — net wealth below this is untaxed. */
@@ -382,14 +386,14 @@ export interface WealthTaxComponents {
   shares: number;
   /** Deposits, crypto, BSU, buffer — everything valued at 100%. */
   otherAssets: number;
-  /** Total deductible debt (mortgage + non-mortgage). */
+  /** Total debt (mortgage + non-mortgage), before gjeldsreduksjon. */
   debt: number;
 }
 
 export interface WealthTaxBreakdown {
   /** Assets after valuation discounts. */
   valuedAssets: number;
-  /** Valued assets − debt, floored at 0. */
+  /** Valued assets − debt after gjeldsreduksjon, floored at 0. */
   netWealth: number;
   bunnfradrag: number;
   /** Net wealth above the bunnfradrag (the taxed slice). */
@@ -412,11 +416,16 @@ function valuePrimaryHome(marketValue: number, P: WealthTaxParams): number {
  */
 export function calcWealthTax(c: WealthTaxComponents, year: number = TAX_YEAR): WealthTaxBreakdown {
   const P = WEALTH_TAX_PARAMS[year] ?? WEALTH_PARAMS;
-  const valuedAssets =
-    valuePrimaryHome(c.primaryHomeValue, P) +
-    Math.max(0, c.shares) * P.sharesRate +
-    Math.max(0, c.otherAssets);
-  const netWealth = Math.max(0, valuedAssets - Math.max(0, c.debt));
+  const home = Math.max(0, c.primaryHomeValue);
+  const shares = Math.max(0, c.shares);
+  const other = Math.max(0, c.otherAssets);
+  const debt = Math.max(0, c.debt);
+  const valuedAssets = valuePrimaryHome(home, P) + shares * P.sharesRate + other;
+  const grossAssets = home + shares + other;
+  const deductibleDebt = grossAssets > 0
+    ? debt * (1 - (1 - P.sharesRate) * (shares / grossAssets))
+    : debt;
+  const netWealth = Math.max(0, valuedAssets - deductibleDebt);
   const taxableBase = Math.max(0, netWealth - P.bunnfradrag);
   // Each bracket taxes the slice of net wealth between its `from` and the next
   // bracket's `from`; the first bracket starts at the bunnfradrag.
