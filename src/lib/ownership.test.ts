@@ -210,10 +210,17 @@ describe('withOwnershipShare (the onboarding question)', () => {
     expect(withOwnershipShare(list, 100, M, fresh)).toBe(list);
   });
 
-  it('below 100 % adds one co-owner holding the rest, from this month', () => {
+  it('below 100 % adds one co-owner holding the rest, from this month without a move-in', () => {
     const next = withOwnershipShare([], 60, M, fresh)!;
     expect(next).toEqual([{ ...fresh, ownershipPct: 40, since: M }]);
     expect(ownershipShares({ coOwners: next }, M)).toEqual({ own: 0.6, debt: 0.6 });
+  });
+
+  it("a new co-owner owns since the current home's move-in month, like the Bolig page", () => {
+    expect(withOwnershipShare([], 60, M, fresh, '2021-08')).toEqual([{ ...fresh, ownershipPct: 40, since: '2021-08' }]);
+    // A move-in still ahead (or unreadable) falls back to this month, so the answer holds now.
+    expect(withOwnershipShare([], 60, M, fresh, '2027-02')).toEqual([{ ...fresh, ownershipPct: 40, since: M }]);
+    expect(withOwnershipShare([], 60, M, fresh, 'soon')).toEqual([{ ...fresh, ownershipPct: 40, since: M }]);
   });
 
   it('keeps a co-owner who has left and adds the new one beside them', () => {
@@ -221,9 +228,30 @@ describe('withOwnershipShare (the onboarding question)', () => {
     expect(withOwnershipShare([left], 70, M, fresh)).toEqual([left, { ...fresh, ownershipPct: 30, since: M }]);
   });
 
-  it("changes the one current co-owner's share, keeping a separate loan share", () => {
+  it('a co-owner added this month is edited in place, keeping a separate loan share', () => {
     const c = co({ since: M, debtSharePct: 30 });
     expect(withOwnershipShare([c], 75, M, fresh)).toEqual([{ ...c, ownershipPct: 25 }]);
+  });
+
+  it('never edits an earlier co-owner in place: their row ends last month and a new one starts now', () => {
+    const c = co({ since: '2023-04', debtSharePct: 30 });
+    const next = withOwnershipShare([c], 75, M, fresh)!;
+    expect(next).toEqual([
+      { ...c, until: '2026-10' },
+      { ...c, id: fresh.id, ownershipPct: 25, since: M },
+    ]);
+    // History before this month keeps the 50/50 split.
+    expect(ownershipShares({ coOwners: next }, '2024-06').own).toBe(0.5);
+    expect(ownershipShares({ coOwners: next }, M).own).toBe(0.75);
+    // An undated co-owner the same way.
+    expect(withOwnershipShare([co()], 90, M, fresh)).toEqual([
+      co({ until: '2026-10' }), co({ id: fresh.id, ownershipPct: 10, since: M }),
+    ]);
+  });
+
+  it('the same share changes nothing', () => {
+    const list = [co({ since: '2023-04' })];
+    expect(withOwnershipShare(list, 50, M, fresh)).toBe(list);
   });
 
   it('back to 100 %: a co-owner added this month is removed, an older one ends last month', () => {

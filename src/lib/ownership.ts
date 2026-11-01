@@ -118,14 +118,21 @@ export function validateCoOwners(list: CoOwner[]): { ok: true } | { ok: false; e
 
 /**
  * The co-owner list after the user answers "you own `sharePct` % of the home"
- * in `month` (the onboarding question). Handles the simple shapes only: no
- * current co-owner (one is added from `month` holding the rest), or one with no
- * last month (their share is set; at 100 % they are removed if added this
- * month, else end last month). Anything richer, a non-finite share, or a result
- * that fails `validateCoOwners` gives null: edit it on the Bolig page.
+ * in `month` (the onboarding question). History stays as it was:
+ * - No current co-owner: one is added holding the rest, owning since the
+ *   move-in month (`moveIn`, as the Bolig page does) or `month` when there is
+ *   none or it is later.
+ * - One current co-owner added this month: their row is edited in place, or
+ *   removed at 100 %.
+ * - One current co-owner from an earlier month: a changed share ends their row
+ *   last month and adds a row from `month` with the new share (none at 100 %),
+ *   so the months before keep the old split.
+ * The same share returns `list` itself. More than one current co-owner, one
+ * with a last month set, a non-finite share, or a result that fails
+ * `validateCoOwners` gives null: that is edited on the Bolig page.
  */
 export function withOwnershipShare(
-  list: CoOwner[], sharePct: number, month: string, newRow: Pick<CoOwner, 'id' | 'name'>,
+  list: CoOwner[], sharePct: number, month: string, newRow: Pick<CoOwner, 'id' | 'name'>, moveIn?: string,
 ): CoOwner[] | null {
   if (!Number.isFinite(sharePct)) return null;
   const others = 100 - Math.min(100, Math.max(0, sharePct));
@@ -133,10 +140,18 @@ export function withOwnershipShare(
   if (active.length > 1 || active[0]?.until) return null;
   const c = active[0];
   let next: CoOwner[];
-  if (!c) next = others > 0 ? [...list, { ...newRow, ownershipPct: others, since: month }] : list;
-  else if (others > 0) next = list.map(x => (x === c ? { ...c, ownershipPct: others } : x));
-  else if (c.since === month) next = list.filter(x => x !== c);
-  else next = list.map(x => (x === c ? { ...c, until: addMonthsKey(month, -1) } : x));
+  if (!c) {
+    const since = isMonthKey(moveIn) && moveIn <= month ? moveIn : month;
+    next = others > 0 ? [...list, { ...newRow, ownershipPct: others, since }] : list;
+  } else if (c.ownershipPct === others) {
+    next = list;
+  } else if (c.since === month) {
+    next = others > 0 ? list.map(x => (x === c ? { ...c, ownershipPct: others } : x)) : list.filter(x => x !== c);
+  } else {
+    // `c` has no until (checked above); the new row keeps their name and loan share.
+    const ended = list.map(x => (x === c ? { ...c, until: addMonthsKey(month, -1) } : x));
+    next = others > 0 ? [...ended, { ...c, id: newRow.id, ownershipPct: others, since: month }] : ended;
+  }
   return validateCoOwners(next).ok ? next : null;
 }
 

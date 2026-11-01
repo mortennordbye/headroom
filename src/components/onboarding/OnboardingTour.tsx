@@ -15,13 +15,16 @@ import { ProgressBar } from '../ui/ProgressBar';
 import { MonthPicker } from '../ui/MonthPicker';
 import { parseLocaleNumber, isValidYearMonth } from '../../lib/validators';
 import { CATEGORIES, isCategoryKey } from '../../lib/categories';
-import { ownershipShares, withOwnershipShare } from '../../lib/ownership';
+import { ownershipShares } from '../../lib/ownership';
+import { currentResidence } from '../../lib/property';
+import { stableStringify } from '../../lib/stableStringify';
 import { currentMonthKey } from '../../lib/date';
 import { makeId } from '../../lib/savingsMigration';
 import {
   ONBOARDING_TOPICS,
   type OnboardingField,
   type OnboardingTopic,
+  planOwnershipShare,
 } from '../../lib/onboarding';
 
 /** Icon per topic id (kept in the shell — the catalog stays data-only). */
@@ -325,23 +328,48 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     t, lang, setLang, region, setRegion,
     currentMonth, effectiveIncome, setMonthlyIncomeForMonth,
     savingsTargetPercent, setSavingsTargetPercent,
-    assets, updateAsset, setCoOwners, pension, updatePension,
+    assets, updateAsset, setCoOwners, residences, pension, updatePension,
     growthReturnRate, setGrowthReturnRate, houseGrowthRate, setHouseGrowthRate,
     cashGrowthRate, setCashGrowthRate, cryptoGrowthRate, setCryptoGrowthRate,
   } = useFinance();
 
   const monthKey = format(currentMonth, 'yyyy-MM');
 
-  // The ownership share is stored as co-owners, dated from the real month like
-  // the Bolig page's. A setup richer than one co-owner is edited there instead.
-  const shareMonth = currentMonthKey();
-  const coOwnerList = assets.coOwners ?? [];
-  const coOwnersFor = (sharePct: number) => withOwnershipShare(coOwnerList, sharePct, shareMonth, {
-    id: makeId('coo'), name: t.ownership.defaultName.replace('{n}', String((assets.coOwners?.length ?? 0) + 1)),
+  // The ownership share is stored as co-owners (the Bolig page's model). Unlike
+  // the other fields it is committed once, on blur or on leaving the step, and
+  // always planned from the list as it was when the step opened.
+  const [shareOpen] = useState(() => {
+    const month = currentMonthKey();
+    const list = assets.coOwners ?? [];
+    const share = Math.round(ownershipShares(assets, month).own * 1000) / 10;
+    return {
+      month, list, share,
+      newRow: { id: makeId('coo'), name: t.ownership.defaultName.replace('{n}', String(list.length + 1)) },
+      moveIn: currentResidence(residences)?.moveInDate?.slice(0, 7),
+    };
   });
-  const myShare = Math.round(ownershipShares(assets, shareMonth).own * 1000) / 10;
-  const [shareEditable] = useState(() => coOwnersFor(myShare) !== null);
-  const shown = fields.filter(f => f.writer !== 'ownershipShare' || shareEditable);
+  // A setup the question can't express is edited on the Bolig page: the field
+  // is left out and a note says so, as it does when an answer can't be written.
+  const [shareAskable] = useState(
+    () => planOwnershipShare(String(shareOpen.share), shareOpen.list, shareOpen.month, shareOpen.newRow).kind !== 'elsewhere',
+  );
+  const [shareElsewhere, setShareElsewhere] = useState(!shareAskable);
+  const shareDraft = useRef<string | null>(null);
+  const commitShare = () => {
+    const raw = shareDraft.current;
+    if (raw === null) return;
+    shareDraft.current = null;
+    const plan = planOwnershipShare(raw, shareOpen.list, shareOpen.month, shareOpen.newRow, shareOpen.moveIn);
+    if (plan.kind === 'write' && stableStringify(plan.coOwners) !== stableStringify(assets.coOwners ?? [])) {
+      setCoOwners(plan.coOwners);
+    }
+    if (plan.kind !== 'none') setShareElsewhere(plan.kind === 'elsewhere');
+  };
+  // Leaving the step without a blur (Escape, a shortcut) still commits the draft.
+  const commitShareRef = useRef(commitShare);
+  useEffect(() => { commitShareRef.current = commitShare; });
+  useEffect(() => () => commitShareRef.current(), []);
+  const shown = fields.filter(f => f.writer !== 'ownershipShare' || shareAskable);
 
   // Growth-rate settings live outside Assets/Pension, so they need their own map.
   const growthRates: Record<string, number> = { growthReturnRate, houseGrowthRate, cashGrowthRate, cryptoGrowthRate };
@@ -359,7 +387,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
       case 'asset': return String(assets[f.key as keyof Assets] ?? 0);
       case 'pension': return String(pension[f.key as keyof Pension] ?? 0);
       case 'growthRate': return String(growthRates[f.key] ?? 0);
-      case 'ownershipShare': return String(myShare);
+      case 'ownershipShare': return String(shareOpen.share);
       default: return '';
     }
   };
@@ -374,6 +402,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     setValues(prev => ({ ...prev, [f.key]: raw }));
     if (f.writer === 'lang') { setLang(raw as Language); return; }
     if (f.writer === 'region') { setRegion(raw as Region); return; }
+    if (f.writer === 'ownershipShare') { shareDraft.current = raw; return; } // committed on blur
     const n = parseLocaleNumber(raw);
     if (isNaN(n) || (n < 0 && !f.allowNegative)) return; // keep the draft, don't push an invalid value
     if (f.writer === 'income') setMonthlyIncomeForMonth(monthKey, n);
@@ -381,10 +410,6 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
     else if (f.writer === 'asset') updateAsset(f.key as NumericAssetKey, n);
     else if (f.writer === 'pension') updatePension(f.key as keyof Pension, n);
     else if (f.writer === 'growthRate') growthSetters[f.key]?.(n);
-    else if (f.writer === 'ownershipShare' && n <= 100) {
-      const next = coOwnersFor(n);
-      if (next && next !== coOwnerList) setCoOwners(next);
-    }
   };
 
   const fieldLabels = t.onboarding.fields;
@@ -419,10 +444,12 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
             inputMode="decimal"
             value={values[f.key] ?? ''}
             onChange={e => writeField(f, e.target.value)}
+            onBlur={f.writer === 'ownershipShare' ? commitShare : undefined}
             className="w-full rounded-[6px] px-4 py-3 text-[14px] font-mono border focus:outline-none focus:ring-2 focus:ring-[var(--forest-light)]"
             style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
           />
         )}
+        {f.writer === 'ownershipShare' && shareElsewhere && <ShareElsewhereNote text={t.onboarding.ownershipShareElsewhere} />}
       </div>
     );
   };
@@ -433,6 +460,9 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
   return (
     <div className="space-y-3 mb-5">
       {primary.map(renderField)}
+      {!shareAskable && fields.some(f => f.writer === 'ownershipShare') && (
+        <ShareElsewhereNote text={t.onboarding.ownershipShareElsewhere} />
+      )}
       {advanced.length > 0 && (
         <Collapsible label={t.onboarding.advancedSettings}>
           {advanced.map(renderField)}
@@ -440,6 +470,10 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
       )}
     </div>
   );
+}
+
+function ShareElsewhereNote({ text }: { text: string }) {
+  return <p role="status" className="text-[12px]" style={{ color: 'var(--text-2)' }}>{text}</p>;
 }
 
 /** Required "current job + yearly salary" for that step. Writes a JobEntry and
