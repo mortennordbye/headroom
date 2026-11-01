@@ -13,9 +13,10 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { fullFixture } from './fixture';
+import { freePort } from './freePort';
 
-const PORT = 3988;
-const BASE = `http://localhost:${PORT}`;
+let PORT: number;
+let BASE: string;
 const MARKET_TOOLS = ['import_listings', 'import_sales', 'get_home_valuation'];
 
 let proc: ChildProcess;
@@ -69,6 +70,8 @@ async function call(name: string, args: Record<string, unknown> = {}) {
 }
 
 beforeAll(async () => {
+  PORT = await freePort();
+  BASE = `http://localhost:${PORT}`;
   process.env.HEADROOM_URL = BASE;
   const dir = mkdtempSync(join(tmpdir(), 'hr-market-'));
   seedSsbCache(join(dir, 'database.sqlite'));
