@@ -193,6 +193,15 @@ export function hoursAt(
   return 37.5;
 }
 
+/**
+ * The job an unassigned hours snapshot belongs to: the job of the salary active
+ * at its month (the same salary `hoursAt` is evaluated against). Undefined when
+ * no salary was active then, so the snapshot stays unassigned.
+ */
+export function jobIdForHoursSnapshot(snapshot: HoursSnapshot, salaries: SalaryEntry[]): string | undefined {
+  return salaryAt(snapshot.periodMonth, salaries)?.jobId || undefined;
+}
+
 /** One month of the salary series, as far as the CPI comparison is concerned. */
 export interface SalaryCpiPoint {
   totalAnnual: number;

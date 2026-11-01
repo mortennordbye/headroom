@@ -41,8 +41,6 @@ in git and the CHANGELOG, not here.
   per-job billing rate with billed-hours snapshots, and a per-job stack in the Total comp chart
   (`compByYear` aggregates globally). **Where**: `src/context/FinanceContext.tsx`,
   `src/pages/SalaryPage.tsx`.
-- **Bulk-reassign unassigned entries.** Bonus/overtime/hours rows from before `jobId` render under
-  "Uten jobb"; there's no bulk-attribute UI. **Where**: `src/pages/SalaryPage.tsx`.
 - **2027 withholding tables aren't out yet.** `TREKK_PARAMS` only has 2026. The Trekk tables
   workflow opens a `tier:review` PR once Skatteetaten publishes (usually December). **Unblock**:
   review and merge that PR. **Where**: `.github/workflows/trekk-tables.yml`,

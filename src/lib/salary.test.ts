@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob, activeJobBreakdown, salaryVsCpiYoy, jobOverlapRanges, allSalariedJobsEnded } from './salary';
+import { salaryAt, hoursAt, nominalHourlyRate, WEEKS_PER_MONTH, computeNewGross, priorSalaryForJob, activeJobBreakdown, salaryVsCpiYoy, jobOverlapRanges, allSalariedJobsEnded, jobIdForHoursSnapshot } from './salary';
 import type { SalaryEntry, JobEntry, HoursSnapshot } from '../context/FinanceContext';
 
 const sal = (id: string, effectiveDate: string, grossAnnual: number, jobId = 'j1'): SalaryEntry => ({
@@ -89,6 +89,37 @@ describe('hoursAt', () => {
   it('applies unassigned snapshots to whichever job is active', () => {
     const twoJobs = [job('j1', 37.5), job('j2', 20)];
     expect(hoursAt('2025-09', snaps, twoJobs, sal('b', '2025-05', 500000, 'j2'))).toBe(32);
+  });
+});
+
+describe('jobIdForHoursSnapshot', () => {
+  // Job A ran 2016-2020 with an unassigned 2018 part-time snapshot; job B started
+  // 2021 with its own unassigned snapshot at its start month. The 2015 snapshot
+  // predates every salary.
+  const jobs = [job('A', 37.5), job('B', 37.5)];
+  const salaries = [sal('a', '2016-01', 400000, 'A'), sal('b', '2021-01', 600000, 'B')];
+  const before = [snap('hA', '2018-01', 20), snap('hB', '2021-01', 40), snap('h0', '2015-06', 30)];
+  const after = before.map(h => ({ ...h, jobId: jobIdForHoursSnapshot(h, salaries) }));
+  const hoursFor = (month: string, list: HoursSnapshot[]) => hoursAt(month, list, jobs, salaryAt(month, salaries));
+
+  it('picks the job whose salary was active at the snapshot month', () => {
+    expect(after.map(h => h.jobId)).toEqual(['A', 'B', undefined]);
+  });
+
+  it("leaves both jobs' hours unchanged", () => {
+    for (const month of ['2016-01', '2018-01', '2019-06', '2020-12', '2021-01', '2023-05']) {
+      expect(hoursFor(month, after)).toBe(hoursFor(month, before));
+    }
+    expect(hoursFor('2019-06', after)).toBe(20);
+    expect(hoursFor('2023-05', after)).toBe(40);
+  });
+
+  it("stops an earlier job's snapshot carrying into a later job that has none of its own", () => {
+    const noB = [snap('hA', '2018-01', 20)];
+    const moved = noB.map(h => ({ ...h, jobId: jobIdForHoursSnapshot(h, salaries) }));
+    expect(hoursFor('2019-06', moved)).toBe(20);
+    expect(hoursFor('2022-01', noB)).toBe(20);
+    expect(hoursFor('2022-01', moved)).toBe(37.5); // B's contracted hours
   });
 });
 
