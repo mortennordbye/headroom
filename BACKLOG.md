@@ -80,6 +80,18 @@ in git and the CHANGELOG, not here.
 - **The savings target shrinks as you automate, by construction** (it's a share of the
   uncommitted residual). Surfaced in the panel rather than changed. **Where**:
   `calcRecommendations` in `src/lib/calculations.ts`.
+- **The allocation panel's target and the budget's savings target disagree once a paydown row is
+  active.** The panel (`sizeAllocation`) leaves the plan's own mortgage/debt paydowns out of
+  spending so activating and syncing them can't shift the target; `calcRecommendations` /
+  `plannedMonthlySaving` still count them as spending, so the Budget Saving pill, its
+  "unallocated" note and the Dashboard read lower. Surfaced with a caption in the panel. **Why
+  deferred**: counting a linked paydown as saving in `plannedMonthlySaving` spreads into the
+  Dashboard and Forecast projections (which already amortize the loan, so the paydown would count
+  twice), the savings-rate chart (`paydownPrincipal`), the pill split and the MCP's own copy in
+  `mcp/derive.ts`. **Unblock**: decide whether a plan-linked paydown is saving or spending
+  everywhere. **Where**: `src/lib/allocationSync.ts`, `src/lib/calculations.ts`,
+  `src/context/FinanceContext.tsx`, `src/components/SmartRecommendations.tsx`,
+  `src/pages/DashboardPage.tsx`, `mcp/derive.ts`.
 - **CashflowChart shows savings transfers as money out** (a literal cashflow view), so it disagrees
   with the savings-rate chart. **Where**: `src/components/charts/CashflowChart.tsx`.
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
