@@ -46,7 +46,7 @@ import {
   computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
-import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, stampLoadedPension, pensionAfterJobRemoved, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
+import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, stampLoadedPension, pensionAfterJobRemoved, rebaseImportedJobLink, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
 import { otpSchemeFor } from '../lib/pension';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
@@ -1605,6 +1605,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (resetMissing && data.homeowner) data.homeowner = stampLegacyTerm(data.homeowner, currentMonthKey());
     // Pension auto-post switched on before switching on stamped the month starts
     // from now; nothing back-posts.
+    // An import that drops the job the OTP scheme links to clears the link from
+    // the next unposted month on, as removing the job does.
+    if (!resetMissing && current) data = rebaseImportedJobLink(data, current, currentMonthKey());
     data = stampLoadedPension(data, resetMissing ? undefined : current, DEFAULT_PENSION, currentMonthKey());
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);

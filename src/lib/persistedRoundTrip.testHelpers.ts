@@ -14,7 +14,7 @@ import type {
 import { DEFAULT_BILLING_CONFIG, DEFAULT_EMPLOYER_COST_CONFIG } from './employerCost';
 import { currentMortgage } from './existingMortgage';
 import { stampLegacyTerm } from './loanTerm';
-import { stampLoadedPension } from './pensionAccrual';
+import { rebaseImportedJobLink, stampLoadedPension } from './pensionAccrual';
 import { migrateImportedMortgage, migrateMortgageBalance } from './mortgageSlices';
 import {
   applyPersistedFields, derivePayload, makePayloadRegistry, persistedKeys,
@@ -87,7 +87,7 @@ export function importAndSave(state: Blob, file: Blob): Blob {
   for (const key of ['assets', 'homeowner', 'transition'] as const) {
     if (sanitized[key] !== undefined || r[key] !== current[key]) Object.assign(data, { [key]: r[key] });
   }
-  return applyAndSave(state, stampLoadedPension(data, current, PENSION, NOW), false);
+  return applyAndSave(state, stampLoadedPension(rebaseImportedJobLink(data, current, NOW), current, PENSION, NOW), false);
 }
 
 /** Undo history[k] (saved on top of history[k - 1]) against `current`, as the

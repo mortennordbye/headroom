@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  pensionAccrualRules, isPensionRuleId, otpBonusBaseline, otpBonusDue, addOtpBonusPosted, switchAutoPostOn, changeOtpScheme, pensionAfterJobRemoved,
+  pensionAccrualRules, isPensionRuleId, otpBonusBaseline, otpBonusDue, addOtpBonusPosted, switchAutoPostOn, changeOtpScheme, pensionAfterJobRemoved, rebaseImportedJobLink,
   stampUnstampedAutoPost, stampLoadedPension, type PensionAccrualInput,
 } from './pensionAccrual';
 import { computeAutomationPostings, type AutomationState } from './automation';
@@ -466,8 +466,16 @@ describe('changing the OTP base settings while auto-post runs', () => {
     expect(extra(p, bonuses, [], '2026-12')).toEqual({ '2025': 0, '2026': 0 });
   });
 
-  it('relinking carries no owed share of pay the new link leaves out', () => {
-    // Linked to A, a late A bonus owes 5 000; B's overtime is from before the stamp.
+  const DEFAULTS: Pension = {
+    otpBalance: 0, otpEmployerPct: 5, otpEmployeePct: 0, otpGrowthRate: 5, otpIncludesBonuses: false, otpIncludesOvertime: false,
+    ipsBalance: 0, ipsAnnualContribution: 0, ipsGrowthRate: 7, birthYear: 0, retirementAge: 67, folketrygdBeholdning: 0,
+    folketrygdSingle: true, pensionPayoutYears: 10, afpEligible: false, otpAutoPost: false, ipsAutoPost: false,
+  };
+
+  it('relinking keeps a late entry the old link owed, as far as the new share reaches', () => {
+    // Linked to A, a late A bonus owes 5 000 for a settled month. B's overtime is
+    // settled under the old link, so only the owed A share can post, and only up
+    // to the new settings' share to date (2 500).
     const bonuses = [{ date: '2026-03-01', amount: 100_000, type: 'performance' as const, jobId: 'a' }];
     const overtime = [{ date: '2026-02-01', amount: 50_000, jobId: 'b' }];
     const linked: P = {
@@ -475,10 +483,10 @@ describe('changing the OTP base settings while auto-post runs', () => {
       otpLastPostedMonth: '2026-05', otpBonusPostedByYear: { '2025': 0, '2026': 0 },
     };
     const relinked = changeOtpScheme(linked, { otpJobId: 'b' }, 600_000, bonuses, overtime, JOBS, '2026-05');
-    expect(extra(relinked, bonuses, overtime, '2026-06')).toEqual({ '2025': 0, '2026': 0 });
+    expect(extra(relinked, bonuses, overtime, '2026-06')).toEqual({ '2025': 0, '2026': 2_500 });
   });
 
-  it('two steps (overtime on, then bonuses off) do not turn an owed bonus into old overtime', () => {
+  it('two steps (overtime on, then bonuses off) keep the owed late bonus owed', () => {
     const bonuses = [{ date: '2026-03-01', amount: 100_000, type: 'performance' as const }];   // late, owes 5 000
     const overtime = [{ date: '2026-02-01', amount: 20_000 }];
     const posted: P = {
@@ -486,9 +494,76 @@ describe('changing the OTP base settings while auto-post runs', () => {
       otpLastPostedMonth: '2026-05', otpBonusPostedByYear: { '2025': 0, '2026': 0 },
     };
     const step1 = changeOtpScheme(posted, { otpIncludesOvertime: true }, 600_000, bonuses, overtime, JOBS, '2026-05');
-    expect(extra(step1, bonuses, overtime, '2026-06')).toEqual({ '2025': 0, '2026': 5_000 });   // the late bonus, still owed
+    expect(extra(step1, bonuses, overtime, '2026-06')).toEqual({ '2025': 0, '2026': 5_000 });
+    // With bonuses off the new share to date is only the overtime's 1 000, so that is all the owed share can post.
     const step2 = changeOtpScheme(step1, { otpIncludesBonuses: false }, 600_000, bonuses, overtime, JOBS, '2026-05');
-    expect(extra(step2, bonuses, overtime, '2026-06')).toEqual({ '2025': 0, '2026': 0 });
+    expect(extra(step2, bonuses, overtime, '2026-06')).toEqual({ '2025': 0, '2026': 1_000 });
+  });
+
+  describe('a late entry for a settled month survives later setting changes (600 000, 10%)', () => {
+    const ten: P = { ...start, otpEmployerPct: 10, otpAutoPost: true };
+
+    it('overtime on, then off again: the late bonus posts in full', () => {
+      const overtime = [{ date: '2026-03-10', amount: 30_000 }];
+      const bonuses = [{ date: '2026-11-25', amount: 50_000, type: 'annual' as const }];   // typed in after November posted
+      const p: P = { ...ten, otpIncludesBonuses: true, otpLastPostedMonth: '2026-11', otpBonusPostedByYear: { '2026': 0 } };
+      const on = changeOtpScheme(p, { otpIncludesOvertime: true }, 600_000, bonuses, overtime, JOBS, '2026-11');
+      const off = changeOtpScheme(on, { otpIncludesOvertime: false }, 600_000, bonuses, overtime, JOBS, '2026-11');
+      expect(extra(off, bonuses, overtime, '2026-12')).toEqual({ '2026': 5_000 });
+    });
+
+    it('linking a job after another job\'s bonus posted: the late bonus posts in full', () => {
+      const bonuses = [
+        { date: '2026-06-10', amount: 40_000, type: 'annual' as const, jobId: 'b' },   // already posted
+        { date: '2026-11-25', amount: 50_000, type: 'annual' as const, jobId: 'a' },   // late
+      ];
+      const p: P = { ...ten, otpIncludesBonuses: true, otpLastPostedMonth: '2026-11', otpBonusPostedByYear: { '2026': 4_000 } };
+      const linked = changeOtpScheme(p, { otpJobId: 'a' }, 600_000, bonuses, [], JOBS, '2026-11');
+      expect(extra(linked, bonuses, [], '2026-12')).toEqual({ '2026': 5_000 });
+    });
+
+    it('across New Year: a December bonus entered in January posts after overtime is turned off', () => {
+      const overtime = [{ date: '2026-06-10', amount: 10_000 }];                          // already posted
+      const bonuses = [{ date: '2026-12-20', amount: 9_000, type: 'annual' as const }];    // late
+      const p: P = {
+        ...ten, otpIncludesBonuses: true, otpIncludesOvertime: true,
+        otpLastPostedMonth: '2026-12', otpBonusPostedByYear: { '2026': 1_000 },
+      };
+      const off = changeOtpScheme(p, { otpIncludesOvertime: false }, 600_000, bonuses, overtime, JOBS, '2027-01');
+      expect(extra(off, bonuses, overtime, '2027-01')).toEqual({ '2026': 900, '2027': 0 });
+    });
+  });
+
+  it('a job removal resolves the old link as it was before the removal, whichever job list it gets', () => {
+    // Linked to A, B's March bonus is settled under the link; clearing it must not post it.
+    const bonuses = [{ date: '2026-03-25', amount: 100_000, type: 'annual' as const, jobId: 'b' }];
+    const linked: P = {
+      ...start, otpAutoPost: true, otpIncludesBonuses: true, otpJobId: 'a',
+      otpLastPostedMonth: '2026-05', otpBonusPostedByYear: { '2025': 0, '2026': 0 },
+    };
+    const before = pensionAfterJobRemoved(linked, 'a', SALARIES, SALARIED_JOBS, bonuses, [], '2026-05');
+    const after = pensionAfterJobRemoved(linked, 'a', SALARIES, SALARIED_JOBS.filter(j => j.id !== 'a'), bonuses, [], '2026-05');
+    expect(before.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 5_000 });
+    expect(after).toEqual(before);
+  });
+
+  it('an import that drops the linked job clears the link without back-posting', () => {
+    const bonuses = [{ id: 'x', date: '2026-03-10', amount: 20_000, type: 'annual' as const, jobId: 'b' }];
+    const pension: Pension = {
+      ...DEFAULTS, otpAutoPost: true, otpIncludesBonuses: true, otpJobId: 'a',
+      otpLastPostedMonth: '2026-05', otpBonusPostedByYear: { '2025': 0, '2026': 0 },
+    };
+    const current = { pension, jobs: SALARIED_JOBS, salaries: SALARIES, bonuses, overtime: [] };
+    const imported: Parameters<typeof rebaseImportedJobLink>[0] = { jobs: SALARIED_JOBS.filter(j => j.id !== 'a') };
+    const data = rebaseImportedJobLink(imported, current, '2026-06');
+    expect(data.pension?.otpJobId).toBeUndefined();
+    expect(data.pension?.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 1_000 });
+    expect(extra(data.pension as P, bonuses, [], '2026-06', 900_000)).toEqual({ '2025': 0, '2026': 0 });
+    // Nothing to do when the import keeps the job, carries its own pension, or has no jobs.
+    const keep = { jobs: SALARIED_JOBS };
+    expect(rebaseImportedJobLink(keep, current, '2026-06')).toBe(keep);
+    const own = { jobs: [], pension };
+    expect(rebaseImportedJobLink(own, current, '2026-06')).toBe(own);
   });
 
   it('toggling a setting off and on again in one month lands back on the same record', () => {

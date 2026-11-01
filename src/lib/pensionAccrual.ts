@@ -270,41 +270,28 @@ export function switchAutoPostOn<P extends Parameters<typeof stampUnstampedAutoP
 }
 
 /**
- * The scheme that counts only the pay both `a` and `b` count: a kind both
- * include, from the job both link to (one link and no link: that job; two
- * different links: nothing).
- */
-function sharedScheme(a: OtpBaseScheme, b: OtpBaseScheme): OtpBaseScheme {
-  if (a.otpJobId && b.otpJobId && a.otpJobId !== b.otpJobId) return {};
-  return {
-    otpIncludesBonuses: a.otpIncludesBonuses === true && b.otpIncludesBonuses === true,
-    otpIncludesOvertime: a.otpIncludesOvertime === true && b.otpIncludesOvertime === true,
-    otpJobId: a.otpJobId || b.otpJobId,
-  };
-}
-
-/**
  * The pension after changing its OTP base settings (`patch`: bonuses, overtime,
- * the job link) in `month`. The change applies from the next unposted month on.
- * Whenever there is a stamp (`otpLastPostedMonth`), with auto-post on or off,
- * `otpBonusPostedByYear` is rebased so pay dated in a month already posted
- * counts as settled under the new settings: nothing the balance already holds
- * back-posts, and pay dated after the stamp posts in full. Rebasing with
- * auto-post off matters because switching it back on within the stamp's month
- * keeps the record.
+ * the job link) in `month`. The change applies from the next unposted month on,
+ * so pay dated through the stamp (`otpLastPostedMonth`) stays settled under the
+ * OLD settings, and pay dated after it follows the new ones.
  *
- * A share still owed for those months (a late entry not yet posted) stays owed
- * only for pay both the old and the new settings count. The record does not say
- * which entries it covers, so the owed share is taken as that shared pay's share
- * through the stamp less everything posted, floored at 0: it may under-carry a
- * late entry but never posts pay the new settings leave out. Each year's record
- * becomes the new settings' share of pay through the stamp less that owed share,
- * floored at 0.
+ * Whenever there is a stamp, with auto-post on or off, `otpBonusPostedByYear`
+ * is rebased per year to
+ *
+ *   new settings' share through the stamp − max(0, old settings' share through the stamp − posted)
+ *
+ * floored at 0. So nothing the balance already holds back-posts, pay dated after
+ * the stamp posts in full, and a share the old settings still owed for a settled
+ * month (a late entry typed in after its month posted) stays owed in full, even
+ * when the new settings would leave that pay out. Turning a kind on mid-year
+ * settles that kind's pay dated through the stamp. Rebasing with auto-post off
+ * matters because switching it back on within the stamp's month keeps the record.
  *
  * Bonuses and overtime share the 12G room above fixed pay as one pool, with no
  * per-kind split. At the cap, never back-posting wins: pay settled through the
- * stamp can use up room that pay dated later would otherwise have had. `jobs`
- * resolves the job link before and after (see `otpSchemeFor`).
+ * stamp can use up room that pay dated later would otherwise have had, and an
+ * owed share only posts as far as the new settings' share to date reaches.
+ * `jobs` resolves the job link before and after (see `otpSchemeFor`).
  */
 export function changeOtpScheme<P extends Parameters<typeof stampUnstampedAutoPost>[0]>(
   pension: P,
@@ -319,10 +306,8 @@ export function changeOtpScheme<P extends Parameters<typeof stampUnstampedAutoPo
   const stamp = pension.otpLastPostedMonth;
   if (!stamp) return next;
   const pct = pension.otpEmployerPct + pension.otpEmployeePct;
-  const oldScheme = otpSchemeFor(pension, jobs);
-  const newScheme = otpSchemeFor(next, jobs);
-  const newPay = otpCountedPay(bonuses, overtime, newScheme);
-  const sharedPay = otpCountedPay(bonuses, overtime, sharedScheme(oldScheme, newScheme));
+  const oldPay = otpCountedPay(bonuses, overtime, otpSchemeFor(pension, jobs));
+  const newPay = otpCountedPay(bonuses, overtime, otpSchemeFor(next, jobs));
   const year = Number(month.slice(0, 4));
   const record: Record<string, number> = {};
   for (const y of [year - 1, year]) {
@@ -331,8 +316,8 @@ export function changeOtpScheme<P extends Parameters<typeof stampUnstampedAutoPo
     // Months of year y already posted: through the stamp, or none before it.
     const through = stamp < `${y}-01` ? undefined : (stamp < `${y}-12` ? stamp : `${y}-12`);
     const share = (pay: readonly OtpPay[]) => (through ? otpBonusShareToDate(fixedGross, pay, pct, through) : 0);
-    const owed = Math.max(0, share(sharedPay) - (posted ?? 0));
-    record[String(y)] = Math.max(0, share(newPay) - owed);
+    const owedOld = Math.max(0, share(oldPay) - (posted ?? 0));
+    record[String(y)] = Math.max(0, share(newPay) - owedOld);
   }
   return { ...next, otpBonusPostedByYear: record };
 }
@@ -340,8 +325,9 @@ export function changeOtpScheme<P extends Parameters<typeof stampUnstampedAutoPo
 /**
  * The pension after the job `jobId` is removed: a scheme linked to that job
  * falls back to every job's pay, applied as a settings change (`changeOtpScheme`).
- * The fixed pay is what the remaining jobs earn, as the next posting will use;
- * the jobs before the removal only resolve the old link. Any other pension is
+ * The fixed pay is what the remaining jobs earn, as the next posting will use.
+ * The old link is resolved as if the job still exists (it does until this
+ * removal), whether `jobs` is the list before or after it. Any other pension is
  * returned as is.
  */
 export function pensionAfterJobRemoved<P extends Parameters<typeof stampUnstampedAutoPost>[0]>(
@@ -354,13 +340,39 @@ export function pensionAfterJobRemoved<P extends Parameters<typeof stampUnstampe
   month: string,
 ): P {
   if (pension.otpJobId !== jobId) return pension;
-  const fixedGross = activeJobBreakdown(
-    salaries.filter(s => s.jobId !== jobId), jobs.filter(j => j.id !== jobId), month,
-  ).reduce((s, c) => s + c.gross, 0);
-  return changeOtpScheme(pension, { otpJobId: undefined }, fixedGross, bonuses, overtime, jobs, month);
+  const remaining = jobs.filter(j => j.id !== jobId);
+  const fixedGross = activeJobBreakdown(salaries.filter(s => s.jobId !== jobId), remaining, month)
+    .reduce((s, c) => s + c.gross, 0);
+  return changeOtpScheme(pension, { otpJobId: undefined }, fixedGross, bonuses, overtime, [...remaining, { id: jobId }], month);
 }
 
 type LoadSlice = Pick<ExportPayload, 'pension' | 'salaries' | 'jobs' | 'bonuses' | 'overtime'>;
+
+/**
+ * Import step: an import that brings `jobs` but not `pension` can drop the job
+ * the current OTP scheme links to. That is a settings change like removing the
+ * job (`pensionAfterJobRemoved`): the link is cleared and the record rebased,
+ * resolving the old link against the jobs before the import and taking fixed
+ * pay, bonuses and overtime from what the app holds after it. Returns `data`
+ * itself when nothing changes.
+ */
+export function rebaseImportedJobLink<D extends Partial<LoadSlice>>(
+  data: D,
+  current: Partial<LoadSlice>,
+  month: string,
+): D {
+  const pension = current.pension;
+  const link = pension?.otpJobId;
+  if (!pension || !link || data.pension || !data.jobs) return data;
+  if (data.jobs.some(j => j.id === link) || !(current.jobs ?? []).some(j => j.id === link)) return data;
+  const salaries = data.salaries ?? current.salaries ?? [];
+  const fixedGross = activeJobBreakdown(salaries, data.jobs, month).reduce((s, c) => s + c.gross, 0);
+  const rebased = changeOtpScheme(
+    pension, { otpJobId: undefined }, fixedGross,
+    data.bonuses ?? current.bonuses ?? [], data.overtime ?? current.overtime ?? [], current.jobs ?? [], month,
+  );
+  return { ...data, pension: rebased };
+}
 
 /**
  * Load/import step: a `data.pension` with auto-post on but never stamped is
