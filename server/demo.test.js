@@ -84,6 +84,11 @@ describe('parseTrustProxy', () => {
   it('reads a hop count as a number', () => {
     expect(parseTrustProxy('1')).toBe(1);
     expect(parseTrustProxy(' 2 ')).toBe(2);
+    expect(parseTrustProxy('10')).toBe(10);
+  });
+
+  it('rejects a hop count outside 1-10', () => {
+    for (const v of ['0', '11', '999']) expect(() => parseTrustProxy(v)).toThrow(/1-10/);
   });
 
   it('reads addresses and CIDRs as a trimmed list', () => {

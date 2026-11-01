@@ -74,7 +74,12 @@ const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '')
   .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
 if (ALLOWED_HOSTS.length > 0) {
   app.use((req, res, next) => {
-    const host = (req.hostname || '').toLowerCase();
+    // The raw Host header, not req.hostname: with `trust proxy` set (demo mode)
+    // req.hostname comes from X-Forwarded-Host, which a client can spoof past
+    // this guard. Port stripped the way Express does it, IPv6-literal safe.
+    const raw = req.headers.host || '';
+    const portAt = raw.indexOf(':', raw[0] === '[' ? raw.indexOf(']') + 1 : 0);
+    const host = (portAt === -1 ? raw : raw.slice(0, portAt)).toLowerCase();
     if (host && !ALLOWED_HOSTS.includes(host)) {
       return res.status(403).json({ error: 'host not allowed' });
     }

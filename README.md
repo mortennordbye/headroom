@@ -309,7 +309,7 @@ All optional — the defaults are sensible and nothing needs to be set.
 | `ALLOWED_HOSTS` | _(unset — all hosts allowed)_ | Comma-separated hostname allowlist, e.g. `finance.example.com,localhost`. When unset, no host filtering is applied. |
 | `AUTH_PASSWORD` | _(unset — auth off)_ | When set, forces the [optional password](#optional-password) on with this password, overriding the in-app Settings toggle. |
 | `DEMO_MODE` | _(unset — off)_ | Set to `1` to run this instance as a [public read-only demo](#public-demo-mode). |
-| `TRUST_PROXY` | _(unset)_ | Demo mode only. The reverse proxy in front of the demo, as a hop count (`1`) or comma-separated IPs/CIDRs (`10.0.0.0/8`), so the per-visitor rate limit sees the real client IP from `X-Forwarded-For`. Ignored outside demo mode. |
+| `TRUST_PROXY` | _(unset)_ | Demo mode only. The reverse proxy in front of the demo, preferably as its IP or CIDR (`10.0.0.0/8`, comma-separated for several), or as a hop count from `1` to `10`. Lets the per-visitor rate limit see the real client IP from `X-Forwarded-For`. Ignored outside demo mode. |
 
 ## Public demo mode
 
@@ -348,6 +348,10 @@ What changes:
   a reverse proxy, set `TRUST_PROXY` to that proxy (hop count or IPs/CIDRs) so the
   limit keys on the real client address; without it the socket address is used
   and `X-Forwarded-For` is ignored, so every visitor shares the proxy's bucket.
+  Prefer the proxy's IP or CIDR over a hop count: a hop count trusts whatever
+  connects directly, so with one the container port must only be reachable
+  through the proxy (bind it with `BIND_HOST` or the port mapping), or a client
+  can set its own `X-Forwarded-For` and get unlimited buckets.
 - **No background jobs.** Rotating backups and scheduled bank sync are both
   skipped — a demo instance has nothing worth backing up and no bank to sync.
 
@@ -361,7 +365,7 @@ to the internet on `GET /api/data`.
 environment:
   DEMO_MODE: "1"
   ALLOWED_HOSTS: "demo.example.com"
-  TRUST_PROXY: "1"   # one reverse proxy in front
+  TRUST_PROXY: "172.16.0.0/12"   # the reverse proxy's network
 ```
 
 ## Data persistence
