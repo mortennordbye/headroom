@@ -175,6 +175,15 @@ in git and the CHANGELOG, not here.
 
 ## Tooling and infrastructure
 
+- **Temporary tap log for the mobile "first tap does nothing" report.** On the iPhone home-screen
+  app the first tap on a bottom tab can still do nothing, after #292, #293 and #295 (which fixed
+  the old page staying up while a cold route loaded) and after the saved tick and update prompt
+  were moved off the tab bar. WebKit emulation no longer reproduces it, so `?debugtaps` turns on an on-screen log of touches, the element under the finger, clicks,
+  route changes, frame stalls and the running bundle. **Why deferred**: needs a capture from the
+  real phone. **Unblock**: a log of a failed tap, then fix the cause and delete the component and
+  its mount. **Where**: `src/components/TapDebugLog.tsx`, `<TapDebugLog />` in
+  `src/components/Layout.tsx`.
+
 - **Stricter lint presets.** No `recommendedTypeChecked` for the TypeScript and no `jsx-a11y`.
   **Why deferred**: out of scope for #142, which only brought `server/` and `desktop/` under the
   recommended rules. **Where**: `eslint.config.js`.

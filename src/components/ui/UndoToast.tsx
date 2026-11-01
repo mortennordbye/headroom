@@ -29,7 +29,7 @@ export function UndoToast({ message, undoLabel, dismissLabel, onUndo, onDismiss,
   return (
     <div
       role="status"
-      className="fixed left-1/2 -translate-x-1/2 bottom-20 md:bottom-6 z-50 flex items-center gap-3 px-4 py-2.5 rounded-full border shadow-lg"
+      className="fixed left-1/2 -translate-x-1/2 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-6 z-50 flex items-center gap-3 px-4 py-2.5 rounded-full border shadow-lg"
       style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
     >
       <span className="text-[13px] text-[var(--text-1)]">{message}</span>

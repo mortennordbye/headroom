@@ -23,6 +23,7 @@ import OnboardingTour from './onboarding/OnboardingTour';
 import HistoryManagerModal from './HistoryManagerModal';
 import GlossaryModal from './GlossaryModal';
 import RouteFallback from './RouteFallback';
+import TapDebugLog from './TapDebugLog';
 
 import { NAV_ITEMS, NAV_GROUPS, MORE_ROUTES, ALWAYS_VISIBLE_NAV, groupForPath, navKeyForPath, navIconForPath } from './navItems';
 import { SegmentedControl } from './ui/SegmentedControl';
@@ -528,6 +529,8 @@ const Layout: React.FC = () => {
         </button>
       </nav>
 
+      <TapDebugLog />
+
       {/* First-run guided setup (renders only when active; portals to body) */}
       <OnboardingTour />
 
@@ -546,11 +549,13 @@ const Layout: React.FC = () => {
       )}
 
       {/* Transient "saved" tick — a subtle positive confirmation that an edit
-          persisted (saves are otherwise silent; only failures raise a banner). */}
+          persisted (saves are otherwise silent; only failures raise a banner).
+          On mobile it sits as high as main's bottom padding: the tab bar grows by
+          the home-indicator inset, and a toast over it swallows taps on the tabs. */}
       {justSaved && (
         <div
           role="status"
-          className="animate-fade-in fixed right-4 bottom-20 md:bottom-6 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-lg text-[12px] font-medium"
+          className="animate-fade-in fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-6 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-lg text-[12px] font-medium"
           style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
         >
           <Check size={13} style={{ color: 'var(--positive)' }} />
