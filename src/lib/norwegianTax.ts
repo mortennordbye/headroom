@@ -330,8 +330,9 @@ export function calcPensionIncomeTax(
 // Gjeldsreduksjon (skatteloven § 4-19): the share of debt matching the share of
 // gross assets held in discounted shares/funds is valued at the same rate as the
 // shares. Gross assets count the primary home and shares at market value (§ 4-19
-// third ledd). The primary-home discount gives no reduction; a secondary home is
-// valued at 100 %, so it gives none either.
+// third ledd); for a co-owned home, the owner's share of its market value. The
+// primary-home discount gives no reduction; a secondary home is valued at 100 %,
+// so it gives none either.
 //
 // Simplification (a "good-enough" estimate, not a tax return): single-person
 // bunnfradrag (no spousal doubling).
@@ -380,8 +381,14 @@ export const WEALTH_TAX_PARAMS: Record<number, WealthTaxParams> = {
 export const WEALTH_PARAMS = WEALTH_TAX_PARAMS[TAX_YEAR] ?? WEALTH_TAX_PARAMS[2025];
 
 export interface WealthTaxComponents {
-  /** Market value of the primary residence (valued at 25% / 70%). */
+  /** The owner's market value of the primary residence (valued at 25% / 70%). */
   primaryHomeValue: number;
+  /** The owner's share (0..1) of a co-owned primary residence; default 1. The 70 %
+   *  threshold is tested on the whole home (`primaryHomeValue / primaryHomeShare`),
+   *  then the valued amount is scaled back to the share. Skatte-ABC B-11-2.7.1:
+   *  "Vurderingen av om boligen har så høy verdi at 70 %-regelen skal benyttes,
+   *  gjøres imidlertid med utgangspunkt i hele eiendommens omsetningsverdi." */
+  primaryHomeShare?: number;
   /** Listed shares & equity funds market value (valued at 80%). */
   shares: number;
   /** Deposits, crypto, BSU, buffer — everything valued at 100%. */
@@ -417,10 +424,12 @@ function valuePrimaryHome(marketValue: number, P: WealthTaxParams): number {
 export function calcWealthTax(c: WealthTaxComponents, year: number = TAX_YEAR): WealthTaxBreakdown {
   const P = WEALTH_TAX_PARAMS[year] ?? WEALTH_PARAMS;
   const home = Math.max(0, c.primaryHomeValue);
+  const homeShare = Math.min(1, Math.max(0, c.primaryHomeShare ?? 1));
   const shares = Math.max(0, c.shares);
   const other = Math.max(0, c.otherAssets);
   const debt = Math.max(0, c.debt);
-  const valuedAssets = valuePrimaryHome(home, P) + shares * P.sharesRate + other;
+  const valuedHome = homeShare > 0 ? valuePrimaryHome(home / homeShare, P) * homeShare : 0;
+  const valuedAssets = valuedHome + shares * P.sharesRate + other;
   const grossAssets = home + shares + other;
   const deductibleDebt = grossAssets > 0
     ? debt * (1 - (1 - P.sharesRate) * (shares / grossAssets))

@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { BalanceSnapshot, CoOwner } from '../context/FinanceContext';
 import {
-  activeCoOwners, ownershipShares, myHouseValue, myHouseDebt, primaryHomeWealthValue,
-  primaryHomeWealthValueOfShare, myPrimaryHomeWealthValue, validateCoOwners, snapshotCoOwners,
+  activeCoOwners, ownershipShares, myHouseValue, myHouseDebt, validateCoOwners, snapshotCoOwners,
   rewriteSnapshotCoOwners, sanitizeCoOwners, sanitizeSnapshotCoOwners, mySaleProceeds, withOwnershipShare,
 } from './ownership';
 import { calcWealthTax, WEALTH_TAX_PARAMS } from './norwegianTax';
@@ -64,38 +63,27 @@ describe('ownershipShares', () => {
   });
 });
 
-describe('primaryHomeWealthValue (70 % threshold on the whole home)', () => {
-  it('is the identity at 100 %', () => {
-    expect(primaryHomeWealthValue(16_000_000, 1)).toBe(16_000_000);
+describe('calcWealthTax primaryHomeShare (70 % threshold on the whole home)', () => {
+  const valuedShare = (full: number, own: number, year?: number) =>
+    calcWealthTax({ primaryHomeValue: full * own, primaryHomeShare: own, shares: 0, otherAssets: 0, debt: 0 }, year).valuedAssets;
+
+  it('a 100 % share is the plain market value', () => {
+    expect(valuedShare(16_000_000, 1)).toBe(valued(16_000_000));
   });
 
-  // Skatte-ABC B-11-2.7.1 worked example: 16 MNOK, 50 % → 3 350 000.
   it.each([4_000_000, 10_000_000, 16_000_000])('values a 50 %% share of %i at half the whole home', (v) => {
-    const mine = primaryHomeWealthValue(v, 0.5);
-    expect(valued(mine)).toBeCloseTo(valued(v) * 0.5, 4);
+    expect(valuedShare(v, 0.5)).toBeCloseTo(valued(v) * 0.5, 4);
   });
 
   it('matches the Skatteetaten example (Skatte-ABC B-11-2.7.1, 10 MNOK threshold in 2025)', () => {
-    const valued2025 = (v: number) => calcWealthTax({ primaryHomeValue: v, shares: 0, otherAssets: 0, debt: 0 }, 2025).valuedAssets;
     expect(WEALTH_TAX_PARAMS[2025].primaryHomeHighThreshold).toBe(10_000_000);
-    expect(valued2025(primaryHomeWealthValue(16_000_000, 0.5, 2025))).toBeCloseTo(3_350_000, 4);
+    expect(valuedShare(16_000_000, 0.5, 2025)).toBeCloseTo(3_350_000, 4);
     // Valuing the 8 M share alone would under-state it at 2 000 000.
-    expect(valued2025(8_000_000)).toBe(2_000_000);
-  });
-
-  it('below the threshold it is just the share of the value', () => {
-    expect(primaryHomeWealthValue(4_000_000, 0.5)).toBeCloseTo(2_000_000, 6);
+    expect(calcWealthTax({ primaryHomeValue: 8_000_000, shares: 0, otherAssets: 0, debt: 0 }, 2025).valuedAssets).toBe(2_000_000);
   });
 
   it('0 % share → 0', () => {
-    expect(primaryHomeWealthValue(16_000_000, 0)).toBe(0);
-    expect(primaryHomeWealthValueOfShare(0, 0)).toBe(0);
-  });
-
-  it('the share-input form agrees with the full-value form', () => {
-    expect(primaryHomeWealthValueOfShare(8_000_000, 0.5)).toBeCloseTo(primaryHomeWealthValue(16_000_000, 0.5), 6);
-    expect(myPrimaryHomeWealthValue({ houseValue: 16_000_000, coOwners: [co()] }))
-      .toBeCloseTo(primaryHomeWealthValue(16_000_000, 0.5), 6);
+    expect(valuedShare(16_000_000, 0)).toBe(0);
   });
 });
 

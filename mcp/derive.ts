@@ -14,7 +14,7 @@ import type {
   TransitionData,
 } from '../src/context/FinanceContext';
 import { computeEquityBreakdown, sumSavings } from '../src/lib/equity';
-import { activeCoOwners, myHouseDebt, myHouseValue, myPrimaryHomeWealthValue, ownershipShares } from '../src/lib/ownership';
+import { activeCoOwners, myHouseDebt, myHouseValue, ownershipShares } from '../src/lib/ownership';
 import { automationMortgage, monthlyPaydownPrincipal } from '../src/lib/automation';
 import { ageFromBirthDate } from '../src/lib/date';
 import {
@@ -1127,7 +1127,8 @@ export function assetsAndDebts(blob: ExportPayload, monthKey = osloMonthKey()) {
     // Formuesskatt estimate as AssetPage shows it (Norway only).
     wealthTax: (blob.region ?? 'no') === 'no'
       ? calcWealthTax({
-          primaryHomeValue: myPrimaryHomeWealthValue(blob.assets, monthKey),
+          primaryHomeValue: myHouseValue(blob.assets, monthKey),
+          primaryHomeShare: ownershipShares(blob.assets, monthKey).own,
           shares: blob.assets.portfolio,
           otherAssets: blob.assets.crypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
           debt: myHouseDebt(blob.assets, monthKey) + nonMortgageDebt,
