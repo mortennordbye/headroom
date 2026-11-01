@@ -6,7 +6,7 @@
 // drops every write affordance.
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { Debt } from '../context/FinanceContext';
+import type { Debt, FixedExpense } from '../context/FinanceContext';
 import { translations } from '../i18n/translations';
 
 const LIVE: Debt[] = [
@@ -22,6 +22,7 @@ const mockCtx = {
   t: translations.nb,
   lang: 'nb' as const,
   debts: LIVE,
+  fixedExpenses: [] as FixedExpense[],
   setDebts,
   // Plain ASCII spaces on purpose — `toLocaleString('nb-NO')` groups with a
   // non-breaking space, which no literal in this file would ever match.
@@ -36,7 +37,7 @@ vi.mock('./charts/DebtPaydownVsPlanChart', () => ({ default: () => null }));
 
 const { default: DebtSection } = await import('./DebtSection');
 
-const render = (props?: { debts?: Debt[]; readOnly?: boolean }) =>
+const render = (props?: { debts?: Debt[]; fixedExpenses?: FixedExpense[]; readOnly?: boolean }) =>
   renderToStaticMarkup(<DebtSection {...props} />);
 
 describe('DebtSection — month resolution', () => {
@@ -76,6 +77,18 @@ describe('DebtSection — month resolution', () => {
   it('disables the row buttons when read-only, so nothing opens the editor', () => {
     expect(render({ debts: PROJECTED, readOnly: true })).toContain('disabled');
     expect(render()).not.toContain('disabled');
+  });
+
+  it('plans a debt at its linked expense, not its minimum', () => {
+    // 200 000 at 5 % with the 3 000 minimum, or a 5 000/mo expense that pays it.
+    const pay = (over: Partial<FixedExpense> = {}): FixedExpense[] =>
+      [{ id: 'e', name: 'Avdrag', amount: 5_000, destinationKind: 'debt', debtId: 'd-1', ...over }];
+    const linked = render({ fixedExpenses: pay() });
+    expect(linked).toContain('5 000 kr/');
+    expect(linked).not.toContain('3 000 kr/');
+    // A paused expense pays nothing, so the row falls back to the minimum.
+    const paused = render({ fixedExpenses: pay({ automationPaused: true }) });
+    expect(paused).toContain('3 000 kr/');
   });
 
   it('still shows the empty state through the prop', () => {

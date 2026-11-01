@@ -36,7 +36,7 @@ import DebtSection from '../components/DebtSection';
 import ChartTooltip from '../components/ChartTooltip';
 import { CHART, AXIS_PROPS, AXIS_PROPS_Y, GRID_PROPS } from '../lib/chartColors';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
-import { snapshotHasAssumptions } from '../lib/snapshots';
+import { snapshotHasAssumptions, fixedExpensesForMonth } from '../lib/snapshots';
 import { SavingsAllocationPanel } from '../components/SavingsAllocationPanel';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { activeCoOwners, myHouseDebt, myHouseValue, ownershipShares } from '../lib/ownership';
@@ -113,7 +113,7 @@ const AssetPage: React.FC = () => {
   // equity-only, matching what netWorthHistory recorded at the time.
   const debts = hist.isLive ? liveDebts : hist.snapshot?.debts ?? NO_DEBTS;
   // The fixed expenses that pay those debts down, from the same month.
-  const fixedExpenses = hist.snapshot?.fixedExpenses ?? liveFixedExpenses;
+  const fixedExpenses = fixedExpensesForMonth(balanceSnapshots, liveFixedExpenses, hist.activeKey, currentMonthKey());
   // Forward assumptions in history mode come from the month's snapshot (v2), so a
   // past-month projection reflects what was assumed then, not today's rates. v1
   // snapshots (no `assumptions`) fall back to live — the documented `?? live`
@@ -735,7 +735,7 @@ const AssetPage: React.FC = () => {
       {/* Shown for every month, with the rows resolved for the one on screen: a
           recorded month reads its snapshot, a projected one its amortized
           balances. Watching a debt fall is half the point of looking forward. */}
-      <DebtSection debts={debts} readOnly={!hist.isLive} />
+      <DebtSection debts={debts} fixedExpenses={fixedExpenses} readOnly={!hist.isLive} />
 
       {/* Mortgage payoff over time */}
       <Card padding="none" className="p-5 md:p-7 space-y-4">
