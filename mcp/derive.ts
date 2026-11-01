@@ -28,7 +28,7 @@ import {
   calcMonthlyPayment,
   calcTransitionNewLoan,
 } from '../src/lib/calculations';
-import { planPayoff, extraPaymentSavings, sumDebtByType, lendingDebtTotal, type PayoffStrategy } from '../src/lib/debt';
+import { planPayoff, extraPaymentSavings, sumDebtByType, lendingDebtTotal, withLinkedPayments, type PayoffStrategy } from '../src/lib/debt';
 import { essentialMonthlyExpenses, fixedExpenseTotalsByType } from '../src/lib/fixedExpenseTotals';
 import { monthlyCashflow } from '../src/lib/monthlyCashflow';
 import { savingsRateStatus, savingsContributionsForMonth } from '../src/lib/savingsRate';
@@ -945,7 +945,7 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,
       startOtherAssets: eq.netCrypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
-      debts: blob.debts ?? [],
+      debts: withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []),
       monthKey,
       startHolidaySurplus,
       feriepengesatsPct,

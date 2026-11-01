@@ -14,12 +14,6 @@ in git and the CHANGELOG, not here.
   app models one person. **Unblock**: an issue covering a marital-status field. **Where**:
   `src/lib/norwegianTax.ts`, `annualMortgageInterest` in `src/context/FinanceContext.tsx` and
   `mcp/derive.ts`.
-- **Linked debts amortize at their minimum in projections.** A debt that a fixed expense pays
-  down (`destinationKind: 'debt'`) is projected at its `minPayment`, not at the expense amount,
-  so the two can disagree when they differ. Left out of the fix for debts the payment can't keep
-  up with (#355), which only changed the growth. **Unblock**: decide whether the projection should
-  use the linked expense's amount, and how a paused expense counts. **Where**:
-  `calcDebtBalanceByYear` in `src/lib/debt.ts`.
 - **OTP base, remaining gaps.** Bonuses are now a per-user setting, but the rest of the base is
   fixed: overtime is always left out (it counts under innskuddspensjonsloven § 5-5 første ledd
   unless the plan excludes it), on-call is always counted, the § 5-5 annet ledd bokstav b
