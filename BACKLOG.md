@@ -47,6 +47,21 @@ in git and the CHANGELOG, not here.
 
 ## Bank import
 
+- **Some deleted-row tombstones are never pruned, and the prune trusts two clocks and the session
+  store.** Tombstones are pruned against per-account fetch floors (`tombstoneCutoffs`), but these
+  are kept forever because nothing bounds them: legacy `deletedBankIds` with no tombstone (no
+  date); tombstones without `deletedAt` (written before it existed; their date may have been
+  edited); account-less tombstones under a removed connection's prefix or a connection with an
+  unfloored account. None of these sets grows, since every new delete writes a dated tombstone
+  with an account. The prune can also be wrong, bringing a deleted row back, if the server clock
+  jumps backwards, if an older `eb-session.json` is restored by hand (floors go down), or if a
+  client clock running behind writes an early `deletedAt` for a row whose date was also edited.
+  **Unblock**: stamp `deletedAt` on the server when a tombstone first appears in `POST /api/data`
+  (guarded endpoint, `tier:review`), and store a high-water "latest cutoff reported" per account so
+  a lowered floor or clock is detected and pruning stops. Legacy entries need a dated source,
+  which doesn't exist. **Where**: `tombstoneCutoffs` / `recordSync` / `inheritOrphanFloors` in
+  `server/bank.js`, `prunableBankTombstoneIds` / `addDeletedBankTombstones` in
+  `src/lib/bankDedup.ts`.
 - **Heuristics to tune.** The keyword table (`src/lib/categorize.ts`), transfer detection
   (`src/lib/transfers.ts`, could use own-IBAN matching), transfer-suggestion thresholds
   (`src/lib/transferSuggestions.ts`, tuned on one dataset), envelope name hints (`NAME_HINTS` in

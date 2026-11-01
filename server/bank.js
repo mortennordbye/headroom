@@ -722,6 +722,9 @@ async function finishLink(code, state) {
   console.log(`[bank] linked ${pending.aspspName}: ${accounts.length} account(s)${note ? ` (${note})` : ''}`);
   const store = readStore();
   const idx = store.connections.findIndex((c) => c.id === pending.connectionId);
+  const removedEntry = (store.removed || []).find((c) => c.id === pending.connectionId);
+  // A re-link carries keys from the live connection, a re-add from the removed entry.
+  const prevAccounts = idx >= 0 ? store.connections[idx].accounts : removedEntry && removedEntry.accounts;
   const connection = {
     id: pending.connectionId,
     aspsp: pending.aspspName,
@@ -734,10 +737,11 @@ async function finishLink(code, state) {
     needs_relink: false,
     // A re-link (or a re-add of a removed bank) already has rows in the ledger;
     // the next sync checks its overlap for a changed reference format.
-    ...(idx >= 0 || (store.removed || []).some((c) => c.id === pending.connectionId) ? { relinked: true } : {}),
-    accounts: idx >= 0 ? carryAccountKeys(store.connections[idx].accounts, accounts) : accounts,
+    ...(idx >= 0 || removedEntry ? { relinked: true } : {}),
+    accounts: prevAccounts ? carryAccountKeys(prevAccounts, accounts) : accounts,
     accounts_note: note,
   };
+  inheritOrphanFloors(store, connection);
   if (idx >= 0) store.connections[idx] = connection;
   else store.connections.push(connection);
   if (store.removed) store.removed = store.removed.filter((c) => c.id !== connection.id);
@@ -762,7 +766,12 @@ function removeConnection(id) {
   store.connections = store.connections.filter((c) => c.id !== id);
   if (gone && gone.aspsp) {
     store.removed = (store.removed || []).filter((c) => c.aspsp !== gone.aspsp);
-    store.removed.push({ aspsp: gone.aspsp, id: gone.id, idPrefix: gone.idPrefix });
+    // Keep the account identities so a re-add carries their keys (and with them
+    // their fetch floors) even when the bank issues new uids.
+    const accounts = (gone.accounts || []).map((a) => ({
+      uid: a.uid, ...(a.key_uid ? { key_uid: a.key_uid } : {}), ...(a.iban ? { iban: a.iban } : {}),
+    }));
+    store.removed.push({ aspsp: gone.aspsp, id: gone.id, idPrefix: gone.idPrefix, accounts });
   }
   writeStore(store);
   return { removed: before - store.connections.length };
@@ -820,6 +829,33 @@ function fetchFromDate(c, acc, floors, nowMs = Date.now(), days = DAYS) {
   const lastSync = c.last_sync ? Date.parse(c.last_sync) : NaN;
   if (!connectionFloored && Number.isFinite(lastSync)) return isoDay(lastSync - RESYNC_OVERLAP_DAYS * 864e5);
   return isoDay(nowMs - days * 864e5);
+}
+
+/**
+ * Backstop for account keys that fail to carry: when a connection's account list
+ * changes (link, re-link, re-add, the account-list refresh) and a floored key of
+ * that connection is no longer among its accounts, the new key may be the same
+ * account under a new uid. Give every unfloored account of the connection the
+ * highest such orphaned floor, so it can't refetch rows from before any of them
+ * (the lowest would let a renamed account reach behind its own old floor). With
+ * every old key still present, a new account keeps the full EB_DAYS backfill.
+ * Mutates `store.fetchFloors`; returns how many floors it set.
+ */
+function inheritOrphanFloors(store, c) {
+  const floors = store.fetchFloors;
+  if (!floors || !c || typeof c.id !== 'string') return 0;
+  const owner = `${c.id.slice(0, 8)}:`;
+  const keys = new Set((c.accounts || []).map((a) => accountKey(c, a)));
+  let orphan = null;
+  for (const [key, floor] of Object.entries(floors)) {
+    if (key.startsWith(owner) && !keys.has(key) && typeof floor === 'string' && ISO_DAY.test(floor) && (orphan == null || floor > orphan)) orphan = floor;
+  }
+  if (!orphan) return 0;
+  let set = 0;
+  for (const key of keys) {
+    if (typeof floors[key] !== 'string') { floors[key] = orphan; set += 1; }
+  }
+  return set;
 }
 
 /**
@@ -919,11 +955,9 @@ function getStatus() {
   });
   // Rolling sync history, newest first, for the Settings card.
   const syncLog = [...(store.syncLog || [])].reverse();
-  const future = futureFloors(store);
-  if (future.length) console.warn(`[bank] ${future.length} fetch floor(s) are in the future; fetching from today for them`);
   return {
     linked: connections.length > 0, connections, syncLog,
-    tombstoneCutoffs: tombstoneCutoffs(store), futureFloors: future, ...base,
+    tombstoneCutoffs: tombstoneCutoffs(store), futureFloors: futureFloors(store), ...base,
   };
 }
 
@@ -945,7 +979,6 @@ async function fetchMappedTransactions() {
   let mapped = [];
   let anyValid = false;
   const synced = [];
-  const floors = { ...(store.fetchFloors || {}) };
   for (const c of store.connections) {
     // A single expired bank flags itself for re-link but doesn't block the
     // others — we still sync every bank whose consent is live.
@@ -966,6 +999,7 @@ async function fetchMappedTransactions() {
       try {
         const { accounts: refreshed, note } = await resolveSessionAccounts({ session_id: c.session_id });
         if (refreshed.length) c.accounts = carryAccountKeys(c.accounts, refreshed);
+        inheritOrphanFloors(store, c);
         c.accounts_note = note;
         if (missingIban) c.accounts_enriched = true;
         writeStore(store);
@@ -982,7 +1016,7 @@ async function fetchMappedTransactions() {
     synced.push(sync);
     try {
       for (const acc of c.accounts || []) {
-        const raw = await fetchTransactions(acc.uid, fetchFromDate(c, acc, floors));
+        const raw = await fetchTransactions(acc.uid, fetchFromDate(c, acc, store.fetchFloors));
         accountKeys.push(accountKey(c, acc));
         mapped = mapped.concat(
           mapEBTransactions(raw, {
@@ -1009,7 +1043,7 @@ async function fetchMappedTransactions() {
     e.needsRelink = true;
     throw e;
   }
-  return { rows: mapped, synced, floors };
+  return { rows: mapped, synced, floors: { ...(store.fetchFloors || {}) } };
 }
 
 // How many recent sync outcomes to keep in the rolling log (oldest pruned).
@@ -1063,6 +1097,13 @@ function recordSync(outcome = {}) {
   if (outcome.ok !== false && Array.isArray(outcome.synced)) {
     // Never later than today: it is now minus the overlap.
     const nextFrom = isoDay(Date.parse(now) - RESYNC_OVERLAP_DAYS * 864e5);
+    // Heal a floor stored in the future down to today, the value fetches and
+    // cutoffs already used for it, so no cutoff ever reported moves later. Not
+    // to nextFrom: a cutoff reported in the last week was up to today minus the
+    // margin, which nextFrom minus the margin would undercut.
+    const healed = futureFloors(store, Date.parse(now));
+    for (const key of healed) store.fetchFloors[key] = isoDay(Date.parse(now));
+    if (healed.length) console.warn(`[bank] reset ${healed.length} fetch floor(s) that were in the future to today`);
     for (const s of outcome.synced) {
       const c = store.connections.find((x) => x.id === s.connectionId && x.session_id === s.sessionId);
       if (!c) continue;
@@ -1107,6 +1148,7 @@ module.exports = {
   connectionPrefixes,
   fetchFromDate,
   dropRowsBeforeFloor,
+  inheritOrphanFloors,
   tombstoneCutoffs,
   futureFloors,
   FLOOR_MARGIN_DAYS,

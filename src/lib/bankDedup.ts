@@ -127,8 +127,10 @@ export function evictSupersededPending(txs: DailyTransaction[]): DailyTransactio
 // `deletedBankIds`. After a re-link the bank may resend that row under a new
 // reference format, which the id alone can't catch; the server matches these
 // fingerprints the way it matches stored rows (`dropRelinkFormatTwins` in
-// server/bank.js). Returns `prev` unchanged when nothing new was removed.
-export function addDeletedBankTombstones(prev: DeletedBankTombstone[], removed: DailyTransaction[]): DeletedBankTombstone[] {
+// server/bank.js). `deletedAt` records when, since a row's date can be edited
+// before it is deleted (prunableBankTombstoneIds). Returns `prev` unchanged when
+// nothing new was removed.
+export function addDeletedBankTombstones(prev: DeletedBankTombstone[], removed: DailyTransaction[], now: Date = new Date()): DeletedBankTombstone[] {
   const have = new Set(prev.map((t) => t.id));
   const added: DeletedBankTombstone[] = [];
   for (const t of removed) {
@@ -137,6 +139,7 @@ export function addDeletedBankTombstones(prev: DeletedBankTombstone[], removed: 
     added.push({
       id: t.id, date: t.date, amount: t.amount, account: t.account, description: t.description, kind: t.kind,
       ...(t.pending ? { pending: true } : {}),
+      deletedAt: now.toISOString(),
     });
   }
   return added.length ? [...prev, ...added] : prev;
@@ -170,9 +173,14 @@ const isDay = (v: unknown): v is string => typeof v === 'string' && ISO_DAY.test
 // when the account has none. One without an account falls back to the id
 // prefixes it starts with (the legacy bare `eb-` prefix overlaps the others):
 // it is kept when it matches none or any of them is null, else judged by the
-// lowest. An unreadable date keeps the tombstone, and a duplicate id is kept if
-// any copy must stay. Legacy ids with no tombstone carry no date and are never
-// returned here. Pure.
+// lowest. Both the row's date and when it was deleted (`deletedAt`) must be
+// before the cutoff: the date can be edited before a delete, so a recent row
+// backdated and deleted would otherwise be pruned while the overlap fetch can
+// still return it, and a row can't be dated after the day it was deleted by more
+// than the margin. A tombstone without `deletedAt` (written before it existed)
+// is never pruned, since its date may have been edited. An unreadable date keeps
+// the tombstone, and a duplicate id is kept if any copy must stay. Legacy ids
+// with no tombstone carry no date and are never returned here. Pure.
 export function prunableBankTombstoneIds(
   tombstones: DeletedBankTombstone[],
   cutoffs: TombstoneCutoffs | null | undefined,
@@ -198,8 +206,9 @@ export function prunableBankTombstoneIds(
   for (const t of tombstones) {
     if (!t || typeof t.id !== 'string') continue;
     const day = typeof t.date === 'string' ? t.date.slice(0, 10) : '';
+    const deleted = typeof t.deletedAt === 'string' ? t.deletedAt.slice(0, 10) : '';
     const cutoff = cutoffFor(t);
-    if (cutoff != null && isDay(day) && day < cutoff) out.add(t.id);
+    if (cutoff != null && isDay(day) && day < cutoff && isDay(deleted) && deleted < cutoff) out.add(t.id);
     else keep.add(t.id);
   }
   for (const id of keep) out.delete(id);

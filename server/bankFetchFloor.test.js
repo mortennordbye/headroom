@@ -121,10 +121,81 @@ describe('fetchMappedTransactions + recordSync', () => {
     writeStore(s);
     bank.recordSync({ ok: true, synced: res.synced });
     expect(readStore().fetchFloors).toEqual({ 'aaaa1111:u1': '2026-03-01', 'bbbb2222:b1': '2025-12-25' });
-    // A floor already later than the next fetch start stays.
-    writeStore({ connections: [conn('aaaa1111', ['u1'])], fetchFloors: { 'aaaa1111:u1': '2099-01-01' } });
+    // A floor already later than the next fetch start (today) stays.
+    const today = isoDay(Date.now());
+    writeStore({ connections: [conn('aaaa1111', ['u1'])], fetchFloors: { 'aaaa1111:u1': today } });
     bank.recordSync({ ok: true, synced: [{ connectionId: 'aaaa1111-x', sessionId: 's-aaaa1111', accountKeys: ['aaaa1111:u1'], complete: true }] });
-    expect(readStore().fetchFloors['aaaa1111:u1']).toBe('2099-01-01');
+    expect(readStore().fetchFloors['aaaa1111:u1']).toBe(today);
+  });
+});
+
+describe('floors survive remove/re-add and re-links with new account uids', () => {
+  const pendingPath = path.join(dir, 'eb-pending.json');
+  const floor = isoDay(Date.now() - 7 * day);
+  const old = isoDay(Date.now() - 60 * day);
+  // finishLink for connection aaaa1111-x, with the session the bank hands back.
+  const link = async (accounts) => {
+    fs.writeFileSync(pendingPath, JSON.stringify({ state: 'st', validUntil: validUntil(), aspspName: 'Bank aaaa1111', connectionId: 'aaaa1111-x', idPrefix: 'eb-aaaa1111-' }));
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, status: 200, text: async () => JSON.stringify({ session_id: 's-new', accounts, access: { valid_until: validUntil() } }),
+    })));
+    await bank.finishLink('code', 'st');
+    return readStore().connections.find((c) => c.id === 'aaaa1111-x');
+  };
+  const linked = (accounts) => writeStore({ connections: [{ ...conn('aaaa1111', []), accounts }], fetchFloors: { 'aaaa1111:u1': floor } });
+  // The relinked account must start at the old floor and drop a 60-day-old row.
+  const expectBound = (c) => {
+    const acc = c.accounts[0];
+    const key = `aaaa1111:${acc.key_uid || acc.uid}`;
+    const floors = readStore().fetchFloors;
+    expect(bank.fetchFromDate(c, acc, floors)).toBe(floor);
+    expect(bank.dropRowsBeforeFloor([{ id: 'eb-aaaa1111-r', date: old, account: key }], new Set(), floors)).toEqual([]);
+  };
+
+  it('carries keys from the removed entry on a re-add, by IBAN', async () => {
+    linked([{ uid: 'u1', iban: 'NO1' }]);
+    bank.removeConnection('aaaa1111-x');
+    expect(readStore().removed[0].accounts).toEqual([{ uid: 'u1', iban: 'NO1' }]);
+    const c = await link([{ uid: 'new-uid', account_id: { iban: 'NO1' } }]);
+    expect(c.accounts[0].key_uid).toBe('u1');
+    expectBound(c);
+  });
+
+  it("gives a re-added account the orphaned floor when its key can't carry (new uid, no IBAN)", async () => {
+    linked([{ uid: 'u1' }]);
+    bank.removeConnection('aaaa1111-x');
+    const c = await link([{ uid: 'new-uid' }]);
+    expect(readStore().fetchFloors['aaaa1111:new-uid']).toBe(floor);
+    expectBound(c);
+  });
+
+  it('does the same on a live re-link where carry fails', async () => {
+    linked([{ uid: 'u1' }]);
+    expectBound(await link([{ uid: 'new-uid' }]));
+  });
+
+  it('keeps the full EB_DAYS backfill for a pure addition (every old key still present)', async () => {
+    linked([{ uid: 'u1' }]);
+    const c = await link([{ uid: 'u1' }, { uid: 'u2' }]);
+    expect(readStore().fetchFloors['aaaa1111:u2']).toBeUndefined();
+    expect(bank.fetchFromDate(c, c.accounts[1], readStore().fetchFloors)).toBe(isoDay(Date.now() - 90 * day));
+  });
+
+  it('inherits the highest orphaned floor, not the lowest', () => {
+    const store = { fetchFloors: { 'aaaa1111:gone1': '2026-01-01', 'aaaa1111:gone2': '2026-03-01', 'aaaa1111:kept': '2026-02-01', 'bbbb2222:x': '2026-09-01' } };
+    const c = { id: 'aaaa1111-x', idPrefix: 'eb-aaaa1111-', accounts: [{ uid: 'kept' }, { uid: 'fresh' }] };
+    expect(bank.inheritOrphanFloors(store, c)).toBe(1);
+    expect(store.fetchFloors['aaaa1111:fresh']).toBe('2026-03-01');
+    expect(store.fetchFloors['aaaa1111:kept']).toBe('2026-02-01');
+  });
+});
+
+describe('a future floor heals on the next successful sync', () => {
+  it('resets it to today, not to the next fetch start', () => {
+    writeStore({ connections: [conn('aaaa1111', ['u1'])], fetchFloors: { 'aaaa1111:u1': '2999-01-01', 'zzzz9999:q': '2999-01-01' } });
+    bank.recordSync({ ok: true, synced: [{ connectionId: 'aaaa1111-x', sessionId: 's-aaaa1111', accountKeys: ['aaaa1111:u1'], complete: true }] });
+    expect(readStore().fetchFloors).toEqual({ 'aaaa1111:u1': isoDay(Date.now()), 'zzzz9999:q': isoDay(Date.now()) });
+    expect(bank.getStatus().futureFloors).toEqual([]);
   });
 });
 

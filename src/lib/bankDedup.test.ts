@@ -136,8 +136,8 @@ describe('evictSupersededPending', () => {
 describe('addDeletedBankTombstones', () => {
   it("records a deleted bank row's fingerprint, without category or other display fields", () => {
     const row = tx({ id: 'eb-aaaa1111-2026-10-27-0', account: 'aaaa1111:1', category: 'groceries', merchant: 'REMA' });
-    expect(addDeletedBankTombstones([], [row])).toEqual([
-      { id: 'eb-aaaa1111-2026-10-27-0', date: '2026-06-28', amount: 100, account: 'aaaa1111:1', description: 'REMA 1000', kind: 'expense' },
+    expect(addDeletedBankTombstones([], [row], new Date('2026-10-30T10:00:00Z'))).toEqual([
+      { id: 'eb-aaaa1111-2026-10-27-0', date: '2026-06-28', amount: 100, account: 'aaaa1111:1', description: 'REMA 1000', kind: 'expense', deletedAt: '2026-10-30T10:00:00.000Z' },
     ]);
   });
 
@@ -167,8 +167,18 @@ describe('forgetRestoredBankRows', () => {
 });
 
 describe('prunableBankTombstoneIds', () => {
-  const tomb = (id: string, date: string, account?: string): DeletedBankTombstone => ({
-    id, date, amount: 100, description: 'Shop', ...(account ? { account } : {}),
+  // Deleted on the row's own date unless a test says otherwise.
+  const tomb = (id: string, date: string, account?: string, deletedAt: string | null = date): DeletedBankTombstone => ({
+    id, date, amount: 100, description: 'Shop', ...(account ? { account } : {}), ...(deletedAt ? { deletedAt: `${deletedAt}T12:00:00.000Z` } : {}),
+  });
+
+  // MCP update_transaction can change an eb- row's date: a recent row backdated
+  // and then deleted must wait until its delete day is behind the cutoff too.
+  it('needs the delete day behind the cutoff as well, and never prunes a tombstone without one', () => {
+    const cutoffs = { accounts: { a: '2026-05-01' } };
+    expect(prunableBankTombstoneIds([tomb('eb-backdated', '2020-01-01', 'a', '2026-06-20')], cutoffs).size).toBe(0);
+    expect([...prunableBankTombstoneIds([tomb('eb-backdated', '2020-01-01', 'a', '2026-04-20')], cutoffs)]).toEqual(['eb-backdated']);
+    expect(prunableBankTombstoneIds([tomb('eb-legacy', '2020-01-01', 'a', null)], cutoffs).size).toBe(0);
   });
 
   it('prunes a tombstone dated before its account cutoff, and keeps the cutoff day and after', () => {

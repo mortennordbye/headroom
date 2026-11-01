@@ -57,6 +57,7 @@ export interface SyncedConnection { connectionId: string; sessionId: string; acc
 export const FLOOR_MARGIN_DAYS: number;
 export function fetchFromDate(c: FloorConnection, acc: FloorAccount, floors?: Record<string, string>, nowMs?: number, days?: number): string;
 export function dropRowsBeforeFloor<T extends { id: string; date: string; account?: string }>(rows: T[], existingIds: Set<string>, floors?: Record<string, string>, nowMs?: number): T[];
+export function inheritOrphanFloors(store: FloorStore, c: FloorConnection): number;
 export function tombstoneCutoffs(store: FloorStore, nowMs?: number): TombstoneCutoffs;
 export function futureFloors(store: FloorStore, nowMs?: number): string[];
 export function lastSyncAgeMs(nowMs?: number): number;

@@ -1142,6 +1142,7 @@ async function runBankSyncUnlocked() {
     // A bank that ignores date_from can return rows from before an account's
     // floor, which may be ones whose tombstone the client already pruned.
     const mapped = bank.dropRowsBeforeFloor(fetched.rows, existingIds, fetched.floors);
+    if (mapped.length < fetched.rows.length) console.log(`[bank] dropped ${fetched.rows.length - mapped.length} fetched row(s) dated before their account's fetch floor`);
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
     const tombstones = Array.isArray(blob.deletedBankTombstones) ? blob.deletedBankTombstones : [];
     blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds, tombstones, bank.connectionPrefixes());
