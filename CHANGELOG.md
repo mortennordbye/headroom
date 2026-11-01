@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.1](https://github.com/mortennordbye/headroom/compare/v3.17.0...v3.17.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* count a one-legged savings transfer once in the cashflow ([#363](https://github.com/mortennordbye/headroom/issues/363)) ([89c78ca](https://github.com/mortennordbye/headroom/commit/89c78cac13cda44061ba7114c8c3c1798bf99d84))
+* let the OTP base count overtime and only the scheme's job ([#360](https://github.com/mortennordbye/headroom/issues/360)) ([88f0989](https://github.com/mortennordbye/headroom/commit/88f09896dec81e42ebfe5e711036cc06ffa68886))
+
 ## [3.17.0](https://github.com/mortennordbye/headroom/compare/v3.16.1...v3.17.0) (2026-11-01)
 
 
