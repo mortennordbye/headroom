@@ -104,18 +104,16 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
     // closes the modal rather than dropping to the grid the user never saw.
     const done = editing === initialMonth ? onClose : () => setEditing(null);
     const coOwners = snapshotCoOwners(assets.coOwners, editing);
-    const initial = snapshotBalances(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate });
     return (
       <SnapshotEditor
         monthKey={editing}
         monthTitle={monthLabel(editing)}
-        initial={initial}
+        initial={snapshotBalances(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate })}
         base={base}
         coOwners={coOwners}
         onCancel={done}
         onSave={(balances) => {
-          const toSave = { ...balances, assumptions: assumptionsToSave(base, initial, balances) };
-          setManualSnapshot(editing, buildManualSnapshot(base, toSave, editing, coOwners));
+          setManualSnapshot(editing, buildManualSnapshot(base, balances, editing, coOwners));
           done();
         }}
       />
@@ -248,6 +246,10 @@ function SnapshotEditor({
   const hm = t.historyManager;
   const f = hm.fields;
   const [b, setB] = useState<SnapshotBalances>(initial);
+  // The values the editor opened with. `initial` is rebuilt from live rates on
+  // every render, so comparing against it after a background reload would read
+  // an untouched v1 month as edited.
+  const [opened] = useState<SnapshotBalances>(initial);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const set = (patch: Partial<SnapshotBalances>) => setB(prev => ({ ...prev, ...patch }));
@@ -274,7 +276,7 @@ function SnapshotEditor({
             {hm.cancel}
           </button>
           <button
-            onClick={() => onSave(b)}
+            onClick={() => onSave({ ...b, assumptions: assumptionsToSave(base, opened, b) })}
             className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)]"
           >
             {hm.save}

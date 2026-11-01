@@ -178,6 +178,14 @@ describe('assumptionsToSave', () => {
     expect(assumptionsToSave(v1, initial, edited)).toEqual({ ...today, growthReturnRate: 6 });
   });
 
+  it('compares against the values the editor opened with, not later live rates', () => {
+    const opened = snapshotBalances(v1, today);
+    const rebuilt = snapshotBalances(v1, { ...today, growthReturnRate: 8 });
+    expect(assumptionsToSave(v1, opened, opened)).toBeUndefined();
+    // Against a rebuilt seed the untouched editor would wrongly read as edited.
+    expect(assumptionsToSave(v1, rebuilt, opened)).toEqual(today);
+  });
+
   it('keeps the recorded assumptions of a month that has them', () => {
     const initial = snapshotBalances(v2, today);
     expect(assumptionsToSave(v2, initial, initial)).toEqual(recorded);
