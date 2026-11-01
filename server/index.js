@@ -1,6 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
@@ -14,7 +14,7 @@ const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
 const { startBankSyncSchedule } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
-const { isDemoMode, makeDemoGate } = require('./demo');
+const { isDemoMode, makeDemoGate, parseTrustProxy } = require('./demo');
 const { isWindowComplete } = require('./cpiWindow');
 const { changedKeys, revertChange } = require('./revert');
 const pkg = require('./package.json');
@@ -29,6 +29,13 @@ const DEMO_MODE = isDemoMode(process.env);
 const BUILD_SHA = process.env.BUILD_SHA || 'dev';
 
 const app = express();
+
+// A public demo is reached through a reverse proxy, so the socket address is the
+// proxy's. TRUST_PROXY names the hops/addresses to trust for X-Forwarded-For
+// (demo mode only, so a normal deployment keeps ignoring forwarded headers).
+// Never `true`: that would let any client pick its own rate-limit key.
+const TRUST_PROXY = DEMO_MODE ? parseTrustProxy(process.env.TRUST_PROXY) : undefined;
+if (TRUST_PROXY !== undefined) app.set('trust proxy', TRUST_PROXY);
 
 // Security headers. CSP is tailored to what the app actually loads: same-origin
 // scripts/assets, inline styles (Tailwind v4 + Recharts inject them), and Google
@@ -224,8 +231,12 @@ const sessions = createSessionStore(SESSION_TTL_MS, sessionStore);
 // A generous ceiling on the whole API (only trips on a pathological flood — the
 // debounced autosave stays far below it) plus a strict guard on the auth
 // mutations to blunt password brute-forcing.
+// A public demo has many callers, so there the API ceiling is per client IP
+// (IPv6 grouped by /56 via ipKeyGenerator) instead of one bucket any visitor
+// could drain for everyone.
 const globalKey = () => 'single-user';
-const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 2000, keyGenerator: globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
+const demoIpKey = (req) => ipKeyGenerator(req.ip || '');
+const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 2000, keyGenerator: DEMO_MODE ? demoIpKey : globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, keyGenerator: globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
 app.use('/api/', apiLimiter);
 app.use(['/api/auth/login', '/api/auth/config'], authLimiter);

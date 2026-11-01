@@ -42,4 +42,18 @@ function makeDemoGate() {
   };
 }
 
-module.exports = { DEMO_ERROR, isDemoMode, makeDemoGate };
+/**
+ * Parse TRUST_PROXY into an Express `trust proxy` value: a hop count (`1`) or a
+ * list of addresses/CIDRs/presets (`10.0.0.0/8, loopback`). Unset or blank
+ * means don't trust any proxy. There is no way to get `true` (trust everyone):
+ * a non-numeric word that isn't an address is passed on as-is, and Express
+ * rejects it at startup.
+ */
+function parseTrustProxy(value) {
+  const v = String(value ?? '').trim();
+  if (!v) return undefined;
+  if (/^\d+$/.test(v)) return Number(v);
+  return v.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+module.exports = { DEMO_ERROR, isDemoMode, makeDemoGate, parseTrustProxy };

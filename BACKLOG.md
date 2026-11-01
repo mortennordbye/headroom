@@ -196,10 +196,6 @@ in git and the CHANGELOG, not here.
   `homeowner`/`transition`/`fixedExpenses` constants moved into `src/lib`, and a type check for the
   ~20 weakly guarded registry keys. **Where**: `src/lib/payloadRegistry.ts`,
   `src/context/FinanceContext.tsx`, `mcp/tools/write.ts`.
-- **Public demo shares one rate-limit bucket.** **Unblock**: per-IP keying when `DEMO_MODE` is on,
-  with `trust proxy` scoped to the gateway. **Where**: `server/index.js` (`globalKey`,
-  `apiLimiter`). A stale SW predating `DEMO_MODE` would boot the old client; only matters if the
-  demo URL is repointed.
 
 ## Desktop app
 
