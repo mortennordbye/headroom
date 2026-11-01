@@ -138,7 +138,7 @@ const AssetPage: React.FC = () => {
   const myValue = myHouseValue(assets);
   const myDebt = myHouseDebt(assets);
   // Norwegian wealth tax (formuesskatt): primary home at 25%/70%, shares at 80%,
-  // deposits/crypto/BSU/buffer at full value, minus all debt. Norway region only.
+  // deposits/crypto/BSU/buffer at full value, minus debt after gjeldsreduksjon. Norway region only.
   const wealthTax = useMemo(
     () => calcWealthTax({
       primaryHomeValue: myPrimaryHomeWealthValue(assets),
