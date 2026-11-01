@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { format } from 'date-fns';
 import { ChevronDown, Plus, RefreshCw, Trash2, Wand2 } from 'lucide-react';
 import { useFinance, type AllocationDestinationKind, type Saving } from '../context/FinanceContext';
 import { Card } from './ui/Card';
@@ -6,10 +7,10 @@ import { SectionLabel } from './ui/SectionLabel';
 import { Button } from './ui/Button';
 import { SavingsModeToggle } from './SavingsModeToggle';
 import ConfirmModal from './ConfirmModal';
-import { resolveAllocation, isCreatableRow, destinationKey, type AllocationRow } from '../lib/savingsAllocation';
-import { savingsBase, isPercentSavings, isRestSavings, percentOfSavingsBase, savingsTargetAmount } from '../lib/savingsRate';
+import { isCreatableRow, destinationKey, type AllocationRow } from '../lib/savingsAllocation';
+import { savingsBase, isPercentSavings, isRestSavings, percentOfSavingsBase } from '../lib/savingsRate';
 import { currentMonthKey } from '../lib/date';
-import { allocationSyncPlan } from '../lib/allocationSync';
+import { allocationSyncPlan, buildActivation, sizeAllocation } from '../lib/allocationSync';
 
 // Turns the savings target (residual × savingsTargetPercent) into a per-destination
 // plan, and — on an explicit click — into the fixed expenses that make it real.
@@ -33,10 +34,10 @@ interface PanelProps {
 
 export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) => {
   const {
-    t, assets, debts, housingMode, formatCurrency, plannedMonthlySaving,
+    t, assets, debts, housingMode, formatCurrency, currentMonth,
     savingsAllocations, addSavingsAllocation, updateSavingsAllocation, removeSavingsAllocation,
     fixedExpenses, setFixedExpenses, savings, setSavings, viewSavings, viewFixedExpenses,
-    automationEnabled, effectiveIncome, monthSavingsTargetPercent,
+    automationEnabled, effectiveIncome, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent,
   } = useFinance();
   const sa = t.savingsAllocation;
   const [created, setCreated] = useState(0);
@@ -69,12 +70,19 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   // The pot is the WHOLE savings target, not the slice still uncommitted.
   // `recommendedInvestment` is the target minus what is already automated, so
   // dividing that made an activated plan appear to empty itself: every row read
-  // 0 kr and a valid 100 % split was flagged as over-allocated. The rows below
-  // pair with their "Active · X" chips only when both count the same pot.
-  const plan = useMemo(
-    () => resolveAllocation(savingsAllocations, Math.max(0, plannedMonthlySaving)),
-    [savingsAllocations, plannedMonthlySaving],
+  // 0 kr and a valid 100 % split was flagged as over-allocated.
+  //
+  // One sizing for the rows shown, for activating them and for syncing them
+  // (see sizeAllocation), so the three can't disagree. It is the CURRENT
+  // month's, whatever month is being viewed: what it sizes is written to live
+  // transfers, and a one-month adjustment must not reshape the standing plan.
+  const nowKey = currentMonthKey();
+  const nowIncome = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
+  const sizing = useMemo(
+    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent),
+    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent],
   );
+  const plan = sizing.plan;
 
   const savingsIds = savingsAccounts.map(s => s.id);
   const debtIds = debts.map(d => d.id);
@@ -160,59 +168,30 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   // split can't be inferred from a `type` field any more — the destination
   // decides, at the one moment it is chosen.
   const createExpenses = () => {
-    // Same convention as assigning a destination by hand: the first move happens
-    // NEXT month, never retroactively.
-    const stamp = currentMonthKey();
-    const newSavings: Saving[] = [];
-    const newExpenses = [];
-    for (const row of creatable) {
-      if (row.destinationKind === 'mortgage' || row.destinationKind === 'debt') {
-        newExpenses.push({
-          id: crypto.randomUUID(),
-          name: labelFor(row),
-          amount: row.amount,
-          type: 'fixed' as const,
-          destinationKind: row.destinationKind,
-          debtId: row.debtId,
-          lastPostedMonth: stamp,
-          allocationId: row.id,
-        });
-        continue;
-      }
-      newSavings.push({
-        id: crypto.randomUUID(),
-        name: labelFor(row),
-        amount: row.amount,
-        // A 'rest' row activates as a rest row, so the live saving keeps
-        // absorbing what the others leave instead of freezing at today's split.
-        mode: row.mode ?? 'percent',
-        // A percentage row is activated as a share of the BASE, not of the
-        // target, so later editing the target percent doesn't silently re-scale
-        // a live transfer.
-        percent: row.mode === 'percent' || row.mode === undefined ? percentOfBase(row.amount) : undefined,
-        destinationKind: row.destinationKind,
-        savingsAccountId: row.savingsAccountId,
-        lastPostedMonth: stamp,
-        allocationId: row.id,
-      });
-    }
-    if (newSavings.length) setSavings([...savings, ...newSavings]);
-    if (newExpenses.length) setFixedExpenses([...fixedExpenses, ...newExpenses]);
+    // A '%' saving is a share of the base left after the paydowns this same
+    // click creates, the base sync reads too.
+    const creating = new Set(creatable.map(r => r.id));
+    const made = buildActivation(
+      creatable,
+      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating),
+      // Same convention as assigning a destination by hand: the first move
+      // happens NEXT month, never retroactively.
+      currentMonthKey(),
+      labelFor,
+      () => crypto.randomUUID(),
+    );
+    if (made.savings.length) setSavings([...savings, ...made.savings]);
+    if (made.expenses.length) setFixedExpenses([...fixedExpenses, ...made.expenses]);
     setCreated(creatable.length);
   };
 
   // The allocation is authoritative over the transfers it created (and only
   // those: the match is on `allocationId`). Edited rows leave those transfers
   // behind until the user syncs them here.
-  //
-  // Split the target as it stands without the plan's own transfers, which is
-  // what activation sized them from. Two loops otherwise: the pot the rows above
-  // show grows to whatever is already saved once that passes the target, and a
-  // mortgage or debt paydown is spending, so it shrinks the base it was sized
-  // from. Syncing against either moved the figures again on every click.
-  const syncBase = savingsBase(effectiveIncome, viewFixedExpenses.filter(e => !e.allocationId));
-  const syncRows = resolveAllocation(savingsAllocations, savingsTargetAmount(syncBase, monthSavingsTargetPercent)).rows;
-  const syncChanges = allocationSyncPlan(syncRows, savings, fixedExpenses, base);
+  // Offered only while viewing the current month, since it rewrites live
+  // transfers from the current month's sizing.
+  const viewingNow = format(currentMonth, 'yyyy-MM') === nowKey;
+  const syncChanges = viewingNow ? allocationSyncPlan(sizing, savings, fixedExpenses) : [];
   const nameOf = (id: string) =>
     savings.find(sv => sv.id === id)?.name ?? fixedExpenses.find(e => e.id === id)?.name ?? '';
   const syncPreview = syncChanges.map(c => {
@@ -235,7 +214,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
       <div className="flex items-baseline justify-between gap-3 flex-wrap pb-4 border-b border-[var(--border)]">
         {!bare && <SectionLabel>{sa.title}</SectionLabel>}
         <span className="text-[12px] font-mono tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
-          <span className="block">{formatCurrency(Math.max(0, plannedMonthlySaving))} {sa.perMonth}</span>
+          <span className="block">{formatCurrency(sizing.target)} {sa.perMonth}</span>
           {committedTotal > 0 && (
             <span className="block mt-0.5" style={{ color: 'var(--text-3)' }}>
               {sa.alreadyAutomated.replace('{amount}', formatCurrency(committedTotal))}
