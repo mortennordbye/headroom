@@ -348,10 +348,13 @@ What changes:
   a reverse proxy, set `TRUST_PROXY` to that proxy (hop count or IPs/CIDRs) so the
   limit keys on the real client address; without it the socket address is used
   and `X-Forwarded-For` is ignored, so every visitor shares the proxy's bucket.
-  Prefer the proxy's IP or CIDR over a hop count: a hop count trusts whatever
-  connects directly, so with one the container port must only be reachable
-  through the proxy (bind it with `BIND_HOST` or the port mapping), or a client
-  can set its own `X-Forwarded-For` and get unlimited buckets.
+  Prefer the proxy's exact IP (or the compose network's own subnet) over a hop
+  count or a broad range: whatever `TRUST_PROXY` matches may set its own
+  `X-Forwarded-For`. A hop count trusts anything that connects directly, and a
+  wide range like Docker's `172.16.0.0/12` also covers the bridge gateway that
+  published-port traffic can arrive from. Either way, keep the container port
+  reachable only through the proxy (bind it with `BIND_HOST` or don't publish
+  it), or a client can rotate `X-Forwarded-For` and get unlimited buckets.
 - **No background jobs.** Rotating backups and scheduled bank sync are both
   skipped — a demo instance has nothing worth backing up and no bank to sync.
 
@@ -365,7 +368,7 @@ to the internet on `GET /api/data`.
 environment:
   DEMO_MODE: "1"
   ALLOWED_HOSTS: "demo.example.com"
-  TRUST_PROXY: "172.16.0.0/12"   # the reverse proxy's network
+  TRUST_PROXY: "10.89.0.2"       # the reverse proxy's exact IP on the demo network
 ```
 
 ## Data persistence
