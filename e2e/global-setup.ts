@@ -30,15 +30,11 @@ async function waitForHealthy(url: string, server: { exitCode: number | null }) 
 }
 
 /**
- * Build the SPA (E2E_REUSE_BUILD=1 skips it when a build exists), stage the
- * server with the build in its dist/ (the layout desktop/scripts/sync.js makes)
- * in a temp dir, and start it against a fresh DATA_DIR seeded with
- * server/seed.js's synthetic demo data. Never touches the real data volume.
- * Returns the teardown.
- *
- * The server runs from the temp copy rather than from server/ because its SPA
- * fallback 404s every client route when the install path has a dot-directory
- * in it (a checkout under .claude/worktrees, for one).
+ * Build the SPA (E2E_REUSE_BUILD=1 skips it when a build exists), sync it into
+ * server/dist (the layout desktop/scripts/sync.js makes, and what
+ * `node server/index.js` serves), and start the server against a fresh
+ * DATA_DIR seeded with server/seed.js's synthetic demo data. Never touches the
+ * real data volume. Returns the teardown.
  */
 export default async function globalSetup() {
   const dist = path.join(root, 'dist');
@@ -46,19 +42,11 @@ export default async function globalSetup() {
     execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit' });
   }
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'headroom-e2e-'));
-  const serverSrc = path.join(root, 'server');
-  const serverDir = path.join(tmp, 'server');
-  fs.mkdirSync(serverDir);
-  for (const name of fs.readdirSync(serverSrc)) {
-    if ((name.endsWith('.js') && !name.endsWith('.test.js')) || name === 'package.json') {
-      fs.copyFileSync(path.join(serverSrc, name), path.join(serverDir, name));
-    }
-  }
-  fs.cpSync(path.join(serverSrc, 'data'), path.join(serverDir, 'data'), { recursive: true });
-  fs.symlinkSync(path.join(serverSrc, 'node_modules'), path.join(serverDir, 'node_modules'), 'dir');
+  const serverDir = path.join(root, 'server');
+  fs.rmSync(path.join(serverDir, 'dist'), { recursive: true, force: true });
   fs.cpSync(dist, path.join(serverDir, 'dist'), { recursive: true });
 
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'headroom-e2e-'));
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DATA_DIR: path.join(tmp, 'data'),
