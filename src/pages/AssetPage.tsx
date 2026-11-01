@@ -89,7 +89,7 @@ const AssetPage: React.FC = () => {
     setCashGrowthRate,
     cryptoGrowthRate,
     setCryptoGrowthRate,
-    planMonthlySaving,
+    currentPlanMonthlySaving,
     pension: livePension,
     updatePension,
     currentMortgage: liveMortgage,
@@ -225,7 +225,7 @@ const AssetPage: React.FC = () => {
     };
 
     const savingsAccounts = assets.savingsAccounts ?? [];
-    const annualSavings = Math.max(0, planMonthlySaving * 12);
+    const annualSavings = Math.max(0, currentPlanMonthlySaving * 12);
   const cashStart = sumSavings(assets) + assets.bsu + assets.bufferAccount;
   // BSU room against the annual + lifetime caps, from the live balance and the
   // snapshot history (only shown live; history mode is read-only/dimmed).

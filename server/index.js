@@ -15,7 +15,7 @@ const { startBackupSchedule, parseCount } = require('./backup');
 const { startBankSyncSchedule } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
 const { isDemoMode, makeDemoGate, parseTrustProxy } = require('./demo');
-const { isWindowComplete } = require('./cpiWindow');
+const { isWindowComplete, osloMonthKey } = require('./cpiWindow');
 const { changedKeys, revertChange } = require('./revert');
 const { migrateHistory, historyStatements } = require('./history');
 const pkg = require('./package.json');
@@ -638,7 +638,7 @@ app.post('/api/data', (req, res) => {
     // evictSupersededPending: reconcile re-adds a stored booked row a stale tab
     // dropped, which could sit beside the pending twin that tab still holds —
     // drop the superseded pending row so it doesn't resurrect on save.
-    merged.dailyTransactions = bank.evictSupersededPending(bank.dropStaleBareTwins(merged.dailyTransactions));
+    merged.dailyTransactions = bank.evictSupersededPending(bank.dropStaleBareTwins(merged.dailyTransactions, bank.connectionPrefixes()));
   }
   const content = JSON.stringify(merged);
   if (content.length > SIZE_WARN_BYTES) {
@@ -804,7 +804,7 @@ app.get('/api/inflation', async (req, res) => {
   // cooldown fell through to the `else if` below and flagged the data stale —
   // which the client renders as "could not reach SSB", constantly and wrongly.
   // See server/cpiWindow.js.
-  const nowMonth = new Date().toISOString().slice(0, 7);
+  const nowMonth = osloMonthKey();
   const haveComplete = isWindowComplete(cached.map(r => r.month), paddedFrom, to, nowMonth);
   const needsRefresh = !haveComplete || ageMs > CACHE_TTL_MS;
   // A user-initiated refresh bypasses the per-hour attempt cooldown (but not the
@@ -1136,7 +1136,7 @@ async function runBankSync() {
     const existingIds = new Set(existing.map((tx) => tx.id));
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
     const tombstones = Array.isArray(blob.deletedBankTombstones) ? blob.deletedBankTombstones : [];
-    blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds, tombstones);
+    blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds, tombstones, bank.connectionPrefixes());
     // Bump rev so *other* open tabs see the change and refetch the freshly-synced
     // rows. The caller returns the new rev so the tab that triggered the sync can
     // adopt it and not treat its own sync as a conflicting external change.

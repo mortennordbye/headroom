@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  SSB_PUBLICATION_LAG_MONTHS, shiftMonth, monthCount, publishedThrough, isWindowComplete,
+  SSB_PUBLICATION_LAG_MONTHS, shiftMonth, monthCount, publishedThrough, isWindowComplete, osloMonthKey,
 } from './cpiWindow.js';
 
 /** Every month from `from` to `to` inclusive — a fully populated cache. */
@@ -86,5 +86,15 @@ describe('isWindowComplete', () => {
     const cached = [...range('2025-01', '2026-05'), ...range('2025-01', '2026-05')];
     // 2026-06 is still genuinely missing; duplicates must not pad the count.
     expect(isWindowComplete(cached, '2025-01', '2026-08', '2026-08', 2)).toBe(false);
+  });
+});
+
+describe('osloMonthKey', () => {
+  it('is the Oslo month, not the UTC one, just after midnight on the 1st', () => {
+    expect(osloMonthKey(new Date('2026-10-31T23:30:00Z'))).toBe('2026-11');
+  });
+
+  it('stays in the old month until Oslo midnight', () => {
+    expect(osloMonthKey(new Date('2026-06-30T21:59:00Z'))).toBe('2026-06');
   });
 });

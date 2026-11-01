@@ -57,9 +57,6 @@ in git and the CHANGELOG, not here.
   tombstones (and their ids) older than it. **Where**: `fetchMappedTransactions` / `startLink` /
   `removeConnection` in `server/bank.js`, `deletedBankIds` / `deletedBankTombstones` in
   `src/context/FinanceContext.tsx`.
-- **Bank-id dedup regex ambiguity.** A legacy bare id whose ref starts with 8 hex chars + `-` is
-  classified as connection-prefixed. **Unblock**: converge the id format, or a secondary key.
-  **Where**: `src/lib/bankDedup.ts`, `dropStaleBareTwins` in `server/bank.js`.
 - **Heuristics to tune.** The keyword table (`src/lib/categorize.ts`), transfer detection
   (`src/lib/transfers.ts`, could use own-IBAN matching), transfer-suggestion thresholds
   (`src/lib/transferSuggestions.ts`, tuned on one dataset), envelope name hints (`NAME_HINTS` in
@@ -101,8 +98,6 @@ in git and the CHANGELOG, not here.
 - **History before debt historization is equity-only**, and history months stored only as a total
   aren't split by co-owner share. Can be hand-corrected in the History manager. **Where**:
   `netWorthSeriesFrom` in `src/lib/netWorth.ts`, `src/lib/ownership.ts`.
-- **`recommendedInvestment` on Assets is month-coupled** (derives from the viewed month's income).
-  **Where**: `calcRecommendations(effectiveIncome, …)` in `src/context/FinanceContext.tsx`.
 - **Scenario bands only on the Forecast chart.** The Assets growth and Dashboard projections are
   stacked, so a band needs a design decision. **Where**: `src/pages/AssetPage.tsx`,
   `src/pages/DashboardPage.tsx`, `src/lib/scenarioBands.ts`.
@@ -115,8 +110,6 @@ in git and the CHANGELOG, not here.
   (`src/lib/onboarding.ts`).
 - **A declined catch-up counts its skipped months as interest-charged.** Needs per-loan "interest
   charged through" state. **Where**: `computeAutomationPostings` in `src/lib/automation.ts`.
-- **MCP server clock vs browser clock** can disagree for a few hours at month end. **Where**:
-  `currentMonthKey` in `src/lib/date.ts`, `mcp/derive.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank
   schedule import), no rate-change history. **Where**: `src/lib/calculations.ts`.
 - **Residence history isn't linked to the current home**, and Kjøpe & selge doesn't write the move

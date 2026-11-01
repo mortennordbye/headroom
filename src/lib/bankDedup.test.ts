@@ -28,7 +28,7 @@ describe('dedupeBankTransactions', () => {
   it('rescues a manual category from the dropped bare twin onto its survivor', () => {
     const out = dedupeBankTransactions([
       tx({ id: 'eb-999', category: 'groceries', categorySource: 'manual' }),
-      tx({ id: 'eb-aaaaaaaa-999', account: 'x', category: 'other', categorySource: 'auto' }),
+      tx({ id: 'eb-aaaaaaaa-999', account: 'aaaaaaaa:acc', category: 'other', categorySource: 'auto' }),
     ]);
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe('eb-aaaaaaaa-999');
@@ -39,7 +39,7 @@ describe('dedupeBankTransactions', () => {
   it('rescues a segment from the dropped bare twin onto its survivor', () => {
     const out = dedupeBankTransactions([
       tx({ id: 'eb-999', segment: 'oneOff' }),
-      tx({ id: 'eb-aaaaaaaa-999', account: 'x' }),
+      tx({ id: 'eb-aaaaaaaa-999', account: 'aaaaaaaa:acc' }),
     ]);
     expect(out).toHaveLength(1);
     expect(out[0].segment).toBe('oneOff');
@@ -48,30 +48,49 @@ describe('dedupeBankTransactions', () => {
   it('keeps a legacy bare row that has no prefixed twin', () => {
     const out = dedupeBankTransactions([
       tx({ id: 'eb-onlylegacy' }),
-      tx({ id: 'eb-cccc3333-other', account: 'x' }),
+      tx({ id: 'eb-cccc3333-other', account: 'cccc3333:acc' }),
     ]);
     expect(out).toHaveLength(2);
   });
 
   it('keeps genuinely distinct transactions and manual rows; is idempotent', () => {
-    const clean = [tx({ id: 'eb-cccc3333-1', account: 'x' }), tx({ id: 'manual-2' }), tx({ id: 'manual-3' })];
+    const clean = [tx({ id: 'eb-cccc3333-1', account: 'cccc3333:acc' }), tx({ id: 'manual-2' }), tx({ id: 'manual-3' })];
     expect(dedupeBankTransactions(clean)).toHaveLength(3);
     expect(dedupeBankTransactions(dedupeBankTransactions(clean))).toHaveLength(3);
   });
 
-  // Documents the known regex ambiguity (see bankDedup.ts / BACKLOG.md): an id of
-  // shape `eb-<8hex>-<rest>` is always read as PREFIXED (conn=<8hex>, ref=<rest>),
-  // even though a legacy bare id could theoretically have that exact text. Left
-  // as-is because no safe discriminator exists; this test locks current behavior.
-  it('classifies an ambiguous eb-<8hex>-<rest> id as prefixed', () => {
+  // A legacy bare ref can itself start with 8 hex chars + '-'. The 8-hex segment
+  // only counts as a connection prefix when a known connection has it.
+  it('treats eb-<8hex>-<rest> as bare when no connection has that prefix', () => {
     const out = dedupeBankTransactions([
-      tx({ id: 'eb-a1b2c3d4-5678', account: 'ambiguous' }),
-      tx({ id: 'eb-5678', amount: 100 }),
+      tx({ id: 'eb-deadbeef-5678' }),
+      tx({ id: 'eb-5678' }),
     ]);
-    // Read as prefixed with ref '5678'; the bare 'eb-5678' shares that ref, so it
-    // is dropped as a stale twin (the survivor keeps the prefixed id).
-    expect(out).toHaveLength(1);
-    expect(out[0].id).toBe('eb-a1b2c3d4-5678');
+    expect(out.map((t) => t.id)).toEqual(['eb-deadbeef-5678', 'eb-5678']);
+  });
+
+  it('drops the bare twin of a legacy ref that starts with 8 hex chars + "-"', () => {
+    const out = dedupeBankTransactions([
+      tx({ id: 'eb-deadbeef-5678' }),
+      tx({ id: 'eb-aaaa1111-deadbeef-5678', account: 'aaaa1111:acc' }),
+    ]);
+    expect(out.map((t) => t.id)).toEqual(['eb-aaaa1111-deadbeef-5678']);
+  });
+
+  it('still reads a real prefixed id as prefixed, known from its account key', () => {
+    const out = dedupeBankTransactions([
+      tx({ id: 'eb-a1b2c3d4-5678', account: 'a1b2c3d4:acc' }),
+      tx({ id: 'eb-5678' }),
+    ]);
+    expect(out.map((t) => t.id)).toEqual(['eb-a1b2c3d4-5678']);
+  });
+
+  it('still reads a real prefixed id as prefixed, known from a connection prefix', () => {
+    const out = dedupeBankTransactions([
+      tx({ id: 'eb-a1b2c3d4-5678' }),
+      tx({ id: 'eb-5678' }),
+    ], ['eb-a1b2c3d4-']);
+    expect(out.map((t) => t.id)).toEqual(['eb-a1b2c3d4-5678']);
   });
 });
 

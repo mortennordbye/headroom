@@ -27,6 +27,18 @@ function shiftMonth(month, n) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+/**
+ * The 'YYYY-MM' month of `now` in Europe/Oslo time. The server usually runs in
+ * UTC (Docker), so a plain UTC slice is a month behind Oslo for an hour or two
+ * after midnight on the 1st. Mirrors `osloMonthKey` in src/lib/date.ts.
+ */
+function osloMonthKey(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit' })
+    .formatToParts(now);
+  const part = (type) => parts.find(p => p.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}`;
+}
+
 /** Months in an inclusive 'YYYY-MM' range; 0 when `to` precedes `from`. */
 function monthCount(fromMonth, toMonth) {
   const [fy, fm] = String(fromMonth).split('-').map(Number);
@@ -64,4 +76,5 @@ module.exports = {
   monthCount,
   publishedThrough,
   isWindowComplete,
+  osloMonthKey,
 };
