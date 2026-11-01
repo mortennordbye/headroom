@@ -61,7 +61,7 @@ import { restskattEstimate } from '../src/lib/restskatt';
 import { grossFromNetAnnual } from '../src/lib/grossFromNet';
 import { cardNetForMonth } from '../src/lib/forskuddstrekk';
 import { feriepengerSurplus } from '../src/lib/feriepenger';
-import { otpAnnualContribution as otpContribution, otpPensionableIncome, otpProjectedPensionableIncome, projectPensionWealth } from '../src/lib/pension';
+import { otpAnnualContribution as otpContribution, otpCountedPay, otpPensionableIncome, otpSchemeFor, otpProjectedPensionableIncome, projectPensionWealth } from '../src/lib/pension';
 import { DEFAULT_INFLATION_PCT } from '../src/lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../src/lib/retirementIncome';
 import { estimateBeholdning, projectBeholdning, annualFolketrygdPension } from '../src/lib/folketrygd';
@@ -729,7 +729,7 @@ export function salaryAndTax(blob: ExportPayload, monthKey = osloMonthKey()) {
  * math; this does the same.
  */
 const DEFAULT_PENSION: Pension = {
-  otpBalance: 0, otpEmployerPct: 5, otpEmployeePct: 0, otpGrowthRate: 5, otpIncludesBonuses: false,
+  otpBalance: 0, otpEmployerPct: 5, otpEmployeePct: 0, otpGrowthRate: 5, otpIncludesBonuses: false, otpIncludesOvertime: false,
   ipsBalance: 0, ipsAnnualContribution: 0, ipsGrowthRate: 7,
   birthYear: 0, retirementAge: 67, folketrygdBeholdning: 0, folketrygdSingle: true,
   pensionPayoutYears: 10, afpEligible: false, otpAutoPost: false, ipsAutoPost: false,
@@ -753,10 +753,13 @@ export function pensionSummary(blob: ExportPayload, monthKey = osloMonthKey(), i
   const yearsToRetire = hasBirthYear ? Math.max(0, p.retirementAge - (currentYear - p.birthYear)) : 0;
   const pensionableIncome = activeGrossAnnual(blob, monthKey);
   // As PensionPage: this year's base for the yearly figure, a recurring estimate
-  // (last year's bonuses, no signing bonus) for the projection.
+  // (last year's bonuses and overtime, no signing bonus) for the projection.
   const otpIncludesBonuses = p.otpIncludesBonuses === true;
-  const otpBase = otpPensionableIncome(pensionableIncome, blob.bonuses ?? [], currentYear, otpIncludesBonuses);
-  const otpProjectionBase = otpProjectedPensionableIncome(pensionableIncome, blob.bonuses ?? [], currentYear, otpIncludesBonuses);
+  const otpIncludesOvertime = p.otpIncludesOvertime === true;
+  const otpScheme = otpSchemeFor(p, blob.jobs ?? []);
+  const otpCounted = otpCountedPay(blob.bonuses ?? [], blob.overtime ?? [], otpScheme);
+  const otpBase = otpPensionableIncome(pensionableIncome, otpCounted, currentYear);
+  const otpProjectionBase = otpProjectedPensionableIncome(pensionableIncome, otpCounted, currentYear);
   const otpAnnualContribution = otpContribution(otpBase, p.otpEmployerPct + p.otpEmployeePct, TAX_YEAR);
   const otpProjectedContribution = otpContribution(otpProjectionBase, p.otpEmployerPct + p.otpEmployeePct, TAX_YEAR);
   const ipsAnnualContribution = Math.min(p.ipsAnnualContribution, IPS_MAX_DEDUCTION);
@@ -816,8 +819,11 @@ export function pensionSummary(blob: ExportPayload, monthKey = osloMonthKey(), i
     yearsToRetire,
     pensionableIncome: Math.round(pensionableIncome),
     otpIncludesBonuses,
+    otpIncludesOvertime,
+    // Set when only this job's bonuses and overtime count toward the OTP base.
+    otpJobId: otpScheme.otpJobId ?? null,
     // The pay the OTP contribution is taken on, before the 12G cap: this year's
-    // (fixed + this year's bonuses if counted) and the recurring one the projection uses.
+    // (fixed + this year's bonuses and overtime if counted) and the recurring one the projection uses.
     otpBase: Math.round(otpBase),
     otpProjectionBase: Math.round(otpProjectionBase),
     otpAnnualContribution: Math.round(otpAnnualContribution),

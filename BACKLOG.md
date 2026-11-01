@@ -22,15 +22,41 @@ in git and the CHANGELOG, not here.
   allowed, so likely the projection should pay a linked expense from month 0 while the minimum
   still waits). **Where**: `simulatePayoff` in `src/lib/debt.ts`, `AutomationState.debts` and the
   debt paydown in `src/lib/automation.ts`.
-- **OTP base, remaining gaps.** Bonuses are now a per-user setting, but the rest of the base is
-  fixed: overtime is always left out (it counts under innskuddspensjonsloven § 5-5 første ledd
-  unless the plan excludes it), on-call is always counted, the § 5-5 annet ledd bokstav b
-  variant (last year's pay as the base) is not modelled, and bonuses are summed across all jobs
-  instead of only the scheme's employer. Deferred to keep the bonus fix small. **Unblock**: an
-  issue deciding which plan options to expose (likely one "counts overtime" setting and a job
-  link for the scheme). **Where**: `otpPensionableIncome` and `otpBonusShareToDate` in
-  `src/lib/pension.ts`, `src/lib/pensionAccrual.ts`, `src/pages/PensionPage.tsx`,
-  `pensionSummary` in `mcp/derive.ts`.
+- **OTP base, remaining gaps.** Bonuses and overtime are per-user settings and the scheme can
+  be linked to one job, but on-call is always counted, the § 5-5 annet ledd bokstav b variant
+  (last year's pay as the base) is not modelled, and the job link only narrows bonuses and
+  overtime, not fixed salary. Deferred to keep the overtime and job-link fix small. **Unblock**:
+  an issue deciding whether to expose on-call and a last-year base as plan options, and whether
+  the job link should narrow fixed pay (it would zero the base after a job change unless
+  relinked). **Where**: `otpCountedPay` and `otpPensionableIncome` in `src/lib/pension.ts`,
+  `src/pages/PensionPage.tsx`, `pensionSummary` in `mcp/derive.ts`.
+- **OTP owed share capped at the new share.** The OTP posted record (`otpBonusPostedByYear`)
+  never goes below 0, so a rebase after a settings change can only carry an owed share as far
+  as the new settings' share to date reaches. A late entry followed by a relink or a dropped
+  kind before the next post under-posts: relinking from job A to job B posts 2 500 of the 5 000
+  a late A bonus owed. Deferred to keep the setting-change rebase small. **Unblock**: allow a
+  negative record, or keep the owed share in a separate carry field that the next posting pays
+  out. **Where**: `changeOtpScheme` in `src/lib/pensionAccrual.ts`.
+- **OTP bonus room moves with a salary change.** The bonus and overtime share to date is taken
+  on the current fixed pay, so near 12G a salary change changes the room retroactively: going
+  from 1.5M to 1.4M back-posts about 6 000 of bonus share for months already posted. Predates
+  the overtime and job-link work. **Unblock**: rebase `otpBonusPostedByYear` when fixed pay
+  changes, as `changeOtpScheme` does for the base settings, or price each month on the pay of
+  that month. **Where**: `otpBonusShareToDate` in `src/lib/pension.ts`, `otpBonusDue` and
+  `pensionAccrualRules` in `src/lib/pensionAccrual.ts`.
+- **Declined OTP catch-up leaves the new year untracked.** Declining a catch-up stamps the
+  month without updating `otpBonusPostedByYear`, so a skip into a new year leaves that year with
+  no record and last year's bonuses can no longer settle. Predates the overtime and job-link
+  work. **Unblock**: on decline, record the skipped months' bonus share (as switching auto-post
+  on does with its baseline). **Where**: the decline handling in `src/context/FinanceContext.tsx`
+  (`declineCatchup` and the pension stamp next to it), `otpBonusBaseline` in
+  `src/lib/pensionAccrual.ts`.
+- **OTP rate change mid-year is not rebased.** Changing `otpEmployerPct` or `otpEmployeePct`
+  changes every year's bonus share to date, so the record no longer matches what was posted and
+  the next posting back-posts or holds back the difference. Predates the overtime and job-link
+  work. **Unblock**: run the same rebase as `changeOtpScheme` when the rate changes. **Where**:
+  `changeOtpScheme` in `src/lib/pensionAccrual.ts`, the rate sliders in
+  `src/pages/PensionPage.tsx`.
 - **Not audited yet**: bank import and categorisation.
 
 ## Income and salary

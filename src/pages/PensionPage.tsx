@@ -19,8 +19,8 @@ import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
 import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
-import { otpAnnualContribution as otpContribution, otpPensionableIncome, otpProjectedPensionableIncome, projectPensionWealth } from '../lib/pension';
-import { switchAutoPostOn } from '../lib/pensionAccrual';
+import { otpAnnualContribution as otpContribution, otpCountedPay, otpPensionableIncome, otpProjectedPensionableIncome, otpSchemeFor, projectPensionWealth, type OtpBaseScheme } from '../lib/pension';
+import { changeOtpScheme, switchAutoPostOn } from '../lib/pensionAccrual';
 import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { currentMonthKey } from '../lib/date';
@@ -71,7 +71,7 @@ const AutoPostToggle: React.FC<{
 };
 
 const PensionPage: React.FC = () => {
-  const { t, pension: livePension, updatePension, salaries, jobs, bonuses, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang, holidaySurplusFor } = useFinance();
+  const { t, pension: livePension, updatePension, salaries, jobs, bonuses, overtime, formatCurrency, restorePensionAssumptionDefaults, region, customTaxRatePct, profile, inflation, lang, holidaySurplusFor } = useFinance();
   const pa = t.pensionAutomation;
   const reduced = useReducedMotion();
 
@@ -98,15 +98,26 @@ const PensionPage: React.FC = () => {
     [salaries, jobs, asOfMonth],
   );
 
-  // OTP base: the fixed pay above, plus the year's bonuses when the scheme counts
-  // them. The projection uses a recurring estimate instead (last year's bonuses,
-  // no signing bonus), and the monthly auto-post moves the fixed part each month.
+  // OTP base: the fixed pay above, plus the year's bonuses and overtime the scheme
+  // counts (from its job, when one is linked). The projection uses a recurring
+  // estimate instead (last year's, no signing bonus), and the monthly auto-post
+  // moves the fixed part each month.
   const otpPct = pension.otpEmployerPct + pension.otpEmployeePct;
   const asOfYear = Number(asOfMonth.slice(0, 4));
+  // A job link that names no current job reads as unset (every job's pay).
+  const otpScheme = useMemo(() => otpSchemeFor(pension, jobs), [pension, jobs]);
+  const otpCounted = useMemo(() => otpCountedPay(bonuses, overtime, otpScheme), [bonuses, overtime, otpScheme]);
+  // A change to which pay counts applies from the next unposted month on, so
+  // the auto-post record is rebased with it (see changeOtpScheme).
+  const changeScheme = (patch: OtpBaseScheme) => {
+    const next = changeOtpScheme(livePension, patch, calcActiveGrossAnnual(salaries, jobs, today), bonuses, overtime, jobs, today);
+    for (const key of Object.keys(patch) as (keyof OtpBaseScheme)[]) updatePension(key, next[key]);
+    if (next.otpBonusPostedByYear !== livePension.otpBonusPostedByYear) updatePension('otpBonusPostedByYear', next.otpBonusPostedByYear);
+  };
   const otpAnnualContribution = otpContribution(
-    otpPensionableIncome(pensionableIncome, bonuses, asOfYear, pension.otpIncludesBonuses), otpPct, TAX_YEAR);
+    otpPensionableIncome(pensionableIncome, otpCounted, asOfYear), otpPct, TAX_YEAR);
   const otpProjectedContribution = otpContribution(
-    otpProjectedPensionableIncome(pensionableIncome, bonuses, asOfYear, pension.otpIncludesBonuses), otpPct, TAX_YEAR);
+    otpProjectedPensionableIncome(pensionableIncome, otpCounted, asOfYear), otpPct, TAX_YEAR);
   const otpFixedMonthly = otpContribution(pensionableIncome, otpPct, TAX_YEAR) / 12;
   const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
   // IPS lowers alminnelig inntekt, taxed at 22% in Norway. Under the generic
@@ -339,12 +350,40 @@ const PensionPage: React.FC = () => {
             <ToggleRow
               label={t.pensionPage.otpIncludesBonusesLabel}
               checked={pension.otpIncludesBonuses === true}
-              onChange={(on) => updatePension('otpIncludesBonuses', on)}
+              onChange={(on) => changeScheme({ otpIncludesBonuses: on })}
               hint={t.pensionPage.otpIncludesBonusesHint}
             />
           </div>
+          <div className="mt-5">
+            <ToggleRow
+              label={t.pensionPage.otpIncludesOvertimeLabel}
+              checked={pension.otpIncludesOvertime === true}
+              onChange={(on) => changeScheme({ otpIncludesOvertime: on })}
+              hint={t.pensionPage.otpIncludesOvertimeHint}
+            />
+          </div>
+          {(jobs.length > 1 || otpScheme.otpJobId) && (
+            <div className="mt-5">
+              <label htmlFor="otp-job" className="block text-[13px] font-medium" style={{ color: 'var(--text-1)' }}>{t.pensionPage.otpJobLabel}</label>
+              <span className="block text-[11.5px] mt-1 leading-relaxed" style={{ color: 'var(--text-3)' }}>{t.pensionPage.otpJobHint}</span>
+              <select
+                id="otp-job"
+                value={otpScheme.otpJobId ?? ''}
+                onChange={(e) => changeScheme({ otpJobId: e.target.value || undefined })}
+                className="mt-2 w-full h-9 px-3 rounded-[6px] text-[13px] border"
+                style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+              >
+                <option value="">{t.pensionPage.otpJobAll}</option>
+                {jobs.map(j => <option key={j.id} value={j.id}>{`${j.employer} — ${j.role}`}</option>)}
+              </select>
+            </div>
+          )}
           <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${pension.otpIncludesBonuses === true ? t.pensionPage.otpNoteMidBonuses : t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
+            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${
+              pension.otpIncludesBonuses === true
+                ? (pension.otpIncludesOvertime === true ? t.pensionPage.otpNoteMidBonusesOvertime : t.pensionPage.otpNoteMidBonuses)
+                : (pension.otpIncludesOvertime === true ? t.pensionPage.otpNoteMidOvertime : t.pensionPage.otpNoteMid)
+            }${formatCurrency(otpAnnualContribution)}.`}
           </p>
           {hist.isLive && (
             <AutoPostToggle
@@ -356,7 +395,7 @@ const PensionPage: React.FC = () => {
                 // month) and counts the bonus share earned so far as already in the
                 // balance; the months it was off are not caught up.
                 if (on) {
-                  const next = switchAutoPostOn(livePension, 'otp', pensionableIncome, bonuses, today);
+                  const next = switchAutoPostOn(otpSchemeFor(livePension, jobs), 'otp', pensionableIncome, bonuses, today, overtime);
                   updatePension('otpLastPostedMonth', next.otpLastPostedMonth);
                   updatePension('otpBonusPostedByYear', next.otpBonusPostedByYear);
                 }
