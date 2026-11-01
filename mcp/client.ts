@@ -9,7 +9,7 @@
 import type { ExportPayload, InflationPoint } from '../src/context/FinanceContext';
 import { partitionSavings, mergeStoredSavings } from '../src/lib/savingsMigration';
 import { migrateMortgageBalance } from '../src/lib/mortgageSlices';
-import { currentMonthKey, addMonthsKey } from '../src/lib/date';
+import { osloMonthKey, addMonthsKey } from '../src/lib/date';
 import type { ComparableSale } from '../src/lib/marketValuation';
 
 const BASE_URL = (process.env.HEADROOM_URL || 'http://localhost:8080').replace(/\/$/, '');
@@ -75,7 +75,7 @@ async function fetchData(retryOnAuth = true): Promise<DataSnapshot> {
   const rev = Number(res.headers.get('x-data-rev') ?? 0);
   const blob = (await res.json()) as ExportPayload | null;
   if (!blob) throw new Error('no data yet — open the app and enter some data first');
-  return { blob: migrateMortgageBalance(normalizeSavings(blob), currentMonthKey()), rev };
+  return { blob: migrateMortgageBalance(normalizeSavings(blob), osloMonthKey()), rev };
 }
 
 /** POST the whole blob back, echoing the rev for optimistic concurrency. */
@@ -112,7 +112,7 @@ async function putData(blob: ExportPayload, rev: number, label: string, retryOnA
  * callers fall back to the default inflation rate like the app does.
  */
 export async function getInflation(): Promise<InflationPoint[]> {
-  const to = currentMonthKey();
+  const to = osloMonthKey();
   const from = addMonthsKey(to, -24);
   try {
     const res = await fetch(`${BASE_URL}/api/inflation?from=${from}&to=${to}`, { headers: authHeaders() });

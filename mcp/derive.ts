@@ -43,7 +43,7 @@ import { isSpend } from '../src/lib/spend';
 import { excludedTransferIds } from '../src/lib/transferRules';
 import { withoutOneOffs } from '../src/lib/segments';
 import { yearReview, availableReportYears } from '../src/lib/yearReview';
-import { currentMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
+import { osloMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
 import { effectiveRemainingMonths, paymentTermMonths, splitTermMonths, termMonthsFromYears } from '../src/lib/loanTerm';
 import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest } from '../src/lib/existingMortgage';
 import { withNotifiedRate } from '../src/lib/notifiedRate';
@@ -133,7 +133,7 @@ export function grossAnnualIncome(blob: ExportPayload, monthKey: string): number
  * `currentMortgageNow`, with the app's defaults (5.5 %, 25 years) for a rate or
  * term an old blob lacks, as the app's load merges them in.
  */
-function mortgageOwed(blob: ExportPayload, monthKey = currentMonthKey()) {
+function mortgageOwed(blob: ExportPayload, monthKey = osloMonthKey()) {
   const h = blob.homeowner;
   const homeowner = { ...h, rente: h?.rente ?? 5.5, nedbetalingstid: h?.nedbetalingstid ?? 25 };
   return currentMortgage(blob.housingMode, blob.assets, homeowner, blob.transition, monthKey);
@@ -281,13 +281,13 @@ export function netWorth(blob: ExportPayload, monthKey?: string): number {
  * resolved savings transfers. Mirrors the app's `totalFixedExpenses` — savings do
  * leave the account, so the budget reserves them, even though they are not spend.
  */
-export function totalFixedExpenses(blob: ExportPayload, monthKey = currentMonthKey()): number {
+export function totalFixedExpenses(blob: ExportPayload, monthKey = osloMonthKey()): number {
   return savingsView(blob, monthKey).totalFixed;
 }
 
 // ---- tool payloads --------------------------------------------------------
 
-export function overview(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function overview(blob: ExportPayload, monthKey = osloMonthKey()) {
   const gross = grossAnnualIncome(blob, monthKey);
   const nonMortgageDebt = totalNonMortgageDebt(blob);
   const breakdown = computeEquityBreakdown(blob.assets, monthKey);
@@ -384,7 +384,7 @@ function savingsRateHealth(blob: ExportPayload, monthKey: string, v: ReturnType<
   return { targetRateOfIncomePct, status: savingsRateStatus(rows, targetRateOfIncomePct) };
 }
 
-export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function budgetSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
   const v = savingsView(blob, monthKey);
   const months = lastNMonthKeys(monthAnchor(monthKey), 12);
   const seasonal = seasonalConfig(blob, monthKey);
@@ -392,7 +392,7 @@ export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey())
   // Literal cashflow, as CashflowChart: transfers netted out, budgeted bills
   // reconciled against their imported payments, each month against its own
   // fixed expenses plus this month's savings.
-  const { fixedFor, totalFor } = perMonthFixed(blob, v.contributions, currentMonthKey());
+  const { fixedFor, totalFor } = perMonthFixed(blob, v.contributions, osloMonthKey());
   const rows = monthlyCashflow(
     months,
     nonTransferTransactions(blob),
@@ -440,7 +440,7 @@ function nonTransferTransactions(blob: ExportPayload) {
   return txs.filter((tx) => !excluded.has(tx.id));
 }
 
-export function spendingAnalysis(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function spendingAnalysis(blob: ExportPayload, monthKey = osloMonthKey()) {
   // Net out own-account transfers exactly as the app's budget analysis does
   // (transferRules + auto-detected pairs), so category totals aren't inflated by
   // card payments / savings moves that show up as an expense + a matching income.
@@ -467,7 +467,7 @@ export function spendingAnalysis(blob: ExportPayload, monthKey = currentMonthKey
 export function yearReviewSummary(
   blob: ExportPayload,
   year?: number,
-  monthKey = currentMonthKey(),
+  monthKey = osloMonthKey(),
 ) {
   const txs = nonTransferTransactions(blob);
   const payslips = blob.payslips ?? {};
@@ -502,7 +502,7 @@ export function debtAnalysis(
   blob: ExportPayload,
   extraMonthly = 0,
   strategy: PayoffStrategy = 'avalanche',
-  monthKey = currentMonthKey(),
+  monthKey = osloMonthKey(),
 ) {
   const debts = blob.debts ?? [];
   const baseline = planPayoff(debts, 0, strategy, monthKey);
@@ -543,7 +543,7 @@ function goalCurrentValue(goal: Goal, assets: Assets): number {
   }
 }
 
-export function savingsAndGoals(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function savingsAndGoals(blob: ExportPayload, monthKey = osloMonthKey()) {
   const buffer = blob.assets.bufferAccount ?? 0;
   const fixedTotal = totalFixedExpenses(blob, monthKey);
   const essential = essentialMonthlyExpenses(blob.fixedExpenses ?? []);
@@ -588,7 +588,7 @@ export function savingsAndGoals(blob: ExportPayload, monthKey = currentMonthKey(
   };
 }
 
-export function recommendations(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function recommendations(blob: ExportPayload, monthKey = osloMonthKey()) {
   const { view: v, plan, planMonthlySaving } = budgetPlan(blob, monthKey);
   const health = savingsRateHealth(blob, monthKey, v);
   return {
@@ -652,7 +652,7 @@ export function whatIfExtraDebtPayment(
  * Salary and income tax for a month. Mirrors SalaryPage (active jobs, marginal
  * rate, restskatt) and FinanceContext (net monthly, with every deduction).
  */
-export function salaryAndTax(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function salaryAndTax(blob: ExportPayload, monthKey = osloMonthKey()) {
   const region = blob.region ?? 'no';
   const jobs = activeJobBreakdown(blob.salaries ?? [], blob.jobs ?? [], monthKey);
   // Salary-system gross only: the `income * 12` fallback is annualised NET pay,
@@ -723,7 +723,7 @@ const DEFAULT_PENSION: Pension = {
  * retirement; folketrygd/AFP are already at today's G. Balances and `projection`
  * stay nominal (kroner of each year).
  */
-export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey(), inflationPct = DEFAULT_INFLATION_PCT) {
+export function pensionSummary(blob: ExportPayload, monthKey = osloMonthKey(), inflationPct = DEFAULT_INFLATION_PCT) {
   if (!blob.pension) return { configured: false as const };
   const p: Pension = { ...DEFAULT_PENSION, ...blob.pension };
   const region = blob.region ?? 'no';
@@ -869,7 +869,7 @@ export interface ForecastOverrides {
  * stored assumption, else the page's data-driven seed. CPI isn't in the blob, so
  * the inflation seed is the page's 3% fallback unless overridden.
  */
-export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {}, monthKey = currentMonthKey()) {
+export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {}, monthKey = osloMonthKey()) {
   const a = blob.forecastAssumptions?.a;
   const currentGross = grossAnnualIncome(blob, monthKey);
   const sorted = [...(blob.salaries ?? [])].sort((x, y) => x.effectiveDate.localeCompare(y.effectiveDate));
@@ -959,7 +959,7 @@ function transitionLoans(blob: ExportPayload, monthKey: string) {
 }
 
 /** Mortgage details: amortization, payoff timeline, paydown vs plan. Mirrors BoligPage (homeowner). */
-export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function mortgage(blob: ExportPayload, monthKey = osloMonthKey()) {
   const housingMode = blob.housingMode ?? 'first_buyer';
   const m = activeMortgage(blob, monthKey);
   const remaining = splitTermMonths(m.remainingMonths);
@@ -1032,7 +1032,7 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
  * (live inputs, with the user's manual overrides) and SecondHomePanel's
  * portfolio / comparison.
  */
-export function housing(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function housing(blob: ExportPayload, monthKey = osloMonthKey()) {
   const eq = computeEquityBreakdown(blob.assets);
   const o = blob.capacityOverrides;
   const capacityDebt = lendingDebtTotal(blob.debts ?? []);
@@ -1063,7 +1063,7 @@ export function housing(blob: ExportPayload, monthKey = currentMonthKey()) {
 }
 
 /** Employer cost, billing rate and margin. Mirrors EmployerCostPage, incl. its solve-for mode. */
-export function employerCost(blob: ExportPayload, monthKey = currentMonthKey()) {
+export function employerCost(blob: ExportPayload, monthKey = osloMonthKey()) {
   const costConfig = { ...DEFAULT_EMPLOYER_COST_CONFIG, ...blob.employerCostConfig };
   const billing = { ...DEFAULT_BILLING_CONFIG, ...blob.billingConfig };
   const derivedGross = activeGrossAnnual(blob, monthKey);

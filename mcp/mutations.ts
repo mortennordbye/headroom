@@ -33,7 +33,7 @@ import type {
 } from '../src/context/FinanceContext';
 import { diff, type FieldChange } from './util';
 import { birthYearFrom } from '../src/lib/profile';
-import { currentMonthKey } from '../src/lib/date';
+import { osloMonthKey } from '../src/lib/date';
 import { isValidTermParts, yearsFromParts } from '../src/lib/loanTerm';
 import { withNotifiedRate } from '../src/lib/notifiedRate';
 import { rewriteSnapshotCoOwners, sanitizeCoOwners, validateCoOwners, type CoOwnerError } from '../src/lib/ownership';
@@ -376,7 +376,7 @@ export type AssetKey = (typeof ASSET_KEYS)[number];
 export function updateAsset(
   blob: ExportPayload,
   fields: Partial<Record<AssetKey, number>>,
-  monthKey = currentMonthKey(),
+  monthKey = osloMonthKey(),
 ): FieldChange[] {
   const after = { ...blob.assets };
   const changes: FieldChange[] = [];
@@ -511,7 +511,7 @@ export interface CurrentMortgageFields {
 export function updateCurrentMortgage(
   blob: ExportPayload,
   args: CurrentMortgageFields,
-  monthKey = currentMonthKey(),
+  monthKey = osloMonthKey(),
 ): FieldChange[] {
   if (!blob.homeowner) throw new Error('no current mortgage to update');
   const { termYears, termMonths, balance } = args;
