@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.2](https://github.com/mortennordbye/headroom/compare/v3.17.1...v3.17.2) (2026-11-01)
+
+
+### Bug Fixes
+
+* count a plan-linked loan paydown as saving everywhere ([#364](https://github.com/mortennordbye/headroom/issues/364)) ([f51724a](https://github.com/mortennordbye/headroom/commit/f51724adb998c4604c0e0807a8a0a81b61878038))
+
 ## [3.17.1](https://github.com/mortennordbye/headroom/compare/v3.17.0...v3.17.1) (2026-11-01)
 
 
