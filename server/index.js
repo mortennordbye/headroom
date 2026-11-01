@@ -1188,7 +1188,7 @@ if (fs.existsSync(DIST)) {
   app.get(/^\/(?:static|assets)\/.+\.[^/]+$/, (_req, res) => res.sendStatus(404));
   // SPA fallback. Regex route (not the bare '*' string) for Express 5 /
   // path-to-regexp v8 compatibility; matches any unhandled GET.
-  app.get(/.*/, (req, res) => res.sendFile(path.join(DIST, 'index.html')));
+  app.get(/.*/, (req, res) => res.sendFile('index.html', { root: DIST }));
 }
 
 // Start the listener + on-disk backups only when run directly (node index.js).
