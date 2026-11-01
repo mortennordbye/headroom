@@ -19,6 +19,7 @@ import { useFinanceSettings } from '../context/FinanceContext';
 import { PROJECTION_HORIZON_MONTHS } from '../lib/snapshots';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useTapAction } from '../hooks/useTapAction';
 import OnboardingTour from './onboarding/OnboardingTour';
 import HistoryManagerModal from './HistoryManagerModal';
 import GlossaryModal from './GlossaryModal';
@@ -65,6 +66,17 @@ const Layout: React.FC = () => {
   const activeGroup = groupForPath(location.pathname);
   const navGroup = groupForPath(navPath);
   const sheetRef = useFocusTrap<HTMLDivElement>(() => setMoreOpen(false), undefined, moreOpen);
+  // The More button and the sheet act on touch end and cancel the click, so a
+  // late click can't land on the backdrop that just appeared (or the page under
+  // a sheet that just closed). See useTapAction.
+  const openMore = () => setMoreOpen(true);
+  const closeMore = () => setMoreOpen(false);
+  const openGuide = () => { setMoreOpen(false); startOnboarding(); };
+  const openGlossary = () => { setMoreOpen(false); setGlossaryOpen(true); };
+  const openMoreTap = useTapAction(openMore);
+  const closeMoreTap = useTapAction(closeMore);
+  const openGuideTap = useTapAction(openGuide);
+  const openGlossaryTap = useTapAction(openGlossary);
 
   const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
 
@@ -448,7 +460,8 @@ const Layout: React.FC = () => {
           <div
             className="absolute inset-0 animate-fade-in"
             style={{ background: 'rgba(0,0,0,0.55)' }}
-            onClick={() => setMoreOpen(false)}
+            onClick={closeMore}
+            {...closeMoreTap}
           />
           <div
             ref={sheetRef}
@@ -467,7 +480,8 @@ const Layout: React.FC = () => {
                 {t.nav.more}
               </span>
               <button
-                onClick={() => setMoreOpen(false)}
+                onClick={closeMore}
+                {...closeMoreTap}
                 aria-label={t.cancel}
                 className="grid place-items-center w-8 h-8 rounded-[6px]"
                 style={{ background: 'var(--bg-2)', color: 'var(--text-2)' }}
@@ -484,7 +498,8 @@ const Layout: React.FC = () => {
             </div>
             {/* Setup guide — the mobile trigger for the guided tour */}
             <button
-              onClick={() => { setMoreOpen(false); startOnboarding(); }}
+              onClick={openGuide}
+              {...openGuideTap}
               className="mt-2 w-full flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
               style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)', color: 'var(--text-1)' }}
             >
@@ -493,7 +508,8 @@ const Layout: React.FC = () => {
             </button>
             {/* Glossary — the mobile trigger for the term lookup */}
             <button
-              onClick={() => { setMoreOpen(false); setGlossaryOpen(true); }}
+              onClick={openGlossary}
+              {...openGlossaryTap}
               className="mt-2 w-full flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
               style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)', color: 'var(--text-1)' }}
             >
@@ -519,7 +535,8 @@ const Layout: React.FC = () => {
         <MobileNavTab to="/assets" icon={navIconForPath('/assets')} label={t.nav.assets} active={navGroup?.primary === '/assets'} onNavigate={setPendingNav} />
         <MobileNavTab to="/salary" icon={navIconForPath('/salary')} label={t.nav.salary} active={navGroup?.primary === '/salary'} onNavigate={setPendingNav} />
         <button
-          onClick={() => setMoreOpen(true)}
+          onClick={openMore}
+          {...openMoreTap}
           className="flex-1 min-w-0 flex flex-col items-center gap-1 pt-2 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-[10px] font-medium transition-colors"
           style={{ color: moreActive ? 'var(--brass)' : 'var(--text-3)' }}
           aria-label={t.nav.more}
@@ -577,11 +594,17 @@ interface SheetItemProps {
   onNavigate: () => void;
 }
 
-const SheetItem: React.FC<SheetItemProps> = ({ to, icon: Icon, label, onNavigate }) => (
+const SheetItem: React.FC<SheetItemProps> = ({ to, icon: Icon, label, onNavigate }) => {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // Replace on the current page, as the link itself does.
+  const tap = useTapAction(() => { onNavigate(); navigate(to, { replace: pathname === to }); });
+  return (
   <NavLink
     to={to}
     end={to === '/'}
     onClick={onNavigate}
+    {...tap}
     className="flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
     style={({ isActive }) => ({
       background: isActive ? 'var(--warning-bg)' : 'var(--bg-2)',
@@ -597,7 +620,8 @@ const SheetItem: React.FC<SheetItemProps> = ({ to, icon: Icon, label, onNavigate
       </>
     )}
   </NavLink>
-);
+  );
+};
 
 interface NavButtonProps {
   to: string;
