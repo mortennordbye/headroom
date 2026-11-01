@@ -116,23 +116,36 @@ function revertChange(currentBlob, afterBlob, beforeBlob, keys) {
   // copies never conflict and undo restores the balance that was shown. Keys
   // the migration alone makes differ (the balance moving into assets) join the
   // change.
-  // The balance date the migration stamps on an undated balance is not a user
-  // edit, so the stamp is taken back out: a date missing before the revision
-  // stays missing (the next load stamps it again), and a date missing in what
-  // the revision saved matches whatever date the current blob holds, which is
-  // the one the load after that save stamped.
-  const stampOf = (b) => (isObj(b.homeowner) ? b.homeowner.currentMortgageBalanceAsOf : undefined);
-  const migrate = (raw, stamp) => {
+  // The dates the load stamps on an undated balance or loan term are not user
+  // edits, so a stamp is taken back out: a date missing before the revision
+  // stays missing (the next load stamps it again). A date missing in what the
+  // revision saved, where the load would stamp one and the blob before it had
+  // one, matches whatever date the current blob holds: the one the load after
+  // that save stamped.
+  const homeownerOf = (b) => (isObj(b.homeowner) ? b.homeowner : {});
+  const ownerMode = (b) => b.housingMode === 'homeowner' || b.housingMode === 'transitioning';
+  const loadStamps = {
+    currentMortgageBalanceAsOf: (b) => ownerMode(b) && !isMonthKey(homeownerOf(b).currentMortgageBalanceAsOf),
+    nedbetalingstidAsOf: (b) => homeownerOf(b).nedbetalingstid > 0 && !homeownerOf(b).nedbetalingstidAsOf,
+  };
+  const dates = (b) => Object.fromEntries(Object.keys(loadStamps).map((f) => [f, homeownerOf(b)[f]]));
+  const afterDates = Object.fromEntries(Object.entries(loadStamps).map(([f, stamps]) => [f,
+    stamps(afterBlob) && homeownerOf(beforeBlob)[f] !== undefined ? homeownerOf(currentBlob)[f] : homeownerOf(afterBlob)[f]]));
+  const migrate = (raw, keep) => {
     // The migration reads the slices as objects; leave a malformed blob as it is.
     if (!['assets', 'homeowner', 'transition'].every((k) => raw[k] == null || typeof raw[k] === 'object')) return raw;
     const b = migrateMortgageBalance(raw, 'stamp'); // any stamp it writes is replaced next
-    if (!isObj(b.homeowner) || b.homeowner.currentMortgageBalanceAsOf === stamp) return b;
-    const { currentMortgageBalanceAsOf: _stamp, ...rest } = b.homeowner;
-    return { ...b, homeowner: stamp === undefined ? rest : { ...rest, currentMortgageBalanceAsOf: stamp } };
+    if (!isObj(b.homeowner)) return b;
+    const h = { ...b.homeowner };
+    for (const [f, v] of Object.entries(keep)) {
+      if (v === undefined) delete h[f];
+      else h[f] = v;
+    }
+    return { ...b, homeowner: h };
   };
-  const current = migrate(currentBlob, stampOf(currentBlob));
-  const before = migrate(beforeBlob, stampOf(beforeBlob));
-  const after = migrate(afterBlob, isMonthKey(stampOf(afterBlob)) ? stampOf(afterBlob) : stampOf(currentBlob));
+  const current = migrate(currentBlob, dates(currentBlob));
+  const before = migrate(beforeBlob, dates(beforeBlob));
+  const after = migrate(afterBlob, afterDates);
   const allKeys = [...new Set([...keys, ...changedKeys(before, after)])];
   const out = { ...current };
   const conflicts = [];

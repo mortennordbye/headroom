@@ -86,6 +86,32 @@ describe('revertChange', () => {
     expect(revertChange(current, after, before, changedKeys(before, after)).blob).toEqual(before);
   });
 
+  it.each(['homeowner', 'first_buyer'])('keeps a balance date set since a revision that had none on either side (%s)', (housingMode) => {
+    // The revision only added a transaction; the balance date was set afterwards.
+    const before = { housingMode, homeowner: { rente: 5 }, dailyTransactions: [] };
+    const after = { housingMode, homeowner: { rente: 5 }, dailyTransactions: [tx('t1', -100)] };
+    const current = { housingMode, homeowner: { rente: 5, currentMortgageBalanceAsOf: '2026-03' }, dailyTransactions: [tx('t1', -100)] };
+    expect(revertChange(current, after, before, changedKeys(before, after)).blob).toEqual(
+      { housingMode, homeowner: { rente: 5, currentMortgageBalanceAsOf: '2026-03' }, dailyTransactions: [] },
+    );
+  });
+
+  it('does not borrow the current balance date outside the owner modes', () => {
+    // Undo of a restore in first_buyer mode: the load stamps no balance date there.
+    const before = { housingMode: 'first_buyer', homeowner: { rente: 5, currentMortgageBalanceAsOf: '2026-01' } };
+    const after = { housingMode: 'first_buyer', homeowner: { rente: 4 } };
+    const current = { housingMode: 'first_buyer', homeowner: { rente: 4, currentMortgageBalanceAsOf: '2026-03' } };
+    expect(revertChange(current, after, before, changedKeys(before, after)).conflicts).toEqual(['homeowner.currentMortgageBalanceAsOf']);
+  });
+
+  it('does not count a loan term date only the load stamped as an edit', () => {
+    // Undo of a restore of a revision saved before the term had an entry month.
+    const before = { homeowner: { nedbetalingstid: 20, nedbetalingstidAsOf: '2026-01', rente: 5 } };
+    const after = { homeowner: { nedbetalingstid: 22, rente: 5 } };
+    const current = { homeowner: { nedbetalingstid: 22, nedbetalingstidAsOf: '2026-10', rente: 5 } };
+    expect(revertChange(current, after, before, changedKeys(before, after)).blob).toEqual(before);
+  });
+
   it('migrates a blob that was never migrated, undoing through assets', () => {
     const before = { housingMode: 'homeowner', homeowner: { currentMortgageBalance: 1, currentMortgageBalanceAsOf: '2026-01' } };
     const after = { housingMode: 'homeowner', homeowner: { currentMortgageBalance: 2, currentMortgageBalanceAsOf: '2026-01' } };
