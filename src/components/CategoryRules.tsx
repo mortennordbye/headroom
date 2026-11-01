@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
-import { X, Tag, Tags, Wallet, ArrowLeftRight, ChevronDown, Plus, Info } from 'lucide-react';
+import { X, Tag, Tags, Wallet, ArrowLeftRight, ChevronDown, Plus, Info, RefreshCw } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { categoryMeta, isCategoryKey } from '../lib/categories';
+import { recategorizeAuto } from '../lib/categorize';
 import { suggestTransferRules, type TransferSignal } from '../lib/transferSuggestions';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
+import { Button } from './ui/Button';
+import ConfirmModal from './ConfirmModal';
 
 /** Anchor the Budget page's suggestion banner links to. */
 export const RULES_ANCHOR = 'rules';
@@ -26,7 +29,7 @@ export function CategoryRules() {
   const {
     t, categoryRules, removeCategoryRule, labelRules, removeLabelRule,
     transferRules, removeTransferRule, addTransferRule, fixedExpenses, setFixedExpenses,
-    dailyTransactions, formatCurrency,
+    dailyTransactions, setDailyTransactions, formatCurrency,
   } = useFinance();
   // Opens expanded when linked to from the Budget page's suggestion banner.
   const [open, setOpen] = useState(() => window.location.hash === `#${RULES_ANCHOR}`);
@@ -42,6 +45,28 @@ export function CategoryRules() {
   const clearExpenseMatch = (id: string) =>
     setFixedExpenses(fixedExpenses.map((e) => (e.id === id ? { ...e, match: undefined } : e)));
   const count = categoryRules.length + labelRules.length + transferRules.length + matchExpenses.length;
+
+  // Re-run the rules over auto-labelled rows: preview the count, confirm, then
+  // apply. Manual labels are never touched (recategorizeAuto skips them).
+  const [recatCount, setRecatCount] = useState<number | null>(null);
+  const [recatNotice, setRecatNotice] = useState('');
+  const previewRecategorize = () => {
+    const n = recategorizeAuto(dailyTransactions, categoryRules).changes.length;
+    if (n === 0) setRecatNotice(t.budgetPage.recategorizeNone);
+    else { setRecatNotice(''); setRecatCount(n); }
+  };
+  const applyRecategorize = () => {
+    // Recomputed against current state, so a sync between preview and confirm
+    // can't apply a stale change.
+    const { changes } = recategorizeAuto(dailyTransactions, categoryRules);
+    const to = new Map(changes.map((c) => [c.id, c.to]));
+    setDailyTransactions(dailyTransactions.map((tx) => {
+      const category = to.get(tx.id);
+      return category ? { ...tx, category } : tx;
+    }));
+    setRecatCount(null);
+    setRecatNotice(t.budgetPage.recategorizeDone.replace('{count}', String(changes.length)));
+  };
 
   return (
     <Card id={RULES_ANCHOR} padding="lg" className="md:col-span-12">
@@ -167,7 +192,29 @@ export function CategoryRules() {
               ))}
             </ul>
           )}
+          <div className="mt-5 pt-5 border-t border-[var(--border)]">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button variant="secondary" size="sm" leadingIcon={<RefreshCw size={13} />} onClick={previewRecategorize}>
+                {t.budgetPage.recategorizeButton}
+              </Button>
+              {recatNotice && (
+                <span role="status" className="text-[12px]" style={{ color: 'var(--text-2)' }}>{recatNotice}</span>
+              )}
+            </div>
+            <p className="text-[12px] mt-2" style={{ color: 'var(--text-3)' }}>{t.budgetPage.recategorizeHint}</p>
+          </div>
         </div>
+      )}
+      {recatCount !== null && (
+        <ConfirmModal
+          title={t.budgetPage.recategorizeTitle}
+          message={t.budgetPage.recategorizeConfirmMsg.replace('{count}', String(recatCount))}
+          confirmLabel={t.budgetPage.recategorizeConfirm}
+          cancelLabel={t.cancel}
+          danger={false}
+          onConfirm={applyRecategorize}
+          onCancel={() => setRecatCount(null)}
+        />
       )}
     </Card>
   );
