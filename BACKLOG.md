@@ -111,21 +111,24 @@ in git and the CHANGELOG, not here.
   (`planPaydownTotal`), but `monthlyCashflow` takes each month's whole fixed-expense total as
   expenses and only the savings transfers as `saved`, so these two views still show it under
   expenses. **Why deferred**: a parallel change is reworking that cashflow code, and touching it
-  here would collide. **Unblock**: once that lands, move each month's plan paydown from
-  `fixedTotalFor` into `savedFor` (with that month's fixed expenses, allocations and debts).
+  here would collide. **Unblock**: move each month's plan paydown out of the fixed total and into
+  the month's savings (`cashflowSavingsForMonth`), with that month's fixed expenses, allocations
+  and debts.
   **Where**: `src/lib/monthlyCashflow.ts`, `src/components/charts/CashflowChart.tsx`,
   `src/pages/YearReviewPage.tsx`, `src/lib/yearReview.ts`, `perMonthFixed` and `budgetSummary`
   in `mcp/derive.ts`.
-- **A one-legged savings transfer counts as spending and as savings in the cashflow.** When
-  only the outgoing leg of a savings transfer is imported (the savings account isn't connected)
-  and it isn't marked as a transfer, `monthlyCashflow` adds it to `expenses` as unenveloped spend
-  and the planned saving is also reported as `saved`, so that money is counted twice. **Why
-  deferred**: the savings list has no envelope-style matching against transactions, and the old
-  chart had the same double count inside "money out". **Unblock**: reconcile each saving against
-  its matching transactions the way fixed expenses are (`reconcile` in `envelopes.ts`), or nudge
-  the user to mark the row as a transfer via `transferSuggestions`. **Where**: the expense loop in
-  `src/lib/monthlyCashflow.ts`, `src/lib/envelopes.ts`, `src/lib/transferSuggestions.ts`,
-  `src/components/charts/CashflowChart.tsx`, `mcp/derive.ts` (`budgetSummary`).
+- **Some one-legged savings transfers are still counted twice in the cashflow.** The cashflow
+  and year review match a planned saving to its imported outgoing row only when the payee after
+  "Til:" is the saving's name (`savingsMatch.ts`), so a real purchase can never vanish. Accepted
+  misses, where the old double count stays: the transfer drifts more than 1 % from the plan; a
+  saving is split over several transfers, or several savings go out as one; the transfer lands in
+  another month; a 'rest' or percent saving resolved from estimated income differs from what was
+  sent; the destination text isn't the saving's name. **Why deferred**: matching on text any
+  looser lets bill payments (every nettgiro and avtalegiro has "til:" and an account number)
+  claim a saving. **Unblock**: store an account number on each saving and compare it with the
+  row's `counterpartyAccountNumber` (captured since #358); that match needs no name or amount
+  heuristics. **Where**: `src/lib/savingsMatch.ts`, `src/context/FinanceContext.tsx` (`Saving`),
+  `src/lib/transfers.ts` (`normalizeAccountNumber`).
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
   `src/lib/envelopes.ts`, `src/context/FinanceContext.tsx`.
 

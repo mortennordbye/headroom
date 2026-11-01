@@ -3,7 +3,8 @@
 // existing pure aggregators — no new financial formulas of its own. Pure and
 // unit-tested; the page (`YearReviewPage`) only renders what this returns.
 import type { BalanceSnapshot, DailyTransaction, FixedExpense } from '../context/FinanceContext';
-import { monthlyCashflow, isSpend, type MonthlyCashflowRow } from './monthlyCashflow';
+import { monthlyCashflow, cashflowRate, isSpend, type MonthlyCashflowRow } from './monthlyCashflow';
+import type { CashflowSavings } from './savingsMatch';
 import { netWorthFromSnapshot } from './netWorth';
 import { monthsBetween, yearOf } from './date';
 
@@ -43,6 +44,12 @@ export interface YearReviewInput {
    * Pass functions for both to resolve each month's own fixed expenses.
    */
   fixedExpenses?: FixedExpense[] | ((month: string) => FixedExpense[]);
+  /**
+   * Each month's savings, kept out of `totalFixedExpenses`. The review still
+   * counts them as money out, but matching them against the imported rows
+   * stops a one-legged savings transfer from also counting as spending.
+   */
+  savings?: CashflowSavings;
   payslips: Record<string, { tax?: number }>;
   snapshots: Record<string, BalanceSnapshot>;
   netWorthHistory: Record<string, number>;
@@ -67,12 +74,17 @@ function netWorthAt(
 
 export function yearReview(year: number, input: YearReviewInput): YearReview {
   const {
-    transactions, incomeByMonth, totalFixedExpenses, fixedExpenses, payslips,
+    transactions, incomeByMonth, totalFixedExpenses, fixedExpenses, savings, payslips,
     snapshots, netWorthHistory, currentNetWorth, nowMonthKey, topN = 6,
   } = input;
 
   const months = monthsBetween(`${year}-01`, `${year}-12`).filter((m) => m <= nowMonthKey);
-  const monthly = monthlyCashflow(months, transactions, incomeByMonth, 0, totalFixedExpenses, undefined, fixedExpenses);
+  // Savings are money out here: fold `saved` back into `expenses`.
+  const monthly = monthlyCashflow(months, transactions, incomeByMonth, 0, totalFixedExpenses, undefined, fixedExpenses, savings)
+    .map((r) => {
+      const expenses = r.expenses + r.saved;
+      return { ...r, expenses, saved: 0, rate: cashflowRate(r.income, expenses) };
+    });
 
   const totalIncome = monthly.reduce((s, r) => s + r.income, 0);
   const totalVariable = monthly.reduce((s, r) => s + r.variable, 0);
