@@ -106,3 +106,23 @@ describe('monthlyCashflow — envelope reconciliation', () => {
   });
 });
 
+describe('monthlyCashflow — per-month fixed expenses', () => {
+  const may = [{ id: 'e1', name: 'Strøm', amount: 800, type: 'fixed' as const, match: 'stroem' }];
+  const june = [{ id: 'e1', name: 'Strøm', amount: 1000, type: 'fixed' as const, match: 'stroem' }];
+  const byMonth: Record<string, typeof may> = { '2026-05': may, '2026-06': june };
+  const listFor = (m: string) => byMonth[m];
+  const totalFor = (m: string) => byMonth[m].reduce((s, e) => s + e.amount, 0) + 200; // + savings
+
+  it('reconciles each month against its own fixed expenses and total', () => {
+    const txs = [
+      tx({ date: '2026-05-05', amount: 700, kind: 'expense', description: 'stroem AS' }),
+      tx({ date: '2026-06-05', amount: 1100, kind: 'expense', description: 'stroem AS' }),
+    ];
+    const rows = monthlyCashflow(['2026-05', '2026-06'], txs, {}, 40000, totalFor, null, listFor);
+    // May: the 800 envelope covers the 700 payment, plus 200 savings.
+    expect(rows[0].expenses).toBe(1000);
+    // June: the 1000 envelope plus 100 overspend, plus 200 savings.
+    expect(rows[1].expenses).toBe(1300);
+  });
+});
+
