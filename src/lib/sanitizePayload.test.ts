@@ -79,6 +79,16 @@ describe('sanitizePayload', () => {
     expect((out.dailyTransactions as Record<string, unknown>[])[0].amount).toBe(1.5);
   });
 
+  it('coerces bonus amounts, so a string amount reaches the OTP base as a number', () => {
+    const out = sanitizePayload(
+      { bonuses: [{ id: 'b1', date: '2026-03-15', type: 'annual', amount: '30 000' }, { id: 'b2', type: 'other', amount: 'x' }] },
+      SCHEMAS,
+    );
+    const bonuses = out.bonuses as Record<string, unknown>[];
+    expect(bonuses[0].amount).toBe(30000);
+    expect(bonuses[1].amount).toBe(0);
+  });
+
   it('coerces debts numeric fields and leaves non-numeric item fields alone', () => {
     const out = sanitizePayload(
       { debts: [{ id: 'd1', name: 'Card', type: 'credit_card', balance: '12 000', rate: '21,9', minPayment: 500 }] },

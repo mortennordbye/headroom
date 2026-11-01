@@ -15,7 +15,8 @@
 // Growth stays where it belongs: in the projection on the Pension page.
 import { addMonthsKey } from './date';
 import type { AutomationRule } from './automation';
-import { otpAnnualContribution } from './pension';
+import { otpContributionForMonth } from './pension';
+import type { BonusEntry } from '../context/FinanceContext';
 
 export const PENSION_OTP_RULE_ID = 'pension:otp';
 export const PENSION_IPS_RULE_ID = 'pension:ips';
@@ -35,8 +36,12 @@ export interface PensionAccrualInput {
   ipsAnnualContribution: number;
   otpLastPostedMonth?: string;
   ipsLastPostedMonth?: string;
-  /** Gross annual pensionable income across active jobs. */
+  /** Gross annual fixed pay (salary + on-call) across active jobs. */
   pensionableIncome: number;
+  /** The scheme counts bonuses in the OTP base (`Pension.otpIncludesBonuses`). */
+  otpIncludesBonuses?: boolean;
+  /** Bonus entries; each posts its OTP share in the month it is dated. */
+  bonuses?: readonly Pick<BonusEntry, 'date' | 'amount' | 'type'>[];
   currentMonth: string;
 }
 
@@ -64,16 +69,28 @@ export function pensionAccrualRules(
   const startMonth = addMonthsKey(input.currentMonth, 1);
   const rules: AutomationRule[] = [];
 
-  const otpMonthly = otpAnnualContribution(
-    input.pensionableIncome,
-    input.otpEmployerPct + input.otpEmployeePct,
-    Number(input.currentMonth.slice(0, 4)),
-  ) / 12;
-  if (input.otpAutoPost && otpMonthly > 0) {
+  // Fixed pay posts a twelfth of the yearly contribution every month. A bonus
+  // posts its share in the month it is dated, so it lands once, when it was
+  // paid. Each due month is priced on its own year (12G cap, that year's
+  // bonuses), so a catch-up across New Year is right; months the stamp already
+  // covers are never in the window, so nothing posts twice.
+  const otpPct = input.otpEmployerPct + input.otpEmployeePct;
+  const bonuses = input.bonuses ?? [];
+  const includeBonuses = !!input.otpIncludesBonuses;
+  const otpMonthly = otpContributionForMonth(input.pensionableIncome, [], otpPct, input.currentMonth, false);
+  const otpByMonth: Record<string, number> = {};
+  const from = input.otpLastPostedMonth ? addMonthsKey(input.otpLastPostedMonth, 1) : startMonth;
+  for (let m = from; m <= input.currentMonth; m = addMonthsKey(m, 1)) {
+    const amount = otpContributionForMonth(input.pensionableIncome, bonuses, otpPct, m, includeBonuses);
+    if (amount !== otpMonthly) otpByMonth[m] = amount;
+  }
+  const hasByMonth = Object.keys(otpByMonth).length > 0;
+  if (input.otpAutoPost && (otpMonthly > 0 || Object.values(otpByMonth).some(a => a > 0))) {
     rules.push({
       id: PENSION_OTP_RULE_ID,
       name: labels.otp,
       amount: otpMonthly,
+      ...(hasByMonth ? { amountByMonth: otpByMonth } : {}),
       targetKind: 'pensionOtp',
       startMonth,
       lastPostedMonth: input.otpLastPostedMonth,

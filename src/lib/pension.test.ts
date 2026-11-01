@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { otpAnnualContribution, otpPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
+import { otpAnnualContribution, otpContributionForMonth, otpPensionableIncome, otpProjectedPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
 
 describe('pensionFutureValue', () => {
   it('returns the starting balance for zero or negative years', () => {
@@ -99,5 +99,53 @@ describe('otpPensionableIncome', () => {
       { date: '2026-01-01', amount: -5_000, type: 'other' as const },
     ];
     expect(otpPensionableIncome(-1, bad, 2026, true)).toBe(0);
+  });
+});
+
+describe('otpPensionableIncome — bad entries', () => {
+  it('skips a bonus with no date instead of throwing', () => {
+    const bad = [{ amount: 10_000, type: 'annual' as const } as unknown as { date: string; amount: number; type: 'annual' }];
+    expect(otpPensionableIncome(500_000, bad, 2026, true)).toBe(500_000);
+  });
+});
+
+describe('otpProjectedPensionableIncome', () => {
+  const bonuses = [
+    { date: '2025-03-01', amount: 40_000, type: 'annual' as const },
+    { date: '2025-05-01', amount: 25_000, type: 'signing' as const },
+    { date: '2025-06-01', amount: 30_000, type: 'holiday_pay' as const },
+    { date: '2025-12-01', amount: 10_000, type: 'profit_share' as const },
+    { date: '2026-02-01', amount: 200_000, type: 'annual' as const },
+  ];
+
+  it('is fixed pay alone with bonuses off', () => {
+    expect(otpProjectedPensionableIncome(600_000, bonuses, 2026, false)).toBe(600_000);
+  });
+
+  it('adds last full year\'s bonuses, without signing bonuses or holiday pay, and ignores this year\'s', () => {
+    expect(otpProjectedPensionableIncome(600_000, bonuses, 2026, true)).toBe(650_000);
+  });
+});
+
+describe('otpContributionForMonth', () => {
+  const bonuses = [
+    { date: '2026-03-10', amount: 100_000, type: 'annual' as const },
+    { date: '2026-06-10', amount: 40_000, type: 'holiday_pay' as const },
+  ];
+  const months = Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}`);
+
+  it('is a twelfth of the fixed contribution every month with bonuses off', () => {
+    for (const m of months) expect(otpContributionForMonth(600_000, bonuses, 5, m, false)).toBe(2_500);
+  });
+
+  it('adds the bonus share only in the bonus month, never for holiday pay', () => {
+    expect(otpContributionForMonth(600_000, bonuses, 5, '2026-03', true)).toBe(2_500 + 5_000);
+    expect(otpContributionForMonth(600_000, bonuses, 5, '2026-06', true)).toBe(2_500);
+  });
+
+  it('sums over the year to the capped yearly contribution', () => {
+    const total = months.reduce((s, m) => s + otpContributionForMonth(1_600_000, bonuses, 5, m, true), 0);
+    expect(total).toBeCloseTo(otpAnnualContribution(otpPensionableIncome(1_600_000, bonuses, 2026, true), 5, 2026), 6);
+    expect(total).toBeCloseTo(81_929.4, 6);
   });
 });

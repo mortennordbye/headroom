@@ -46,7 +46,6 @@ import {
   computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
-import { otpPensionableIncome } from '../lib/pension';
 import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
@@ -2760,7 +2759,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         ipsAnnualContribution: Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION),
         otpLastPostedMonth: pension.otpLastPostedMonth,
         ipsLastPostedMonth: pension.ipsLastPostedMonth,
-        pensionableIncome: otpPensionableIncome(calcActiveGrossAnnual(salaries, jobs, nowKey), bonuses, Number(nowKey.slice(0, 4)), pension.otpIncludesBonuses),
+        pensionableIncome: calcActiveGrossAnnual(salaries, jobs, nowKey),
+        otpIncludesBonuses: pension.otpIncludesBonuses,
+        bonuses,
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];

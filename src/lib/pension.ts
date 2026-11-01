@@ -23,29 +23,92 @@ export function otpAnnualContribution(pensionableIncome: number, totalPct: numbe
   return base * totalPct / 100;
 }
 
+type OtpBonus = Pick<BonusEntry, 'date' | 'amount' | 'type'>;
+
+/**
+ * Sum of the bonuses dated with `prefix` ('yyyy-' or 'yyyy-MM'), skipping
+ * `skip` types and entries with no date or a non-positive/NaN amount.
+ */
+function sumBonuses(bonuses: readonly OtpBonus[], prefix: string, skip: readonly string[]): number {
+  return bonuses.reduce(
+    (s, b) => (typeof b.date === 'string' && b.date.startsWith(prefix) && !skip.includes(b.type) && b.amount > 0
+      ? s + b.amount
+      : s),
+    0,
+  );
+}
+
+/** Holiday pay is not a bonus, and the fixed salary already stands for it. */
+const NOT_BONUS: readonly string[] = ['holiday_pay'];
+/** A signing bonus is paid once, so it is not expected to come back next year. */
+const NOT_RECURRING: readonly string[] = ['holiday_pay', 'signing'];
+
 /**
  * The pay an OTP contribution is calculated on for `year`. By law the base is
  * all pay received in the contribution year (innskuddspensjonsloven § 5-5 første
  * ledd), but a scheme may leave out varying or temporary supplements (§ 5-5
  * annet ledd bokstav a), and many base it on fixed salary. So bonuses paid in
  * `year` count only when `includeBonuses` says the user's scheme includes them.
- * Holiday pay entries are not bonuses and never count here. The 12G cap is
+ * Holiday-pay entries are left out because `fixedGross` already covers that pay
+ * and they are not bonuses, not because the law excludes them. The 12G cap is
  * applied later, by `otpAnnualContribution`.
  */
 export function otpPensionableIncome(
   fixedGross: number,
-  bonuses: readonly Pick<BonusEntry, 'date' | 'amount' | 'type'>[],
+  bonuses: readonly OtpBonus[],
   year: number,
   includeBonuses: boolean,
 ): number {
   const base = Math.max(0, fixedGross);
   if (!includeBonuses) return base;
-  const prefix = `${year}-`;
-  const bonusTotal = bonuses.reduce(
-    (s, b) => (b.type !== 'holiday_pay' && b.date.startsWith(prefix) && b.amount > 0 ? s + b.amount : s),
-    0,
-  );
-  return base + bonusTotal;
+  return base + sumBonuses(bonuses, `${year}-`, NOT_BONUS);
+}
+
+/**
+ * The yearly OTP base to project forward from `year` until retirement. One
+ * year's bonuses are not a promise of the same every year, so the recurring
+ * estimate is the previous full calendar year's bonuses, leaving out signing
+ * bonuses (one-off) and holiday pay (covered by `fixedGross`). Only when
+ * `includeBonuses` says the scheme counts bonuses.
+ */
+export function otpProjectedPensionableIncome(
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  year: number,
+  includeBonuses: boolean,
+): number {
+  const base = Math.max(0, fixedGross);
+  if (!includeBonuses) return base;
+  return base + sumBonuses(bonuses, `${year - 1}-`, NOT_RECURRING);
+}
+
+/**
+ * The OTP contribution to post for `month` ('yyyy-MM'): a twelfth of the yearly
+ * contribution on fixed pay, plus `totalPct` of any bonus dated in `month` when
+ * `includeBonuses`. The 12G cap of the month's own year holds across that year:
+ * a bonus only counts for the room left under 12G once the full year's fixed
+ * pay and the year's earlier bonuses are in, so the twelve months sum to
+ * `otpAnnualContribution(otpPensionableIncome(...))`. With bonuses off this is
+ * the fixed twelfth every month, as before.
+ */
+export function otpContributionForMonth(
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  totalPct: number,
+  month: string,
+  includeBonuses: boolean,
+): number {
+  const year = Number(month.slice(0, 4));
+  const fixed = Math.max(0, fixedGross);
+  const fixedPart = otpAnnualContribution(fixed, totalPct, year) / 12;
+  if (!includeBonuses) return fixedPart;
+  const yearBonuses = bonuses.filter(b => typeof b.date === 'string' && b.date.startsWith(`${year}-`));
+  const thisMonth = sumBonuses(yearBonuses, month, NOT_BONUS);
+  if (thisMonth <= 0) return fixedPart;
+  const earlier = sumBonuses(yearBonuses.filter(b => b.date.slice(0, 7) < month), `${year}-`, NOT_BONUS);
+  const before = otpAnnualContribution(fixed + earlier, totalPct, year);
+  const after = otpAnnualContribution(fixed + earlier + thisMonth, totalPct, year);
+  return fixedPart + (after - before);
 }
 
 /**

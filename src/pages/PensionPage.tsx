@@ -19,7 +19,7 @@ import { NumberRow } from '../components/ui/NumberRow';
 import { SliderRow } from '../components/ui/SliderRow';
 import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
-import { otpAnnualContribution as otpContribution, otpPensionableIncome, projectPensionWealth } from '../lib/pension';
+import { otpAnnualContribution as otpContribution, otpPensionableIncome, otpProjectedPensionableIncome, projectPensionWealth } from '../lib/pension';
 import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { currentMonthKey } from '../lib/date';
@@ -97,9 +97,16 @@ const PensionPage: React.FC = () => {
     [salaries, jobs, asOfMonth],
   );
 
-  // OTP base: the fixed pay above, plus the year's bonuses when the scheme counts them.
-  const otpBase = otpPensionableIncome(pensionableIncome, bonuses, Number(asOfMonth.slice(0, 4)), pension.otpIncludesBonuses);
-  const otpAnnualContribution = otpContribution(otpBase, pension.otpEmployerPct + pension.otpEmployeePct, TAX_YEAR);
+  // OTP base: the fixed pay above, plus the year's bonuses when the scheme counts
+  // them. The projection uses a recurring estimate instead (last year's bonuses,
+  // no signing bonus), and the monthly auto-post moves the fixed part each month.
+  const otpPct = pension.otpEmployerPct + pension.otpEmployeePct;
+  const asOfYear = Number(asOfMonth.slice(0, 4));
+  const otpAnnualContribution = otpContribution(
+    otpPensionableIncome(pensionableIncome, bonuses, asOfYear, pension.otpIncludesBonuses), otpPct, TAX_YEAR);
+  const otpProjectedContribution = otpContribution(
+    otpProjectedPensionableIncome(pensionableIncome, bonuses, asOfYear, pension.otpIncludesBonuses), otpPct, TAX_YEAR);
+  const otpFixedMonthly = otpContribution(pensionableIncome, otpPct, TAX_YEAR) / 12;
   const ipsAnnualContribution = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
   // IPS lowers alminnelig inntekt, taxed at 22% in Norway. Under the generic
   // region there's no fixed rate, so the saving is the user's own marginal rate.
@@ -110,13 +117,13 @@ const PensionPage: React.FC = () => {
   const projection = useMemo(() => projectPensionWealth({
     otpBalance: pension.otpBalance,
     ipsBalance: pension.ipsBalance,
-    otpAnnualContribution,
+    otpAnnualContribution: otpProjectedContribution,
     ipsAnnualContribution,
     otpGrowthRate: pension.otpGrowthRate,
     ipsGrowthRate: pension.ipsGrowthRate,
     yearsToRetire,
     startYear: currentYear,
-  }), [pension, yearsToRetire, otpAnnualContribution, ipsAnnualContribution, currentYear]);
+  }), [pension, yearsToRetire, otpProjectedContribution, ipsAnnualContribution, currentYear]);
 
   const atRetirement = projection.length > 0 ? projection[projection.length - 1] : null;
   const totalNow = pension.otpBalance + pension.ipsBalance;
@@ -336,14 +343,14 @@ const PensionPage: React.FC = () => {
             />
           </div>
           <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
+            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${pension.otpIncludesBonuses ? t.pensionPage.otpNoteMidBonuses : t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
           </p>
           {hist.isLive && (
             <AutoPostToggle
               label={pa.otpToggle}
               checked={livePension.otpAutoPost}
               onChange={(on) => updatePension('otpAutoPost', on)}
-              monthly={otpAnnualContribution / 12}
+              monthly={otpFixedMonthly}
               lastPostedMonth={livePension.otpLastPostedMonth}
               blockedReason={otpAnnualContribution > 0 ? null : pa.otpNeedsIncome}
             />

@@ -353,6 +353,10 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const p = derive.pensionSummary(b, MONTH);
     if (!p.configured) throw new Error('expected a configured pension');
     expect(p.otpAnnualContribution).toBe(37500); // (720000 + 30000 bonus) * 5%
+    expect(p.otpIncludesBonuses).toBe(true);
+    expect(p.otpBase).toBe(750000);
+    // No 2025 bonuses in the fixture, so the recurring estimate adds nothing.
+    expect(p.otpProjectionBase).toBe(720000);
   });
 
   it('pension: headline income is in today\'s kroner and equals the inTodaysKroner block', () => {

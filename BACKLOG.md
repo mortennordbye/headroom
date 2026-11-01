@@ -14,6 +14,15 @@ in git and the CHANGELOG, not here.
   app models one person. **Unblock**: an issue covering a marital-status field. **Where**:
   `src/lib/norwegianTax.ts`, `annualMortgageInterest` in `src/context/FinanceContext.tsx` and
   `mcp/derive.ts`.
+- **OTP base, remaining gaps.** Bonuses are now a per-user setting, but the rest of the base is
+  fixed: overtime is always left out (it counts under innskuddspensjonsloven § 5-5 første ledd
+  unless the plan excludes it), on-call is always counted, the § 5-5 annet ledd bokstav b
+  variant (last year's pay as the base) is not modelled, and bonuses are summed across all jobs
+  instead of only the scheme's employer. Deferred to keep the bonus fix small. **Unblock**: an
+  issue deciding which plan options to expose (likely one "counts overtime" setting and a job
+  link for the scheme). **Where**: `otpPensionableIncome` and `otpContributionForMonth` in
+  `src/lib/pension.ts`, `src/lib/pensionAccrual.ts`, `src/pages/PensionPage.tsx`,
+  `pensionSummary` in `mcp/derive.ts`.
 - **Not audited yet**: bank import and categorisation.
 
 ## Income and salary

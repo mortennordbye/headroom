@@ -18,7 +18,7 @@ import { estimateAfpGrunnlag, annualAfp } from '../lib/afp';
 import { prepayVsInvestFor } from '../lib/prepayVsInvest';
 import { netWorthBands } from '../lib/scenarioBands';
 import { projectForecast, forecastMortgage, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
-import { otpAnnualContribution, otpPensionableIncome, pensionFutureValue } from '../lib/pension';
+import { otpAnnualContribution, otpProjectedPensionableIncome, pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
 import { myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
@@ -61,7 +61,8 @@ const ForecastPage: React.FC = () => {
     const yearsToRetire = hasBirthYear
       ? Math.max(0, pension.retirementAge - (currentYear - pension.birthYear))
       : 0;
-    const otpBase = otpPensionableIncome(currentGross, bonuses, currentYear, pension.otpIncludesBonuses);
+    // Long-run OTP base: fixed pay plus the recurring bonus estimate, if the scheme counts bonuses.
+    const otpBase = otpProjectedPensionableIncome(currentGross, bonuses, currentYear, pension.otpIncludesBonuses);
     const otpAnnual = otpAnnualContribution(otpBase, pension.otpEmployerPct + pension.otpEmployeePct, TAX_YEAR);
     const ipsAnnual = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
     const otpAtRetire = pensionFutureValue(pension.otpBalance, otpAnnual, pension.otpGrowthRate, yearsToRetire);

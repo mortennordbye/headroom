@@ -75,6 +75,7 @@ const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
   fixedExpenses: { amount: 0 },
   savings: { amount: 0, percent: 0, bufferTargetAmount: 0, postedAmount: 0 },
   dailyTransactions: { amount: 0 },
+  bonuses: { amount: 0 },
   // A percentage row carries its share here; an imported "50" as a string must
   // coerce, or the resolver reads it as absent and the row silently freezes.
   savingsAllocations: { percent: 0, amount: 0 },
