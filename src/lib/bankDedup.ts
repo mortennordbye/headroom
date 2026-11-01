@@ -13,33 +13,49 @@ import type { TransactionSegment } from './segments';
 // those distinct). Manual (non-eb) rows are untouched.
 //
 // TWIN: `dropStaleBareTwins` in server/bank.js (CJS) is a byte-equivalent copy of
-// this logic, including the two regexes below. The server can't import from src/,
+// this logic, including the regexes below. The server can't import from src/,
 // so the two are hand-maintained and MUST stay identical — change both or neither.
 //
-// Known limitation (see BACKLOG.md "Bank-id dedup regex ambiguity"): the
-// prefixed-vs-bare split is inherently ambiguous. A legacy BARE id whose ref
-// happens to start with 8 hex chars + '-' (e.g. `eb-a1b2c3d4-...`) is
-// indistinguishable from a real PREFIXED id and is treated as prefixed. Not
-// tightened here because no safe structural discriminator exists — guessing wrong
-// could resurrect or double-count real bank transactions.
-const PREFIXED = /^eb-[0-9a-f]{8}-(.+)$/i;
-const BARE = /^eb-(?![0-9a-f]{8}-)(.+)$/i;
+// A legacy bare ref can itself start with 8 hex chars + '-', so the id text alone
+// can't tell `eb-<conn8>-<ref>` from `eb-<ref>`. The 8-hex segment counts as a
+// connection prefix only when a known connection has it: one named in
+// `connectionPrefixes` (the server passes its live and removed connections'
+// idPrefix values), or one seen in a row's account key (`<conn8>:<uid>`, stamped
+// on every row a prefixed connection imports). Otherwise the id is bare.
+const PREFIXED = /^eb-([0-9a-f]{8})-(.+)$/i;
+const BARE = /^eb-(.+)$/i;
+const CONNECTION_PREFIX = /^eb-([0-9a-f]{8})-$/i;
+const ACCOUNT_CONNECTION = /^([0-9a-f]{8}):/i;
 
-function prefixedRef(id: string): string | null {
-  const m = typeof id === 'string' ? PREFIXED.exec(id) : null;
-  return m ? m[1] : null;
+function knownPrefixes(txs: DailyTransaction[], connectionPrefixes: string[]): Set<string> {
+  const known = new Set<string>();
+  for (const p of connectionPrefixes) {
+    const m = typeof p === 'string' ? CONNECTION_PREFIX.exec(p) : null;
+    if (m) known.add(m[1].toLowerCase());
+  }
+  for (const t of txs) {
+    const m = typeof t.account === 'string' ? ACCOUNT_CONNECTION.exec(t.account) : null;
+    if (m) known.add(m[1].toLowerCase());
+  }
+  return known;
 }
 
-function bareRef(id: string): string | null {
+function prefixedRef(id: string, known: Set<string>): string | null {
+  const m = typeof id === 'string' ? PREFIXED.exec(id) : null;
+  return m && known.has(m[1].toLowerCase()) ? m[2] : null;
+}
+
+function bareRef(id: string, known: Set<string>): string | null {
   const m = typeof id === 'string' ? BARE.exec(id) : null;
-  return m ? m[1] : null;
+  return m && prefixedRef(id, known) == null ? m[1] : null;
 }
 
 // Idempotent: with no legacy twins it returns the list unchanged.
-export function dedupeBankTransactions(txs: DailyTransaction[]): DailyTransaction[] {
+export function dedupeBankTransactions(txs: DailyTransaction[], connectionPrefixes: string[] = []): DailyTransaction[] {
+  const known = knownPrefixes(txs, connectionPrefixes);
   const prefixedRefs = new Set<string>();
   for (const t of txs) {
-    const r = prefixedRef(t.id);
+    const r = prefixedRef(t.id, known);
     if (r) prefixedRefs.add(r);
   }
   // A manual category or segment on a dropped bare twin is rescued onto its prefixed
@@ -48,7 +64,7 @@ export function dedupeBankTransactions(txs: DailyTransaction[]): DailyTransactio
   const segmentRescue = new Map<string, TransactionSegment>();
   const out: DailyTransaction[] = [];
   for (const t of txs) {
-    const br = bareRef(t.id);
+    const br = bareRef(t.id, known);
     if (br && prefixedRefs.has(br)) {
       if (t.categorySource === 'manual' && t.category != null) {
         rescue.set(br, { category: t.category, categorySource: t.categorySource });
@@ -60,7 +76,7 @@ export function dedupeBankTransactions(txs: DailyTransaction[]): DailyTransactio
   }
   if (rescue.size === 0 && segmentRescue.size === 0) return out;
   return out.map((t) => {
-    const r = prefixedRef(t.id);
+    const r = prefixedRef(t.id, known);
     const resc = r ? rescue.get(r) : undefined;
     const seg = r ? segmentRescue.get(r) : undefined;
     let row = resc && t.categorySource !== 'manual' ? { ...t, ...resc } : t;

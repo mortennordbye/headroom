@@ -638,7 +638,7 @@ app.post('/api/data', (req, res) => {
     // evictSupersededPending: reconcile re-adds a stored booked row a stale tab
     // dropped, which could sit beside the pending twin that tab still holds —
     // drop the superseded pending row so it doesn't resurrect on save.
-    merged.dailyTransactions = bank.evictSupersededPending(bank.dropStaleBareTwins(merged.dailyTransactions));
+    merged.dailyTransactions = bank.evictSupersededPending(bank.dropStaleBareTwins(merged.dailyTransactions, bank.connectionPrefixes()));
   }
   const content = JSON.stringify(merged);
   if (content.length > SIZE_WARN_BYTES) {
@@ -1136,7 +1136,7 @@ async function runBankSync() {
     const existingIds = new Set(existing.map((tx) => tx.id));
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
     const tombstones = Array.isArray(blob.deletedBankTombstones) ? blob.deletedBankTombstones : [];
-    blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds, tombstones);
+    blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds, tombstones, bank.connectionPrefixes());
     // Bump rev so *other* open tabs see the change and refetch the freshly-synced
     // rows. The caller returns the new rev so the tab that triggered the sync can
     // adopt it and not treat its own sync as a conflicting external change.

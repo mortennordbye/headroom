@@ -57,9 +57,6 @@ in git and the CHANGELOG, not here.
   tombstones (and their ids) older than it. **Where**: `fetchMappedTransactions` / `startLink` /
   `removeConnection` in `server/bank.js`, `deletedBankIds` / `deletedBankTombstones` in
   `src/context/FinanceContext.tsx`.
-- **Bank-id dedup regex ambiguity.** A legacy bare id whose ref starts with 8 hex chars + `-` is
-  classified as connection-prefixed. **Unblock**: converge the id format, or a secondary key.
-  **Where**: `src/lib/bankDedup.ts`, `dropStaleBareTwins` in `server/bank.js`.
 - **Heuristics to tune.** The keyword table (`src/lib/categorize.ts`), transfer detection
   (`src/lib/transfers.ts`, could use own-IBAN matching), transfer-suggestion thresholds
   (`src/lib/transferSuggestions.ts`, tuned on one dataset), envelope name hints (`NAME_HINTS` in
