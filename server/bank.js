@@ -438,45 +438,71 @@ function mapEBTransactions(txs, opts = {}) {
 // rescued onto its survivor.
 //
 // TWIN: `dedupeBankTransactions` in src/lib/bankDedup.ts (TS/ESM) is a
-// byte-equivalent copy of this logic, including the two regexes below. This CJS
+// byte-equivalent copy of this logic, including the regexes below. This CJS
 // server can't import from src/, so the two are hand-maintained and MUST stay
 // identical — change both or neither.
 //
-// Known limitation (see BACKLOG.md "Bank-id dedup regex ambiguity"): the
-// prefixed-vs-bare split is inherently ambiguous. A legacy BARE id whose ref
-// happens to start with 8 hex chars + '-' (e.g. `eb-a1b2c3d4-...`) is
-// indistinguishable from a real PREFIXED id and is treated as prefixed. Not
-// tightened here because no safe structural discriminator exists — guessing wrong
-// could resurrect or double-count real bank transactions.
-function dropStaleBareTwins(txs) {
-  const PREFIXED = /^eb-[0-9a-f]{8}-(.+)$/i;
-  const BARE = /^eb-(?![0-9a-f]{8}-)(.+)$/i;
+// A legacy bare ref can itself start with 8 hex chars + '-', so the id text alone
+// can't tell `eb-<conn8>-<ref>` from `eb-<ref>`. The 8-hex segment counts as a
+// connection prefix only when a known connection has it: one named in
+// `connectionPrefixes` (see connectionPrefixes() below), or one seen in a row's
+// account key (`<conn8>:<uid>`, stamped on every row a prefixed connection
+// imports). Otherwise the id is bare.
+function dropStaleBareTwins(txs, connectionPrefixes = []) {
+  const PREFIXED = /^eb-([0-9a-f]{8})-(.+)$/i;
+  const BARE = /^eb-(.+)$/i;
+  const CONNECTION_PREFIX = /^eb-([0-9a-f]{8})-$/i;
+  const ACCOUNT_CONNECTION = /^([0-9a-f]{8}):/i;
+  const known = new Set();
+  for (const p of connectionPrefixes) {
+    const m = typeof p === 'string' ? CONNECTION_PREFIX.exec(p) : null;
+    if (m) known.add(m[1].toLowerCase());
+  }
+  for (const t of txs) {
+    const m = typeof t.account === 'string' ? ACCOUNT_CONNECTION.exec(t.account) : null;
+    if (m) known.add(m[1].toLowerCase());
+  }
+  const prefixedRef = (id) => {
+    const m = typeof id === 'string' ? PREFIXED.exec(id) : null;
+    return m && known.has(m[1].toLowerCase()) ? m[2] : null;
+  };
+  const bareRef = (id) => {
+    const m = typeof id === 'string' ? BARE.exec(id) : null;
+    return m && prefixedRef(id) == null ? m[1] : null;
+  };
   const prefixedRefs = new Set();
   for (const t of txs) {
-    const m = PREFIXED.exec(t.id);
-    if (m) prefixedRefs.add(m[1]);
+    const r = prefixedRef(t.id);
+    if (r) prefixedRefs.add(r);
   }
   const rescue = new Map();
   const segmentRescue = new Map();
   const out = [];
   for (const t of txs) {
-    const b = BARE.exec(t.id);
-    if (b && prefixedRefs.has(b[1])) {
-      if (t.categorySource === 'manual' && t.category != null) rescue.set(b[1], { category: t.category, categorySource: t.categorySource });
-      if (t.segment) segmentRescue.set(b[1], t.segment);
+    const br = bareRef(t.id);
+    if (br && prefixedRefs.has(br)) {
+      if (t.categorySource === 'manual' && t.category != null) rescue.set(br, { category: t.category, categorySource: t.categorySource });
+      if (t.segment) segmentRescue.set(br, t.segment);
       continue;
     }
     out.push(t);
   }
   if (rescue.size === 0 && segmentRescue.size === 0) return out;
   return out.map((t) => {
-    const m = PREFIXED.exec(t.id);
-    const r = m && rescue.get(m[1]);
-    const s = m && segmentRescue.get(m[1]);
-    let row = r && t.categorySource !== 'manual' ? { ...t, ...r } : t;
+    const r = prefixedRef(t.id);
+    const resc = r && rescue.get(r);
+    const s = r && segmentRescue.get(r);
+    let row = resc && t.categorySource !== 'manual' ? { ...t, ...resc } : t;
     if (s && !t.segment) row = { ...row, segment: s };
     return row;
   });
+}
+
+// The idPrefix of every live and removed connection, for dropStaleBareTwins. The
+// legacy bare 'eb-' prefix doesn't have the connection-prefix shape and is ignored.
+function connectionPrefixes() {
+  const store = readStore();
+  return [...store.connections, ...(store.removed || [])].map((c) => c.idPrefix);
 }
 
 // A pending row and its later BOOKED version can coexist with different ids: a
@@ -579,7 +605,7 @@ function dropRelinkFormatTwins(existing, incoming) {
   });
 }
 
-function mergeTransactions(existing, incoming, deletedIds = [], tombstones = []) {
+function mergeTransactions(existing, incoming, deletedIds = [], tombstones = [], knownConnectionPrefixes = []) {
   const deleted = new Set(deletedIds);
   // A row the user soft-deleted in the UI must not come back on the next sync.
   const byId = new Map(existing.filter((t) => !deleted.has(t.id)).map((t) => [t.id, t]));
@@ -603,7 +629,7 @@ function mergeTransactions(existing, incoming, deletedIds = [], tombstones = [])
     if (prior && prior.segment) row = { ...row, segment: prior.segment };
     byId.set(t.id, row);
   }
-  return evictSupersededPending(dropStaleBareTwins([...byId.values()]));
+  return evictSupersededPending(dropStaleBareTwins([...byId.values()], knownConnectionPrefixes));
 }
 
 // --- high-level flow used by the routes -------------------------------------
@@ -937,6 +963,7 @@ module.exports = {
   dropRelinkFormatTwins,
   evictSupersededPending,
   dropStaleBareTwins,
+  connectionPrefixes,
   normalizeAccount,
   carryAccountKeys,
   lastSyncAgeMs,
