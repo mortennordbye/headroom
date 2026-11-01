@@ -114,11 +114,6 @@ in git and the CHANGELOG, not here.
   income, which only the context derives today. **Unblock**: a pure per-month savings resolver
   in `src/lib/` shared with `FinanceContext`. **Where**: `src/components/charts/CashflowChart.tsx`,
   `viewSavings` in `src/context/FinanceContext.tsx`.
-- **Year review uses one fixed-expense list for the whole year.** Same bug the cashflow chart had:
-  past months are reconciled against the viewed month's fixed expenses. **Why deferred**: out of
-  scope for the chart fix. **Unblock**: pass per-month resolvers (`monthlyCashflow` accepts them)
-  using `fixedExpensesForMonth`. **Where**: `src/lib/yearReview.ts`, `src/pages/YearReviewPage.tsx`,
-  `mcp/derive.ts`.
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
   `src/lib/envelopes.ts`, `src/context/FinanceContext.tsx`.
 

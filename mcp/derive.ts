@@ -66,6 +66,7 @@ import { estimateBeholdning, projectBeholdning, annualFolketrygdPension } from '
 import { estimateAfpGrunnlag, annualAfp } from '../src/lib/afp';
 import { projectForecast, forecastMortgage } from '../src/lib/forecastProjection';
 import { netWorthFromSnapshot } from '../src/lib/netWorth';
+import { fixedExpensesForMonth } from '../src/lib/snapshots';
 import { paydownVsPlan } from '../src/lib/paydown';
 import { currentResidence, residenceMetrics, loanTimeline } from '../src/lib/property';
 import { summarizeScenario, calcPortfolio } from '../src/lib/secondHome';
@@ -388,15 +389,17 @@ export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey())
   const seasonal = seasonalConfig(blob, monthKey);
   const income = Math.round(v.income);
   // Literal cashflow, as CashflowChart: transfers netted out, budgeted bills
-  // reconciled against their imported payments.
+  // reconciled against their imported payments, each month against its own
+  // fixed expenses plus this month's savings.
+  const { fixedFor, totalFor } = perMonthFixed(blob, v.contributions, currentMonthKey());
   const rows = monthlyCashflow(
     months,
     nonTransferTransactions(blob),
     blob.monthlyIncomes ?? {},
     income,
-    v.totalFixed,
+    totalFor,
     seasonal,
-    blob.fixedExpenses ?? [],
+    fixedFor,
   );
   const health = savingsRateHealth(blob, monthKey, v);
   return {
@@ -416,6 +419,16 @@ export function budgetSummary(blob: ExportPayload, monthKey = currentMonthKey())
     savingsRate: health.status,
     cashflowLast12: rows,
   };
+}
+
+/** Per-month fixed-expense resolvers, as CashflowChart and YearReviewPage build them:
+ *  a past month's recorded list when it has one, else the live list, plus `savings`. */
+function perMonthFixed(blob: ExportPayload, savings: number, nowKey: string) {
+  const snapshots = blob.balanceSnapshots ?? {};
+  const live = blob.fixedExpenses ?? [];
+  const fixedFor = (month: string) => fixedExpensesForMonth(snapshots, live, month, nowKey);
+  const totalFor = (month: string) => fixedFor(month).reduce((sum, item) => sum + item.amount, 0) + savings;
+  return { fixedFor, totalFor };
 }
 
 /** Transactions with internal (own-account) transfers netted out, mirroring the
@@ -469,10 +482,12 @@ export function yearReviewSummary(
     incomeByMonth[m] = blob.monthlyIncomes?.[m] ?? netMonthlyFor(blob, m);
   }
 
+  const { fixedFor, totalFor } = perMonthFixed(blob, savingsView(blob, monthKey).contributions, monthKey);
   const review = yearReview(targetYear, {
     transactions: txs,
     incomeByMonth,
-    totalFixedExpenses: totalFixedExpenses(blob, monthKey),
+    totalFixedExpenses: totalFor,
+    fixedExpenses: fixedFor,
     payslips,
     snapshots,
     netWorthHistory: history,

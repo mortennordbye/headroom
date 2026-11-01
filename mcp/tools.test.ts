@@ -662,6 +662,25 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(r.totalIncome).toBe(net * 6);
   });
 
+  it('budget and year review measure a past month against its recorded fixed expenses', () => {
+    const b = fullFixture();
+    // May recorded a smaller list: only the 14 000 mortgage line.
+    b.balanceSnapshots = {
+      ...b.balanceSnapshots,
+      '2026-05': { ...b.balanceSnapshots!['2026-06'], fixedExpenses: [b.fixedExpenses![0]] },
+    };
+    const live = derive.budgetSummary(b, MONTH);
+    // Same formula as CashflowChart: the month's own list plus this month's savings.
+    const may = live.cashflowLast12.find((r) => r.month === '2026-05')!;
+    const june = live.cashflowLast12.find((r) => r.month === '2026-06')!;
+    expect(may.expenses).toBe(14000 + live.monthlySavings + 4500);
+    expect(june.expenses).toBe(live.totalFixedExpenses + 2000);
+
+    const review = derive.yearReviewSummary(b, 2026, MONTH);
+    expect(review.monthly.find((r) => r.month === '2026-05')!.expenses).toBe(may.expenses);
+    expect(review.monthly.find((r) => r.month === '2026-06')!.expenses).toBe(june.expenses);
+  });
+
   it('recommendations and budget summary agree on savings-rate health', () => {
     const b = fullFixture();
     b.monthlyIncomes = {};

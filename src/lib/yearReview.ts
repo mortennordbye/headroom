@@ -36,12 +36,13 @@ export interface YearReviewInput {
   transactions: DailyTransaction[];
   /** Per-month net income (real overrides merged with derived salary). */
   incomeByMonth: Record<string, number>;
-  totalFixedExpenses: number;
+  totalFixedExpenses: number | ((month: string) => number);
   /**
    * The fixed-expense rows `totalFixedExpenses` was summed from. When supplied, a
    * budgeted bill whose payment was also imported is charged once, not twice.
+   * Pass functions for both to resolve each month's own fixed expenses.
    */
-  fixedExpenses?: FixedExpense[];
+  fixedExpenses?: FixedExpense[] | ((month: string) => FixedExpense[]);
   payslips: Record<string, { tax?: number }>;
   snapshots: Record<string, BalanceSnapshot>;
   netWorthHistory: Record<string, number>;
