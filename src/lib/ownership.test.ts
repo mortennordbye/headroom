@@ -223,6 +223,17 @@ describe('withOwnershipShare (the onboarding question)', () => {
     expect(withOwnershipShare([], 60, M, fresh, 'soon')).toEqual([{ ...fresh, ownershipPct: 40, since: M }]);
   });
 
+  it("never dates a new co-owner into a past co-owner's months", () => {
+    // An ex-partner held half 2020-2024; replaying onboarding with a 2020 move-in.
+    const ex = co({ id: 'ex', since: '2020-01', until: '2024-12' });
+    const next = withOwnershipShare([ex], 60, M, fresh, '2020-01')!;
+    expect(next).toEqual([ex, { ...fresh, ownershipPct: 40, since: '2025-01' }]);
+    expect(ownershipShares({ coOwners: next }, '2022-06').own).toBe(0.5);
+    expect(ownershipShares({ coOwners: next }, '2025-06').own).toBe(0.6);
+    // A later move-in than the last co-owner's exit still wins.
+    expect(withOwnershipShare([ex], 60, M, fresh, '2025-09')).toEqual([ex, { ...fresh, ownershipPct: 40, since: '2025-09' }]);
+  });
+
   it('keeps a co-owner who has left and adds the new one beside them', () => {
     const left = co({ id: 'old', since: '2020-01', until: '2024-12' });
     expect(withOwnershipShare([left], 70, M, fresh)).toEqual([left, { ...fresh, ownershipPct: 30, since: M }]);

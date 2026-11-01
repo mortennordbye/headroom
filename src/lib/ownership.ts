@@ -121,7 +121,8 @@ export function validateCoOwners(list: CoOwner[]): { ok: true } | { ok: false; e
  * in `month` (the onboarding question). History stays as it was:
  * - No current co-owner: one is added holding the rest, owning since the
  *   move-in month (`moveIn`, as the Bolig page does) or `month` when there is
- *   none or it is later.
+ *   none or it is later, and never before the month after a past co-owner's
+ *   last month.
  * - One current co-owner added this month: their row is edited in place, or
  *   removed at 100 %.
  * - One current co-owner from an earlier month: a changed share ends their row
@@ -141,7 +142,10 @@ export function withOwnershipShare(
   const c = active[0];
   let next: CoOwner[];
   if (!c) {
-    const since = isMonthKey(moveIn) && moveIn <= month ? moveIn : month;
+    // Never earlier than the month after a past co-owner left, or their months would be rewritten.
+    const afterLeft = list.flatMap(x => (isMonthKey(x.until) && x.until < month ? [addMonthsKey(x.until, 1)] : []));
+    const since = [isMonthKey(moveIn) && moveIn <= month ? moveIn : month, ...afterLeft]
+      .reduce((a, b) => (b > a ? b : a));
     next = others > 0 ? [...list, { ...newRow, ownershipPct: others, since }] : list;
   } else if (c.ownershipPct === others) {
     next = list;
