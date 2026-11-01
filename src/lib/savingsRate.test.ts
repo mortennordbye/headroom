@@ -478,3 +478,44 @@ describe('savingsForMonth / savingsContributionsForMonth', () => {
     }
   });
 });
+
+describe('the plan\'s loan paydowns count toward the target', () => {
+  const rest: Saving = { id: 'r', name: 'r', amount: 0, mode: 'rest', destinationKind: 'portfolio' };
+  const fund: Saving = { id: 'f', name: 'f', amount: 0, mode: 'percent', percent: 10, destinationKind: 'bsu' };
+
+  it('a rest row takes what the paydowns leave of a target they are no longer spending in', () => {
+    // income 50 000, rent 10 000, paydown 2 000: base 38 000 (paydown still
+    // leaves the account), target 20 % of 40 000 = 8 000, of which the paydown
+    // is 2 000 and the 10 % row 3 800 → rest 2 200.
+    const r = resolveSavingsAmounts([fund, rest], 38000, 20, 2000);
+    expect(r.map(s => s.amount)).toEqual([3800, 2200]);
+    // Without a paydown nothing changes.
+    expect(resolveSavingsAmounts([fund, rest], 38000, 20).map(s => s.amount)).toEqual([3800, 3800]);
+  });
+
+  it('a paydown above the target leaves the rest row nothing', () => {
+    // base 38 000 + 12 000 → target 10 000, all of it and more paid down.
+    expect(resolveSavingsAmounts([rest], 38000, 20, 12000)[0].amount).toBe(0);
+  });
+
+  it('a month adjustment is what the transfers move, whatever the paydowns', () => {
+    expect(resolveSavingsForMonth([rest], 38000, 20, 1500, 2000)[0].amount).toBe(1500);
+  });
+
+  it('savingsForMonth reads the month\'s own plan-linked paydowns', () => {
+    const data: MonthSavingsInput = {
+      savings: [rest],
+      savingsTargetPercent: 20,
+      savingsMonthOverrides: {},
+      balanceSnapshots: {},
+      fixedExpenses: [
+        { id: 'rent', name: 'Rent', amount: 10000 },
+        { id: 'pm', name: 'Extra', amount: 2000, destinationKind: 'mortgage', allocationId: 'm' },
+      ],
+      savingsAllocations: [{ id: 'm', percent: 25, destinationKind: 'mortgage' }],
+    };
+    expect(savingsContributionsForMonth(data, '2026-06', '2026-06', 50000)).toBe(6000);
+    // The same expense made by hand is ordinary spending.
+    expect(savingsContributionsForMonth({ ...data, savingsAllocations: [] }, '2026-06', '2026-06', 50000)).toBe(7600);
+  });
+});

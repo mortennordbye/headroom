@@ -223,6 +223,22 @@ describe('withLinkedPayments', () => {
     expect(calcDebtBalanceByYear(out, 2)).toEqual([24_000, 12_000, 0]);
   });
 
+  it("adds the allocation plan's paydown on top of the instalment", () => {
+    const d = debt({ id: 'd', balance: 24_000, rate: 0, minPayment: 1_000 });
+    const plan = [{ id: 'row', percent: 0, destinationKind: 'debt' as const, debtId: 'd' }];
+    const extra = link({ id: 'x', amount: 500, allocationId: 'row' });
+    // On top of the minimum...
+    expect(withLinkedPayments([d], [extra], plan)[0].minPayment).toBe(1_500);
+    // ...and on top of the larger hand-made instalment, which keeps the max rule.
+    expect(withLinkedPayments([d], [link(), extra], plan)[0].minPayment).toBe(2_000 + 500);
+    // Without its row it is an ordinary linked expense again.
+    expect(withLinkedPayments([d], [link(), extra])[0].minPayment).toBe(2_500);
+    expect(withLinkedPayments([d], [extra])[0].minPayment).toBe(1_000);
+    // A paused one moves nothing; one onto a revolving debt is no extra principal.
+    expect(withLinkedPayments([d], [{ ...extra, automationPaused: true }], plan)[0].minPayment).toBe(1_000);
+    expect(withLinkedPayments([{ ...d, revolving: true }], [extra], plan)[0].minPayment).toBe(1_000);
+  });
+
   it('ignores a non-finite or non-positive expense amount', () => {
     const d = debt({ id: 'd', balance: 24_000, rate: 0, minPayment: 1_000 });
     expect(withLinkedPayments([d], [link({ amount: NaN }), link({ amount: -5 })])[0].minPayment).toBe(1_000);

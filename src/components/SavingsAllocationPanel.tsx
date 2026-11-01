@@ -58,14 +58,24 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
 
   // One flat option list; the value encodes both kind and target id, matching the
   // `debt:<id>` / `savingsAccount:<id>` convention in destinationKey().
-  const options = useMemo(() => [
+  const options = useMemo<{ v: string; l: string; invalid?: boolean }[]>(() => [
     { v: 'bufferAccount', l: t.expenseDestination.buffer },
     { v: 'portfolio', l: t.expenseDestination.portfolio },
     { v: 'bsu', l: t.expenseDestination.bsu },
     ...savingsAccounts.map(s => ({ v: `savingsAccount:${s.id}`, l: `${t.expenseDestination.savings}: ${s.name}` })),
     ...(housingMode !== 'first_buyer' ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }] : []),
-    ...debts.map(d => ({ v: `debt:${d.id}`, l: `${t.expenseDestination.debt}: ${d.name}` })),
-  ], [t, savingsAccounts, debts, housingMode]);
+    // A revolving balance is cleared every month: paying it is spending, not
+    // principal, so it is no place to send savings (see planPaydownRow). A row
+    // that already points at one keeps it, marked invalid, so the select shows
+    // the real target instead of falling back on the first option.
+    ...debts
+      .filter(d => !d.revolving || savingsAllocations.some(a => a.destinationKind === 'debt' && a.debtId === d.id))
+      .map(d => ({
+        v: `debt:${d.id}`,
+        l: `${t.expenseDestination.debt}: ${d.name}${d.revolving ? ` (${t.savingsAllocation.notCountedRevolving})` : ''}`,
+        invalid: !!d.revolving,
+      })),
+  ], [t, savingsAccounts, debts, housingMode, savingsAllocations]);
 
   // The pot is the WHOLE savings target, not the slice still uncommitted.
   // `recommendedInvestment` is the target minus what is already automated, so
@@ -79,13 +89,13 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   const nowKey = currentMonthKey();
   const nowIncome = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
   const sizing = useMemo(
-    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent),
-    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent],
+    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, undefined, debts),
+    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, debts],
   );
   const plan = sizing.plan;
 
   const savingsIds = savingsAccounts.map(s => s.id);
-  const debtIds = debts.map(d => d.id);
+  const debtIds = debts.filter(d => !d.revolving).map(d => d.id);
   // What each destination ALREADY moves every month, from the live expenses.
   // Two jobs: it stops a second click duplicating a transfer, and it lets each
   // row show what is actually running rather than only what is planned.
@@ -111,7 +121,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   const committedTotal = [...committedByKey.values()].reduce((s, n) => s + n, 0);
 
   const creatable = plan.rows.filter(
-    r => isCreatableRow(r, savingsIds, debtIds) && !committedByKey.has(destinationKey(r)),
+    r => !r.excluded && isCreatableRow(r, savingsIds, debtIds) && !committedByKey.has(destinationKey(r)),
   );
 
   // Live savings rows that no plan row covers. Without these the panel is only
@@ -173,7 +183,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     const creating = new Set(creatable.map(r => r.id));
     const made = buildActivation(
       creatable,
-      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating),
+      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating, debts),
       // Same convention as assigning a destination by hand: the first move
       // happens NEXT month, never retroactively.
       currentMonthKey(),
@@ -224,11 +234,6 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
         </span>
       </div>
       <p className="mt-3 text-[12px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{sa.intro}</p>
-      {/* The budget's target still counts a paydown as spending (see
-          sizeAllocation), so say why the two figures can differ. */}
-      {savingsAllocations.some(a => a.destinationKind === 'mortgage' || a.destinationKind === 'debt') && (
-        <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{sa.paydownNote}</p>
-      )}
       {/* Says out loud what the per-row switch does. The difference between the
           two modes is the whole feature, and a two-letter toggle can't carry it. */}
       <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
@@ -319,8 +324,10 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                   value={destinationKey(row)}
                   onChange={e => setTarget(row.id, e.target.value)}
                   aria-label={sa.targetLabel}
+                  aria-invalid={row.excluded === 'revolving' || undefined}
+                  style={row.excluded === 'revolving' ? { color: 'var(--negative)' } : undefined}
                 >
-                  {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                  {options.map(o => <option key={o.v} value={o.v} disabled={o.invalid}>{o.l}</option>)}
                 </select>
                 <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-2)]" />
               </div>
@@ -332,7 +339,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                 <input
                   className={pctInputCls}
                   inputMode="decimal"
-                  value={row.amount ?? 0}
+                  value={(row.excluded ? savingsAllocations.find(a => a.id === row.id)?.amount : row.amount) ?? 0}
                   aria-label={sa.amountLabel}
                   onChange={e => updateSavingsAllocation(row.id, { amount: Number(e.target.value) || 0 })}
                 />
@@ -376,6 +383,11 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                   title={sa.activeHint}
                 >
                   {sa.active.replace('{amount}', formatCurrency(committedByKey.get(destinationKey(row))!))}
+                </span>
+              )}
+              {row.excluded && (
+                <span className="text-[10.5px] font-medium" style={{ color: 'var(--warning)' }}>
+                  {row.excluded === 'paused' ? sa.notCountedPaused : sa.notCountedRevolving}
                 </span>
               )}
               <span className="ml-auto text-[13px] font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>

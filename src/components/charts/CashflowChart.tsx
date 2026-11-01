@@ -31,7 +31,7 @@ import { cashflowSavingsForMonth } from '../../lib/savingsMatch';
 export default function CashflowChart() {
   const {
     t, lang, currentMonth, monthlyIncomes, effectiveIncome, derivedNetMonthlyFor,
-    balanceSnapshots, fixedExpenses, savings, savingsTargetPercent, savingsMonthOverrides,
+    balanceSnapshots, fixedExpenses, savings, savingsTargetPercent, savingsMonthOverrides, savingsAllocations, debts,
     region, grossAnnualIncome, employerCostConfig,
     // Whole-finance cashflow: net out internal transfers, but not per-account (income
     // isn't account-scoped), so use nonTransferTransactions.
@@ -51,7 +51,7 @@ export default function CashflowChart() {
     // month is reconciled against its own fixed expenses and savings, not the
     // viewed month's.
     const nowKey = currentMonthKey();
-    const savingsData = { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses };
+    const savingsData = { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, debts };
     const fixedFor = (month: string) => fixedExpensesForMonth(balanceSnapshots, fixedExpenses, month, nowKey);
     const totalFor = (month: string) => fixedFor(month).reduce((sum, item) => sum + item.amount, 0);
     const cashflowSavings = {
@@ -64,7 +64,7 @@ export default function CashflowChart() {
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),
         income, expenses, saved, net,
       }));
-  }, [currentMonth, monthlyIncomes, effectiveIncome, derivedNetMonthlyFor, savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, dailyTransactions, allTransactions, internalTransferIds, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
+  }, [currentMonth, monthlyIncomes, effectiveIncome, derivedNetMonthlyFor, savings, savingsTargetPercent, savingsMonthOverrides, savingsAllocations, debts, balanceSnapshots, fixedExpenses, dailyTransactions, allTransactions, internalTransferIds, dateLocale, region, grossAnnualIncome, employerCostConfig.feriepengesatsPct]);
 
   return (
     <div role="img" aria-label={t.charts.aria.cashflow} className="w-full h-full">

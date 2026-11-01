@@ -34,7 +34,7 @@ const ForecastPage: React.FC = () => {
     t, totalFixedExpenses, salaries, jobs, bonuses, overtime, loan, income,
     formatCurrency, region, customTaxRatePct, pension,
     planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, currentMortgage, bsuTaxCredit,
-    assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts, fixedExpenses,
+    assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts, fixedExpenses, savingsAllocations,
     forecastAssumptions: fa, setForecastAssumptions, holidaySurplusFor, employerCostConfig,
   } = useFinance();
   const reduced = useReducedMotion();
@@ -188,9 +188,9 @@ const ForecastPage: React.FC = () => {
     houseGrowthPct: houseGrowthRate,
     startShares: netInvestment,
     startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
-    debts: withLinkedPayments(debts, fixedExpenses),
+    debts: withLinkedPayments(debts, fixedExpenses, savingsAllocations),
     monthKey: today,
-  }), [currentGross, startYear, startHolidaySurplus, feriepengesatsPct, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, fixedExpenses, today]);
+  }), [currentGross, startYear, startHolidaySurplus, feriepengesatsPct, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, fixedExpenses, savingsAllocations, today]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),

@@ -101,6 +101,7 @@ const AssetPage: React.FC = () => {
     region,
     housingMode,
     setHousingMode,
+    savingsAllocations,
   } = useFinance();
   const reduced = useReducedMotion();
 
@@ -271,8 +272,8 @@ const AssetPage: React.FC = () => {
     [myValue, mortgage.balance, projHouseGrowth, mortgage.ratePct, projMortgageTerm]
   );
   const debtByYear = useMemo(
-    () => calcDebtBalanceByYear(withLinkedPayments(debts, fixedExpenses), 15, currentMonthKey()),
-    [debts, fixedExpenses],
+    () => calcDebtBalanceByYear(withLinkedPayments(debts, fixedExpenses, savingsAllocations), 15, currentMonthKey()),
+    [debts, fixedExpenses, savingsAllocations],
   );
   const mortgageBalances = useMemo(
     () => calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, projMortgageTerm, 15),

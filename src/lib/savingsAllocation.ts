@@ -9,7 +9,7 @@
 // into fixed expenses explicitly, and those post through the normal automation
 // runner (src/lib/automation.ts). That keeps one path to a balance change and
 // keeps the amounts inside the budget, where the savings-rate math can see them.
-import type { AllocationDestinationKind } from '../context/FinanceContext';
+import type { AllocationDestinationKind, Debt, FixedExpense } from '../context/FinanceContext';
 
 export interface SavingsAllocation {
   id: string;
@@ -34,6 +34,10 @@ export interface SavingsAllocation {
 export interface AllocationRow extends SavingsAllocation {
   /** The allocation's share of the target, in kr (whole kroner). */
   amount: number;
+  /** A loan paydown row that is not counted as saving: its expense is paused,
+   *  or its debt is revolving (`planPaydownRow`). It takes nothing from the
+   *  target (`amount` 0), so the other rows split it as the budget does. */
+  excluded?: 'paused' | 'revolving';
 }
 
 /**
@@ -174,4 +178,61 @@ export function destinationKey(
   if (d.destinationKind === 'savingsAccount') return `savingsAccount:${d.savingsAccountId ?? ''}`;
   if (d.destinationKind === 'debt') return `debt:${d.debtId ?? ''}`;
   return d.destinationKind;
+}
+
+/** The fields of a fixed expense that tie it to an allocation row. */
+type LinkedExpense = Pick<FixedExpense, 'amount' | 'allocationId' | 'destinationKind' | 'debtId' | 'automationPaused'>;
+
+/** The row a linked expense belongs to, if that row still exists and still
+ *  points where the expense pays. */
+export function governingRow<R extends SavingsAllocation>(
+  e: LinkedExpense, byId: ReadonlyMap<string, R>,
+): R | undefined {
+  const row = e.allocationId ? byId.get(e.allocationId) : undefined;
+  if (!row || !e.destinationKind) return undefined;
+  return destinationKey(row) === destinationKey({ destinationKind: e.destinationKind, debtId: e.debtId })
+    ? row : undefined;
+}
+
+/** The debts' flags a paydown rule reads: only whether one is revolving. */
+export type PaydownDebts = readonly Pick<Debt, 'id' | 'revolving'>[] | undefined;
+
+/**
+ * The row an expense pays down a loan for, when it counts as the plan's saving:
+ * its row still governs it (`governingRow`), it isn't paused (a paused expense
+ * moves nothing onto the loan, as `withLinkedPayments` and
+ * `monthlyPaydownPrincipal` read it), and it doesn't pay a revolving debt (a
+ * balance cleared every month is spending, never principal).
+ */
+export function planPaydownRow<R extends SavingsAllocation>(
+  e: LinkedExpense, byId: ReadonlyMap<string, R>, debts?: PaydownDebts,
+): R | undefined {
+  if (e.automationPaused) return undefined;
+  if (e.destinationKind === 'debt' && debts?.some(d => d.id === e.debtId && d.revolving)) return undefined;
+  return governingRow(e, byId);
+}
+
+/**
+ * What the plan's own loan paydowns move a month: the fixed expenses an
+ * allocation row created to pay extra on the mortgage or a debt
+ * (`planPaydownRow`). Extra principal raises net worth like a deposit, so this
+ * is SAVING wherever the month is split into saving and spending: it counts
+ * toward the savings target, never as consumption the target is a share of.
+ * The whole payment counts, not just its principal: the plan's paydown is an
+ * extra on top of the loan's own instalment, which already covers the interest.
+ *
+ * It is not cash, though. A projection already amortizes the loan with the
+ * payment (`withLinkedPayments`), so it must not add this to the cash it saves.
+ */
+export function planPaydownTotal(
+  allocations: readonly SavingsAllocation[] | undefined,
+  fixedExpenses: readonly LinkedExpense[],
+  debts?: PaydownDebts,
+): number {
+  if (!allocations?.length) return 0;
+  const byId = new Map(allocations.map(a => [a.id, a]));
+  return fixedExpenses.reduce(
+    (sum, e) => (planPaydownRow(e, byId, debts) && Number.isFinite(e.amount) && e.amount > 0 ? sum + e.amount : sum),
+    0,
+  );
 }

@@ -15,6 +15,8 @@ import { fullFixture } from './fixture';
 import { prepayVsInvestFor } from '../src/lib/prepayVsInvest';
 import { DEFAULT_FORECAST_ASSUMPTIONS, EMPTY_SCENARIO } from '../src/lib/forecastProjection';
 import { retirementIncomeInTodaysKroner } from '../src/lib/retirementIncome';
+import { buildActivation, sizeAllocation } from '../src/lib/allocationSync';
+import type { SavingsAllocation } from '../src/lib/savingsAllocation';
 
 const MONTH = '2026-06';
 
@@ -913,5 +915,50 @@ describe('derive: "now" is the Oslo month, whatever the host zone', () => {
     expect(a.equityBreakdown.houseEquity).toBe(solo.equityBreakdown.houseEquity);
     expect(a.netWorth).toBe(solo.netWorth);
     expect(derive.overview(b).netWorth).toBe(solo.netWorth);
+  });
+});
+
+describe('derive: a plan-linked loan paydown is saving, as in the app', () => {
+  // income 50 000, rent 10 000, 20 % target; the plan pays 2 000 extra on the
+  // student loan and puts the rest in BSU. Activated the way the panel does it.
+  function planned(): { blob: ExportPayload; target: number } {
+    const b = fixture();
+    b.monthlyIncomes = { [MONTH]: 50000 };
+    b.savingsTargetPercent = 20;
+    const rent = { id: 'rent', name: 'Rent', amount: 10000 };
+    const allocs: SavingsAllocation[] = [
+      { id: 'd', percent: 0, mode: 'amount', amount: 2000, destinationKind: 'debt', debtId: 'd1' },
+      { id: 'r', percent: 0, mode: 'rest', destinationKind: 'bsu' },
+    ];
+    const sizing = sizeAllocation(allocs, 50000, [rent], 20);
+    let n = 0;
+    const made = buildActivation(sizing.plan.rows, sizeAllocation(allocs, 50000, [rent], 20, new Set(['d', 'r'])),
+      MONTH, () => 'x', () => `n${n++}`, [rent]);
+    b.fixedExpenses = [rent, ...made.expenses];
+    b.savings = made.savings;
+    b.savingsAllocations = allocs;
+    return { blob: b, target: sizing.target };
+  }
+
+  it("the MCP's saving and unallocated match the allocation panel's target", () => {
+    const { blob, target } = planned();
+    const recs = derive.recommendations(blob, MONTH);
+    expect(target).toBe(8000);
+    expect(recs.budgetPlan.recommendedInvestment).toBe(0);
+    expect(recs.plannedMonthlySaving).toBe(target);
+    expect(recs.planLoanPaydown).toBe(2000);
+    expect(recs.budgetPlan.recommendedSpending).toBe(50000 - 10000 - target);
+    // The transfers alone: the paydown is a fixed expense, not a transfer.
+    expect(derive.budgetSummary(blob, MONTH).monthlySavings).toBe(6000);
+    expect(derive.budgetSummary(blob, MONTH).planLoanPaydown).toBe(2000);
+  });
+
+  it('the forecast seeds its cash saving without the paydown it amortizes the loan with', () => {
+    const { blob } = planned();
+    blob.forecastAssumptions = undefined;
+    const f = derive.forecast(blob, {}, MONTH);
+    // No salaries in the fixture, so no holiday pay on top of the gross.
+    const net = derive.taxFor(blob, derive.grossAnnualIncome(blob, MONTH), false).netAnnual;
+    expect(f.scenario.savingsPct).toBe(Math.min(90, Math.round((6000 * 12 / net) * 100)));
   });
 });

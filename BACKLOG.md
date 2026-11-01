@@ -22,6 +22,22 @@ in git and the CHANGELOG, not here.
   allowed, so likely the projection should pay a linked expense from month 0 while the minimum
   still waits). **Where**: `simulatePayoff` in `src/lib/debt.ts`, `AutomationState.debts` and the
   debt paydown in `src/lib/automation.ts`.
+- **Projections ignore an extra mortgage paydown.** A plan-linked paydown now counts as saving
+  and is kept out of the cash a projection saves, because the projection is meant to amortize the
+  loan with it. Debts do (`withLinkedPayments`), but the mortgage is still projected at its
+  scheduled annuity from today's balance, so the extra principal shows up only as the real
+  balance falls month by month. Predates the paydown-as-saving change, which made it more
+  visible: a mortgage-paydown user's projected net worth now grows (1 - target%) x paydown a month
+  less, since that share of the target moved from cash into the unprojected paydown. **Why
+  deferred**: the mortgage projection is a closed-form annuity shared by the Dashboard, Assets,
+  Forecast and MCP forecast (and by the rentefradrag in the forecast's tax), so taking extra
+  principal means a month-by-month schedule there and its own tests, a change of its own rather
+  than part of where the budget counts the paydown. **Unblock**: let the mortgage
+  projection take the linked paydown expenses as extra monthly principal, the way
+  `withLinkedPayments` does for debts. **Where**: `calcHouseEquityByYear` /
+  `calcMortgageBalanceByYear` in `src/lib/calculations.ts`, `forecastMortgage` in
+  `src/lib/forecastProjection.ts`, `src/pages/DashboardPage.tsx`, `src/pages/ForecastPage.tsx`,
+  `src/pages/AssetPage.tsx`, `forecast` in `mcp/derive.ts`.
 - **OTP base, remaining gaps.** Bonuses and overtime are per-user settings and the scheme can
   be linked to one job, but on-call is always counted, the § 5-5 annet ledd bokstav b variant
   (last year's pay as the base) is not modelled, and the job link only narrows bonuses and
@@ -121,18 +137,57 @@ in git and the CHANGELOG, not here.
 - **The savings target shrinks as you automate, by construction** (it's a share of the
   uncommitted residual). Surfaced in the panel rather than changed. **Where**:
   `calcRecommendations` in `src/lib/calculations.ts`.
-- **The allocation panel's target and the budget's savings target disagree once a paydown row is
-  active.** The panel (`sizeAllocation`) leaves the plan's own mortgage/debt paydowns out of
-  spending so activating and syncing them can't shift the target; `calcRecommendations` /
-  `plannedMonthlySaving` still count them as spending, so the Budget Saving pill, its
-  "unallocated" note and the Dashboard read lower. Surfaced with a caption in the panel. **Why
-  deferred**: counting a linked paydown as saving in `plannedMonthlySaving` spreads into the
-  Dashboard and Forecast projections (which already amortize the loan, so the paydown would count
-  twice), the savings-rate chart (`paydownPrincipal`), the pill split and the MCP's own copy in
-  `mcp/derive.ts`. **Unblock**: decide whether a plan-linked paydown is saving or spending
-  everywhere. **Where**: `src/lib/allocationSync.ts`, `src/lib/calculations.ts`,
-  `src/context/FinanceContext.tsx`, `src/components/SmartRecommendations.tsx`,
-  `src/pages/DashboardPage.tsx`, `mcp/derive.ts`.
+- **The cashflow chart and Year review still count a plan paydown as an expense.** A paydown the
+  savings allocation set up is saving everywhere the month is split into saving and spending
+  (`planPaydownTotal`), but `monthlyCashflow` takes each month's whole fixed-expense total as
+  expenses and only the savings transfers as `saved`, so these two views still show it under
+  expenses. **Why deferred**: it was left out of the paydown-as-saving change while #363 was
+  reworking that cashflow code, to avoid a collision; #363 has merged, so nothing blocks it now
+  beyond keeping that change small. **Unblock**: move each month's plan paydown out of the fixed
+  total and into the month's savings (`cashflowSavingsForMonth`), with that month's fixed
+  expenses, allocations and debts. **Where**: `src/lib/monthlyCashflow.ts`,
+  `src/components/charts/CashflowChart.tsx`, `src/pages/YearReviewPage.tsx`,
+  `src/lib/yearReview.ts`, `src/lib/savingsMatch.ts`, `perMonthFixed` and `budgetSummary` in
+  `mcp/derive.ts`.
+- **A mortgage plan paydown still counts as saving in first-buyer mode.** `planPaydownRow` checks
+  the row, the pause flag and revolving debts, not the housing mode, while the automation runner
+  skips mortgage rules when `housingMode` is `first_buyer` (there is no mortgage), so the budget
+  counts a paydown that moves nothing. **Why deferred**: found in review after the
+  paydown-as-saving change; it needs the housing mode threaded through every `planPaydownTotal`
+  caller. **Unblock**: pass `housingMode` (or a "has mortgage" flag) to `planPaydownRow` and treat
+  a mortgage paydown as not counted in `first_buyer`, with the panel marking the row like a paused
+  one. **Where**: `planPaydownRow` in `src/lib/savingsAllocation.ts`, `sizeAllocation` in
+  `src/lib/allocationSync.ts`, the mortgage skip in `computeAutomationPostings`
+  (`src/lib/automation.ts`), `src/context/FinanceContext.tsx`, `savingsView` in `mcp/derive.ts`.
+- **The allocation panel's select falls back to the first option for a mortgage row in
+  first-buyer mode.** The mortgage option is only listed outside `first_buyer`, so a row that
+  already targets it has no matching `<option>` and the select shows "Bufferkonto". **Why
+  deferred**: found in review; same shape as the revolving-debt fix but a different condition.
+  **Unblock**: keep the mortgage option when a row targets it, disabled and marked invalid, as is
+  done for a revolving debt. **Where**: the `options` list in
+  `src/components/SavingsAllocationPanel.tsx`.
+- **The runner charges loan interest against a plan paydown when the regular instalment isn't a
+  linked expense.** If the only expense linked to a loan is the plan's extra paydown, the
+  automation runner treats it as the whole payment and takes the month's interest out of it, so
+  less principal is posted than the budget counts as saving. **Why deferred**: found in review;
+  changing it touches the posting maths (interest coverage, `uncoveredMonths`) the runner shares
+  with every paydown. **Unblock**: decide whether the runner should assume the instalment is paid
+  outside the app (charge no interest to a plan paydown) or keep charging it and have the budget
+  count only the principal in that case. **Where**: the loan interest handling in
+  `computeAutomationPostings` in `src/lib/automation.ts`, `planPaydownTotal` in
+  `src/lib/savingsAllocation.ts`.
+- **`totalMonthlyDebtService` has no finite guard.** The Budget page sums each debt's raw
+  `minPayment`, so a hand-edited NaN or undefined shows as "NaN kr". **Why deferred**: found in
+  review, unrelated to the paydown change. **Unblock**: sum through the shared finite guard (as
+  `withLinkedPayments` does). **Where**: `totalMonthlyDebtService` in `src/pages/BudgetPage.tsx`.
+- **`targetRateOfIncome` overshoots once the target is fully automated.** It adds the target share
+  of the residual left after the transfers on top of the transfers themselves, so with the whole
+  target automated the target line reads above what the plan sets aside. **Why deferred**: found
+  in review; changing it moves the savings-rate target line and the on-track status in the app
+  and the MCP. **Unblock**: compute the target as the plan's target saving (as
+  `calcRecommendations` does) over income, plus the paydown principal. **Where**:
+  `targetRateOfIncome` in `src/lib/savingsRate.ts`, `SavingsRateChart.tsx`, `BudgetPage.tsx`,
+  `savingsRateHealth` in `mcp/derive.ts`.
 - **Some one-legged savings transfers are still counted twice in the cashflow.** The cashflow
   and year review match a planned saving to its imported outgoing row only when the payee after
   "Til:" is the saving's name (`savingsMatch.ts`), so a real purchase can never vanish. Accepted

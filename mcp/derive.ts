@@ -91,6 +91,7 @@ import {
   targetRateOfIncome,
   planSavingsRateSeries,
 } from '../src/lib/savingsRate';
+import { planPaydownTotal } from '../src/lib/savingsAllocation';
 
 // ---- shared helpers -------------------------------------------------------
 
@@ -218,8 +219,10 @@ export function savingsView(blob: ExportPayload, monthKey: string) {
   const target = blob.savingsTargetPercent ?? 20;
   const savings = blob.savings ?? [];
   const monthSaving = blob.savingsMonthOverrides?.[monthKey];
-  const plan = resolveSavingsAmounts(savings, pool, target);
-  const view = monthSaving === undefined ? plan : resolveSavingsForMonth(savings, pool, target, monthSaving);
+  // The plan's own loan paydowns: saving, not consumption. Mirrors `planPaydown`.
+  const planPaydown = planPaydownTotal(blob.savingsAllocations, fixed, blob.debts);
+  const plan = resolveSavingsAmounts(savings, pool, target, planPaydown);
+  const view = monthSaving === undefined ? plan : resolveSavingsForMonth(savings, pool, target, monthSaving, planPaydown);
   const contributions = savingsContributionTotal(view);
   const planContributions = savingsContributionTotal(plan);
   const fixedTotal = fixed.reduce((s, e) => s + e.amount, 0);
@@ -228,6 +231,7 @@ export function savingsView(blob: ExportPayload, monthKey: string) {
     pool,
     target,
     monthSaving,
+    planPaydown,
     savings: view,
     contributions,
     planContributions,
@@ -253,13 +257,16 @@ function incomeStats(blob: ExportPayload, monthKey: string) {
 function budgetPlan(blob: ExportPayload, monthKey: string) {
   const v = savingsView(blob, monthKey);
   const { average, volatility } = incomeStats(blob, monthKey);
+  const targetPool = v.pool + v.planPaydown;
   const monthTargetPct = v.monthSaving === undefined
     ? v.target
-    : v.pool > 0 ? Math.min(100, (v.monthSaving / v.pool) * 100) : 0;
-  const plan = calcRecommendations(v.income, average, v.totalFixed, volatility, monthTargetPct, v.contributions);
+    : targetPool > 0 ? Math.min(100, ((v.monthSaving + v.planPaydown) / targetPool) * 100) : 0;
+  const plan = calcRecommendations(v.income, average, v.totalFixed, volatility, monthTargetPct, v.contributions + v.planPaydown);
+  // Cash only, as in the app: projections amortize the loans with the paydowns.
   let planMonthlySaving = v.contributions + Math.max(0, plan.recommendedInvestment);
   if (v.monthSaving !== undefined) {
-    const base = calcRecommendations(v.income, average, v.fixedTotal + v.planContributions, volatility, v.target, v.planContributions);
+    const base = calcRecommendations(v.income, average, v.fixedTotal + v.planContributions, volatility, v.target,
+      v.planContributions + v.planPaydown);
     planMonthlySaving = v.planContributions + Math.max(0, base.recommendedInvestment);
   }
   return { view: v, plan, planMonthlySaving };
@@ -412,9 +419,13 @@ export function budgetSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
     essentialMonthlyExpenses: Math.round(essentialMonthlyExpenses(blob.fixedExpenses ?? [])),
     fixedByType: fixedExpenseTotalsByType(blob.fixedExpenses ?? []),
     savingsTargetPercent: v.target,
-    // This month's savings transfers, resolved to kroner. `monthAdjustment` is the
-    // one-month saving the user set for this month (null = follows the plan).
+    // This month's savings TRANSFERS only, resolved to kroner. `monthAdjustment`
+    // is the one-month amount the user set for those transfers (null = follows
+    // the plan). The allocation plan's own loan paydowns are saving too but are
+    // fixed expenses, reported apart as `planLoanPaydown` (inside
+    // `totalFixedExpenses`).
     monthlySavings: Math.round(v.contributions),
+    planLoanPaydown: Math.round(v.planPaydown),
     monthAdjustment: v.monthSaving ?? null,
     // `savingsRate.trailingRate` is a share of income: compare it with
     // `savingsRateTargetOfIncomePct`, not with `savingsTargetPercent`.
@@ -438,6 +449,8 @@ function perMonthFixed(blob: ExportPayload, nowKey: string) {
     savingsMonthOverrides: blob.savingsMonthOverrides ?? {},
     balanceSnapshots: snapshots,
     fixedExpenses: live,
+    savingsAllocations: blob.savingsAllocations,
+    debts: blob.debts,
   };
   const fixedFor = (month: string) => fixedExpensesForMonth(snapshots, live, month, nowKey);
   const fixedTotalFor = (month: string) => fixedFor(month).reduce((sum, item) => sum + item.amount, 0);
@@ -523,7 +536,7 @@ export function debtAnalysis(
   strategy: PayoffStrategy = 'avalanche',
   monthKey = osloMonthKey(),
 ) {
-  const debts = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []);
+  const debts = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? [], blob.savingsAllocations);
   const baseline = planPayoff(debts, 0, strategy, monthKey);
   const withExtra = planPayoff(debts, extraMonthly, strategy, monthKey);
   return {
@@ -613,7 +626,10 @@ export function recommendations(blob: ExportPayload, monthKey = osloMonthKey()) 
   return {
     monthKey,
     budgetPlan: plan,
-    plannedMonthlySaving: Math.round(planMonthlySaving),
+    // The whole saving, as the app's Saving pill: transfers, the plan's loan
+    // paydowns (extra principal) and the unallocated rest.
+    plannedMonthlySaving: Math.round(planMonthlySaving + v.planPaydown),
+    planLoanPaydown: Math.round(v.planPaydown),
     savingsRateTargetOfIncomePct: Math.round(health.targetRateOfIncomePct * 10) / 10,
     savingsRate: health.status,
     history: computeHistoryInsights(
@@ -656,7 +672,7 @@ export function whatIfExtraDebtPayment(
   debtId: string,
   extraMonthly: number,
 ) {
-  const debt = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []).find((d) => d.id === debtId);
+  const debt = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? [], blob.savingsAllocations).find((d) => d.id === debtId);
   if (!debt) throw new Error(`no debt with id "${debtId}"`);
   // The linked expenses' payment (never under the minimum); the extra goes on top.
   const basePayment = debt.minPayment;
@@ -957,7 +973,7 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,
       startOtherAssets: eq.netCrypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
-      debts: withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []),
+      debts: withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? [], blob.savingsAllocations),
       monthKey,
       startHolidaySurplus,
       feriepengesatsPct,

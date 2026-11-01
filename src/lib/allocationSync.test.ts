@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { allocationSyncPlan, buildActivation, sizeAllocation, type AllocationSizing } from './allocationSync';
 import {
-  destinationKey, isCreatableRow, type AllocationPlan, type AllocationRow, type SavingsAllocation,
+  destinationKey, isCreatableRow, planPaydownTotal, type AllocationPlan, type AllocationRow, type SavingsAllocation,
 } from './savingsAllocation';
-import { resolveSavingsAmounts, savingsBase } from './savingsRate';
-import type { FixedExpense, Saving } from '../context/FinanceContext';
+import { resolveSavingsAmounts, savingsBase, savingsContributionTotal } from './savingsRate';
+import { calcRecommendations, planMonthlySavingFor } from './calculations';
+import { withLinkedPayments } from './debt';
+import type { Debt, FixedExpense, Saving } from '../context/FinanceContext';
 
 const row = (p: Partial<AllocationRow> & Pick<AllocationRow, 'id' | 'amount' | 'destinationKind'>): AllocationRow =>
   ({ percent: 0, ...p });
@@ -139,6 +141,111 @@ describe('sizeAllocation', () => {
   });
 });
 
+// What the budget reads once the plan is live, the way FinanceContext and the
+// MCP derive it: live savings resolved with the plan's paydowns, then the
+// recommendation with those paydowns counted as set aside.
+function budgetFromLive(income: number, fixed: FixedExpense[], savings: Saving[], allocs: SavingsAllocation[], pct: number) {
+  const paydown = planPaydownTotal(allocs, fixed);
+  const live = resolveSavingsAmounts(savings, savingsBase(income, fixed), pct, paydown);
+  const transfers = savingsContributionTotal(live);
+  const consumption = fixed.reduce((s, e) => s + e.amount, 0);
+  const recs = calcRecommendations(income, income, consumption + transfers, 0, pct, transfers + paydown);
+  return {
+    paydown, transfers, recs,
+    // The Budget Saving pill: transfers + paydowns + the unallocated rest.
+    savingPill: transfers + paydown + recs.recommendedInvestment,
+    // What a projection annualises as cash.
+    cash: planMonthlySavingFor(income, consumption, transfers, pct, paydown),
+  };
+}
+
+describe('the panel and the budget agree once a paydown row is active', () => {
+  const rent: FixedExpense = { id: 'rent', name: 'Rent', amount: 10000 };
+  const activateAll = (allocs: SavingsAllocation[], fixed: FixedExpense[], income: number, pct: number) => {
+    let n = 0;
+    const plan = sizeAllocation(allocs, income, fixed, pct).plan;
+    const creating = new Set(plan.rows.map(r => r.id));
+    return buildActivation(plan.rows, sizeAllocation(allocs, income, fixed, pct, creating), '2026-11',
+      () => 'x', () => `n${n++}`, fixed);
+  };
+
+  it('a mortgage paydown and a rest row: same target, nothing unallocated', () => {
+    const allocs: SavingsAllocation[] = [
+      { id: 'm', percent: 0, mode: 'amount', amount: 2000, destinationKind: 'mortgage' },
+      { id: 'r', percent: 0, mode: 'rest', destinationKind: 'bsu' },
+    ];
+    const sizing = sizeAllocation(allocs, 50000, [rent], 20);
+    expect(sizing.target).toBe(8000);
+    const made = activateAll(allocs, [rent], 50000, 20);
+    const b = budgetFromLive(50000, [rent, ...made.expenses], made.savings, allocs, 20);
+    expect(b.paydown).toBe(2000);
+    expect(b.transfers).toBe(6000);
+    expect(b.recs.recommendedInvestment).toBe(0);
+    expect(b.savingPill).toBe(sizing.target);
+    expect(b.recs.recommendedSpending).toBe(50000 - 10000 - sizing.target);
+  });
+
+  it('a paused or revolving paydown is spending in both', () => {
+    const allocs: SavingsAllocation[] = [
+      { id: 'd', percent: 0, mode: 'amount', amount: 2000, destinationKind: 'debt', debtId: 'card' },
+      { id: 'r', percent: 0, mode: 'rest', destinationKind: 'bsu' },
+    ];
+    const made = activateAll(allocs, [rent], 50000, 20);
+    const debts = [{ id: 'card', revolving: true }];
+    for (const [fixed, flags] of [
+      [[rent, ...made.expenses.map(x => ({ ...x, automationPaused: true }))], undefined],
+      [[rent, ...made.expenses], debts],
+    ] as const) {
+      const sizing = sizeAllocation(allocs, 50000, [...fixed], 20, undefined, flags);
+      // The paydown is spending again, so the target is a share of 38 000.
+      expect(sizing.target).toBe(7600);
+      expect(planPaydownTotal(allocs, fixed, flags)).toBe(0);
+      const live = resolveSavingsAmounts(made.savings, savingsBase(50000, [...fixed]), 20, 0);
+      const transfers = savingsContributionTotal(live);
+      const recs = calcRecommendations(50000, 50000, 12000 + transfers, 0, 20, transfers);
+      expect(transfers + recs.recommendedInvestment).toBe(sizing.target);
+      // The panel's BSU row is what the live rest transfer moves, and the
+      // paydown row takes nothing from the target.
+      const row = (id: string) => sizing.plan.rows.find(r => r.id === id)!;
+      expect(row('r').amount).toBe(live.find(sv => sv.allocationId === 'r')!.amount);
+      expect(row('r').amount).toBe(7600);
+      expect(row('d')).toMatchObject({ amount: 0, excluded: flags ? 'revolving' : 'paused', mode: 'amount' });
+      // Syncing never zeroes the paydown's own transfer.
+      expect(allocationSyncPlan(sizing, made.savings, [...fixed])).toEqual([]);
+    }
+  });
+
+  it('a partial plan leaves the same remainder unallocated in both', () => {
+    const allocs: SavingsAllocation[] = [
+      { id: 'm', percent: 25, destinationKind: 'mortgage' },
+      { id: 'b', percent: 50, destinationKind: 'bsu' },
+    ];
+    const sizing = sizeAllocation(allocs, 50000, [rent], 20);
+    const made = activateAll(allocs, [rent], 50000, 20);
+    const b = budgetFromLive(50000, [rent, ...made.expenses], made.savings, allocs, 20);
+    expect(b.recs.recommendedInvestment).toBe(sizing.plan.remainder);
+    expect(b.savingPill).toBe(sizing.target);
+  });
+
+  it('projections do not count a debt paydown twice: cash plus the extra payment is the target', () => {
+    const debt: Debt = { id: 'card', name: 'Card', type: 'consumer', balance: 50000, rate: 12, minPayment: 500 };
+    const allocs: SavingsAllocation[] = [
+      { id: 'd', percent: 0, mode: 'amount', amount: 2000, destinationKind: 'debt', debtId: 'card' },
+      { id: 'r', percent: 0, mode: 'rest', destinationKind: 'portfolio' },
+    ];
+    const made = activateAll(allocs, [rent], 50000, 20);
+    const fixed = [rent, ...made.expenses];
+    const b = budgetFromLive(50000, fixed, made.savings, allocs, 20);
+    // The projection pays the plan's paydown on top of the instalment...
+    const [projected] = withLinkedPayments([debt], fixed, allocs);
+    expect(projected.minPayment).toBe(500 + 2000);
+    // ...so its cash leaves the paydown out, and cash plus the extra over the
+    // instalment adds up to the target.
+    expect(b.cash).toBe(6000);
+    expect(b.cash + projected.minPayment - debt.minPayment).toBe(sizeAllocation(allocs, 50000, [rent], 20).target);
+  });
+});
+
 // Property check: drive the panel's flow (activate, edit, sync, income change)
 // over random plans and assert the sizing is consistent by construction.
 describe('allocation activate/sync properties', () => {
@@ -195,12 +302,21 @@ describe('allocation activate/sync properties', () => {
       const s1 = activate(s0);
       expect(pending(s1)).toEqual([]);
 
-      // Activated '%' savings move their row's kroner against the real base.
-      const { plan } = size(s1);
+      // Activated savings move their row's kroner against the real base.
+      const { plan, target } = size(s1);
       const realBase = savingsBase(s1.income, s1.fixed);
-      for (const sv of resolveSavingsAmounts(s1.savings, realBase, s1.pct)) {
+      const paydown = planPaydownTotal(s1.allocs, s1.fixed);
+      // A rest row is only the plan's own when no hand-made saving shares the target.
+      const planOnly = s1.savings.every(sv => sv.allocationId);
+      for (const sv of resolveSavingsAmounts(s1.savings, realBase, s1.pct, paydown)) {
         const r = plan.rows.find(x => x.id === sv.allocationId);
         if (r && sv.mode === 'percent') expect(Math.abs(sv.amount - r.amount)).toBeLessThanOrEqual(1);
+        if (r && sv.mode === 'rest' && planOnly) expect(Math.abs(sv.amount - r.amount)).toBeLessThanOrEqual(plan.rows.length);
+      }
+      // And the budget's saving is the panel's target whenever the plan fits it.
+      if (!plan.overAllocated && planOnly) {
+        const b = budgetFromLive(s1.income, s1.fixed, s1.savings, s1.allocs, s1.pct);
+        expect(Math.abs(b.savingPill - target)).toBeLessThanOrEqual(plan.rows.length);
       }
 
       const s2 = { ...s1, allocs: s1.allocs.map(a => ({ ...a, percent: ri(5, 60), amount: a.mode === 'amount' ? ri(100, 4000) : a.amount })) };

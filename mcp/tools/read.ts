@@ -38,7 +38,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Budget summary',
       description:
-        'Monthly net income vs fixed/variable expenses, per-type fixed totals, this month\'s savings transfers (and any one-month adjustment), last-12-month cashflow (each row reports savings transfers as `saved`, apart from `expenses`; net = income - expenses - saved), and plan-based savings-rate health. savingsRate.trailingRate is a share of income: compare it with savingsRateTargetOfIncomePct, not savingsTargetPercent (which is a share of what is left after expenses).',
+        'Monthly net income vs fixed/variable expenses, per-type fixed totals, this month\'s savings transfers as monthlySavings (transfers only; any one-month adjustment applies to them) and the allocation plan loan paydowns as planLoanPaydown (saving, though counted inside totalFixedExpenses), last-12-month cashflow (each row reports savings transfers as `saved`, apart from `expenses`; net = income - expenses - saved), and plan-based savings-rate health. savingsRate.trailingRate is a share of income: compare it with savingsRateTargetOfIncomePct, not savingsTargetPercent (which is a share of what is left after expenses).',
       inputSchema: {},
       annotations: { title: 'Budget summary', ...readOnly },
     },
@@ -124,7 +124,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Recommendations',
       description:
-        'Budget plan (recommended spend vs invest, conservative-mode flag), plannedMonthlySaving (automated transfers plus the unallocated target), savings-rate health vs savingsRateTargetOfIncomePct, and history-based insights (mortgage/debt ahead-of-plan, equity change).',
+        'Budget plan (recommended spend vs invest, conservative-mode flag), plannedMonthlySaving (automated transfers, the allocation plan loan paydowns as planLoanPaydown, plus the unallocated target), savings-rate health vs savingsRateTargetOfIncomePct, and history-based insights (mortgage/debt ahead-of-plan, equity change).',
       inputSchema: {},
       annotations: { title: 'Recommendations', ...readOnly },
     },

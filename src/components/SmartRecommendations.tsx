@@ -106,6 +106,7 @@ export default function SmartRecommendations() {
     recommendedSpending,
     recommendedInvestment,
     savingsContributions,
+    planPaydown,
     suggestedInvestment,
     conservativeMode,
     conservativeReason,
@@ -157,22 +158,32 @@ export default function SmartRecommendations() {
   // wrote a percentage against a smaller pool and came back inflated, by ~3x
   // once most of the target was automated. `plannedSaving + recommendedSpending`
   // equals `base` exactly, which is what makes the pills a clean two-way split.
-  const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions);
+  // The plan's own loan paydowns are saving, not bills (see planPaydownTotal).
+  const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions - planPaydown);
   const base = effectiveIncome - spendFixed;
-  const plannedSaving = savingsContributions + Math.max(0, recommendedInvestment);
+  const plannedSaving = savingsContributions + planPaydown + Math.max(0, recommendedInvestment);
 
   // The pills adjust THIS month only (life happens: a month with no room to
   // save). The plan — the Sparemål badge — is untouched, so the forecast and
   // every other month keep it, and next month is back to normal on its own.
   // Any amount from 0 to the whole pool: transfers that don't fit are cut for
   // this month (see resolveSavingsForMonth). A recorded month is read-only.
+  // The adjustment is what the transfers move: the plan's paydowns are fixed
+  // expenses it can't cut, so the saving floors at them (said out loud, not
+  // snapped silently) and they come off what is stored.
   const monthKey = format(currentMonth, 'yyyy-MM');
   const isPastMonth = monthKey < currentMonthKey();
   const monthAdjusted = savingsMonthOverrides[monthKey] !== undefined;
+  const [paydownFloorMonth, setPaydownFloorMonth] = useState<string | null>(null);
   const commitPool = (saving: number) => {
     if (base <= 0) return;
-    setSavingsMonthOverride(monthKey, Math.min(Math.max(0, saving), base));
+    const wanted = Math.min(Math.max(0, saving), base);
+    setPaydownFloorMonth(wanted < planPaydown ? monthKey : null);
+    setSavingsMonthOverride(monthKey, Math.max(0, wanted - planPaydown));
   };
+  const paydownFloorHint = paydownFloorMonth === monthKey && planPaydown > 0
+    ? t.budgetPage.paydownFloor.replace('{amount}', formatCurrency(planPaydown))
+    : undefined;
 
   const handleSpendingEdit = (newSpending: number) => commitPool(base - Math.max(0, newSpending));
   const handleSavingEdit = (newSaving: number) => commitPool(Math.max(0, newSaving));
@@ -288,14 +299,14 @@ export default function SmartRecommendations() {
               onCommit={handleSavingEdit}
               note={unfundedNote}
               readOnly={isPastMonth}
-              hint={conservativeMode && suggestedInvestment > recommendedInvestment
-                ? `${t.common.recommended}: ${formatCurrency(savingsContributions + suggestedInvestment)}`
-                : undefined}
+              hint={paydownFloorHint ?? (conservativeMode && suggestedInvestment > recommendedInvestment
+                ? `${t.common.recommended}: ${formatCurrency(savingsContributions + planPaydown + suggestedInvestment)}`
+                : undefined)}
             />
           </div>
           {monthAdjusted && (
             <p className="mt-2 text-[11px] text-[var(--text-2)]">
-              {t.budgetPage.savingAdjusted.replace('{amount}', formatCurrency(planMonthlySaving))}
+              {t.budgetPage.savingAdjusted.replace('{amount}', formatCurrency(planMonthlySaving + planPaydown))}
               {!isPastMonth && (
                 <>
                   {' · '}

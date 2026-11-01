@@ -160,6 +160,23 @@ describe('planMonthlySavingFor', () => {
   it('is only the automated transfers when income does not cover consumption', () => {
     expect(planMonthlySavingFor(20_000, 25_000, 1_000, 20)).toBe(1_000);
   });
+
+  it("counts the plan's loan paydown toward the target but leaves it out of the cash", () => {
+    // income 50 000, consumption 12 000 of which 2 000 is the plan's paydown:
+    // target 20 % of 40 000 = 8 000. 1 000 automated, 2 000 paid down, 5 000 left.
+    expect(planMonthlySavingFor(50_000, 12_000, 1_000, 20, 2_000)).toBe(6_000);
+    // Without the paydown as saving, the target would be a share of 38 000.
+    expect(planMonthlySavingFor(50_000, 12_000, 1_000, 20)).toBe(7_600);
+  });
+});
+
+describe('calcRecommendations: the plan\'s loan paydown is saving', () => {
+  it('fills part of the target instead of shrinking the base it is a share of', () => {
+    // fixed 10 000 + paydown 2 000 + transfers 3 000; target 20 % of 40 000.
+    const r = calcRecommendations(50_000, 50_000, 15_000, 0, 20, 3_000 + 2_000);
+    expect(r.recommendedInvestment).toBe(3_000);
+    expect(r.recommendedSpending).toBe(32_000);
+  });
 });
 
 describe('calcRecommendations', () => {

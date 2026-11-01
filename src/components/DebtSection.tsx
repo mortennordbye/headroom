@@ -49,11 +49,11 @@ interface DebtSectionProps {
 }
 
 export default function DebtSection({ debts: debtsProp, fixedExpenses: expensesProp, readOnly = false }: DebtSectionProps = {}) {
-  const { t, lang, debts: liveDebts, fixedExpenses: liveExpenses, setDebts, formatCurrency } = useFinance();
+  const { t, lang, debts: liveDebts, fixedExpenses: liveExpenses, savingsAllocations, setDebts, formatCurrency } = useFinance();
   const debts = debtsProp ?? liveDebts;
   // What each debt is actually paid: its linked fixed expenses, never under the
   // minimum. The payoff figures use this; edits still write the stored debt.
-  const paidDebts = withLinkedPayments(debts, expensesProp ?? liveExpenses);
+  const paidDebts = withLinkedPayments(debts, expensesProp ?? liveExpenses, savingsAllocations);
   // Summed from the rows on screen rather than read off the context, so the total
   // can never disagree with the ledger above it.
   const totalDebt = debts.reduce((s, dbt) => s + Math.max(0, dbt.balance), 0);

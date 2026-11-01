@@ -65,6 +65,7 @@ const DashboardPage: React.FC = () => {
     currentMonthSpending,
     recommendedSpending,
     plannedMonthlySaving,
+    planPaydown,
     planMonthlySaving,
     monthSavingsTargetPercent,
     savingsMonthOverrides,
@@ -104,6 +105,7 @@ const DashboardPage: React.FC = () => {
     assumptionsNudgeDismissed,
     dismissAssumptionsNudge,
     profile,
+    savingsAllocations,
   } = useFinance();
   // Month names must follow the UI language (BudgetPage does the same).
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -128,10 +130,12 @@ const DashboardPage: React.FC = () => {
   // Saving is its own segment rather than part of "Faste kostnader": lumping it
   // in made this page report 45 685 kr of fixed costs where the Budget page said
   // 31 741 under the very same label. The four segments still sum to income
-  // exactly, because `remainingBudget` subtracts the whole fixed total.
-  const budgetFixed = Math.max(0, totalFixedExpenses - savingsContributions);
+  // exactly, because `remainingBudget` subtracts the whole fixed total. The
+  // plan's own loan paydowns are saving too (see planPaydownTotal).
+  const budgetFixed = Math.max(0, totalFixedExpenses - savingsContributions - planPaydown);
+  const budgetSaving = savingsContributions + planPaydown;
   const budgetUsedPctRaw = effectiveIncome > 0 ? (budgetFixed / effectiveIncome) * 100 : 0;
-  const savingPctRaw = effectiveIncome > 0 ? (savingsContributions / effectiveIncome) * 100 : 0;
+  const savingPctRaw = effectiveIncome > 0 ? (budgetSaving / effectiveIncome) * 100 : 0;
   const spentPctRaw = effectiveIncome > 0 ? (totalSpent / effectiveIncome) * 100 : 0;
   const remainingBudget = effectiveIncome - totalFixedExpenses - totalSpent;
   const remainingPctRaw = effectiveIncome > 0 ? (remainingBudget / effectiveIncome) * 100 : 0;
@@ -253,15 +257,21 @@ const DashboardPage: React.FC = () => {
     // expense, so subtracting it here too would take the share of a pool the
     // saving had already been removed from (see calcRecommendations `base`).
     // Fixed expenses aren't historized, so the current total is the best proxy.
-    const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions);
+    // The plan's own loan paydowns are saving too (see planPaydownTotal).
+    const spendFixed = Math.max(0, totalFixedExpenses - savingsContributions - planPaydown);
     const investFrom = (monthlyIncome: number) =>
       Math.max(0, monthlyIncome - spendFixed) * (savingsTargetPercent / 100);
-    // A month the user adjusted shows what it actually set aside.
+    // A month the user adjusted shows what it actually set aside: the adjusted
+    // transfers plus the paydowns, which an adjustment never cuts.
+    const adjustedFor = (m: string) => {
+      const kr = savingsMonthOverrides[m];
+      return kr === undefined ? undefined : kr + planPaydown;
+    };
     const months: { key: string; label: string; value: number; projected?: boolean }[] =
       incomeSeries.map(({ month, value }) => ({
         key: month,
         label: fmtDate(parse(month, 'yyyy-MM', new Date()), 'MMM', { locale: dateLocale }),
-        value: Math.round(savingsMonthOverrides[month] ?? investFrom(value)),
+        value: Math.round(adjustedFor(month) ?? investFrom(value)),
       }));
     // 2 projected months ahead
     const last = incomeSeries[incomeSeries.length - 1];
@@ -270,12 +280,12 @@ const DashboardPage: React.FC = () => {
       for (let i = 1; i <= 2; i++) {
         const d = parse(last.month, 'yyyy-MM', new Date());
         d.setMonth(d.getMonth() + i);
-        const adjusted = savingsMonthOverrides[fmtDate(d, 'yyyy-MM')];
+        const adjusted = adjustedFor(fmtDate(d, 'yyyy-MM'));
         months.push({ key: `proj-${i}`, label: fmtDate(d, 'MMM', { locale: dateLocale }), value: Math.round(adjusted ?? baseVal * PROJECTED_INCOME_GROWTH ** i), projected: true });
       }
     }
     return months;
-  }, [incomeSeries, savingsTargetPercent, savingsMonthOverrides, totalFixedExpenses, savingsContributions, dateLocale]);
+  }, [incomeSeries, savingsTargetPercent, savingsMonthOverrides, totalFixedExpenses, savingsContributions, planPaydown, dateLocale]);
 
   // ─── Insight 2: top categories MoM (shared categoryMoM math; localize at render) ───
   const categoryDeltas = useMemo(() => {
@@ -297,12 +307,12 @@ const DashboardPage: React.FC = () => {
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
-    const debtByYear = calcDebtBalanceByYear(withLinkedPayments(debts, fixedExpenses), 15, currentMonthKey());
+    const debtByYear = calcDebtBalanceByYear(withLinkedPayments(debts, fixedExpenses, savingsAllocations), 15, currentMonthKey());
     const mortgageByYear = calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, mortgageTermYears, 15);
     const run = (rates: typeof projectionRates) => calcNetWorthProjectionByBucket(projectionStart, annualSavings, rates, 15, houseByYear, debtByYear, { mortgageByYear, region, ownShare });
     return withTotalBand(run(projectionRates), projectionRates, BAND_DELTA_PP, run);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, ownShare, mortgage.balance, mortgage.ratePct, mortgageTermYears, debts, fixedExpenses, region]);
+  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, ownShare, mortgage.balance, mortgage.ratePct, mortgageTermYears, debts, fixedExpenses, savingsAllocations, region]);
 
   const projectionEndYear = projection15y[projection15y.length - 1]?.year;
   const projectionEndValue = projection15y[projection15y.length - 1]?.total ?? 0;
@@ -598,8 +608,8 @@ const DashboardPage: React.FC = () => {
 
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <LegendItem dot="var(--teal)" name={t.fixedCosts} value={formatCurrency(budgetFixed)} pct={`${budgetUsedPctRaw.toFixed(1)}%`} />
-            {savingsContributions > 0 && (
-              <LegendItem dot="var(--brass)" name={t.budgetPage.savingSlice} value={formatCurrency(savingsContributions)} pct={`${savingPctRaw.toFixed(1)}%`} />
+            {budgetSaving > 0 && (
+              <LegendItem dot="var(--brass)" name={t.budgetPage.savingSlice} value={formatCurrency(budgetSaving)} pct={`${savingPctRaw.toFixed(1)}%`} />
             )}
             <LegendItem dot="var(--warning)" name={t.monthSpent} value={formatCurrency(totalSpent)} pct={`${spentPctRaw.toFixed(1)}%`} />
             <LegendItem
@@ -704,7 +714,7 @@ const DashboardPage: React.FC = () => {
               </div>
               <SectionLabel>{t.dashboardPage.monthlyInvestment}</SectionLabel>
               <div className="text-[24px] font-bold tracking-[-0.02em] leading-none mt-2">
-                {formatCurrency(plannedMonthlySaving)}
+                {formatCurrency(plannedMonthlySaving + planPaydown)}
               </div>
               <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
                 {format(currentMonth, 'MMM', { locale: dateLocale })} · {Math.round(monthSavingsTargetPercent)}% {t.dashboardPage.savingsRate}
