@@ -6,10 +6,6 @@ in git and the CHANGELOG, not here.
 
 ## Calculations and money figures
 
-- **BSU lifetime room is measured against the balance.** The 300k cap counts deposits, but only the
-  balance (with interest) is stored, so the room shown is a floor. **Unblock**: agree a persisted
-  "total deposited" field and its backfill. **Where**: `src/lib/bsu.ts`, payload sites in
-  `src/context/FinanceContext.tsx`.
 - **Wealth tax simplifications.** Single-person bunnfradrag (no spousal doubling), the forecast
   splits financial assets by today's shares-vs-other ratio, and Pengestrøm shows no wealth-tax
   line. Gjeldsreduksjon's gross-asset ratio uses the adjusted `primaryHomeValue`, which overstates

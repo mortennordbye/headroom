@@ -327,6 +327,7 @@ export function registerWriteTools(server: McpServer) {
         taxRate: z.number().min(0).max(100).optional().describe('Tax rate % on portfolio gains.'),
         bsu: kr.optional(),
         bsuAnnualContribution: kr.optional().describe('Planned BSU deposit this year in kr.'),
+        bsuTotalDeposited: kr.optional().describe('Total deposited into BSU so far in kr, excluding interest. The 300 000 kr lifetime cap counts deposits.'),
         houseValue: kr.optional(),
         houseDebt: kr.optional().describe('Mortgage balance in kr.'),
         crypto: kr.optional(),

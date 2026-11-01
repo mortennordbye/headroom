@@ -363,7 +363,7 @@ export function deleteRule(blob: ExportPayload, args: { type: RuleType; id: stri
 
 /** The numeric scalar fields of `assets` update_asset may touch. */
 export const ASSET_KEYS = [
-  'portfolio', 'unrealizedGain', 'shieldingDeduction', 'taxRate', 'bsu', 'bsuAnnualContribution',
+  'portfolio', 'unrealizedGain', 'shieldingDeduction', 'taxRate', 'bsu', 'bsuAnnualContribution', 'bsuTotalDeposited',
   'houseValue', 'houseDebt', 'crypto', 'cryptoUnrealizedGain', 'cryptoTaxRate', 'bufferAccount',
 ] as const satisfies readonly (keyof Assets)[];
 export type AssetKey = (typeof ASSET_KEYS)[number];

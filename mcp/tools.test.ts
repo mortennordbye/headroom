@@ -554,6 +554,17 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(a.equityBreakdown.houseEquity).toBeCloseTo(solo.a.equityBreakdown.houseEquity / 2, 6);
   });
 
+  it('assets & debts: BSU lifetime room uses total deposited when set, else the balance', () => {
+    const b = fullFixture();
+    const floor = derive.assetsAndDebts(b).bsuRoom;
+    expect(floor.lifetimeBasis).toBe('balance');
+    expect(floor.lifetimeRoomLeft).toBe(300000 - b.assets.bsu);
+    b.assets.bsuTotalDeposited = b.assets.bsu - 2000; // 2 000 of the balance is interest
+    const exact = derive.assetsAndDebts(b).bsuRoom;
+    expect(exact.lifetimeBasis).toBe('deposits');
+    expect(exact.lifetimeRoomLeft).toBe(floor.lifetimeRoomLeft + 2000);
+  });
+
   it('co-owners: overview reads equity and debt at the same month', () => {
     const b = fullFixture();
     b.assets.coOwners = [{ id: 'c', name: 'Samboer', ownershipPct: 50, since: '2026-05' }];
