@@ -21,5 +21,11 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: '**/mobile-*.e2e.ts' },
+    // Touch behaviour on the phone layout. WebKit is what an iPhone runs, and
+    // where taps were seen arriving without their click (src/lib/tapRecovery.ts).
+    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] }, testMatch: '**/mobile-*.e2e.ts' },
+    { name: 'mobile-webkit', use: { ...devices['iPhone 15'] }, testMatch: '**/mobile-*.e2e.ts' },
+  ],
 });

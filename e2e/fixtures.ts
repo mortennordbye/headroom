@@ -40,6 +40,9 @@ export const test = base.extend<{ consoleErrors: string[] }>({
       const origin = new URL(baseURL!).origin;
       page.on('console', (msg) => {
         if (msg.type() !== 'error') return;
+        // WebKit on Linux reports the viewport meta's interactive-widget (a
+        // Chrome-on-Android hint other browsers ignore) as an error.
+        if (msg.text().startsWith('Viewport argument key "interactive-widget" not recognized')) return;
         const url = msg.location().url;
         if (!url || url.startsWith(origin)) errors.push(`${msg.text()} (${url || 'no location'})`);
       });

@@ -1,8 +1,9 @@
-import { devices } from '@playwright/test';
+/// <reference lib="dom" />
+import { type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { test, expect, putBlob, seedBlob } from './fixtures';
 
-// The bottom tab bar is md:hidden, so this needs a phone viewport with touch.
-test.use({ ...devices['Pixel 7'] });
+// The bottom tab bar is md:hidden, so these run in the mobile-* projects
+// (phone viewport with touch) in playwright.config.ts.
 
 test('one tap on a tab whose page is not loaded yet shows the loading skeleton at once', async ({ page, request }) => {
   await putBlob(request, seedBlob());
@@ -24,54 +25,75 @@ test('one tap on a tab whose page is not loaded yet shows the loading skeleton a
   await expect(main.getByRole('heading', { level: 1, name: 'Månedsbudsjettet ditt.' })).toBeVisible();
 });
 
-test('a tab navigates on lift-off even when the browser never sends the click', async ({ page, request }) => {
+/**
+ * What the on-device tap log showed iOS doing: touchstart and touchend on the
+ * element, then no click. Dispatched in the page so no click follows.
+ */
+async function touchWithoutClick(locator: Locator) {
+  await locator.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const touch = { identifier: 1, target: el, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+    // Plain events carrying touch lists: WebKit has no Touch constructor.
+    const fire = (type: string, touches: object[]) => {
+      const e = new Event(type, { bubbles: true, cancelable: true, composed: true });
+      Object.defineProperties(e, { touches: { value: touches }, changedTouches: { value: [touch] } });
+      el.dispatchEvent(e);
+    };
+    fire('touchstart', [touch]);
+    fire('touchend', []);
+  });
+}
+
+async function openDashboard(page: Page, request: APIRequestContext) {
   await putBlob(request, seedBlob());
   await page.goto('/');
   await expect(page.getByRole('main').getByRole('heading', { level: 1 }).first()).toBeVisible();
+}
 
-  // What the on-device log showed iOS doing: touch down and up on the tab, no click.
-  const tab = page.getByRole('navigation').getByRole('link', { name: 'Lønn' });
-  const box = (await tab.boundingBox())!;
-  const at = { pointerType: 'touch', isPrimary: true, bubbles: true, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 };
-  await tab.dispatchEvent('pointerdown', at);
-  await tab.dispatchEvent('pointerup', at);
-
+test('a tab tap that never gets its click still navigates', async ({ page, request }) => {
+  await openDashboard(page, request);
+  await touchWithoutClick(page.getByRole('navigation').getByRole('link', { name: 'Lønn' }));
   await expect(page).toHaveURL(/\/salary/);
 });
 
-test('a normal tap on a tab navigates once', async ({ page, request }) => {
-  await putBlob(request, seedBlob());
-  await page.goto('/');
-  await expect(page.getByRole('main').getByRole('heading', { level: 1 }).first()).toBeVisible();
-
-  await page.getByRole('navigation').getByRole('link', { name: 'Budsjett' }).tap();
-  await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Månedsbudsjettet ditt.' })).toBeVisible();
-
-  // Lift-off navigated and the click that followed was ignored, so one step
-  // back lands on the dashboard rather than on a duplicate Budget entry.
-  await page.goBack();
-  await expect(page).toHaveURL(/\/(\?|$)/);
+test('More and the links in its sheet work when the click never comes', async ({ page, request }) => {
+  await openDashboard(page, request);
+  await touchWithoutClick(page.getByRole('navigation').getByRole('button', { name: 'Mer' }));
+  const sheet = page.getByRole('dialog');
+  await expect(sheet).toBeVisible();
+  await touchWithoutClick(sheet.getByRole('link', { name: 'Prognose' }));
+  await expect(page).toHaveURL(/\/forecast/);
+  await expect(sheet).toBeHidden();
 });
 
-test('More opens on one tap, stays open, and its items navigate on one tap', async ({ page, request }) => {
-  await putBlob(request, seedBlob());
-  await page.goto('/');
-  await expect(page.getByRole('main').getByRole('heading', { level: 1 }).first()).toBeVisible();
+test('a click that turns up late after a recovered tap is dropped', async ({ page, request }) => {
+  await openDashboard(page, request);
+  const more = page.getByRole('navigation').getByRole('button', { name: 'Mer' });
+  const box = (await more.boundingBox())!;
+  await touchWithoutClick(more);
+  const sheet = page.getByRole('dialog');
+  await expect(sheet).toBeVisible();
+  // The browser's own click arriving now would land on the backdrop that
+  // just opened and close the sheet. It must be ignored.
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(300);
+  await expect(sheet).toBeVisible();
+});
 
+test('a normal tap acts once', async ({ page, request }) => {
+  await openDashboard(page, request);
   await page.getByRole('navigation').getByRole('button', { name: 'Mer' }).tap();
   const sheet = page.getByRole('dialog');
   await expect(sheet).toBeVisible();
-  // The touch was handled on lift-off and its click cancelled, so nothing
-  // lands on the backdrop that just appeared and closes the sheet again.
-  await page.waitForTimeout(500);
-  await expect(sheet).toBeVisible();
-
-  await sheet.getByRole('link', { name: 'Prognose' }).tap();
-  await expect(page).toHaveURL(/\/forecast/);
-  await expect(sheet).toBeHidden();
-
-  await page.getByRole('navigation').getByRole('button', { name: 'Mer' }).tap();
+  // Long enough for a wrongly recovered second click to have fired.
+  await page.waitForTimeout(600);
   await expect(sheet).toBeVisible();
   await sheet.getByRole('button', { name: 'Avbryt' }).tap();
   await expect(sheet).toBeHidden();
+
+  const before = await page.evaluate(() => history.length);
+  await page.getByRole('navigation').getByRole('link', { name: 'Budsjett' }).tap();
+  await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Månedsbudsjettet ditt.' })).toBeVisible();
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => history.length)).toBe(before + 1);
 });

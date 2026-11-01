@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
+import { NavLink, Outlet, useLocation, useSearchParams } from 'react-router';
 import {
   ChevronLeft,
   ChevronRight,
@@ -19,7 +19,6 @@ import { useFinanceSettings } from '../context/FinanceContext';
 import { PROJECTION_HORIZON_MONTHS } from '../lib/snapshots';
 import { useBalanceHistory } from '../hooks/useBalanceHistory';
 import { useFocusTrap } from '../hooks/useFocusTrap';
-import { useTapAction } from '../hooks/useTapAction';
 import OnboardingTour from './onboarding/OnboardingTour';
 import HistoryManagerModal from './HistoryManagerModal';
 import GlossaryModal from './GlossaryModal';
@@ -66,17 +65,6 @@ const Layout: React.FC = () => {
   const activeGroup = groupForPath(location.pathname);
   const navGroup = groupForPath(navPath);
   const sheetRef = useFocusTrap<HTMLDivElement>(() => setMoreOpen(false), undefined, moreOpen);
-  // The More button and the sheet act on touch end and cancel the click, so a
-  // late click can't land on the backdrop that just appeared (or the page under
-  // a sheet that just closed). See useTapAction.
-  const openMore = () => setMoreOpen(true);
-  const closeMore = () => setMoreOpen(false);
-  const openGuide = () => { setMoreOpen(false); startOnboarding(); };
-  const openGlossary = () => { setMoreOpen(false); setGlossaryOpen(true); };
-  const openMoreTap = useTapAction(openMore);
-  const closeMoreTap = useTapAction(closeMore);
-  const openGuideTap = useTapAction(openGuide);
-  const openGlossaryTap = useTapAction(openGlossary);
 
   const isVisible = (path: string) => path === ALWAYS_VISIBLE_NAV || !hiddenNavItems.includes(path);
 
@@ -460,8 +448,7 @@ const Layout: React.FC = () => {
           <div
             className="absolute inset-0 animate-fade-in"
             style={{ background: 'rgba(0,0,0,0.55)' }}
-            onClick={closeMore}
-            {...closeMoreTap}
+            onClick={() => setMoreOpen(false)}
           />
           <div
             ref={sheetRef}
@@ -480,8 +467,7 @@ const Layout: React.FC = () => {
                 {t.nav.more}
               </span>
               <button
-                onClick={closeMore}
-                {...closeMoreTap}
+                onClick={() => setMoreOpen(false)}
                 aria-label={t.cancel}
                 className="grid place-items-center w-8 h-8 rounded-[6px]"
                 style={{ background: 'var(--bg-2)', color: 'var(--text-2)' }}
@@ -498,8 +484,7 @@ const Layout: React.FC = () => {
             </div>
             {/* Setup guide — the mobile trigger for the guided tour */}
             <button
-              onClick={openGuide}
-              {...openGuideTap}
+              onClick={() => { setMoreOpen(false); startOnboarding(); }}
               className="mt-2 w-full flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
               style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)', color: 'var(--text-1)' }}
             >
@@ -508,8 +493,7 @@ const Layout: React.FC = () => {
             </button>
             {/* Glossary — the mobile trigger for the term lookup */}
             <button
-              onClick={openGlossary}
-              {...openGlossaryTap}
+              onClick={() => { setMoreOpen(false); setGlossaryOpen(true); }}
               className="mt-2 w-full flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
               style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)', color: 'var(--text-1)' }}
             >
@@ -535,8 +519,7 @@ const Layout: React.FC = () => {
         <MobileNavTab to="/assets" icon={navIconForPath('/assets')} label={t.nav.assets} active={navGroup?.primary === '/assets'} onNavigate={setPendingNav} />
         <MobileNavTab to="/salary" icon={navIconForPath('/salary')} label={t.nav.salary} active={navGroup?.primary === '/salary'} onNavigate={setPendingNav} />
         <button
-          onClick={openMore}
-          {...openMoreTap}
+          onClick={() => setMoreOpen(true)}
           className="flex-1 min-w-0 flex flex-col items-center gap-1 pt-2 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-[10px] font-medium transition-colors"
           style={{ color: moreActive ? 'var(--brass)' : 'var(--text-3)' }}
           aria-label={t.nav.more}
@@ -594,17 +577,11 @@ interface SheetItemProps {
   onNavigate: () => void;
 }
 
-const SheetItem: React.FC<SheetItemProps> = ({ to, icon: Icon, label, onNavigate }) => {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  // Replace on the current page, as the link itself does.
-  const tap = useTapAction(() => { onNavigate(); navigate(to, { replace: pathname === to }); });
-  return (
+const SheetItem: React.FC<SheetItemProps> = ({ to, icon: Icon, label, onNavigate }) => (
   <NavLink
     to={to}
     end={to === '/'}
     onClick={onNavigate}
-    {...tap}
     className="flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-md)] text-[14px] font-medium transition-colors border"
     style={({ isActive }) => ({
       background: isActive ? 'var(--warning-bg)' : 'var(--bg-2)',
@@ -620,8 +597,7 @@ const SheetItem: React.FC<SheetItemProps> = ({ to, icon: Icon, label, onNavigate
       </>
     )}
   </NavLink>
-  );
-};
+);
 
 interface NavButtonProps {
   to: string;
@@ -662,35 +638,13 @@ interface MobileNavTabProps {
   onNavigate: (to: string) => void;
 }
 
-// iOS sometimes delivers the touch but never the click that should follow it,
-// mostly right after a page has opened and is still filling in (seen with the
-// on-device tap log: touchstart and touchend on the tab, then no click). So a
-// finger navigates on lift-off, and the click, if it does come, is ignored.
-// Mouse and keyboard still go through the link's own click.
-const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, active, onNavigate }) => {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const touch = useRef<{ x: number; y: number; done: boolean } | null>(null);
-  return (
+// A tap that iOS never turns into a click is recovered app-wide by
+// installTapRecovery (src/lib/tapRecovery.ts), so the tab just uses its click.
+const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, active, onNavigate }) => (
   <NavLink
     to={to}
     end={to === '/'}
-    onPointerDown={e => {
-      touch.current = e.pointerType === 'touch' && e.isPrimary ? { x: e.clientX, y: e.clientY, done: false } : null;
-    }}
-    onPointerUp={e => {
-      const start = touch.current;
-      // A finger that slid away is not a tap.
-      if (!start || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) return;
-      start.done = true;
-      onNavigate(to);
-      // Replace on the current tab, as the link itself does.
-      navigate(to, { replace: pathname === to });
-    }}
-    onClick={e => {
-      if (touch.current?.done) { touch.current = null; e.preventDefault(); return; }
-      if (isPlainClick(e)) onNavigate(to);
-    }}
+    onClick={e => { if (isPlainClick(e)) onNavigate(to); }}
     className="flex-1 min-w-0 flex flex-col items-center gap-1 pt-2 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-[10px] font-medium transition-colors"
     style={{
       color: active ? 'var(--brass)' : 'var(--text-3)',
@@ -699,7 +653,6 @@ const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, acti
     {Icon && <Icon size={20} strokeWidth={1.75} aria-hidden style={{ color: active ? 'var(--brass)' : 'var(--brass-dim)' }} />}
     <span className="truncate max-w-full px-0.5">{label}</span>
   </NavLink>
-  );
-};
+);
 
 export default Layout;

@@ -176,13 +176,13 @@ in git and the CHANGELOG, not here.
 ## Tooling and infrastructure
 
 - **Temporary tap log for the mobile "first tap does nothing" report.** The on-device log showed
-  iOS delivering touchstart and touchend on a bottom tab but no click, so the tabs now navigate on
-  pointerup. Emulation can't reproduce the dropped click, so the log stays until that is confirmed
-  on the phone. It is turned on in Settings (About card) or with `?debugtaps`. **Why deferred**:
-  needs confirmation from the real phone. **Unblock**: the user confirms taps work, then delete the
-  component, its mount and the toggle. **Where**: `src/components/TapDebugLog.tsx`,
-  `src/lib/tapLog.ts`, `<TapDebugLog />` in `src/components/Layout.tsx`, the toggle in the About
-  card of `src/pages/SettingsPage.tsx`.
+  iOS delivering touchstart and touchend but no click. `installTapRecovery` now clicks any button
+  or link whose tap got no click, app-wide. Emulation can't make iOS drop a click, so the log stays
+  until that is confirmed on the phone. It is turned on in Settings (About card) or with
+  `?debugtaps`. **Why deferred**: needs confirmation from the real phone. **Unblock**: the user
+  confirms taps work, then delete the component, its mount and the toggle. **Where**:
+  `src/components/TapDebugLog.tsx`, `src/lib/tapLog.ts`, `<TapDebugLog />` in
+  `src/components/Layout.tsx`, the toggle in the About card of `src/pages/SettingsPage.tsx`.
 
 - **Stricter lint presets.** No `recommendedTypeChecked` for the TypeScript and no `jsx-a11y`.
   **Why deferred**: out of scope for #142, which only brought `server/` and `desktop/` under the
