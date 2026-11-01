@@ -114,6 +114,13 @@ in git and the CHANGELOG, not here.
 - **History before debt historization is equity-only**, and history months stored only as a total
   aren't split by co-owner share. Can be hand-corrected in the History manager. **Where**:
   `netWorthSeriesFrom` in `src/lib/netWorth.ts`, `src/lib/ownership.ts`.
+- **History manager grid can't open a month's editor.** Clicking edit/add on a row in the grid
+  (Settings, Dashboard) leaves the grid showing. Likely cause: swapping the grid `ModalShell` for
+  the editor's runs the old one's cleanup `history.back()`, whose `popstate` then closes the new
+  one. The balance-page "Rediger måneden" path (single modal) works. Seen in a headless Chromium
+  smoke run, not yet checked in a desktop browser. **Unblock**: confirm in a real browser, then
+  keep one `ModalShell` across the grid/editor switch. **Where**: `src/components/ui/ModalShell.tsx`,
+  `src/components/HistoryManagerModal.tsx`.
 - **`recommendedInvestment` on Assets is month-coupled** (derives from the viewed month's income).
   **Where**: `calcRecommendations(effectiveIncome, …)` in `src/context/FinanceContext.tsx`.
 - **Scenario bands only on the Forecast chart.** The Assets growth and Dashboard projections are

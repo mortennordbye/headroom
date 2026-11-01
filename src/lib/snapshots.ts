@@ -127,6 +127,27 @@ export function snapshotBalances(
 }
 
 /**
+ * The assumptions a manual save should store. When `base` recorded none (a v1
+ * month, or a backfill seeded from one), the editor shows today's rates as a
+ * stand-in; saving them unchanged would pass them off as recorded, so they are
+ * kept only once the user has changed one.
+ */
+export function assumptionsToSave(
+  base: BalanceSnapshot,
+  initial: SnapshotBalances,
+  edited: SnapshotBalances,
+): SnapshotBalances['assumptions'] {
+  if (snapshotHasAssumptions(base)) return edited.assumptions;
+  const a = initial.assumptions;
+  const b = edited.assumptions;
+  const unchanged = !b || (a != null
+    && a.savingsTargetPercent === b.savingsTargetPercent
+    && a.growthReturnRate === b.growthReturnRate
+    && a.houseGrowthRate === b.houseGrowthRate);
+  return unchanged ? undefined : b;
+}
+
+/**
  * Assemble a manual snapshot from a `base` (nearest recorded month, or the live
  * state) with the user-entered balances overlaid. It re-applies the house value
  * mirror (assets ↔ transition) and drops any older copies of the mortgage

@@ -12,6 +12,8 @@ import {
   historyRows,
   buildManualSnapshot,
   snapshotBalances,
+  snapshotHasAssumptions,
+  assumptionsToSave,
   type SnapshotBalances,
 } from '../lib/snapshots';
 
@@ -102,16 +104,18 @@ export default function HistoryManagerModal({ onClose, initialMonth }: HistoryMa
     // closes the modal rather than dropping to the grid the user never saw.
     const done = editing === initialMonth ? onClose : () => setEditing(null);
     const coOwners = snapshotCoOwners(assets.coOwners, editing);
+    const initial = snapshotBalances(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate });
     return (
       <SnapshotEditor
         monthKey={editing}
         monthTitle={monthLabel(editing)}
-        initial={snapshotBalances(base, { savingsTargetPercent, growthReturnRate, houseGrowthRate })}
+        initial={initial}
         base={base}
         coOwners={coOwners}
         onCancel={done}
         onSave={(balances) => {
-          setManualSnapshot(editing, buildManualSnapshot(base, balances, editing, coOwners));
+          const toSave = { ...balances, assumptions: assumptionsToSave(base, initial, balances) };
+          setManualSnapshot(editing, buildManualSnapshot(base, toSave, editing, coOwners));
           done();
         }}
       />
@@ -309,7 +313,9 @@ function SnapshotEditor({
         </button>
         {advancedOpen && b.assumptions && (
           <div className="space-y-3 pl-1">
-            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{hm.advancedHint}</p>
+            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
+              {snapshotHasAssumptions(base) ? hm.advancedHint : t.assetPage.assumptionsNotRecorded}
+            </p>
             <NumberRow
               label={f.savingsTarget}
               value={b.assumptions.savingsTargetPercent}
