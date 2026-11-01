@@ -16,7 +16,7 @@ import { calcTaxByRegion, calcPensionIncomeTax, IPS_MAX_DEDUCTION, TAX_YEAR } fr
 import { projectBeholdning, estimateBeholdning, annualFolketrygdPension } from '../lib/folketrygd';
 import { estimateAfpGrunnlag, annualAfp } from '../lib/afp';
 import { prepayVsInvestFor } from '../lib/prepayVsInvest';
-import { netWorthBands } from '../lib/scenarioBands';
+import { netWorthBands, BAND_DELTA_PP } from '../lib/scenarioBands';
 import { projectForecast, forecastMortgage, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
 import { otpAnnualContribution, pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
@@ -214,7 +214,6 @@ const ForecastPage: React.FC = () => {
   // per-year contribution net of that year's wealth-tax charge is held the same
   // across scenarios (it depends on income/savings/tax, not the return), so the
   // band base still equals the netWorth line and only the growth rate varies.
-  const BAND_DELTA_PP = 3;
   const chartData = useMemo(() => {
     const bands = netWorthBands(projection[0]?.financial ?? 0, projection.map(p => p.contribution - p.wealthTax), returnPct, BAND_DELTA_PP, years);
     return projection.map((p, i) => {

@@ -103,9 +103,6 @@ in git and the CHANGELOG, not here.
 - **History before debt historization is equity-only**, and history months stored only as a total
   aren't split by co-owner share. Can be hand-corrected in the History manager. **Where**:
   `netWorthSeriesFrom` in `src/lib/netWorth.ts`, `src/lib/ownership.ts`.
-- **Scenario bands only on the Forecast chart.** The Assets growth and Dashboard projections are
-  stacked, so a band needs a design decision. **Where**: `src/pages/AssetPage.tsx`,
-  `src/pages/DashboardPage.tsx`, `src/lib/scenarioBands.ts`.
 
 ## Housing
 
