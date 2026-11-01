@@ -1,5 +1,5 @@
-import React, { Suspense, useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useLocation, useSearchParams } from 'react-router';
+import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useNavigationType, useSearchParams } from 'react-router';
 import {
   ChevronLeft,
   ChevronRight,
@@ -59,6 +59,12 @@ const Layout: React.FC = () => {
     setPendingNav(null);
   }
   const navPath = pendingNav ?? location.pathname;
+  // A new page starts at the top. Back and forward (POP) are left to the
+  // browser, which restores where you were.
+  const navigationType = useNavigationType();
+  useLayoutEffect(() => {
+    if (navigationType !== 'POP') window.scrollTo(0, 0);
+  }, [location.pathname, navigationType]);
   const moreActive = MORE_ROUTES.includes(navPath);
   // The group owning the current route drives the sub-tab strip; the tab bars
   // follow `navPath` so they react to a tap before the page has rendered.
@@ -438,7 +444,10 @@ const Layout: React.FC = () => {
             loaded yet left the old page up, unchanged, until the chunk arrived.
             A new boundary shows the skeleton at once. */}
         <Suspense key={location.pathname} fallback={<RouteFallback />}>
-          <Outlet />
+          {/* A short fade instead of a hard swap; off under reduced motion. */}
+          <div className="animate-fade-in">
+            <Outlet />
+          </div>
         </Suspense>
       </main>
 

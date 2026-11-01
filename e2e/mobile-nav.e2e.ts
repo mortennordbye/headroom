@@ -97,3 +97,25 @@ test('a normal tap acts once', async ({ page, request }) => {
   await page.waitForTimeout(600);
   expect(await page.evaluate(() => history.length)).toBe(before + 1);
 });
+
+test('a page whose code is already loaded opens without the skeleton, at the top', async ({ page, request }) => {
+  await openDashboard(page, request);
+  // Let the idle preload fetch every page's code.
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => {
+    const w = window as unknown as { sawSkeleton: boolean };
+    w.sawSkeleton = false;
+    new MutationObserver(() => {
+      if (document.querySelector('main [role=status][aria-label="Laster …"]')) w.sawSkeleton = true;
+    }).observe(document.body, { subtree: true, childList: true });
+  });
+  await page.evaluate(() => window.scrollTo(0, 900));
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+
+  await page.getByRole('navigation').getByRole('link', { name: 'Budsjett' }).tap();
+  await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Månedsbudsjettet ditt.' })).toBeVisible();
+
+  expect(await page.evaluate(() => (window as unknown as { sawSkeleton: boolean }).sawSkeleton)).toBe(false);
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+});

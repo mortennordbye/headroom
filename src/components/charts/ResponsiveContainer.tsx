@@ -26,5 +26,8 @@ export function ResponsiveContainer(props: ComponentProps<typeof RechartsRespons
     };
   }, []);
 
-  return ready ? <RechartsResponsiveContainer {...props} /> : <ChartSkeleton />;
+  // Fade the chart in over its placeholder rather than swapping it in hard.
+  return ready
+    ? <RechartsResponsiveContainer {...props} className={`animate-fade-in ${props.className ?? ''}`} />
+    : <ChartSkeleton />;
 }
