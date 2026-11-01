@@ -333,6 +333,13 @@ describe('resolveSavingsAmounts — rest rows', () => {
     expect(resolveSavingsAmounts(rows, base, 65)[1].amount).toBe(19500);
   });
 
+  it('does not split the pool with a paused rest row', () => {
+    const rows = [krSaving('buffer', 500), restSaving('fund'), { ...restSaving('old'), paused: true }];
+    const out = resolveSavingsAmounts(rows, base, 65);
+    expect(out[1].amount).toBe(19000);
+    expect(savingsContributionTotal(out)).toBe(19500);
+  });
+
   it('lets rest win over a stale percentage on the same row', () => {
     const rows: Saving[] = [
       { id: 'f', name: 'f', amount: 0, mode: 'rest', percent: 10, destinationKind: 'portfolio' },

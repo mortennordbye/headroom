@@ -109,7 +109,7 @@ export function reconcile(
   // 2. Category envelopes (fixed expenses with a category and no `match`).
   const budgetByCat = new Map<CategoryKey, { budgeted: number; expenseIds: string[] }>();
   for (const e of fixedExpenses) {
-    if ((e.match ?? '').trim()) continue; // a pattern already claims this expense
+    if (normalizeMatchText(e.match)) continue; // a pattern already claims this expense
     if (!isCategoryKey(e.category)) continue;
     const entry = budgetByCat.get(e.category) ?? { budgeted: 0, expenseIds: [] };
     entry.budgeted += e.amount;
@@ -222,7 +222,7 @@ export function suggestEnvelopeLinks(
   const suggestions: EnvelopeSuggestion[] = [];
   const claimed = new Set<CategoryKey>();
   for (const e of fixedExpenses) {
-    if (isCategoryKey(e.category) || (e.match ?? '').trim()) continue; // already an envelope
+    if (isCategoryKey(e.category) || normalizeMatchText(e.match)) continue; // already an envelope
     const category = suggestCategoryForExpenseName(e.name);
     if (!category || alreadyLinked.has(category) || claimed.has(category)) continue;
     const amount = spent.get(category) ?? 0;

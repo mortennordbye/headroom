@@ -19,7 +19,7 @@
  *     botid exemption for a pure rental secondary home.
  */
 import { calcAmortizationSchedule, calcDebtToIncome, MAX_DEBT_TO_INCOME, STRESS_TEST_ADD_PCT } from './calculations';
-import { TAX_PARAMS, TAX_YEAR } from './norwegianTax';
+import { TAX_PARAMS, TAX_YEAR, WEALTH_PARAMS } from './norwegianTax';
 
 /** Capital-income rate (skatt på alminnelig inntekt), as a percent — 22 today. */
 export const CAPITAL_INCOME_RATE_PCT = TAX_PARAMS[TAX_YEAR].skattAlminneligRate * 100;
@@ -96,7 +96,8 @@ export const DEFAULT_SECOND_HOME_SCENARIO: Omit<SecondHomeScenario, 'id' | 'name
   annualAppreciationPct: 3,
   saleAgentFeePct: 3,
   documentedImprovements: 0,
-  marginalWealthTaxPct: 0.85,
+  // The formuesskatt rate just above the bunnfradrag (1.0 % for 2025 and 2026).
+  marginalWealthTaxPct: WEALTH_PARAMS.brackets[0].rate * 100,
   committed: false,
 };
 

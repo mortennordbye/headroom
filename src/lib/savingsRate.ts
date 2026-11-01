@@ -88,7 +88,8 @@ export function resolveSavingsAmounts(
 
 function resolveAgainstTarget(savings: Saving[], base: number, target: number): Saving[] {
   const hasPercent = savings.some(s => isPercentSavings(s));
-  const restCount = savings.reduce((n, s) => (isRestSavings(s) ? n + 1 : n), 0);
+  // A paused rest row moves nothing, so it takes no share of the pool.
+  const restCount = savings.reduce((n, s) => (isRestSavings(s) && !s.paused ? n + 1 : n), 0);
   if (!hasPercent && restCount === 0) return savings;
   const resolved = savings.map(s =>
     isPercentSavings(s)
@@ -110,7 +111,7 @@ function resolveAgainstTarget(savings: Saving[], base: number, target: number): 
   // asking for "the rest" get half each. Same rule as resolveAllocation.
   const each = Math.floor(pool / restCount);
   let extra = pool - each * restCount;
-  return resolved.map(s => (isRestSavings(s) ? { ...s, amount: each + (extra-- > 0 ? 1 : 0) } : s));
+  return resolved.map(s => (isRestSavings(s) && !s.paused ? { ...s, amount: each + (extra-- > 0 ? 1 : 0) } : s));
 }
 
 /**
