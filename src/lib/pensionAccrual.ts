@@ -16,7 +16,8 @@
 import { addMonthsKey } from './date';
 import type { AutomationRule } from './automation';
 import { otpAnnualContribution, otpBonusShareToDate } from './pension';
-import type { BonusEntry } from '../context/FinanceContext';
+import type { BonusEntry, ExportPayload, Pension } from '../context/FinanceContext';
+import { activeJobBreakdown } from './salary';
 
 type OtpBonus = Pick<BonusEntry, 'date' | 'amount' | 'type'>;
 
@@ -229,10 +230,12 @@ export function stampUnstampedAutoPost<P extends {
 }
 
 /**
- * The pension after switching `target` auto-post on in `month`. Every switch-on
+ * The pension after switching `target` auto-post on in `month`. A switch-on
  * re-stamps to `month` (and, for OTP, takes a fresh bonus baseline), as a fixed
  * expense does when it resumes: the months it was off are not caught up, since
- * the balance is the user's to keep right while it is off.
+ * the balance is the user's to keep right while it is off. A stamp already at
+ * `month` is kept with its bonus record, so a quick off/on within the month
+ * can't swallow a bonus added since the last posting.
  */
 export function switchAutoPostOn<P extends Parameters<typeof stampUnstampedAutoPost>[0]>(
   pension: P,
@@ -241,8 +244,46 @@ export function switchAutoPostOn<P extends Parameters<typeof stampUnstampedAutoP
   bonuses: readonly OtpBonus[],
   month: string,
 ): P {
-  const cleared: P = target === 'otp'
-    ? { ...pension, otpAutoPost: true, otpLastPostedMonth: undefined }
-    : { ...pension, ipsAutoPost: true, ipsLastPostedMonth: undefined };
-  return stampUnstampedAutoPost(cleared, fixedGross, bonuses, month);
+  if (target === 'otp') {
+    const on = { ...pension, otpAutoPost: true };
+    if (pension.otpLastPostedMonth === month) return on;
+    return stampUnstampedAutoPost({ ...on, otpLastPostedMonth: undefined }, fixedGross, bonuses, month);
+  }
+  const on = { ...pension, ipsAutoPost: true };
+  if (pension.ipsLastPostedMonth === month) return on;
+  return stampUnstampedAutoPost({ ...on, ipsLastPostedMonth: undefined }, fixedGross, bonuses, month);
+}
+
+type LoadSlice = Pick<ExportPayload, 'pension' | 'salaries' | 'jobs' | 'bonuses'>;
+
+/**
+ * Load/import step: a `data.pension` with auto-post on but never stamped is
+ * stamped to `month` (see `stampUnstampedAutoPost`). The bonus baseline reads
+ * the pay and bonuses the app will hold after this load: `data`'s where it
+ * carries them, else `current`'s (an import of only some sections overlays the
+ * current state). Returns `data` itself when there is nothing to stamp.
+ */
+export function stampLoadedPension<D extends Partial<LoadSlice>>(
+  data: D,
+  current: Partial<LoadSlice> | undefined,
+  defaults: Pension,
+  month: string,
+): D {
+  if (!data.pension) return data;
+  const merged = { ...defaults, ...data.pension };
+  const salaries = data.salaries ?? current?.salaries ?? [];
+  const jobs = data.jobs ?? current?.jobs ?? [];
+  const bonuses = data.bonuses ?? current?.bonuses ?? [];
+  const fixedGross = activeJobBreakdown(salaries, jobs, month).reduce((s, c) => s + c.gross, 0);
+  const stamped = stampUnstampedAutoPost(merged, fixedGross, bonuses, month);
+  if (stamped === merged) return data;
+  const { otpLastPostedMonth, ipsLastPostedMonth, otpBonusPostedByYear } = stamped;
+  return {
+    ...data,
+    pension: {
+      ...data.pension,
+      ...(otpLastPostedMonth !== merged.otpLastPostedMonth ? { otpLastPostedMonth, otpBonusPostedByYear } : {}),
+      ...(ipsLastPostedMonth !== merged.ipsLastPostedMonth ? { ipsLastPostedMonth } : {}),
+    },
+  };
 }

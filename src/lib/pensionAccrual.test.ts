@@ -272,6 +272,21 @@ describe('switching auto-post on', () => {
     expect(rule.lastPostedMonth).toBe('2026-07');
   });
 
+  it('keeps a stamp already at this month and its bonus record, so a quick off/on swallows nothing', () => {
+    const posted = { ...pension, otpLastPostedMonth: '2026-07', otpBonusPostedByYear: { '2026': 0 } };
+    const otp = switchAutoPostOn({ ...posted, otpAutoPost: false }, 'otp', 600_000, bonuses, '2026-07');
+    expect(otp.otpAutoPost).toBe(true);
+    expect(otp.otpLastPostedMonth).toBe('2026-07');
+    expect(otp.otpBonusPostedByYear).toEqual({ '2026': 0 });
+    // The March bonus entered since July posted still lands in August.
+    const [rule] = pensionAccrualRules(input({
+      ...otp, ipsAutoPost: false, pensionableIncome: 600_000, otpIncludesBonuses: true, bonuses, currentMonth: '2026-08',
+    }), LABELS);
+    expect(rule.amountByMonth).toEqual({ '2026-08': 2_500 + 5_000 });
+    const ips = switchAutoPostOn({ ...pension, ipsLastPostedMonth: '2026-07' }, 'ips', 600_000, bonuses, '2026-07');
+    expect(ips.ipsLastPostedMonth).toBe('2026-07');
+  });
+
   it('re-stamps IPS and leaves OTP alone', () => {
     const ips = switchAutoPostOn(pension, 'ips', 600_000, bonuses, '2026-07');
     expect(ips.ipsLastPostedMonth).toBe('2026-07');

@@ -294,6 +294,39 @@ describe("a fixed expense's uncovered months (optional field)", () => {
   });
 });
 
+// Pension auto-post switched on before switching on stamped the month never
+// posted. Load and import stamp it to now (NOW = 2026-10) with the OTP bonus
+// share earned so far counted as already in the balance.
+describe('pension auto-post stamp on load and import', () => {
+  const pay = {
+    salaries: [{ id: 's', jobId: 'j', effectiveDate: '2025-01', grossAnnual: 600_000, changeType: 'initial' }],
+    jobs: [{ id: 'j', startDate: '2025-01', endDate: null, employer: 'Employer', role: 'Role', contractedHoursPerWeek: 37.5 }],
+    bonuses: [{ id: 'b', date: '2026-03-01', amount: 100_000, type: 'annual' }],
+  };
+  const unstamped = { otpAutoPost: true, ipsAutoPost: true, otpEmployerPct: 5, otpEmployeePct: 0 };
+
+  it('load stamps both and records the bonus baseline', () => {
+    const p = slice(loadAndSave(fullBlob({ ...pay, pension: unstamped })), 'pension');
+    expect(p.otpLastPostedMonth).toBe('2026-10');
+    expect(p.ipsLastPostedMonth).toBe('2026-10');
+    expect(p.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 5_000 });
+  });
+
+  it('an import of only the pension reads pay and bonuses from the current state', () => {
+    // The "included" section restore carries pension but not salaries, jobs or bonuses.
+    const state = loadAndSave(fullBlob(pay));
+    const p = slice(importAndSave(state, { pension: unstamped }), 'pension');
+    expect(p.otpLastPostedMonth).toBe('2026-10');
+    expect(p.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 5_000 });
+  });
+
+  it('an existing stamp is left alone', () => {
+    const p = slice(loadAndSave(fullBlob({ ...pay, pension: { ...unstamped, otpLastPostedMonth: '2026-01', ipsLastPostedMonth: '2026-01' } })), 'pension');
+    expect(p.otpLastPostedMonth).toBe('2026-01');
+    expect(p.otpBonusPostedByYear).toEqual({ '2026': 500 }); // the stored record, untouched
+  });
+});
+
 describe("departed paydown stamps (optional assets field)", () => {
   const departed = { mortgage: { lastPostedMonth: '2026-06', uncoveredMonths: { '2026-05': 0 } }, 'debt:car': { lastPostedMonth: '2026-04' } };
 

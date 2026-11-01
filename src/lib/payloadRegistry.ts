@@ -25,9 +25,6 @@ import { migrateSavingsAccounts, migrateSnapshotSavings, partitionSavings, merge
 import { sanitizeCoOwners, sanitizeSnapshotCoOwners } from './ownership';
 import { sanitizeTaxCard } from './forskuddstrekk';
 import { coerceNumber } from './sanitizePayload';
-import { currentMonthKey } from './date';
-import { activeJobBreakdown } from './salary';
-import { stampUnstampedAutoPost } from './pensionAccrual';
 
 // Every persisted field. `currentMonth` is view state — added by the callers
 // that need it, never built here — so it is the one `ExportPayload` key excluded.
@@ -185,17 +182,7 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
       },
     },
     loan: { group: 'reset', demo: 'personal', read: whenTruthy('loan'), default: d.loan },
-    pension: {
-      group: 'reset', demo: 'personal', default: d.pension,
-      read: (data) => {
-        const v = mergedWith('pension', d.pension)(data);
-        if (v === ABSENT) return v;
-        // Auto-post switched on before switching on stamped the month: stamp it now.
-        const month = currentMonthKey();
-        const fixedGross = activeJobBreakdown(data.salaries ?? [], data.jobs ?? [], month).reduce((s, c) => s + c.gross, 0);
-        return stampUnstampedAutoPost(v, fixedGross, data.bonuses ?? [], month);
-      },
-    },
+    pension: { group: 'reset', demo: 'personal', read: mergedWith('pension', d.pension), default: d.pension },
     recurringTemplates: { group: 'reset', demo: 'personal', read: whenDefined('recurringTemplates'), default: [] },
     housingMode: { group: 'reset', demo: 'personal', read: whenOneOf('housingMode', ['first_buyer', 'homeowner', 'transitioning']), default: 'first_buyer' },
     homeowner: { group: 'reset', demo: 'personal', read: mergedWith('homeowner', d.homeowner), default: d.homeowner },

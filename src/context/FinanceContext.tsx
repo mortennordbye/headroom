@@ -46,7 +46,7 @@ import {
   computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
-import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
+import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, stampLoadedPension, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
@@ -1533,7 +1533,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     raw: Partial<ExportPayload> | null,
     resetMissing: boolean,
     // Import only: the state the payload overlays, for the mortgage reconcile.
-    current?: Pick<ExportPayload, 'housingMode' | 'assets' | 'homeowner' | 'transition'>,
+    // Also the pay and bonuses an import keeps, for the pension auto-post stamp.
+    current?: Pick<ExportPayload, 'housingMode' | 'assets' | 'homeowner' | 'transition' | 'pension' | 'salaries' | 'jobs' | 'bonuses'>,
   ) => {
     if (raw == null) return; // first-run (null DB) / no snapshot → keep current state
     const sanitized = sanitizePayload(raw, {
@@ -1593,6 +1594,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
     // A term saved before the countdown existed counts down from now.
     if (resetMissing && data.homeowner) data.homeowner = stampLegacyTerm(data.homeowner, currentMonthKey());
+    // Pension auto-post switched on before switching on stamped the month starts
+    // from now; nothing back-posts.
+    data = stampLoadedPension(data, resetMissing ? undefined : current, DEFAULT_PENSION, currentMonthKey());
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
 

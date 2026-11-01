@@ -1,6 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
-import { pensionAccrualRules } from './pensionAccrual';
-import { computeAutomationPostings, type AutomationState } from './automation';
+import { describe, it, expect } from 'vitest';
 import {
   makePayloadRegistry,
   applyPersistedFields,
@@ -346,51 +344,7 @@ describe('payloadRegistry — resetMissing semantics', () => {
   });
 });
 
-const automationStateZero: AutomationState = {
-  savings: {}, scalars: { bufferAccount: 0, portfolio: 0, bsu: 0, pensionOtp: 0, pensionIps: 0 },
-  mortgage: 0, mortgageRate: 0, debts: {}, housingMode: 'homeowner',
-};
-
 describe('payloadRegistry — special-case reads preserved', () => {
-  it('pension: auto-post on but never stamped is stamped to this month, so the first post is next month', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-15T12:00:00'));
-    try {
-      const state = roundTrip({
-        pension: { otpAutoPost: true, ipsAutoPost: true, otpEmployerPct: 5, otpEmployeePct: 0 } as Pension,
-        bonuses: [{ id: 'b', date: '2026-03-01', amount: 100_000, type: 'annual' }],
-        salaries: [{ id: 's', jobId: 'j', effectiveDate: '2025-01', grossAnnual: 600_000, changeType: 'initial' }],
-        jobs: [],
-      }, false);
-      const p = state.pension as Pension;
-      expect(p.otpLastPostedMonth).toBe('2026-05');
-      expect(p.ipsLastPostedMonth).toBe('2026-05');
-      // 5% default employer share of the March bonus counts as already in the balance.
-      expect(p.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 5_000 });
-      const [otp] = pensionAccrualRules({
-        ...p, pensionableIncome: 600_000, currentMonth: '2026-05', otpIncludesBonuses: true,
-        bonuses: [{ date: '2026-03-01', amount: 100_000, type: 'annual' }],
-      }, { otp: 'OTP', ips: 'IPS' });
-      // Nothing due in May; June is the first month that posts, with no bonus back-posted.
-      expect(computeAutomationPostings([otp], automationStateZero, '2026-05')).toEqual([]);
-      const [june] = pensionAccrualRules({
-        ...p, pensionableIncome: 600_000, currentMonth: '2026-06', otpIncludesBonuses: true,
-        bonuses: [{ date: '2026-03-01', amount: 100_000, type: 'annual' }],
-      }, { otp: 'OTP', ips: 'IPS' });
-      const [posted] = computeAutomationPostings([june], automationStateZero, '2026-06');
-      expect(posted.monthsDue).toBe(1);
-      expect(posted.newBalance).toBe(2_500);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('pension: an existing stamp is left alone', () => {
-    const state = roundTrip({ pension: { otpAutoPost: true, otpLastPostedMonth: '2025-01' } as Pension }, false);
-    expect((state.pension as Pension).otpLastPostedMonth).toBe('2025-01');
-    expect((state.pension as Pension).otpBonusPostedByYear).toBeUndefined();
-  });
-
   it('assets: zeroes the legacy savings scalar and migrates savingsAccounts', () => {
     const state = roundTrip({ assets: { ...canonicalAssets, savings: 12345, savingsAccounts: [] } }, false);
     const a = state.assets as Assets;
