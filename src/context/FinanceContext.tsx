@@ -8,7 +8,7 @@ import {
   format,
   subMonths
 } from 'date-fns';
-import { calcRecommendations } from '../lib/calculations';
+import { calcRecommendations, planMonthlySavingFor } from '../lib/calculations';
 import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, savingsForMonth } from '../lib/savingsRate';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
@@ -1043,6 +1043,9 @@ interface FinanceDerivedContextType {
    *  any projection should annualise, so one skipped month doesn't flatten the
    *  future. Equals `plannedMonthlySaving` when the month isn't adjusted. */
   planMonthlySaving: number;
+  /** `planMonthlySaving` for the real current month, whatever month is being
+   *  viewed. For views that project from today (Assets). */
+  currentPlanMonthlySaving: number;
   /** The plan's transfers for the selected month, ignoring a one-month
    *  adjustment. Equals `savingsContributions` when the month isn't adjusted. */
   planSavingsContributions: number;
@@ -1676,9 +1679,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // don't have inflation source for the user's country, so we skip the call
   // and the UI hides inflation-dependent features.
   const loadInflation = useCallback(async (force = false) => {
-    const now = new Date();
-    const to = format(now, 'yyyy-MM');
-    const from = format(new Date(now.getFullYear() - 12, now.getMonth(), 1), 'yyyy-MM');
+    const to = currentMonthKey();
+    const from = addMonthsKey(to, -12 * 12);
     try {
       const r = await fetch(`/api/inflation?from=${from}&to=${to}${force ? '&force=1' : ''}`);
       if (!r.ok) { setInflationStale(true); return; }
@@ -2181,6 +2183,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [monthSaving, plannedMonthlySaving, planSavingsContributions, totalFixedExpenses, savingsContributions,
       effectiveIncome, averageIncome, incomeVolatility, savingsTargetPercent]);
 
+  // The same plan for the real current month, so a view that projects from today
+  // (Assets) doesn't follow the month being browsed elsewhere. The current month
+  // always uses the live expenses and plan, never a snapshot or an adjustment.
+  const currentPlanMonthlySaving = useMemo(() => {
+    const nowKey = currentMonthKey();
+    const income = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
+    const consumption = fixedExpenses.reduce((sum, item) => sum + item.amount, 0);
+    const planContributions = savingsContributionTotal(
+      resolveSavingsAmounts(savings, savingsBase(income, fixedExpenses), savingsTargetPercent),
+    );
+    return planMonthlySavingFor(income, consumption, planContributions, savingsTargetPercent);
+  }, [monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savings, savingsTargetPercent]);
+
   const setMonthlyIncomeForMonth = useCallback((key: string, amount: number) => {
     setMonthlyIncomes(prev => ({ ...prev, [key]: amount }));
   }, []);
@@ -2230,7 +2245,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // (the auto-capture effects always target it), so we preserve it rather than
   // leave a gap until the next slice change re-captures it.
   const clearHistory = useCallback(() => {
-    const nowKey = format(new Date(), 'yyyy-MM');
+    const nowKey = currentMonthKey();
     setNetWorthHistory(prev => (nowKey in prev ? { [nowKey]: prev[nowKey] } : {}));
     setBalanceSnapshots(prev => (prev[nowKey] ? { [nowKey]: prev[nowKey] } : {}));
   }, []);
@@ -2395,7 +2410,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Dashboard headline) whenever it changes (only for the current real month)
   useEffect(() => {
     if (!loaded.current) return;
-    if (monthKey !== format(new Date(), 'yyyy-MM')) return;
+    if (monthKey !== currentMonthKey()) return;
     // Deliberate: snapshot the current month's net worth into persisted state when it changes.
     // Returning `prev` unchanged when the value already matches keeps a plain
     // load/reload from dirtying the data (3.2).
@@ -2434,7 +2449,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // selected month.
   useEffect(() => {
     if (!loaded.current) return;
-    const nowKey = format(new Date(), 'yyyy-MM');
+    const nowKey = currentMonthKey();
     const snap = liveBalanceSnapshot;
     // Skip the rewrite when the stored snapshot is structurally identical —
     // the slices get fresh identities on every load/adopt, and rewriting the
@@ -3365,7 +3380,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
-    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
+    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, currentPlanMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, currentMortgage: currentMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, paydownPrincipal, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
@@ -3375,7 +3390,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
-    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
+    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, currentPlanMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, currentMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, paydownPrincipal, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,

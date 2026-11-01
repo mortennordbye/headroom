@@ -15,7 +15,7 @@ const { startBackupSchedule, parseCount } = require('./backup');
 const { startBankSyncSchedule } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
 const { isDemoMode, makeDemoGate, parseTrustProxy } = require('./demo');
-const { isWindowComplete } = require('./cpiWindow');
+const { isWindowComplete, osloMonthKey } = require('./cpiWindow');
 const { changedKeys, revertChange } = require('./revert');
 const { migrateHistory, historyStatements } = require('./history');
 const pkg = require('./package.json');
@@ -804,7 +804,7 @@ app.get('/api/inflation', async (req, res) => {
   // cooldown fell through to the `else if` below and flagged the data stale —
   // which the client renders as "could not reach SSB", constantly and wrongly.
   // See server/cpiWindow.js.
-  const nowMonth = new Date().toISOString().slice(0, 7);
+  const nowMonth = osloMonthKey();
   const haveComplete = isWindowComplete(cached.map(r => r.month), paddedFrom, to, nowMonth);
   const needsRefresh = !haveComplete || ageMs > CACHE_TTL_MS;
   // A user-initiated refresh bypasses the per-hour attempt cooldown (but not the
