@@ -17,6 +17,7 @@ const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCo
 const { isDemoMode, makeDemoGate } = require('./demo');
 const { isWindowComplete } = require('./cpiWindow');
 const { changedKeys, revertChange } = require('./revert');
+const { migrateHistory, historyStatements } = require('./history');
 const pkg = require('./package.json');
 
 // Public read-only demo instance (see server/demo.js). Off unless DEMO_MODE is
@@ -129,17 +130,9 @@ db.exec(`
     median REAL NOT NULL,
     fetched_at TEXT NOT NULL
   );
-  -- Rolling per-write history of the finance blob, kept IN the volume (separate
-  -- from the blob itself, like auth/caches). A fine-grained undo/restore net on
-  -- top of the coarse nightly .sqlite backups: every committed revision is
-  -- snapshotted here, with who wrote it and what it changed, and pruned to the
-  -- retention window (DATA_HISTORY_DAYS).
-  CREATE TABLE IF NOT EXISTS finance_history (
-    rev INTEGER PRIMARY KEY,
-    ts TEXT NOT NULL,
-    content TEXT NOT NULL
-  );
 `);
+// Rolling per-write history of the finance blob (schema in ./history).
+migrateHistory(db);
 
 // SSB replaced KPI table 03013 (2015=100) with 14700 (2025=100) in Feb 2026.
 // Cached cpi_index values from the old table are on a different base and would
@@ -155,14 +148,6 @@ if (db.pragma('user_version', { simple: true }) < 1) {
 // write from another tab/device or the bank-sync cron.
 if (!db.prepare('PRAGMA table_info(finance_data)').all().some((c) => c.name === 'rev')) {
   db.exec('ALTER TABLE finance_data ADD COLUMN rev INTEGER NOT NULL DEFAULT 0');
-}
-// Who made each revision and what it changed (see appendHistory). Older rows
-// have NULLs: they can still be restored, just not undone on their own.
-{
-  const cols = db.prepare('PRAGMA table_info(finance_history)').all().map((c) => c.name);
-  if (!cols.includes('source')) db.exec('ALTER TABLE finance_history ADD COLUMN source TEXT');
-  if (!cols.includes('label')) db.exec('ALTER TABLE finance_history ADD COLUMN label TEXT');
-  if (!cols.includes('change')) db.exec('ALTER TABLE finance_history ADD COLUMN change TEXT');
 }
 
 // Optional password auth config (single row). Kept OUT of the user data blob so
@@ -325,27 +310,15 @@ const UI_FOLD_SESSION_MS = 30 * 60 * 1000;
 // undo are set by the server itself.
 const CLIENT_SOURCES = new Set(['ui', 'mcp', 'import']);
 
-const historyInsertStmt = db.prepare(
-  'INSERT OR REPLACE INTO finance_history (rev, ts, content, source, label, change) VALUES (?, ?, ?, ?, ?, ?)'
-);
-const historyNewestStmt = db.prepare(
-  'SELECT rev, ts, source, change FROM finance_history ORDER BY rev DESC LIMIT 1'
-);
-const historyDeleteStmt = db.prepare('DELETE FROM finance_history WHERE rev = ?');
-// Drop revisions past the retention window, keeping the newest MIN.
-const historyPruneAgeStmt = db.prepare(
-  'DELETE FROM finance_history WHERE ts < ? AND rev NOT IN (SELECT rev FROM finance_history ORDER BY rev DESC LIMIT ?)'
-);
-// Drop the oldest revisions once the newest ones already add up to MAX_BYTES.
-const historyPruneBytesStmt = db.prepare(
-  'DELETE FROM finance_history WHERE rev IN (' +
-  'SELECT rev FROM (SELECT rev, SUM(LENGTH(content)) OVER (ORDER BY rev DESC) AS total FROM finance_history) WHERE total > ?' +
-  ') AND rev NOT IN (SELECT rev FROM finance_history ORDER BY rev DESC LIMIT ?)'
-);
-const historyListStmt = db.prepare(
-  'SELECT rev, ts, LENGTH(content) AS bytes, source, label, change FROM finance_history ORDER BY rev DESC'
-);
-const historyGetStmt = db.prepare('SELECT rev, ts, content, source, label, change FROM finance_history WHERE rev = ?');
+const {
+  insert: historyInsertStmt,
+  newest: historyNewestStmt,
+  delete: historyDeleteStmt,
+  pruneAge: historyPruneAgeStmt,
+  pruneBytes: historyPruneBytesStmt,
+  list: historyListStmt,
+  get: historyGetStmt,
+} = historyStatements(db);
 
 /** Parse a stored `change` column ({ keys, prevRev, since }); null for legacy rows. */
 function parseChange(raw) {
@@ -380,7 +353,7 @@ const recordHistory = db.transaction((rev, content, prevContent, prevRev, meta) 
     change = { keys: [...new Set([...older.keys, ...change.keys])], prevRev: older.prevRev, since: older.since };
     historyDeleteStmt.run(newest.rev);
   }
-  historyInsertStmt.run(rev, new Date(now).toISOString(), content, meta.source, meta.label ?? null, JSON.stringify(change));
+  historyInsertStmt.run(rev, new Date(now).toISOString(), content, meta.source, meta.label ?? null, JSON.stringify(change), content);
   historyPruneAgeStmt.run(new Date(now - DATA_HISTORY_DAYS * 86400000).toISOString(), DATA_HISTORY_MIN);
   historyPruneBytesStmt.run(DATA_HISTORY_MAX_BYTES, DATA_HISTORY_MIN);
 });
