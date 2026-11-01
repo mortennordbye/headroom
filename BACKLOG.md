@@ -181,8 +181,8 @@ in git and the CHANGELOG, not here.
   were moved off the tab bar. WebKit emulation no longer reproduces it, so `?debugtaps` turns on an on-screen log of touches, the element under the finger, clicks,
   route changes, frame stalls and the running bundle. **Why deferred**: needs a capture from the
   real phone. **Unblock**: a log of a failed tap, then fix the cause and delete the component and
-  its mount. **Where**: `src/components/TapDebugLog.tsx`, `<TapDebugLog />` in
-  `src/components/Layout.tsx`.
+  its mount. **Where**: `src/components/TapDebugLog.tsx`, `src/lib/tapLog.ts`, `<TapDebugLog />` in
+  `src/components/Layout.tsx`, the toggle in the About card of `src/pages/SettingsPage.tsx`.
 
 - **Stricter lint presets.** No `recommendedTypeChecked` for the TypeScript and no `jsx-a11y`.
   **Why deferred**: out of scope for #142, which only brought `server/` and `desktop/` under the
