@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.5](https://github.com/mortennordbye/headroom/compare/v3.10.4...v3.10.5) (2026-11-01)
+
+
+### Bug Fixes
+
+* add a Settings switch for the tap log ([#299](https://github.com/mortennordbye/headroom/issues/299)) ([bc57867](https://github.com/mortennordbye/headroom/commit/bc578677c9c2f97b7da1a1d4ef5e1d9c50087c58))
+* keep toasts off the mobile tab bar and add a tap log for the first-tap bug ([#297](https://github.com/mortennordbye/headroom/issues/297)) ([13e7daf](https://github.com/mortennordbye/headroom/commit/13e7daf7f8523d87890bde4cc02185bb9fcbd826))
+
 ## [3.10.4](https://github.com/mortennordbye/headroom/compare/v3.10.3...v3.10.4) (2026-11-01)
 
 
