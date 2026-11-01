@@ -380,4 +380,16 @@ describe('pattern (match) envelopes', () => {
     );
     expect(suggestions).toHaveLength(0);
   });
+
+  it('keeps the category envelope when the pattern is only wildcard characters', () => {
+    // "*" normalises to an empty pattern, so it can't be a pattern envelope; it
+    // must not also drop the category link, or the reserved amount is spent twice.
+    const r = reconcile(
+      [fe({ id: 'mat', name: 'Mat', amount: 5000, category: 'groceries', match: '*' })],
+      [tx({ description: 'Rema 1000', amount: 800, category: 'groceries' })],
+      '2026-07',
+    );
+    expect(r.byExpenseId.get('mat')?.actual).toBe(800);
+    expect(r.byCategory.get('groceries')?.budgeted).toBe(5000);
+  });
 });

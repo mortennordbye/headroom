@@ -23,8 +23,7 @@ in git and the CHANGELOG, not here.
 - **OTP base excludes bonuses.** `otpAnnualContribution` is capped at 12G but uses base + on-call
   only; a real OTP base may include bonuses. **Where**: `src/lib/pension.ts`,
   `src/pages/PensionPage.tsx`.
-- **Not audited yet**: `secondHome.ts`, `forskuddstrekk.ts`, `savingsRate.ts`, `envelopes.ts`,
-  bank import and categorisation.
+- **Not audited yet**: bank import and categorisation.
 
 ## Income and salary
 

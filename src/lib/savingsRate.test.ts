@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { savingsRateStatus, savingsContributionTotal, resolveSavingsForMonth, capSavingsToTotal, targetRateOfIncome, planSavingsRateSeries, savingsBase, resolveSavingsAmounts, percentOfSavingsBase } from './savingsRate';
+import { savingsRateStatus, savingsContributionTotal, resolveSavingsForMonth, capSavingsToTotal, targetRateOfIncome, planSavingsRateSeries, savingsBase, resolveSavingsAmounts, percentOfSavingsBase, draftSavingsRows } from './savingsRate';
 import type { MonthlyCashflowRow } from './monthlyCashflow';
 import type { FixedExpense, Saving } from '../context/FinanceContext';
 
@@ -331,6 +331,29 @@ describe('resolveSavingsAmounts — rest rows', () => {
   it('does not let a paused sibling claim part of the target', () => {
     const rows = [{ ...krSaving('buffer', 500), paused: true }, restSaving('fund')];
     expect(resolveSavingsAmounts(rows, base, 65)[1].amount).toBe(19500);
+  });
+
+  it('does not split the pool with a paused rest row', () => {
+    const rows = [krSaving('buffer', 500), restSaving('fund'), { ...restSaving('old'), paused: true }];
+    const out = resolveSavingsAmounts(rows, base, 65);
+    expect(out[1].amount).toBe(19000);
+    expect(savingsContributionTotal(out)).toBe(19500);
+  });
+
+  it('sizes a dialog draft by the dialog\'s pause state, not the stored one', () => {
+    const stored = { ...restSaving('fund'), amount: 3000, paused: true };
+    const rows = [krSaving('buffer', 500), stored];
+    const resumed = draftSavingsRows(rows, stored, 'fund', { amount: 3000, mode: 'rest', paused: false });
+    expect(resolveSavingsAmounts(resumed, base, 65)[1].amount).toBe(19000);
+    const stillPaused = draftSavingsRows(rows, stored, 'fund', { amount: 3000, mode: 'rest', paused: true });
+    expect(resolveSavingsAmounts(stillPaused, base, 65)[1].amount).toBe(3000);
+  });
+
+  it('appends a new draft to the list', () => {
+    const rows = [krSaving('buffer', 500)];
+    const out = draftSavingsRows(rows, undefined, '__draft__', { name: 'new', amount: 0, mode: 'rest', paused: false });
+    expect(out).toHaveLength(2);
+    expect(resolveSavingsAmounts(out, base, 65)[1].amount).toBe(19000);
   });
 
   it('lets rest win over a stale percentage on the same row', () => {

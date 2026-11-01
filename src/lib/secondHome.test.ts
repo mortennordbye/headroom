@@ -18,6 +18,7 @@ import {
   calcPortfolio,
   type SecondHomeScenario,
 } from './secondHome';
+import { WEALTH_PARAMS } from './norwegianTax';
 
 const scenario = (over: Partial<SecondHomeScenario> = {}): SecondHomeScenario => ({
   id: 's1',
@@ -278,5 +279,13 @@ describe('calcRealBorrowingCapacity', () => {
     expect(r.maxTotalDebt).toBe(0);
     expect(r.dtiAfterPurchase).toBe(0);
     expect(r.loanFits).toBe(false);
+  });
+});
+
+describe('DEFAULT_SECOND_HOME_SCENARIO', () => {
+  it('defaults the marginal wealth-tax rate to the statutory rate above the bunnfradrag', () => {
+    // Skatteetaten 2026: 0.35 % kommune + 0.65 % stat = 1.00 % above the innslagspunkt.
+    expect(DEFAULT_SECOND_HOME_SCENARIO.marginalWealthTaxPct).toBeCloseTo(WEALTH_PARAMS.brackets[0].rate * 100, 10);
+    expect(DEFAULT_SECOND_HOME_SCENARIO.marginalWealthTaxPct).toBeCloseTo(1, 10);
   });
 });

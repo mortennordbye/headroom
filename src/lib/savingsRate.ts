@@ -88,7 +88,8 @@ export function resolveSavingsAmounts(
 
 function resolveAgainstTarget(savings: Saving[], base: number, target: number): Saving[] {
   const hasPercent = savings.some(s => isPercentSavings(s));
-  const restCount = savings.reduce((n, s) => (isRestSavings(s) ? n + 1 : n), 0);
+  // A paused rest row moves nothing, so it takes no share of the pool.
+  const restCount = savings.reduce((n, s) => (isRestSavings(s) && !s.paused ? n + 1 : n), 0);
   if (!hasPercent && restCount === 0) return savings;
   const resolved = savings.map(s =>
     isPercentSavings(s)
@@ -110,7 +111,30 @@ function resolveAgainstTarget(savings: Saving[], base: number, target: number): 
   // asking for "the rest" get half each. Same rule as resolveAllocation.
   const each = Math.floor(pool / restCount);
   let extra = pool - each * restCount;
-  return resolved.map(s => (isRestSavings(s) ? { ...s, amount: each + (extra-- > 0 ? 1 : 0) } : s));
+  return resolved.map(s => (isRestSavings(s) && !s.paused ? { ...s, amount: each + (extra-- > 0 ? 1 : 0) } : s));
+}
+
+/**
+ * The savings list with an edit dialog's draft standing in for the row it edits
+ * (or appended, when adding), so a 'rest' row can be sized against its siblings.
+ * The draft carries the dialog's own pause state: a stored `paused` would make
+ * the resolver skip a row the user is resuming and show its stale amount.
+ */
+export function draftSavingsRows(
+  savings: Saving[],
+  original: Saving | undefined,
+  id: string,
+  draft: Pick<Saving, 'amount' | 'mode' | 'percent' | 'paused'> & { name?: string },
+): Saving[] {
+  const row: Saving = {
+    ...(original ?? { name: draft.name ?? '', destinationKind: 'portfolio' as const }),
+    id,
+    amount: draft.amount,
+    mode: draft.mode,
+    percent: draft.percent,
+    paused: draft.paused || undefined,
+  };
+  return original ? savings.map(s => (s.id === id ? row : s)) : [...savings, row];
 }
 
 /**
