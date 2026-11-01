@@ -87,8 +87,6 @@ in git and the CHANGELOG, not here.
   everywhere. **Where**: `src/lib/allocationSync.ts`, `src/lib/calculations.ts`,
   `src/context/FinanceContext.tsx`, `src/components/SmartRecommendations.tsx`,
   `src/pages/DashboardPage.tsx`, `mcp/derive.ts`.
-- **CashflowChart shows savings transfers as money out** (a literal cashflow view), so it disagrees
-  with the savings-rate chart. **Where**: `src/components/charts/CashflowChart.tsx`.
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
   `src/lib/envelopes.ts`, `src/context/FinanceContext.tsx`.
 

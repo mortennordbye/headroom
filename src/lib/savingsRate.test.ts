@@ -4,7 +4,7 @@ import type { MonthlyCashflowRow } from './monthlyCashflow';
 import type { BalanceSnapshot, FixedExpense, Saving } from '../context/FinanceContext';
 
 const row = (month: string, income: number, rate: number, measured = true): MonthlyCashflowRow => ({
-  month, income, variable: 0, expenses: 0, net: 0, rate, measured,
+  month, income, variable: 0, expenses: 0, saved: 0, net: 0, rate, measured,
 });
 
 describe('savingsRateStatus', () => {
