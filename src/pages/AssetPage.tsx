@@ -75,6 +75,7 @@ const AssetPage: React.FC = () => {
     t,
     assets: liveAssets,
     updateAsset,
+    setBsuTotalDeposited,
     addSavingsAccount,
     updateSavingsAccount,
     removeSavingsAccount,
@@ -229,9 +230,27 @@ const AssetPage: React.FC = () => {
   // BSU room against the annual + lifetime caps, from the live balance and the
   // snapshot history (only shown live; history mode is read-only/dimmed).
   const bsu = useMemo(
-    () => bsuStatus(liveAssets.bsu, balanceSnapshots, new Date().getFullYear()),
-    [liveAssets.bsu, balanceSnapshots],
+    () => bsuStatus(liveAssets.bsu, balanceSnapshots, new Date().getFullYear(), liveAssets.bsuTotalDeposited),
+    [liveAssets.bsu, balanceSnapshots, liveAssets.bsuTotalDeposited],
   );
+  // Optional deposit total: empty clears it (lifetime room falls back to the balance).
+  const openBsuDepositedEdit = () => {
+    openModal({
+      title: t.assetPage.bsuTotalDeposited,
+      fields: [{
+        key: 'value', label: t.assetPage.bsuTotalDeposited, type: 'number',
+        value: liveAssets.bsuTotalDeposited?.toString() ?? '', hint: t.assetPage.bsuTotalDepositedHint,
+      }],
+      onSave: (vals) => {
+        if (vals.value.trim() === '') setBsuTotalDeposited(undefined);
+        else {
+          const n = parseLocaleNumber(vals.value);
+          if (!isNaN(n) && n >= 0) setBsuTotalDeposited(n);
+        }
+        closeModal();
+      },
+    });
+  };
   // BSU income-tax credit (10%, under-34, non-homeowner) on this year's deposit.
   const bsuAge = pension.birthYear > 1900 ? new Date().getFullYear() - pension.birthYear : -1;
   const bsuOwnsHome = housingMode !== 'first_buyer';
@@ -452,6 +471,14 @@ const AssetPage: React.FC = () => {
               />
               {hist.isLive && (
                 <AssetRow
+                  label={t.assetPage.bsuTotalDeposited}
+                  value={liveAssets.bsuTotalDeposited ?? 0}
+                  onEdit={openBsuDepositedEdit}
+                  formatCurrency={liveAssets.bsuTotalDeposited === undefined ? () => t.assetPage.bsuTotalDepositedUnset : formatCurrency}
+                />
+              )}
+              {hist.isLive && (
+                <AssetRow
                   label={t.assetPage.bsuContribution}
                   value={assets.bsuAnnualContribution}
                   onEdit={() => openAssetEdit(t.assetPage.bsuContribution, assets.bsuAnnualContribution, 'bsuAnnualContribution')}
@@ -484,9 +511,11 @@ const AssetPage: React.FC = () => {
                         {formatCurrency(bsu.lifetimeRoomLeft)} {t.assetPage.bsuRoomLeft}
                       </span>
                     </div>
-                    <ProgressBar pct={Math.min(100, (bsu.balance / bsu.lifetimeCap) * 100)} square color={bsu.atLifetimeCap ? 'var(--positive)' : 'var(--violet)'} />
+                    <ProgressBar pct={Math.min(100, (bsu.lifetimeCounted / bsu.lifetimeCap) * 100)} square color={bsu.atLifetimeCap ? 'var(--positive)' : 'var(--violet)'} />
                   </div>
-                  <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{t.assetPage.bsuNote}</p>
+                  <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                    {t.assetPage.bsuNote} {bsu.lifetimeBasis === 'deposits' ? t.assetPage.bsuBasisDeposits : t.assetPage.bsuBasisBalance}
+                  </p>
                 </div>
               )}
               {savingsAccounts.map(acc => (

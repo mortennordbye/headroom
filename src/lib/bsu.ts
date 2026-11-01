@@ -9,10 +9,12 @@
 // 27 500 kr cap, so the approximation is close enough for a nudge. The age-34
 // eligibility cutoff is not modeled (no birthdate is tied to the account).
 //
-// The 300 000 kr lifetime cap applies to deposits, not the balance, but only the
-// balance is stored (no deposit history, no BSU rate). The balance includes
-// interest, so it is an upper bound on deposits and `lifetimeRoomLeft` is a
-// lower bound on the real room. The UI says so rather than guessing a rate.
+// The 300 000 kr lifetime cap applies to deposits, not the balance (interest
+// doesn't count). When the user has entered their total deposited so far
+// (`assets.bsuTotalDeposited`), the lifetime room is measured against that.
+// Otherwise it falls back to the balance: it includes interest, so it is an
+// upper bound on deposits and `lifetimeRoomLeft` is a lower bound on the real
+// room. `lifetimeBasis` says which one was used so the UI can label it.
 
 /** Finite-or-0 guard against a hand-edited undefined/NaN balance. */
 const finite = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0);
@@ -42,13 +44,33 @@ export function calcBsuTaxCredit(
   return Math.round(BSU_CREDIT_RATE * eligible);
 }
 
+/**
+ * The tracked deposit total after an automated posting moves the BSU balance
+ * from `prevBalance` to `newBalance`. The delta moves the total either way: an
+ * automated drop is always the reversal of an automated deposit (a month
+ * override correcting a posted amount), never interest or a withdrawal, so it
+ * comes off the total, floored at 0. An untracked (absent) total stays absent.
+ */
+export function bsuDepositedAfterPosting(
+  totalDeposited: number | undefined,
+  prevBalance: number,
+  newBalance: number,
+): number | undefined {
+  if (totalDeposited === undefined) return undefined;
+  return Math.max(0, totalDeposited + finite(newBalance) - finite(prevBalance));
+}
+
 export interface BsuStatus {
   balance: number;
   contributedThisYear: number;
   annualCap: number;
   lifetimeCap: number;
   annualRoomLeft: number;   // clamped ≥ 0
-  lifetimeRoomLeft: number; // clamped ≥ 0; at least this much (balance includes interest)
+  lifetimeRoomLeft: number; // clamped ≥ 0; a floor when lifetimeBasis is 'balance'
+  /** What the lifetime cap was measured against: entered deposits, or the balance fallback. */
+  lifetimeBasis: 'deposits' | 'balance';
+  /** The amount counted toward the lifetime cap (the deposits, or the balance). */
+  lifetimeCounted: number;
   atAnnualCap: boolean;
   atLifetimeCap: boolean;
 }
@@ -71,6 +93,7 @@ export function bsuStatus(
   currentBalance: number,
   snapshots: Record<string, { assets: { bsu?: number } }>,
   year: number,
+  totalDeposited?: number,
 ): BsuStatus {
   const balance = Math.max(0, finite(currentBalance));
   const baseline = baselineForYear(snapshots, year);
@@ -78,7 +101,10 @@ export function bsuStatus(
   const contributedThisYear = baseline == null ? 0 : Math.max(0, balance - baseline);
 
   const annualRoomLeft = Math.max(0, BSU_ANNUAL_CAP - contributedThisYear);
-  const lifetimeRoomLeft = Math.max(0, BSU_LIFETIME_CAP - balance);
+  // A missing, non-finite or negative deposit total falls back to the balance.
+  const hasDeposits = totalDeposited !== undefined && Number.isFinite(totalDeposited) && totalDeposited >= 0;
+  const lifetimeCounted = hasDeposits ? totalDeposited : balance;
+  const lifetimeRoomLeft = Math.max(0, BSU_LIFETIME_CAP - lifetimeCounted);
 
   return {
     balance,
@@ -87,6 +113,8 @@ export function bsuStatus(
     lifetimeCap: BSU_LIFETIME_CAP,
     annualRoomLeft,
     lifetimeRoomLeft,
+    lifetimeBasis: hasDeposits ? 'deposits' : 'balance',
+    lifetimeCounted,
     atAnnualCap: annualRoomLeft <= 0,
     atLifetimeCap: lifetimeRoomLeft <= 0,
   };

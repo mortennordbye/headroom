@@ -81,7 +81,7 @@ import {
   FERIEPENGER_DEFAULT_PCT,
   DEFAULT_BILLING_CONFIG,
 } from '../src/lib/employerCost';
-import { calcBsuTaxCredit } from '../src/lib/bsu';
+import { bsuStatus, calcBsuTaxCredit } from '../src/lib/bsu';
 import {
   savingsBase,
   resolveSavingsAmounts,
@@ -1116,6 +1116,8 @@ export function assetsAndDebts(blob: ExportPayload) {
   const nonMortgageDebt = totalNonMortgageDebt(blob);
   return {
     assets: blob.assets,
+    // BSU room against the annual and lifetime caps, as AssetPage shows it.
+    bsuRoom: bsuStatus(blob.assets.bsu, blob.balanceSnapshots ?? {}, yearOf(currentMonthKey()), blob.assets.bsuTotalDeposited),
     equityBreakdown: eq,
     netWorth: Math.round(netWorth(blob)),
     debts: blob.debts ?? [],

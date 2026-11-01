@@ -331,7 +331,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Assets & debts',
       description:
-        'Every balance with its id: assets (incl. savings accounts), equity breakdown, debts, mortgage/loan settings, savings transfers, fixed expenses, the wealth-tax estimate and the last 12 snapshots\' net worth. Use the debt, savings-account and fixed-expense ids with the matching write tools.',
+        'Every balance with its id: assets (incl. savings accounts), equity breakdown, debts, mortgage/loan settings, savings transfers, fixed expenses, BSU room against the annual and lifetime caps (lifetimeBasis says whether it counts entered deposits or falls back to the balance), the wealth-tax estimate and the last 12 snapshots\' net worth. Use the debt, savings-account and fixed-expense ids with the matching write tools.',
       inputSchema: {},
       annotations: { title: 'Assets & debts', ...readOnly },
     },

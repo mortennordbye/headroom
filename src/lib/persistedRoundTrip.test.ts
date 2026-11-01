@@ -253,3 +253,27 @@ describe.each(FIXTURES)('persisted shape round trip: $name', (f) => {
     });
   }
 });
+
+describe('BSU total deposited (optional assets field)', () => {
+  const withDeposited = fullBlob({ assets: { bsu: 120_000, bsuTotalDeposited: 110_000 } });
+
+  it('a blob without it loads and saves without adding it', () => {
+    const saved = loadAndSave(fullBlob({ assets: { bsu: 120_000 } }));
+    expect('bsuTotalDeposited' in slice(saved, 'assets')).toBe(false);
+  });
+
+  it('survives load, autosave and a second load', () => {
+    const saved = loadAndSave(withDeposited);
+    expect(slice(saved, 'assets').bsuTotalDeposited).toBe(110_000);
+    expect(loadAndSave(saved)).toEqual(saved);
+  });
+
+  it('importing a file that carries it applies it, and undoing the import removes it', () => {
+    const base = loadAndSave(fullBlob({ assets: { bsu: 120_000 } }));
+    const imported = importAndSave(base, withDeposited);
+    expect(slice(imported, 'assets').bsuTotalDeposited).toBe(110_000);
+    const r = revertChange(imported, imported, base, changedKeys(base, imported));
+    expect(r.conflicts).toBeUndefined();
+    expect(loadAndSave(r.blob!)).toEqual(base);
+  });
+});

@@ -73,6 +73,7 @@ const canonicalAssets: Assets = {
   savingsAccounts: [{ id: 'sav-1', name: 'Sparekonto', balance: 444 }],
   houseValue: 555, houseDebt: 666, crypto: 777, cryptoUnrealizedGain: 888, cryptoTaxRate: 20, bufferAccount: 999,
   coOwners: [{ id: 'coo-1', name: 'Medeier 1', ownershipPct: 50, debtSharePct: 40, since: '2024-03', until: '2026-01' }],
+  bsuTotalDeposited: 321,
 };
 const canonicalLoan: LoanData = {
   arslonn: 700000, eksisterendeGjeld: 1, egenkapital: 400000, laanebelop: 2500000, rente: 4.5, nedbetalingstid: 20,
@@ -252,6 +253,29 @@ describe('payloadRegistry — co-owners', () => {
     const { coOwners: _drop, ...noCo } = canonicalAssets;
     const state = roundTrip({ ...fullPayload(), assets: noCo as Assets }, true);
     expect('coOwners' in (state.assets as Assets)).toBe(false);
+  });
+});
+
+describe('payloadRegistry — BSU total deposited', () => {
+  const withDeposited = (v: unknown) =>
+    roundTrip({ ...fullPayload(), assets: { ...canonicalAssets, bsuTotalDeposited: v } as Assets }, true).assets as Assets;
+
+  it('leaves bsuTotalDeposited absent when the stored blob has none (older blobs stay unchanged)', () => {
+    const { bsuTotalDeposited: _drop, ...noDeposited } = canonicalAssets;
+    const state = roundTrip({ ...fullPayload(), assets: noDeposited as Assets }, true);
+    expect('bsuTotalDeposited' in (state.assets as Assets)).toBe(false);
+  });
+
+  it('keeps a valid amount, including 0', () => {
+    expect(withDeposited(120000).bsuTotalDeposited).toBe(120000);
+    expect(withDeposited(0).bsuTotalDeposited).toBe(0);
+  });
+
+  it('coerces a numeric string and drops a non-finite or negative value', () => {
+    expect(withDeposited('120 000').bsuTotalDeposited).toBe(120000);
+    for (const bad of [NaN, -1, 'abc', null]) {
+      expect('bsuTotalDeposited' in withDeposited(bad), String(bad)).toBe(false);
+    }
   });
 });
 
