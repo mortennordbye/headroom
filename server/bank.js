@@ -768,18 +768,120 @@ function removeConnection(id) {
   return { removed: before - store.connections.length };
 }
 
+// --- fetch floors -------------------------------------------------------------
+//
+// `store.fetchFloors` maps an account key (accountKey) to the earliest
+// `date_from` any later fetch of that account may use. recordSync raises it to
+// the next fetch's start for each account actually fetched; it never goes down
+// and is never deleted, so it outlives a remove and binds a re-add (which reuses
+// the connection id, so the same account keys). fetchFromDate clamps to it, and
+// dropRowsBeforeFloor enforces it on the response for banks that ignore
+// `date_from`. That makes it safe for the client to prune a deleted row's
+// tombstone dated before `floor - FLOOR_MARGIN_DAYS` (tombstoneCutoffs).
+
+// How far before an account's floor a row may be dated and still be returned:
+// the bank filters `date_from` on its own date field, which may not be the one a
+// row is dated by (booking, else value, else transaction date), and a pending
+// row dates off its value date. Shared with the client via tombstoneCutoffs, so
+// the two sides can't drift.
+const FLOOR_MARGIN_DAYS = 30;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+// A stored floor as fetches use it: a valid day, capped at today. A floor in the
+// future (clock moved back, hand-edited store) is never used as-is, or every
+// fetch would start in the future; status reports it (futureFloors).
+function effectiveFloor(floor, nowMs = Date.now()) {
+  if (typeof floor !== 'string' || !ISO_DAY.test(floor) || !Number.isFinite(Date.parse(floor))) return null;
+  const today = isoDay(nowMs);
+  return floor > today ? today : floor;
+}
+
+// The day before which a row of an account with this floor can't come back.
+function floorCutoff(floor, nowMs = Date.now()) {
+  const f = effectiveFloor(floor, nowMs);
+  return f ? isoDay(Date.parse(f) - FLOOR_MARGIN_DAYS * 864e5) : null;
+}
+
 /**
- * The fetch floor of every id prefix the store knows (live, removed, or floored
- * before), null for one without a floor yet. The client prunes a deleted-row
- * tombstone only when every prefix its id starts with has a floor (see
- * pruneBankTombstones in src/lib/bankDedup.ts). Pure.
+ * The `date_from` of an account's next fetch. An account with a floor starts at
+ * it (equal to its last fetch minus the overlap, or earlier if a fetch failed
+ * since). One without starts `days` back, so an account newly granted on a
+ * re-link still backfills, except in a store from before floors existed: there
+ * the connection's accounts keep the old `last_sync - overlap` window until their
+ * first sync records a floor, since an EB_DAYS refetch could re-import rows that
+ * a past re-link renamed. Pure.
  */
-function fetchFloorsFor(store) {
-  const floors = { ...(store.fetchFloors || {}) };
-  for (const c of [...(store.connections || []), ...(store.removed || [])]) {
-    if (typeof c.idPrefix === 'string' && !(c.idPrefix in floors)) floors[c.idPrefix] = null;
+function fetchFromDate(c, acc, floors, nowMs = Date.now(), days = DAYS) {
+  const f = floors || {};
+  const floor = effectiveFloor(f[accountKey(c, acc)], nowMs);
+  if (floor) return floor;
+  const connectionFloored = (c.accounts || []).some((a) => effectiveFloor(f[accountKey(c, a)], nowMs));
+  const lastSync = c.last_sync ? Date.parse(c.last_sync) : NaN;
+  if (!connectionFloored && Number.isFinite(lastSync)) return isoDay(lastSync - RESYNC_OVERLAP_DAYS * 864e5);
+  return isoDay(nowMs - days * 864e5);
+}
+
+/**
+ * Drop fetched rows a bank returned from before their account's floor (minus
+ * the margin) despite `date_from`, unless already in the ledger: such a row may
+ * be one whose tombstone the client pruned. Pure.
+ */
+function dropRowsBeforeFloor(rows, existingIds, floors, nowMs = Date.now()) {
+  const f = floors || {};
+  return rows.filter((r) => {
+    if (existingIds.has(r.id) || typeof r.account !== 'string') return true;
+    const cutoff = floorCutoff(f[r.account], nowMs);
+    return !cutoff || String(r.date).slice(0, 10) >= cutoff;
+  });
+}
+
+/**
+ * What the client may prune deleted-row tombstones against (see
+ * prunableBankTombstoneIds in src/lib/bankDedup.ts): `accounts` maps each
+ * floored account key to its cutoff; `prefixes` maps each live or removed id
+ * prefix to the lowest cutoff of its accounts, for tombstones that carry no
+ * account, or null when that can't be bounded (a removed connection, whose
+ * accounts the store no longer lists; a connection with no accounts; any account
+ * without a floor). A re-add or re-link can bring a new account that backfills
+ * EB_DAYS under the same prefix, which is why the prefix cutoff is only a
+ * fallback. Pure.
+ */
+function tombstoneCutoffs(store, nowMs = Date.now()) {
+  const floors = store.fetchFloors || {};
+  const accounts = {};
+  for (const [key, floor] of Object.entries(floors)) {
+    const cutoff = floorCutoff(floor, nowMs);
+    if (cutoff) accounts[key] = cutoff;
   }
-  return floors;
+  const prefixes = {};
+  const put = (prefix, cutoff) => {
+    if (typeof prefix !== 'string') return;
+    if (prefix in prefixes) {
+      const prev = prefixes[prefix];
+      prefixes[prefix] = prev == null || cutoff == null ? null : (cutoff < prev ? cutoff : prev);
+    } else {
+      prefixes[prefix] = cutoff;
+    }
+  };
+  for (const c of store.connections || []) {
+    const accs = c.accounts || [];
+    let lowest = accs.length ? undefined : null;
+    for (const a of accs) {
+      const cutoff = accounts[accountKey(c, a)] || null;
+      if (cutoff == null) { lowest = null; break; }
+      if (lowest === undefined || cutoff < lowest) lowest = cutoff;
+    }
+    put(c.idPrefix, lowest ?? null);
+  }
+  for (const c of store.removed || []) put(c.idPrefix, null);
+  return { accounts, prefixes };
+}
+
+// Account keys whose stored floor is after today (see effectiveFloor).
+function futureFloors(store, nowMs = Date.now()) {
+  const today = isoDay(nowMs);
+  return Object.entries(store.fetchFloors || {}).filter(([, f]) => typeof f === 'string' && f > today).map(([k]) => k);
 }
 
 /** Status for the Settings card. Never throws. */
@@ -817,26 +919,20 @@ function getStatus() {
   });
   // Rolling sync history, newest first, for the Settings card.
   const syncLog = [...(store.syncLog || [])].reverse();
-  return { linked: connections.length > 0, connections, syncLog, fetchFloors: fetchFloorsFor(store), ...base };
+  const future = futureFloors(store);
+  if (future.length) console.warn(`[bank] ${future.length} fetch floor(s) are in the future; fetching from today for them`);
+  return {
+    linked: connections.length > 0, connections, syncLog,
+    tombstoneCutoffs: tombstoneCutoffs(store), futureFloors: future, ...base,
+  };
 }
 
 /**
- * The `date_from` of a connection's next fetch: its last sync minus the overlap,
- * or `days` back on a first sync, but never before the connection's persisted
- * fetch floor (see recordSync). The clamp is what makes the floor a promise: a
- * re-add after a remove (last_sync reset, `days` back) or a raised EB_DAYS can't
- * reach behind it, so the client may prune tombstones older than it. Pure.
- */
-function fetchFromDate(c, floors, nowMs = Date.now(), days = DAYS) {
-  const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
-  const fromMs = lastSync ? lastSync - RESYNC_OVERLAP_DAYS * 864e5 : nowMs - days * 864e5;
-  const from = new Date(fromMs).toISOString().slice(0, 10);
-  const floor = floors && floors[c.idPrefix];
-  return typeof floor === 'string' && floor > from ? floor : from;
-}
-
-/**
- * Fetch new transactions and return them mapped. Throws { needsRelink: true }
+ * Fetch new transactions and return them mapped, as `{ rows, synced, floors }`:
+ * `synced` lists, per connection, the session it used, the account keys whose
+ * fetch completed, and whether every account did (recordSync raises floors and
+ * `last_sync` from it, never for what wasn't fetched); `floors` is the floor map
+ * the fetch ran against, for dropRowsBeforeFloor. Throws { needsRelink: true }
  * (Error with .needsRelink) when consent has lapsed.
  */
 async function fetchMappedTransactions() {
@@ -848,6 +944,8 @@ async function fetchMappedTransactions() {
   }
   let mapped = [];
   let anyValid = false;
+  const synced = [];
+  const floors = { ...(store.fetchFloors || {}) };
   for (const c of store.connections) {
     // A single expired bank flags itself for re-link but doesn't block the
     // others — we still sync every bank whose consent is live.
@@ -879,10 +977,13 @@ async function fetchMappedTransactions() {
         console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);
       }
     }
-    const from = fetchFromDate(c, store.fetchFloors);
+    const accountKeys = [];
+    const sync = { connectionId: c.id, sessionId: c.session_id, accountKeys, complete: false };
+    synced.push(sync);
     try {
       for (const acc of c.accounts || []) {
-        const raw = await fetchTransactions(acc.uid, from);
+        const raw = await fetchTransactions(acc.uid, fetchFromDate(c, acc, floors));
+        accountKeys.push(accountKey(c, acc));
         mapped = mapped.concat(
           mapEBTransactions(raw, {
             includePending: INCLUDE_PENDING,
@@ -893,6 +994,7 @@ async function fetchMappedTransactions() {
           }).map((row) => (c.relinked ? { ...row, relinkPrefix: c.idPrefix } : row)),
         );
       }
+      sync.complete = accountKeys.length > 0;
     } catch (err) {
       if (err.status === 401 || err.status === 403) {
         markRelink(c.id, `fetch ${err.status}`);
@@ -907,7 +1009,7 @@ async function fetchMappedTransactions() {
     e.needsRelink = true;
     throw e;
   }
-  return mapped;
+  return { rows: mapped, synced, floors };
 }
 
 // How many recent sync outcomes to keep in the rolling log (oldest pruned).
@@ -945,27 +1047,33 @@ function appendSyncLog(log, entry, max = SYNC_LOG_MAX) {
 }
 
 /**
- * Record a sync outcome: on success, stamp `last_sync` on every live connection;
- * always append a rolling log entry (ok or error) so the Settings card can show
- * whether a cron sync ran and what it pulled. The relink flag stays until the
+ * Record a sync outcome; always append a rolling log entry (ok or error) so the
+ * Settings card can show whether a cron sync ran and what it pulled. On success,
+ * `outcome.synced` (from fetchMappedTransactions) says what was fetched: each
+ * fetched account's floor is raised to the next fetch's start, and a connection
+ * whose every account was fetched gets `last_sync`. Nothing else is touched: not
+ * a connection that hit 401/403, one with no accounts, or one re-linked while
+ * the sync ran (its session no longer matches). The relink flag stays until the
  * next sync's window (`last_sync` minus the overlap) starts after the re-link
  * day: until then the bank can still resend pre-re-link rows under new ids.
  */
 function recordSync(outcome = {}) {
   const store = readStore();
   const now = new Date().toISOString();
-  if (outcome.ok !== false) {
-    const nextFrom = new Date(Date.parse(now) - RESYNC_OVERLAP_DAYS * 864e5).toISOString().slice(0, 10);
-    for (const c of store.connections) {
-      if (sessionValid(c)) {
+  if (outcome.ok !== false && Array.isArray(outcome.synced)) {
+    // Never later than today: it is now minus the overlap.
+    const nextFrom = isoDay(Date.parse(now) - RESYNC_OVERLAP_DAYS * 864e5);
+    for (const s of outcome.synced) {
+      const c = store.connections.find((x) => x.id === s.connectionId && x.session_id === s.sessionId);
+      if (!c) continue;
+      store.fetchFloors = store.fetchFloors || {};
+      for (const key of s.accountKeys || []) {
+        const prev = store.fetchFloors[key];
+        if (typeof prev !== 'string' || nextFrom > prev) store.fetchFloors[key] = nextFrom;
+      }
+      if (s.complete) {
         c.last_sync = now;
         c.needs_relink = false;
-        // The next fetch starts at nextFrom and every later one at or after it
-        // (fetchFromDate clamps), so raise this prefix's floor. Keyed by prefix
-        // and never deleted, so it outlives a remove and binds a re-add.
-        store.fetchFloors = store.fetchFloors || {};
-        const prev = store.fetchFloors[c.idPrefix];
-        if (typeof prev !== 'string' || nextFrom > prev) store.fetchFloors[c.idPrefix] = nextFrom;
         if (!c.linked_at || nextFrom > String(c.linked_at).slice(0, 10)) delete c.relinked;
       }
     }
@@ -998,7 +1106,10 @@ module.exports = {
   dropStaleBareTwins,
   connectionPrefixes,
   fetchFromDate,
-  fetchFloorsFor,
+  dropRowsBeforeFloor,
+  tombstoneCutoffs,
+  futureFloors,
+  FLOOR_MARGIN_DAYS,
   normalizeAccount,
   carryAccountKeys,
   lastSyncAgeMs,

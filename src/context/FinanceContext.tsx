@@ -50,7 +50,7 @@ import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
-import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones, forgetRestoredBankRows, prunableBankTombstoneIds } from '../lib/bankDedup';
+import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones, forgetRestoredBankRows, prunableBankTombstoneIds, type TombstoneCutoffs } from '../lib/bankDedup';
 import { activeJobBreakdown } from '../lib/salary';
 import { stableStringify } from '../lib/stableStringify';
 import { sanitizePayload } from '../lib/sanitizePayload';
@@ -1608,9 +1608,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           if (tombs.length) {
             void fetch('/api/bank/status')
               .then((s) => (s.ok ? s.json() : null))
-              .then((s: { fetchFloors?: Record<string, string | null> } | null) => {
+              .then((s: { tombstoneCutoffs?: TombstoneCutoffs } | null) => {
                 if (cancelled || !s) return;
-                const gone = prunableBankTombstoneIds(tombs, s.fetchFloors);
+                const gone = prunableBankTombstoneIds(tombs, s.tombstoneCutoffs);
                 if (!gone.size) return;
                 setDeletedBankIds((ids) => forgetRestoredBankRows(ids, gone));
                 setDeletedBankTombstones((prev) => forgetRestoredBankRows(prev, gone));

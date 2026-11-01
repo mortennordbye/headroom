@@ -151,52 +151,57 @@ export function forgetRestoredBankRows<T extends string | { id: string }>(list: 
   return next.length === list.length ? list : next;
 }
 
-// How far before a prefix's fetch floor a tombstone must be dated before it is
-// pruned. The bank filters `date_from` on its own date field, which may not be
-// the one a row is dated by (booking, else value, else transaction date), and a
-// pending row dates off its value date. A month absorbs that drift.
-export const TOMBSTONE_PRUNE_MARGIN_DAYS = 30;
+// What GET /api/bank/status `tombstoneCutoffs` carries (server/bank.js
+// tombstoneCutoffs): per account key, and per id prefix as a fallback, the day
+// before which no future sync can return a row (floor minus the margin; the
+// server enforces it on both the request and the response). A prefix maps to
+// null when it can't be bounded.
+export interface TombstoneCutoffs {
+  accounts?: Record<string, string>;
+  prefixes?: Record<string, string | null>;
+}
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isDay = (v: unknown): v is string => typeof v === 'string' && ISO_DAY.test(v);
 
 // The ids of deleted bank rows no future sync can return, so their tombstones and
-// `deletedBankIds` entries can go (drop them with forgetRestoredBankRows).
-// `floors` is GET /api/bank/status `fetchFloors`: per connection id prefix, the
-// earliest `date_from` any later fetch may use (server/bank.js fetchFromDate
-// clamps to it), or null when the prefix has none yet. A tombstone is prunable
-// only when its id starts with at least one known prefix, every prefix it starts
-// with has a floor (the legacy bare `eb-` prefix overlaps the others), and it is
-// dated more than the margin before the lowest of them. An unknown prefix, a
-// missing floor or an unreadable date keeps the tombstone. Legacy ids with no
-// tombstone carry no date and are never returned here. Pure.
+// `deletedBankIds` entries can go (drop them with forgetRestoredBankRows). A
+// tombstone with an `account` is judged by that account's cutoff alone, and kept
+// when the account has none. One without an account falls back to the id
+// prefixes it starts with (the legacy bare `eb-` prefix overlaps the others):
+// it is kept when it matches none or any of them is null, else judged by the
+// lowest. An unreadable date keeps the tombstone, and a duplicate id is kept if
+// any copy must stay. Legacy ids with no tombstone carry no date and are never
+// returned here. Pure.
 export function prunableBankTombstoneIds(
   tombstones: DeletedBankTombstone[],
-  floors: Record<string, string | null> | null | undefined,
-  marginDays = TOMBSTONE_PRUNE_MARGIN_DAYS,
+  cutoffs: TombstoneCutoffs | null | undefined,
 ): Set<string> {
   const out = new Set<string>();
-  if (!floors || typeof floors !== 'object') return out;
-  const prefixes = Object.keys(floors);
+  if (!cutoffs || typeof cutoffs !== 'object') return out;
+  const accounts = cutoffs.accounts && typeof cutoffs.accounts === 'object' ? cutoffs.accounts : {};
+  const prefixes = cutoffs.prefixes && typeof cutoffs.prefixes === 'object' ? cutoffs.prefixes : {};
+  const cutoffFor = (t: DeletedBankTombstone): string | null => {
+    if (typeof t.account === 'string' && t.account) {
+      const c = accounts[t.account];
+      return isDay(c) ? c : null;
+    }
+    let lowest: string | null = null;
+    for (const [p, c] of Object.entries(prefixes)) {
+      if (!t.id.startsWith(p)) continue;
+      if (!isDay(c)) return null;
+      if (lowest == null || c < lowest) lowest = c;
+    }
+    return lowest;
+  };
   const keep = new Set<string>();
   for (const t of tombstones) {
     if (!t || typeof t.id !== 'string') continue;
     const day = typeof t.date === 'string' ? t.date.slice(0, 10) : '';
-    const matching = prefixes.filter((p) => t.id.startsWith(p));
-    let lowest: string | null = null;
-    let ok = matching.length > 0 && ISO_DAY.test(day);
-    for (const p of matching) {
-      const f = floors[p];
-      if (typeof f !== 'string' || !ISO_DAY.test(f) || !Number.isFinite(Date.parse(f))) { ok = false; break; }
-      if (lowest == null || f < lowest) lowest = f;
-    }
-    if (ok && lowest != null) {
-      const cutoff = new Date(Date.parse(lowest) - marginDays * 864e5).toISOString().slice(0, 10);
-      ok = day < cutoff;
-    }
-    if (ok) out.add(t.id);
+    const cutoff = cutoffFor(t);
+    if (cutoff != null && isDay(day) && day < cutoff) out.add(t.id);
     else keep.add(t.id);
   }
-  // A duplicate tombstone that must stay keeps its id too.
   for (const id of keep) out.delete(id);
   return out;
 }

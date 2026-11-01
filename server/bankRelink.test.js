@@ -9,6 +9,8 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'headroom-relink-'));
 process.env.DATA_DIR = dir;
 const bank = createRequire(import.meta.url)('./bank.js');
 const sessionPath = path.join(dir, 'eb-session.json');
+// What fetchMappedTransactions reports for the test connection's one account.
+const synced = [{ connectionId: 'aaaa1111-x', sessionId: 's', accountKeys: ['aaaa1111:u'], complete: true }];
 
 describe('re-link marker', () => {
   it('is cleared by the first successful sync, so only that sync checks the overlap', () => {
@@ -18,7 +20,7 @@ describe('re-link marker', () => {
     }));
     bank.recordSync({ ok: false, error: 'boom' });
     expect(JSON.parse(fs.readFileSync(sessionPath, 'utf8')).connections[0].relinked).toBe(true);
-    bank.recordSync({ ok: true, added: 0, fetched: 0, total: 0 });
+    bank.recordSync({ ok: true, added: 0, fetched: 0, total: 0, synced });
     expect(JSON.parse(fs.readFileSync(sessionPath, 'utf8')).connections[0]).not.toHaveProperty('relinked');
   });
 });
@@ -29,7 +31,7 @@ describe('re-link marker after a quick re-link', () => {
     connections: [{ id: 'aaaa1111-x', idPrefix: 'eb-aaaa1111-', session_id: 's', valid_until: validUntil, relinked: true, linked_at: linkedAt, accounts: [] }],
   }));
   const relinked = () => JSON.parse(fs.readFileSync(sessionPath, 'utf8')).connections[0].relinked;
-  const ok = { ok: true, added: 0, fetched: 0, total: 0 };
+  const ok = { ok: true, added: 0, fetched: 0, total: 0, synced };
 
   // The next sync fetches from (now - 7 days). While that still reaches rows
   // dated on or before the re-link, the bank can resend old rows under new ids,

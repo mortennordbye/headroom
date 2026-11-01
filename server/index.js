@@ -1129,9 +1129,9 @@ app.get('/api/bank/callback', async (req, res) => {
 // both take the same merge/record path. Records the outcome (success or failure)
 // to the rolling sync log, then returns a summary or rethrows. A missing blob
 // throws `.noBlob` (the app was never opened) and is not logged as a failure.
-async function runBankSync() {
+async function runBankSyncUnlocked() {
   try {
-    const mapped = await bank.fetchMappedTransactions();
+    const fetched = await bank.fetchMappedTransactions();
     const stored = readBlob();
     if (!stored) { const e = new Error('no finance data yet — open the app first'); e.noBlob = true; throw e; }
     const blob = stored.content;
@@ -1139,6 +1139,9 @@ async function runBankSync() {
     const existing = Array.isArray(blob.dailyTransactions) ? blob.dailyTransactions : [];
     const before = existing.length;
     const existingIds = new Set(existing.map((tx) => tx.id));
+    // A bank that ignores date_from can return rows from before an account's
+    // floor, which may be ones whose tombstone the client already pruned.
+    const mapped = bank.dropRowsBeforeFloor(fetched.rows, existingIds, fetched.floors);
     const deletedIds = Array.isArray(blob.deletedBankIds) ? blob.deletedBankIds : [];
     const tombstones = Array.isArray(blob.deletedBankTombstones) ? blob.deletedBankTombstones : [];
     blob.dailyTransactions = bank.mergeTransactions(existing, mapped, deletedIds, tombstones, bank.connectionPrefixes());
@@ -1156,7 +1159,7 @@ async function runBankSync() {
     // The rows genuinely new this sync (id not in the prior ledger), so the
     // Settings sync-history can list *what* was pulled in, not just how many.
     const items = blob.dailyTransactions.filter((tx) => !existingIds.has(tx.id));
-    bank.recordSync({ ok: true, added, fetched: mapped.length, total, items });
+    bank.recordSync({ ok: true, added, fetched: mapped.length, total, items, synced: fetched.synced });
     return { added, fetched: mapped.length, total, dailyTransactions: blob.dailyTransactions, rev };
   } catch (err) {
     // Log the failed attempt too, so a silent (cron or manual) failure is visible
@@ -1164,6 +1167,15 @@ async function runBankSync() {
     if (!err.noBlob) { try { bank.recordSync({ ok: false, error: err.message }); } catch { /* store write best-effort */ } }
     throw err;
   }
+}
+
+// Single flight: a manual "Sync now" during a scheduled sync (or a double click)
+// joins the running sync instead of starting a second one, so two syncs can't
+// interleave their blob writes and floor updates.
+let bankSyncInFlight = null;
+function runBankSync() {
+  if (!bankSyncInFlight) bankSyncInFlight = runBankSyncUnlocked().finally(() => { bankSyncInFlight = null; });
+  return bankSyncInFlight;
 }
 
 app.post('/api/bank/sync', async (_req, res) => {

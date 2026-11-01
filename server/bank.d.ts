@@ -48,8 +48,17 @@ export function dropRelinkFormatTwins(existing: MappedTransaction[], incoming: M
 export function evictSupersededPending(txs: MappedTransaction[]): MappedTransaction[];
 export function dropStaleBareTwins(txs: MappedTransaction[], connectionPrefixes?: string[]): MappedTransaction[];
 export function connectionPrefixes(): string[];
-export function fetchFromDate(c: { idPrefix: string; last_sync?: string | null }, floors?: Record<string, string>, nowMs?: number, days?: number): string;
-export function fetchFloorsFor(store: { connections?: { idPrefix: string }[]; removed?: { idPrefix: string }[]; fetchFloors?: Record<string, string> }): Record<string, string | null>;
+// Fetch floors (see the `fetch floors` section of server/bank.js).
+export interface FloorAccount { uid: string; key_uid?: string }
+export interface FloorConnection { id: string; idPrefix: string; last_sync?: string | null; accounts?: FloorAccount[] }
+export interface FloorStore { connections?: FloorConnection[]; removed?: { idPrefix: string }[]; fetchFloors?: Record<string, string> }
+export interface TombstoneCutoffs { accounts: Record<string, string>; prefixes: Record<string, string | null> }
+export interface SyncedConnection { connectionId: string; sessionId: string; accountKeys: string[]; complete: boolean }
+export const FLOOR_MARGIN_DAYS: number;
+export function fetchFromDate(c: FloorConnection, acc: FloorAccount, floors?: Record<string, string>, nowMs?: number, days?: number): string;
+export function dropRowsBeforeFloor<T extends { id: string; date: string; account?: string }>(rows: T[], existingIds: Set<string>, floors?: Record<string, string>, nowMs?: number): T[];
+export function tombstoneCutoffs(store: FloorStore, nowMs?: number): TombstoneCutoffs;
+export function futureFloors(store: FloorStore, nowMs?: number): string[];
 export function lastSyncAgeMs(nowMs?: number): number;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizeAccount(a: any): { uid?: string; name?: string; product?: string; currency?: string; iban?: string };
@@ -60,6 +69,7 @@ export function startLink(bankName?: string, connectionId?: string): Promise<{ u
 export function finishLink(code: string, state: string): Promise<{ accounts: number }>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getStatus(): Record<string, any>;
-export function fetchMappedTransactions(): Promise<MappedTransaction[]>;
-export function recordSync(): void;
+export function fetchMappedTransactions(): Promise<{ rows: MappedTransaction[]; synced: SyncedConnection[]; floors: Record<string, string> }>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function recordSync(outcome?: { ok?: boolean; synced?: SyncedConnection[]; [k: string]: any }): void;
 export function removeConnection(id: string): { removed: number };
