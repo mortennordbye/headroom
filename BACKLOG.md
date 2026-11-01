@@ -171,6 +171,14 @@ in git and the CHANGELOG, not here.
   recommended rules. **Where**: `eslint.config.js`.
 - **`typescript` 7 is blocked upstream.** `typescript-eslint` peers `typescript <6.1.0`.
   **Unblock**: a release widening it. **Where**: `package.json`.
+- **Dev-only audit alerts with no usable fix.** minimatch GHSA-g3hv-75wg-m249 is fixed only in
+  11.x, which removes `makeRe` and RegExp entries in `Minimatch.set`; every parent (eslint,
+  typescript-eslint, glob 11 via workbox-build, filelist, app-builder-lib, @electron/asar,
+  dir-compare) still pins 3.x to 10.x, so an override would break lint and the build. glob
+  GHSA-3g3m-2fjr-6pw4 needs glob 14 and workbox-build pins ^11. deepmerge GHSA-gcqx-w48m-w2h4 has no
+  patched release (via @rollup/plugin-node-resolve). All are build or lint tooling, never shipped.
+  **Unblock**: parent releases that accept minimatch 11 / glob 14, or a deepmerge fix. **Where**:
+  `package-lock.json`, `desktop/package-lock.json`.
 - **MCP generic `set_field` / `describe_field`.** Needs the default `assets`/`loan`/`pension`/
   `homeowner`/`transition`/`fixedExpenses` constants moved into `src/lib`, and a type check for the
   ~20 weakly guarded registry keys. **Where**: `src/lib/payloadRegistry.ts`,
