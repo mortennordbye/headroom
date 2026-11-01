@@ -524,6 +524,11 @@ function isValidFinancePayload(body) {
       && Number.isFinite(body.assets.bsuTotalDeposited) && body.assets.bsuTotalDeposited >= 0
     )) &&
     Array.isArray(body.fixedExpenses) &&
+    // Optional per expense; older blobs don't carry it.
+    body.fixedExpenses.every((e) => typeof e !== 'object' || e === null || e.uncoveredMonths === undefined || (
+      typeof e.uncoveredMonths === 'object' && e.uncoveredMonths !== null && !Array.isArray(e.uncoveredMonths)
+      && Object.values(e.uncoveredMonths).every((kr) => typeof kr === 'number' && Number.isFinite(kr) && kr >= 0)
+    )) &&
     Array.isArray(body.dailyTransactions) &&
     (body.deletedBankTombstones === undefined || (
       Array.isArray(body.deletedBankTombstones)

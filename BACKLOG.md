@@ -120,8 +120,13 @@ in git and the CHANGELOG, not here.
   `until` (`src/lib/automation.ts`, `src/lib/projectBalances.ts`); buy-and-sell treats the next home
   as the user's alone (`calcTransitionNewLoan`); onboarding doesn't ask the ownership share
   (`src/lib/onboarding.ts`).
-- **A declined catch-up counts its skipped months as interest-charged.** Needs per-loan "interest
-  charged through" state. **Where**: `computeAutomationPostings` in `src/lib/automation.ts`.
+- **Stamps that pay nothing still count as interest-charged.** Creating a paydown expense, resuming
+  it from a pause, or changing its destination sets `lastPostedMonth` to the current month without
+  paying it, so another expense's catch-up on the same loan pays that month as principal only.
+  **Why deferred**: out of scope for the declined catch-up fix (#338). **What would unblock**: record
+  those stamped-but-unpaid months in `uncoveredMonths` (as 0) too. **Where**: `src/components/ExpenseDialog.tsx`,
+  `src/components/SavingsAllocationPanel.tsx`, `src/lib/allocationSync.ts`, `computeAutomationPostings`
+  in `src/lib/automation.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank
   schedule import), no rate-change history. **Where**: `src/lib/calculations.ts`.
 - **Residence history isn't linked to the current home**, and Kjøpe & selge doesn't write the move
