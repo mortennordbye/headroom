@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.11.0](https://github.com/mortennordbye/headroom/compare/v3.10.8...v3.11.0) (2026-11-01)
+
+
+### Features
+
+* flag a monthly income override that no longer matches salary ([#319](https://github.com/mortennordbye/headroom/issues/319)) ([a15a05c](https://github.com/mortennordbye/headroom/commit/a15a05cfa1d8ca2b708ef925ebc7eb59f654acdb))
+* move all unassigned salary entries to a job in one step ([#313](https://github.com/mortennordbye/headroom/issues/313)) ([0483f8b](https://github.com/mortennordbye/headroom/commit/0483f8b7fde67bc9c6f12de7f5bb723ec7fbf6e9))
+
+
+### Bug Fixes
+
+* apply a notified mortgage rate once its month arrives ([#311](https://github.com/mortennordbye/headroom/issues/311)) ([4fcdccb](https://github.com/mortennordbye/headroom/commit/4fcdccbd13ab517b952cb08b2349b7f3aee6826d))
+* apply gjeldsreduksjon to wealth tax debt ([#320](https://github.com/mortennordbye/headroom/issues/320)) ([51c5a52](https://github.com/mortennordbye/headroom/commit/51c5a523ed69e62ee1b3ea3d09d5013729b772ff))
+* rate-limit the public demo per client IP ([#317](https://github.com/mortennordbye/headroom/issues/317)) ([ca66e9c](https://github.com/mortennordbye/headroom/commit/ca66e9cffa25fa4ca23876c6403a5f12425ff3d6))
+* reconcile each year review month against its own fixed expenses ([#315](https://github.com/mortennordbye/headroom/issues/315)) ([e57b609](https://github.com/mortennordbye/headroom/commit/e57b609fa51b60181167a20e582b9dd562561c7b))
+* undo compares legacy mortgage history as the app showed it ([#314](https://github.com/mortennordbye/headroom/issues/314)) ([59816ba](https://github.com/mortennordbye/headroom/commit/59816ba283cdcb7fb827499796144cc07fe4172b))
+
+
+### Performance Improvements
+
+* store revision snapshot sizes instead of measuring them on every save ([#312](https://github.com/mortennordbye/headroom/issues/312)) ([cc0c1be](https://github.com/mortennordbye/headroom/commit/cc0c1be82f84f579432a67509082a603c940a11c))
+
 ## [3.10.8](https://github.com/mortennordbye/headroom/compare/v3.10.7...v3.10.8) (2026-11-01)
 
 
