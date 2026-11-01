@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, unpaidStampMonths, paydownStampOnSave, recordDepartedPaydowns, departedPaydownRules, mergePaydownStamps, type AutomationRule, type AutomationState } from './automation';
+import { computeAutomationPostings, applyAmortization, automationMortgage, monthlyPaydownPrincipal, unpaidStampMonths, paydownStampOnSave, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, mergePaydownStamps, type AutomationRule, type AutomationState } from './automation';
 import { currentMortgage } from './existingMortgage';
 import type { CoOwner, FixedExpense } from '../context/FinanceContext';
 
@@ -931,5 +931,37 @@ describe('paydownStampOnSave — the stamp the edit dialog saves', () => {
   it('clears both when the destination is removed', () => {
     expect(paydownStampOnSave(expense({ uncoveredMonths: { '2026-04': 0 } }), {}, NOW, [main]))
       .toEqual({ lastPostedMonth: undefined, uncoveredMonths: undefined });
+  });
+});
+
+describe('pruneDepartedPaydowns — dropping stamps nothing can charge again', () => {
+  const expense = (over: Partial<FixedExpense>): FixedExpense => ({
+    id: 'main', name: 'Main', amount: 10_000, type: 'fixed', destinationKind: 'mortgage', lastPostedMonth: '2026-05', ...over,
+  });
+  const record = {
+    mortgage: { lastPostedMonth: '2026-06' },
+    'debt:debt-1': { lastPostedMonth: '2026-06', uncoveredMonths: { '2026-05': 0 } },
+  };
+  const onDebt = expense({ id: 'car', destinationKind: 'debt', debtId: 'debt-1' });
+
+  it('keeps a stamp while an active expense on the loan is stamped before it', () => {
+    expect(pruneDepartedPaydowns(record, [expense({}), onDebt], ['debt-1'])).toBe(record);
+  });
+
+  it('drops a stamp once every active expense on the loan has caught up past it', () => {
+    expect(pruneDepartedPaydowns(record, [expense({ lastPostedMonth: '2026-06' }), onDebt], ['debt-1']))
+      .toEqual({ 'debt:debt-1': record['debt:debt-1'] });
+    // A paused expense restamps when it resumes, so it never catches up over those months.
+    expect(pruneDepartedPaydowns(record, [expense({ automationPaused: true }), onDebt], ['debt-1']))
+      .toEqual({ 'debt:debt-1': record['debt:debt-1'] });
+  });
+
+  it("drops a debt's stamp once the debt is gone", () => {
+    expect(pruneDepartedPaydowns(record, [expense({}), onDebt], [])).toEqual({ mortgage: record.mortgage });
+  });
+
+  it('is undefined once nothing is left, and leaves no record alone', () => {
+    expect(pruneDepartedPaydowns(record, [], ['debt-1'])).toBeUndefined();
+    expect(pruneDepartedPaydowns(undefined, [expense({})], [])).toBeUndefined();
   });
 });

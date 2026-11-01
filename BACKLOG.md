@@ -122,13 +122,6 @@ in git and the CHANGELOG, not here.
   current balance, so the balance in a past month isn't known. **What would unblock**: a per-loan
   balance by month (or the payment history) the runner can rewind to. **Where**:
   `computeAutomationPostings` in `src/lib/automation.ts`.
-- **Deleting a paydown expense through MCP doesn't keep its stamp on the loan.** The app records it
-  in `assets.departedPaydowns` (`recordDepartedPaydowns`), so another expense's catch-up doesn't
-  charge the months it paid again; `delete_fixed_expense` doesn't, so the double charge can still
-  happen that way. **Why deferred**: MCP builders touch exactly one top-level key, and this needs
-  `fixedExpenses` and `assets`. **What would unblock**: deciding to allow that second key as a
-  documented exception, like `deleteTransaction`. **Where**: `deleteFixedExpense` in
-  `mcp/mutations.ts`, `recordDepartedPaydowns` in `src/lib/automation.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank
   schedule import), no rate-change history. **Where**: `src/lib/calculations.ts`.
 - **Residence history isn't linked to the current home**, and Kjøpe & selge doesn't write the move

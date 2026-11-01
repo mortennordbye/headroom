@@ -313,8 +313,9 @@ export function computeAutomationPostings(
           .filter(([m]) => otherNeeds(m)));
       }
       // A payment that reaches the loan in none of its months still stamps
-      // them, or they would pile up into one catch-up later.
-      post(rule, monthsDue, paying.size ? newBalance : Math.round(balance), {
+      // them, or they would pile up into one catch-up later. Every posting on
+      // the loan carries its final balance, so whichever one a caller keeps is right.
+      post(rule, monthsDue, newBalance, {
         ...(uncoveredMonths ? { uncoveredMonths } : {}),
         infeasible: monthsShort > 0,
         ...(monthsShort > 0 ? { monthsShort } : {}),
@@ -445,6 +446,26 @@ export function recordDepartedPaydowns(
     out = { ...out, [loan]: mergePaydownStamps(out?.[loan], left) };
   }
   return out;
+}
+
+/**
+ * `record` without the stamps that no longer matter: no active expense on the
+ * loan is stamped before one any more (every catch-up that could charge its
+ * months again has run), or its debt is gone. Returns `record` itself when
+ * nothing is dropped, and undefined once nothing is left.
+ */
+export function pruneDepartedPaydowns(
+  record: Record<string, PaydownStamp> | undefined,
+  expenses: readonly StampedExpense[],
+  debtIds: readonly string[],
+): Record<string, PaydownStamp> | undefined {
+  if (!record) return record;
+  const kept = Object.entries(record).filter(([loan, stamp]) =>
+    (!loan.startsWith('debt:') || debtIds.includes(loan.slice('debt:'.length)))
+    && expenses.some(e => !e.automationPaused && expenseLoan(e) === loan
+      && e.lastPostedMonth !== undefined && e.lastPostedMonth < stamp.lastPostedMonth));
+  if (kept.length === Object.keys(record).length) return record;
+  return kept.length ? Object.fromEntries(kept) : undefined;
 }
 
 /** The departed stamps as runner rules that never post but whose stamps count. */

@@ -43,7 +43,7 @@ import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest, typ
 import { withNotifiedRate } from '../lib/notifiedRate';
 import { grossFromNetAnnual } from '../lib/grossFromNet';
 import {
-  computeAutomationPostings, recordDepartedPaydowns, departedPaydownRules, type PaydownStamp,
+  computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
 import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
@@ -1471,6 +1471,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (departed !== assets.departedPaydowns) setAssets(prev => ({ ...prev, departedPaydowns: departed }));
     setFixedExpenses(val);
   }, [fixedExpenses, assets.departedPaydowns]);
+
+  // Drop a departed stamp once no catch-up can charge its months again (or its debt is gone).
+  useEffect(() => {
+    if (!loaded.current) return;
+    const pruned = pruneDepartedPaydowns(assets.departedPaydowns, fixedExpenses, debts.map(d => d.id));
+    if (pruned === assets.departedPaydowns) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAssets(prev => {
+      const { departedPaydowns: _old, ...rest } = prev;
+      return pruned ? { ...rest, departedPaydowns: pruned } : rest;
+    });
+  }, [assets.departedPaydowns, fixedExpenses, debts]);
 
   // ── Persist payload: single source of shape (§4.2) ──────────────────────────
   // The one place that projects app state → the persisted/exported blob. Used by

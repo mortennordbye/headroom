@@ -13,6 +13,10 @@
 // - updateAsset on houseValue also mirrors it into `transition`, and houseDebt
 //   stamps its month on `homeowner` (when present), as FinanceContext.updateAsset
 //   does.
+// - deleteFixedExpense on a paydown expense that another expense on the same
+//   loan hasn't caught up with also records its stamp in
+//   `assets.departedPaydowns`, as FinanceContext's setFixedExpenses does, so
+//   the months it paid aren't charged interest again.
 // - setCoOwners also rewrites the co-owners stored in `balanceSnapshots`, as
 //   FinanceContext.setCoOwners does, so history shows the share in force each month.
 
@@ -39,6 +43,7 @@ import { withNotifiedRate } from '../src/lib/notifiedRate';
 import { rewriteSnapshotCoOwners, sanitizeCoOwners, validateCoOwners, type CoOwnerError } from '../src/lib/ownership';
 import { currentResidence } from '../src/lib/property';
 import { addDeletedBankTombstones } from '../src/lib/bankDedup';
+import { recordDepartedPaydowns } from '../src/lib/automation';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -248,8 +253,16 @@ export function deleteGoal(blob: ExportPayload, args: { id: string }): FieldChan
 }
 
 export function deleteFixedExpense(blob: ExportPayload, args: { id: string }): FieldChange[] {
-  const { list, changes } = removeById(blob.fixedExpenses ?? [], args.id, 'fixedExpenses', 'fixed expense');
+  const prev = blob.fixedExpenses ?? [];
+  const { list, changes } = removeById(prev, args.id, 'fixedExpenses', 'fixed expense');
   blob.fixedExpenses = list;
+  // A paydown leaving its loan keeps its stamp there, as the app's setter does.
+  const before = blob.assets.departedPaydowns;
+  const after = recordDepartedPaydowns(before, prev, list);
+  if (after !== before) {
+    blob.assets = { ...blob.assets, departedPaydowns: after };
+    changes.push(diff('assets.departedPaydowns', before ?? null, after));
+  }
   return changes;
 }
 

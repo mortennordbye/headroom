@@ -130,6 +130,22 @@ describe('projectSnapshotBalances — contributions only', () => {
     expect(projectSnapshotBalances(base(), [], state(), '2027-08', NOW)).toEqual(base());
   });
 
+  it("keeps the mortgage's paydown when a share payment on it moves nothing", () => {
+    // A co-owner carries the whole loan, so the 'myShare' payment reaches it in
+    // no month and the co-owners pay the interest: the whole payment is all principal.
+    const s = state({ mortgage: 1_000_000, coOwners: [{ id: 'co', name: 'Co', ownershipPct: 100 }] });
+    const loanRule = (over: Partial<AutomationRule>) =>
+      rule({ targetKind: 'mortgage', lastPostedMonth: '2026-07', ...over });
+    const rules = [
+      loanRule({ id: 'A', amount: 3000, mortgagePaymentScope: 'myShare' }),
+      loanRule({ id: 'B', amount: 10_000 }),
+    ];
+    for (const order of [rules, [...rules].reverse()]) {
+      const out = projectSnapshotBalances(base({ houseDebt: 1_000_000 }), order, s, '2026-10', NOW);
+      expect(out.houseDebt).toBe(1_000_000 - 3 * 10_000);
+    }
+  });
+
   it('skips a rule whose destination no longer exists', () => {
     const out = projectSnapshotBalances(
       base(), [rule({ targetKind: 'savingsAccount', savingsAccountId: 'gone' })], state(), '2026-09', NOW);
