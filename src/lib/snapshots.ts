@@ -77,6 +77,15 @@ export function resolveMonthView(
   return { activeKey, mode: activeKey === nowKey ? 'live' : 'recorded' };
 }
 
+/**
+ * Whether a snapshot recorded the forward assumptions in force that month. v1
+ * snapshots predate the field, so readers fall back to today's live values; the
+ * UI uses this to label that fallback instead of passing it off as recorded.
+ */
+export function snapshotHasAssumptions(snap: BalanceSnapshot): boolean {
+  return snap.assumptions != null;
+}
+
 /** The balances a person can realistically reconstruct for a past month. */
 export interface SnapshotBalances {
   savingsAccounts: SavingsAccount[];

@@ -114,8 +114,6 @@ in git and the CHANGELOG, not here.
 - **Provenance is a value-comparison heuristic** (a deliberate value equal to the default shows
   "Default"); a fix needs a `touched` set. Badges could extend to fixed-expense seeds,
   `loan`/`homeowner`/`transition` and `savingsTargetPercent`. **Where**: `src/lib/provenance.ts`.
-- **v1 snapshots have no recorded assumptions** and fall back to live ones without a muted "not
-  recorded" treatment. **Where**: `src/pages/AssetPage.tsx`, `src/lib/snapshots.ts`.
 - **History before debt historization is equity-only**, and history months stored only as a total
   aren't split by co-owner share. Can be hand-corrected in the History manager. **Where**:
   `netWorthSeriesFrom` in `src/lib/netWorth.ts`, `src/lib/ownership.ts`.
