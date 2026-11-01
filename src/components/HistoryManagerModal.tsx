@@ -12,6 +12,8 @@ import {
   historyRows,
   buildManualSnapshot,
   snapshotBalances,
+  snapshotHasAssumptions,
+  assumptionsToSave,
   type SnapshotBalances,
 } from '../lib/snapshots';
 
@@ -244,6 +246,10 @@ function SnapshotEditor({
   const hm = t.historyManager;
   const f = hm.fields;
   const [b, setB] = useState<SnapshotBalances>(initial);
+  // The values the editor opened with. `initial` is rebuilt from live rates on
+  // every render, so comparing against it after a background reload would read
+  // an untouched v1 month as edited.
+  const [opened] = useState<SnapshotBalances>(initial);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const set = (patch: Partial<SnapshotBalances>) => setB(prev => ({ ...prev, ...patch }));
@@ -270,7 +276,7 @@ function SnapshotEditor({
             {hm.cancel}
           </button>
           <button
-            onClick={() => onSave(b)}
+            onClick={() => onSave({ ...b, assumptions: assumptionsToSave(base, opened, b) })}
             className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold text-[var(--text)] bg-[var(--forest)] hover:bg-[var(--forest-dim)]"
           >
             {hm.save}
@@ -309,7 +315,9 @@ function SnapshotEditor({
         </button>
         {advancedOpen && b.assumptions && (
           <div className="space-y-3 pl-1">
-            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{hm.advancedHint}</p>
+            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
+              {snapshotHasAssumptions(base) ? hm.advancedHint : t.assetPage.assumptionsNotRecorded}
+            </p>
             <NumberRow
               label={f.savingsTarget}
               value={b.assumptions.savingsTargetPercent}
