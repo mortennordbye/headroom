@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { otpAnnualContribution, otpBonusShareToDate, otpCountedPay, otpPensionableIncome, otpProjectedPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
+import { otpAnnualContribution, otpBonusShareToDate, otpCountedPay, otpSchemeFor, otpPensionableIncome, otpProjectedPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
 
 describe('pensionFutureValue', () => {
   it('returns the starting balance for zero or negative years', () => {
@@ -201,5 +201,31 @@ describe('otpCountedPay — overtime and the scheme\'s job', () => {
     const counted = otpCountedPay(bonuses, overtime, { otpIncludesOvertime: true, otpJobId: 'a' });
     expect(otpBonusShareToDate(600_000, counted, 5, '2026-01')).toBe(0);
     expect(otpBonusShareToDate(600_000, counted, 5, '2026-02')).toBe(400);
+  });
+});
+
+describe('otpSchemeFor', () => {
+  const jobs = [{ id: 'a' }];
+  const bonuses = [{ date: '2026-03-15', amount: 50_000, type: 'annual' as const, jobId: 'a' }];
+
+  it('treats a job link that names no current job as unset', () => {
+    const scheme = { otpIncludesBonuses: true, otpJobId: 'gone' };
+    expect(otpSchemeFor(scheme, jobs).otpJobId).toBeUndefined();
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, [], otpSchemeFor(scheme, jobs)), 2026)).toBe(650_000);
+  });
+
+  it('keeps a link to a current job, and returns the scheme itself when nothing changes', () => {
+    const scheme = { otpIncludesBonuses: true, otpJobId: 'a' };
+    expect(otpSchemeFor(scheme, jobs)).toBe(scheme);
+  });
+});
+
+describe('otpPensionableIncome — non-number amounts', () => {
+  it('skips a string or infinite amount', () => {
+    const bad = [
+      { date: '2026-01-01', amount: '5000' as unknown as number },
+      { date: '2026-01-01', amount: Number.POSITIVE_INFINITY },
+    ];
+    expect(otpPensionableIncome(500_000, bad, 2026)).toBe(500_000);
   });
 });

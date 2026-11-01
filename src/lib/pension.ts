@@ -34,6 +34,16 @@ export interface OtpBaseScheme {
 }
 
 /**
+ * `scheme` with a job link that names no job in `jobs` dropped, so a link left
+ * over from an import or a deleted job reads as unset (every job's pay) rather
+ * than silently counting nothing. Every caller resolves the link through this.
+ */
+export function otpSchemeFor<S extends OtpBaseScheme>(scheme: S, jobs: readonly { id: string }[]): S {
+  if (!scheme.otpJobId || jobs.some(j => j.id === scheme.otpJobId)) return scheme;
+  return { ...scheme, otpJobId: undefined };
+}
+
+/**
  * The bonus and overtime payments the scheme counts in the OTP base. By law the
  * base is all pay received in the contribution year (innskuddspensjonsloven
  * § 5-5 første ledd), overtime included, but a scheme may leave out varying or
@@ -64,7 +74,8 @@ export function otpCountedPay(
  */
 function sumBonuses(bonuses: readonly OtpPay[], prefix: string, skip: readonly string[]): number {
   return bonuses.reduce(
-    (s, b) => (typeof b.date === 'string' && b.date.startsWith(prefix) && !(b.type && skip.includes(b.type)) && b.amount > 0
+    (s, b) => (typeof b.date === 'string' && b.date.startsWith(prefix) && !(b.type && skip.includes(b.type))
+      && typeof b.amount === 'number' && Number.isFinite(b.amount) && b.amount > 0
       ? s + b.amount
       : s),
     0,

@@ -18,7 +18,7 @@ import { estimateAfpGrunnlag, annualAfp } from '../lib/afp';
 import { prepayVsInvestFor } from '../lib/prepayVsInvest';
 import { netWorthBands, BAND_DELTA_PP } from '../lib/scenarioBands';
 import { projectForecast, forecastMortgage, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
-import { otpAnnualContribution, otpCountedPay, otpProjectedPensionableIncome, pensionFutureValue } from '../lib/pension';
+import { otpAnnualContribution, otpCountedPay, otpProjectedPensionableIncome, otpSchemeFor, pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
 import { myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
@@ -63,7 +63,7 @@ const ForecastPage: React.FC = () => {
       ? Math.max(0, pension.retirementAge - (currentYear - pension.birthYear))
       : 0;
     // Long-run OTP base: fixed pay plus the recurring bonus and overtime estimate the scheme counts.
-    const otpBase = otpProjectedPensionableIncome(currentGross, otpCountedPay(bonuses, overtime, pension), currentYear);
+    const otpBase = otpProjectedPensionableIncome(currentGross, otpCountedPay(bonuses, overtime, otpSchemeFor(pension, jobs)), currentYear);
     const otpAnnual = otpAnnualContribution(otpBase, pension.otpEmployerPct + pension.otpEmployeePct, TAX_YEAR);
     const ipsAnnual = Math.min(pension.ipsAnnualContribution, IPS_MAX_DEDUCTION);
     const otpAtRetire = pensionFutureValue(pension.otpBalance, otpAnnual, pension.otpGrowthRate, yearsToRetire);
@@ -114,7 +114,7 @@ const ForecastPage: React.FC = () => {
       folketrygdAnnual: ft.annual,
       netPensionMonthly: netPensionAnnual / 12,
     };
-  }, [pension, currentGross, bonuses, overtime, region, customTaxRatePct, inflation]);
+  }, [pension, jobs, currentGross, bonuses, overtime, region, customTaxRatePct, inflation]);
 
   // Seeds from the user's real data — the sliders start from these instead of
   // magic numbers, and follow the data until the user overrides a slider.

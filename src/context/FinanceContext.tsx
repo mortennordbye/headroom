@@ -46,7 +46,8 @@ import {
   computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
-import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, stampLoadedPension, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
+import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, stampLoadedPension, pensionAfterJobRemoved, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
+import { otpSchemeFor } from '../lib/pension';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
@@ -2663,9 +2664,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     jobsCrud.remove(id);
     // Cascade: remove orphaned salaries
     setSalaries(prev => prev.filter(s => s.jobId !== id));
-    // The OTP scheme linked to this job falls back to every job's pay.
-    setPension(prev => (prev.otpJobId === id ? { ...prev, otpJobId: undefined } : prev));
-  }, [jobsCrud]);
+    // The OTP scheme linked to this job falls back to every job's pay, from the
+    // next unposted month on.
+    const nowKey = currentMonthKey();
+    setPension(prev => pensionAfterJobRemoved(
+      prev, id, calcActiveGrossAnnual(salaries, jobs, nowKey), bonuses, overtime, jobs, nowKey));
+  }, [jobsCrud, salaries, jobs, bonuses, overtime]);
 
   const addSalary = salariesCrud.add;
   const updateSalary = salariesCrud.update;
@@ -2783,7 +2787,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         pensionableIncome: calcActiveGrossAnnual(salaries, jobs, nowKey),
         otpIncludesBonuses: pension.otpIncludesBonuses,
         otpIncludesOvertime: pension.otpIncludesOvertime,
-        otpJobId: pension.otpJobId,
+        otpJobId: otpSchemeFor(pension, jobs).otpJobId,
         otpBonusPostedByYear: pension.otpBonusPostedByYear,
         bonuses,
         overtime,

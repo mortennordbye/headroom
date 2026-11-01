@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  pensionAccrualRules, isPensionRuleId, otpBonusBaseline, otpBonusDue, addOtpBonusPosted, switchAutoPostOn,
+  pensionAccrualRules, isPensionRuleId, otpBonusBaseline, otpBonusDue, addOtpBonusPosted, switchAutoPostOn, changeOtpScheme, pensionAfterJobRemoved,
   stampUnstampedAutoPost, stampLoadedPension, type PensionAccrualInput,
 } from './pensionAccrual';
 import { computeAutomationPostings, type AutomationState } from './automation';
@@ -255,7 +255,7 @@ describe('isPensionRuleId', () => {
 
 describe('switching auto-post on', () => {
   const pension = {
-    otpAutoPost: false, ipsAutoPost: false, otpEmployerPct: 5, otpEmployeePct: 0,
+    otpAutoPost: false, ipsAutoPost: false, otpEmployerPct: 5, otpEmployeePct: 0, otpIncludesBonuses: true,
     otpLastPostedMonth: '2026-02', ipsLastPostedMonth: '2026-02', otpBonusPostedByYear: { '2026': 0 },
   };
   const bonuses = [{ date: '2026-03-25', amount: 100_000, type: 'annual' as const }];
@@ -350,9 +350,11 @@ describe('switching auto-post on — overtime', () => {
     expect(rule.otpBonusByYear).toEqual({ '2025': 0, '2026': 2_000 }); // 40 000 × 5%
   });
 
-  it('without the overtime setting the baseline is bonuses only, as before', () => {
-    const otp = switchAutoPostOn(pension, 'otp', 600_000, bonuses, '2026-07', [earlyOvertime]);
-    expect(otp.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 5_000 });
+  it('the baseline counts only what the scheme counts', () => {
+    expect(switchAutoPostOn(pension, 'otp', 600_000, bonuses, '2026-07', [earlyOvertime]).otpBonusPostedByYear)
+      .toEqual({ '2025': 0, '2026': 0 });
+    expect(switchAutoPostOn({ ...pension, otpIncludesBonuses: true }, 'otp', 600_000, bonuses, '2026-07', [earlyOvertime]).otpBonusPostedByYear)
+      .toEqual({ '2025': 0, '2026': 5_000 });
   });
 
   it('a loaded pension takes its baseline from the loaded overtime', () => {
@@ -369,5 +371,72 @@ describe('switching auto-post on — overtime', () => {
     };
     const out = stampLoadedPension(data, undefined, defaults, '2026-07');
     expect(out.pension?.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 1_000 });
+  });
+});
+
+describe('changing the OTP base settings while auto-post runs', () => {
+  type P = Parameters<typeof changeOtpScheme>[0];
+  const start: P = { otpAutoPost: false, ipsAutoPost: false, otpEmployerPct: 5, otpEmployeePct: 0 };
+  const JOBS = [{ id: 'a' }, { id: 'b' }];
+  /** The OTP rule's extra (bonus and overtime) share for `month`, per year. */
+  const extra = (p: P, bonuses: Parameters<typeof changeOtpScheme>[3], overtime: Parameters<typeof changeOtpScheme>[4], month: string) =>
+    pensionAccrualRules(input({
+      ...p, otpAutoPost: true, ipsAutoPost: false, pensionableIncome: 600_000, bonuses, overtime, currentMonth: month,
+    }), LABELS)[0].otpBonusByYear;
+
+  it('turning overtime on does not back-post overtime from months already posted', () => {
+    const overtime = [{ date: '2025-10-10', amount: 40_000 }, { date: '2026-03-10', amount: 20_000 }];
+    const on = switchAutoPostOn(start, 'otp', 600_000, [], '2026-05', overtime);
+    expect(on.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 0 });
+    const changed = changeOtpScheme(on, { otpIncludesOvertime: true }, 600_000, [], overtime, JOBS, '2026-06');
+    expect(extra(changed, [], overtime, '2026-06')).toEqual({ '2025': 0, '2026': 0 });
+    // Overtime dated after the stamp still posts in full.
+    const later = [...overtime, { date: '2026-06-10', amount: 20_000 }];
+    expect(extra(changed, [], later, '2026-06')).toEqual({ '2025': 0, '2026': 1_000 });
+  });
+
+  it('turning bonuses on after an overtime-only start does not back-post earlier bonuses', () => {
+    const bonuses = [{ date: '2026-03-25', amount: 100_000, type: 'annual' as const }];
+    const overtime = [{ date: '2026-04-10', amount: 20_000 }];
+    const on = switchAutoPostOn({ ...start, otpIncludesOvertime: true }, 'otp', 600_000, bonuses, '2026-05', overtime);
+    const changed = changeOtpScheme(on, { otpIncludesBonuses: true }, 600_000, bonuses, overtime, JOBS, '2026-06');
+    expect(extra(changed, bonuses, overtime, '2026-06')).toEqual({ '2025': 0, '2026': 0 });
+    const later = [...bonuses, { date: '2026-08-25', amount: 40_000, type: 'annual' as const }];
+    expect(extra(changed, later, overtime, '2026-08')).toEqual({ '2025': 0, '2026': 2_000 });
+  });
+
+  it('changing the job link does not back-post the other job\'s earlier pay', () => {
+    const bonuses = [{ date: '2026-03-25', amount: 100_000, type: 'annual' as const, jobId: 'b' }];
+    const on = switchAutoPostOn({ ...start, otpIncludesBonuses: true, otpJobId: 'a' }, 'otp', 600_000, bonuses, '2026-05');
+    expect(on.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 0 });
+    const cleared = changeOtpScheme(on, { otpJobId: undefined }, 600_000, bonuses, [], JOBS, '2026-06');
+    expect(cleared.otpJobId).toBeUndefined();
+    expect(extra(cleared, bonuses, [], '2026-06')).toEqual({ '2025': 0, '2026': 0 });
+  });
+
+  it('keeps a share the old settings still owed (a late entry) owed', () => {
+    // Bonuses on, stamped May with nothing posted; an April bonus entered late is owed 5 000.
+    const posted: P = {
+      ...start, otpAutoPost: true, otpIncludesBonuses: true, otpLastPostedMonth: '2026-05', otpBonusPostedByYear: { '2026': 0 },
+    };
+    const bonuses = [{ date: '2026-04-25', amount: 100_000, type: 'annual' as const }];
+    const changed = changeOtpScheme(posted, { otpIncludesOvertime: true }, 600_000, bonuses, [], JOBS, '2026-06');
+    expect(extra(changed, bonuses, [], '2026-06')).toEqual({ '2026': 5_000 });
+  });
+
+  it('leaves the record alone while auto-post is off', () => {
+    const off: P = { ...start, otpBonusPostedByYear: { '2026': 7 }, otpLastPostedMonth: '2026-05' };
+    const changed = changeOtpScheme(off, { otpIncludesOvertime: true }, 600_000, [], [], JOBS, '2026-06');
+    expect(changed.otpIncludesOvertime).toBe(true);
+    expect(changed.otpBonusPostedByYear).toEqual({ '2026': 7 });
+  });
+
+  it('removing the linked job clears the link from the next unposted month on', () => {
+    const bonuses = [{ date: '2026-03-25', amount: 100_000, type: 'annual' as const, jobId: 'b' }];
+    const on = switchAutoPostOn({ ...start, otpIncludesBonuses: true, otpJobId: 'a' }, 'otp', 600_000, bonuses, '2026-05');
+    const removed = pensionAfterJobRemoved(on, 'a', 600_000, bonuses, [], JOBS, '2026-06');
+    expect(removed.otpJobId).toBeUndefined();
+    expect(extra(removed, bonuses, [], '2026-06')).toEqual({ '2025': 0, '2026': 0 });
+    expect(pensionAfterJobRemoved(on, 'b', 600_000, bonuses, [], JOBS, '2026-06')).toBe(on);
   });
 });
