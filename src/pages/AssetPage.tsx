@@ -41,6 +41,7 @@ import { SavingsAllocationPanel } from '../components/SavingsAllocationPanel';
 import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { activeCoOwners, myHouseDebt, myHouseValue, ownershipShares } from '../lib/ownership';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
+import { withTotalBand, BAND_DELTA_PP } from '../lib/scenarioBands';
 import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
 import { calcWealthTax, TAX_YEAR, WEALTH_PARAMS } from '../lib/norwegianTax';
 import { currentMonthKey } from '../lib/date';
@@ -177,6 +178,9 @@ const AssetPage: React.FC = () => {
       { key: 'crypto', label: t.bucketCrypto, color: 'var(--rust)' },
       { key: 'cash', label: t.bucketCash, color: 'var(--slate)' },
       { key: 'house', label: t.bucketHouse, color: 'var(--teal)' },
+      // Not buckets: the net-worth line (assets less all debt) and the band around it.
+      { key: 'total', label: t.assetPage.projectionTotal, color: 'var(--text-1)' },
+      { key: 'band', label: t.forecastPage.band, color: 'var(--accent)', swatchOpacity: 0.25 },
     ];
 
     // `allowNegative` is for unrealized gain/loss fields: a loss is a legitimate
@@ -268,16 +272,22 @@ const AssetPage: React.FC = () => {
     () => calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, projMortgageTerm, 15),
     [mortgage.balance, mortgage.ratePct, projMortgageTerm],
   );
+  // Stacked buckets plus a bear/bull band around the total (the Forecast's
+  // ±3 pp spread, rerun through this chart's own model per leg).
   const projectionData = useMemo(
-    () => calcNetWorthProjectionByBucket(
-      { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity },
-      annualSavings,
-      { stocks: projGrowthReturn, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: projHouseGrowth },
-      15,
-      houseByYear,
-      debtByYear,
-      { mortgageByYear: mortgageBalances, region, ownShare: shares.own },
-    ),
+    () => {
+      const rates = { stocks: projGrowthReturn, crypto: cryptoGrowthRate, cash: cashGrowthRate, house: projHouseGrowth };
+      const run = (r: typeof rates) => calcNetWorthProjectionByBucket(
+        { stocks: netInvestment, crypto: netCrypto, cash: cashStart, house: houseEquity },
+        annualSavings,
+        r,
+        15,
+        houseByYear,
+        debtByYear,
+        { mortgageByYear: mortgageBalances, region, ownShare: shares.own },
+      );
+      return withTotalBand(run(rates), rates, BAND_DELTA_PP, run);
+    },
     [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, projGrowthReturn, cryptoGrowthRate, cashGrowthRate, projHouseGrowth, houseByYear, debtByYear, mortgageBalances, region, shares.own]
   );
 
@@ -820,6 +830,14 @@ const AssetPage: React.FC = () => {
               <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('cash')} type="monotone" dataKey="cash" stackId="1" name={t.bucketCash} stroke={CHART.slate} fill="url(#cashGrad)" />
               <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('crypto')} type="monotone" dataKey="crypto" stackId="1" name={t.bucketCrypto} stroke={CHART.rust} fill="url(#cryptoGrad)" />
               <Area isAnimationActive={!reduced} hide={hiddenBuckets.has('stocks')} type="monotone" dataKey="stocks" stackId="1" name={t.bucketStocks} stroke={CHART.forestLight} fill="url(#stocksGrad)" />
+              {/* The plotted total is net of all debt, so it can sit below the stack top
+                  when there is consumer debt. The band wraps this line, not the stack:
+                  a light fill plus dashed bear/bull edges so the lower half stays
+                  readable over the near-opaque stack. */}
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey="band" name={t.forecastPage.band} stroke="none" fill="var(--accent)" fillOpacity={0.09} isAnimationActive={!reduced} activeDot={false} legendType="none" />
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey={(p: { band: [number, number] }) => p.band[0]} stroke="var(--accent)" strokeOpacity={0.6} strokeWidth={1.25} strokeDasharray="4 3" fill="none" isAnimationActive={!reduced} activeDot={false} legendType="none" tooltipType="none" />
+              <Area hide={hiddenBuckets.has('band')} type="monotone" dataKey={(p: { band: [number, number] }) => p.band[1]} stroke="var(--accent)" strokeOpacity={0.6} strokeWidth={1.25} strokeDasharray="4 3" fill="none" isAnimationActive={!reduced} activeDot={false} legendType="none" tooltipType="none" />
+              <Area hide={hiddenBuckets.has('total')} type="monotone" dataKey="total" name={t.assetPage.projectionTotal} stroke="var(--text-1)" strokeWidth={1.75} fill="none" isAnimationActive={!reduced} legendType="none" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -836,7 +854,7 @@ const AssetPage: React.FC = () => {
                 className="flex items-center gap-1.5 transition-opacity hover:opacity-100"
                 style={{ opacity: off ? 0.4 : 1 }}
               >
-                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: b.color }} />
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: b.color, opacity: b.swatchOpacity }} />
                 <span style={off ? { textDecoration: 'line-through' } : undefined}>{b.label}</span>
               </button>
             );

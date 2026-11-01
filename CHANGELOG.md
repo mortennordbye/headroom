@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.16.0](https://github.com/mortennordbye/headroom/compare/v3.15.0...v3.16.0) (2026-11-01)
+
+
+### Features
+
+* show the scenario band on the Assets and Dashboard projections ([#352](https://github.com/mortennordbye/headroom/issues/352)) ([f7bf073](https://github.com/mortennordbye/headroom/commit/f7bf0736b4f26b48035f7ad5eb07c64f44b13039))
+
+
+### Bug Fixes
+
+* step loan catch-ups month by month and keep a departed paydown's charged months ([#350](https://github.com/mortennordbye/headroom/issues/350)) ([a1e19c2](https://github.com/mortennordbye/headroom/commit/a1e19c2ff133da4cec690052df1c94b287437021))
+
 ## [3.15.0](https://github.com/mortennordbye/headroom/compare/v3.14.2...v3.15.0) (2026-11-01)
 
 
