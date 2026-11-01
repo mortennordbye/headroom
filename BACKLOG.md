@@ -123,6 +123,14 @@ in git and the CHANGELOG, not here.
   those stamped-but-unpaid months in `uncoveredMonths` (as 0) too. **Where**: `src/components/ExpenseDialog.tsx`,
   `src/components/SavingsAllocationPanel.tsx`, `src/lib/allocationSync.ts`, `computeAutomationPostings`
   in `src/lib/automation.ts`.
+- **Catch-up order still moves a loan by a few kroner.** With two expenses on one loan, the runner
+  amortizes one expense over all its months before the next, so whose principal lands first changes
+  the interest that compounds. Answering the catch-up prompts in the other order gives a slightly
+  different balance (tens of kroner over a few months), with or without co-owners. **Why deferred**:
+  found while fixing the co-owner order gap in #340; closing it needs the runner to step month by
+  month across all rules on a loan, a redesign of the #338 interest tracking. **What would unblock**:
+  agreeing to rework `computeAutomationPostings` to interleave rules per month. **Where**:
+  `computeAutomationPostings` and `applyAmortization` in `src/lib/automation.ts`.
 - **Loan modelling.** Annuity only (no serial loans), annual-granularity amortization (no bank
   schedule import), no rate-change history. **Where**: `src/lib/calculations.ts`.
 - **Residence history isn't linked to the current home**, and Kjøpe & selge doesn't write the move

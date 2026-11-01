@@ -492,6 +492,60 @@ describe('computeAutomationPostings — co-owner share changes with a second pay
     expect(p.newBalance).toBe(Math.round(bal));
   });
 
+  describe('a co-owner carrying the whole loan through September', () => {
+    const s = state({ coOwners: [co(100, { id: 'x', until: '2026-09' })] });
+    const A = mine({ id: 'A', amount: 9000, lastPostedMonth: '2026-07' });
+    const B = extra({ id: 'B', amount: 1000, lastPostedMonth: '2026-07' });
+    const NOW = '2026-11';
+    // Post `first` (the other rule waits as `others`), then the other with `first` stamped.
+    const inTurn = (first: AutomationRule, second: AutomationRule, cap?: number) => {
+      const [p1] = computeAutomationPostings([first], s, NOW, cap, [second]);
+      const stamped = { ...first, lastPostedMonth: NOW, uncoveredMonths: p1.uncoveredMonths };
+      const [p2] = computeAutomationPostings([second], { ...s, mortgage: p1.newBalance }, NOW, undefined, [stamped]);
+      return { p1, p2 };
+    };
+
+    it("the co-owners' months count as paid whichever catch-up prompt is answered first", () => {
+      const aThenB = inTurn(A, B).p2.newBalance;
+      const both = computeAutomationPostings([A, B], s, NOW);
+      expect(both[both.length - 1].newBalance).toBe(aThenB);
+      // A charges Oct-Nov interest (Aug-Sep was the co-owners'); B's four
+      // payments are all principal.
+      let ab = 1_000_000;
+      ab = ab + ab * r - 9000;
+      ab = ab + ab * r - 9000;
+      expect(aThenB).toBe(Math.round(ab - 4 * 1000));
+
+      // B first: Aug-Sep are principal (not charged interest, which was the
+      // 2 000 kr order gap), and its 1 000 goes toward Oct-Nov interest, which
+      // A then charges only the rest of.
+      const bThenA = inTurn(B, A);
+      expect(bThenA.p1.newBalance).toBe(1_000_000 - 2000);
+      expect(bThenA.p1.uncoveredMonths).toEqual({ '2026-10': 1000, '2026-11': 1000 });
+      let ba = 1_000_000 - 2000;
+      ba = ba + (ba * r - 1000) - 9000;
+      ba = ba + (ba * r - 1000) - 9000;
+      expect(bThenA.p2.newBalance).toBe(Math.round(ba));
+      // What is left between the orders is the runner amortizing one rule at a
+      // time (B's Aug-Sep principal lands before or after A's interest), which
+      // two plain rules on a loan with no co-owners show too.
+      expect(Math.abs(bThenA.p2.newBalance - aThenB)).toBeLessThan(50);
+    });
+
+    it('a declined catch-up never records 0 % months as uncovered', () => {
+      // A declined: it pays November only. October (a month the user carried
+      // the loan) stays uncovered; August and September were the co-owners'.
+      const { p1, p2 } = inTurn(A, B, 1);
+      expect(p1.uncoveredMonths).toEqual({ '2026-10': 0 });
+      let bal = 1_000_000;
+      bal = bal + bal * r - 9000; // A: November only
+      // B: Aug, Sep and Nov are principal. October's interest is still due and
+      // B's 1 000 can't cover it, so October moves nothing and is B's short month.
+      expect(p2.newBalance).toBe(Math.round(bal - 3 * 1000));
+      expect(p2.monthsShort).toBe(1);
+    });
+  });
+
   it('a 0 % month skipped in one call counts as charged for the other rule in that call', () => {
     const both = computeAutomationPostings(
       [mine({ amount: 5000 }), extra({ amount: 6000, lastPostedMonth: '2026-01' })], state({ coOwners }), '2026-04');

@@ -203,11 +203,13 @@ export function computeAutomationPostings(
   };
   const isMyShare = (r: AutomationRule) => r.targetKind === 'mortgage' && r.mortgagePaymentScope === 'myShare';
   // A month a 'myShare' rule skips because the user carried none of the loan:
-  // the co-owners paid its interest. That rule's stamp counts the month as
-  // charged in later calls (it is never in uncoveredMonths), so it counts as
-  // charged for every other rule in this call too, whatever the order.
-  for (const r of rules.filter(isMyShare)) {
-    for (const m of monthsOf(r).appliedMonths) if (!(debtShareAt(state, m) > 0)) (paidInCall.mortgage ??= {})[m] = Infinity;
+  // the co-owners paid its interest. Once that rule is stamped past the month
+  // its stamp counts it as charged (it is never in uncoveredMonths), so it
+  // counts as charged for every other rule now too, whether the 'myShare' rule
+  // posts in this call, in a later prompt (`others`), or was capped. Otherwise
+  // the order the prompts are answered in would change the balance.
+  for (const r of [...rules, ...others].filter(isMyShare)) {
+    for (const m of monthsOf(r).dueMonths) if (!(debtShareAt(state, m) > 0)) (paidInCall.mortgage ??= {})[m] = Infinity;
   }
 
   const out: ResolvedPosting[] = [];
@@ -283,7 +285,9 @@ export function computeAutomationPostings(
     if (loan && (monthsDue < due || monthsShort > 0)) {
       const otherNeeds = (m: string) => (loanRules[loan] ?? []).some(r =>
         r.id !== rule.id && r.lastPostedMonth !== undefined && r.lastPostedMonth < m);
-      const skipped = Object.fromEntries(dueMonths.slice(0, due - monthsDue).map(m => [m, 0]));
+      // A 'myShare' rule's months at a 0 % share are not uncovered: the co-owners paid them.
+      const skipped = Object.fromEntries(dueMonths.slice(0, due - monthsDue)
+        .filter(m => !isMyShare(rule) || debtShareAt(state, m) > 0).map(m => [m, 0]));
       uncoveredMonths = Object.fromEntries(Object.entries({ ...rule.uncoveredMonths, ...skipped, ...short })
         .filter(([m]) => otherNeeds(m)));
     }
