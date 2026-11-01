@@ -295,3 +295,31 @@ export function categorize(input: CategorizeInput): CategorizeResult {
 
   return { category: 'other', source: 'auto' };
 }
+
+export interface RecategorizeRow extends CategorizeInput {
+  id: string;
+  category?: string;
+  categorySource?: 'auto' | 'manual';
+}
+
+export interface RecategorizeChange {
+  id: string;
+  from: string | undefined;
+  to: CategoryKey;
+}
+
+/**
+ * Preview of re-running `categorizeWithRules` over the auto-labelled rows. Only
+ * rows with `categorySource === 'auto'` are considered, so a manual label (or a
+ * row with no recorded source) never changes. Lists just the rows whose category
+ * would actually change.
+ */
+export function recategorizeAuto(transactions: RecategorizeRow[], rules: CategoryRule[]): { changes: RecategorizeChange[] } {
+  const changes: RecategorizeChange[] = [];
+  for (const t of transactions) {
+    if (t.categorySource !== 'auto') continue;
+    const { category } = categorizeWithRules({ merchant: t.merchant, description: t.description, mcc: t.mcc, kind: t.kind }, rules);
+    if (category !== t.category) changes.push({ id: t.id, from: t.category, to: category });
+  }
+  return { changes };
+}

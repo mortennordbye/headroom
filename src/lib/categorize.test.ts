@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { categorize, categorizeWithRules, isStaleAutoLabel, type CategoryRule } from './categorize';
+import { categorize, categorizeWithRules, isStaleAutoLabel, recategorizeAuto, type CategoryRule } from './categorize';
 import { isCategoryKey } from './categories';
 
 describe('categorize', () => {
@@ -191,5 +191,41 @@ describe('isStaleAutoLabel', () => {
     expect(isStaleAutoLabel('transfers', 'Til: Sparekonto')).toBe(false);
     expect(isStaleAutoLabel('shopping', 'Vipps*NETONNET')).toBe(false);
     expect(isStaleAutoLabel(undefined, 'Vipps*NETONNET')).toBe(false);
+  });
+});
+
+describe('recategorizeAuto', () => {
+  const rules: CategoryRule[] = [{ id: 'r1', match: 'til: 1234', category: 'housing' }];
+
+  it('lists auto rows whose category would change', () => {
+    const { changes } = recategorizeAuto([
+      { id: 'a', merchant: 'REMA 1000', category: 'shopping', categorySource: 'auto' },
+      { id: 'b', description: 'Til: 1234 56 78901', category: 'transfers', categorySource: 'auto' },
+    ], rules);
+    expect(changes).toEqual([
+      { id: 'a', from: 'shopping', to: 'groceries' },
+      { id: 'b', from: 'transfers', to: 'housing' },
+    ]);
+  });
+
+  it('never touches manual rows or rows without a source', () => {
+    const { changes } = recategorizeAuto([
+      { id: 'm', merchant: 'REMA 1000', category: 'shopping', categorySource: 'manual' },
+      { id: 'u', merchant: 'REMA 1000', category: 'shopping' },
+    ], rules);
+    expect(changes).toEqual([]);
+  });
+
+  it('skips auto rows that already match', () => {
+    const { changes } = recategorizeAuto([
+      { id: 'a', merchant: 'REMA 1000', category: 'groceries', categorySource: 'auto' },
+      { id: 'i', merchant: 'REMA 1000', kind: 'income', category: 'income', categorySource: 'auto' },
+    ], rules);
+    expect(changes).toEqual([]);
+  });
+
+  it('labels an auto row with no category', () => {
+    const { changes } = recategorizeAuto([{ id: 'a', merchant: 'Spotify', categorySource: 'auto' }], []);
+    expect(changes).toEqual([{ id: 'a', from: undefined, to: 'subscriptions' }]);
   });
 });

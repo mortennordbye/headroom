@@ -64,9 +64,6 @@ in git and the CHANGELOG, not here.
 - **Bank-id dedup regex ambiguity.** A legacy bare id whose ref starts with 8 hex chars + `-` is
   classified as connection-prefixed. **Unblock**: converge the id format, or a secondary key.
   **Where**: `src/lib/bankDedup.ts`, `dropStaleBareTwins` in `server/bank.js`.
-- **Bulk re-categorize auto-sourced rows.** A Settings action re-running `categorizeWithRules` over
-  rows with `categorySource === 'auto'`. **Unblock**: agree the gate + a confirm step. **Where**:
-  `src/pages/SettingsPage.tsx`, `src/lib/categorize.ts`.
 - **Heuristics to tune.** The keyword table (`src/lib/categorize.ts`), transfer detection
   (`src/lib/transfers.ts`, could use own-IBAN matching), transfer-suggestion thresholds
   (`src/lib/transferSuggestions.ts`, tuned on one dataset), envelope name hints (`NAME_HINTS` in
