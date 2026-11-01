@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useLocation, useSearchParams } from 'react-router';
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import {
   ChevronLeft,
   ChevronRight,
@@ -638,11 +638,35 @@ interface MobileNavTabProps {
   onNavigate: (to: string) => void;
 }
 
-const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, active, onNavigate }) => (
+// iOS sometimes delivers the touch but never the click that should follow it,
+// mostly right after a page has opened and is still filling in (seen with the
+// on-device tap log: touchstart and touchend on the tab, then no click). So a
+// finger navigates on lift-off, and the click, if it does come, is ignored.
+// Mouse and keyboard still go through the link's own click.
+const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, active, onNavigate }) => {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const touch = useRef<{ x: number; y: number; done: boolean } | null>(null);
+  return (
   <NavLink
     to={to}
     end={to === '/'}
-    onClick={e => { if (isPlainClick(e)) onNavigate(to); }}
+    onPointerDown={e => {
+      touch.current = e.pointerType === 'touch' && e.isPrimary ? { x: e.clientX, y: e.clientY, done: false } : null;
+    }}
+    onPointerUp={e => {
+      const start = touch.current;
+      // A finger that slid away is not a tap.
+      if (!start || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) return;
+      start.done = true;
+      onNavigate(to);
+      // Replace on the current tab, as the link itself does.
+      navigate(to, { replace: pathname === to });
+    }}
+    onClick={e => {
+      if (touch.current?.done) { touch.current = null; e.preventDefault(); return; }
+      if (isPlainClick(e)) onNavigate(to);
+    }}
     className="flex-1 min-w-0 flex flex-col items-center gap-1 pt-2 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-[10px] font-medium transition-colors"
     style={{
       color: active ? 'var(--brass)' : 'var(--text-3)',
@@ -651,6 +675,7 @@ const MobileNavTab: React.FC<MobileNavTabProps> = ({ to, icon: Icon, label, acti
     {Icon && <Icon size={20} strokeWidth={1.75} aria-hidden style={{ color: active ? 'var(--brass)' : 'var(--brass-dim)' }} />}
     <span className="truncate max-w-full px-0.5">{label}</span>
   </NavLink>
-);
+  );
+};
 
 export default Layout;

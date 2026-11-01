@@ -175,14 +175,14 @@ in git and the CHANGELOG, not here.
 
 ## Tooling and infrastructure
 
-- **Temporary tap log for the mobile "first tap does nothing" report.** On the iPhone home-screen
-  app the first tap on a bottom tab can still do nothing, after #292, #293 and #295 (which fixed
-  the old page staying up while a cold route loaded) and after the saved tick and update prompt
-  were moved off the tab bar. WebKit emulation no longer reproduces it, so `?debugtaps` turns on an on-screen log of touches, the element under the finger, clicks,
-  route changes, frame stalls and the running bundle. **Why deferred**: needs a capture from the
-  real phone. **Unblock**: a log of a failed tap, then fix the cause and delete the component and
-  its mount. **Where**: `src/components/TapDebugLog.tsx`, `src/lib/tapLog.ts`, `<TapDebugLog />` in
-  `src/components/Layout.tsx`, the toggle in the About card of `src/pages/SettingsPage.tsx`.
+- **Temporary tap log for the mobile "first tap does nothing" report.** The on-device log showed
+  iOS delivering touchstart and touchend on a bottom tab but no click, so the tabs now navigate on
+  pointerup. Emulation can't reproduce the dropped click, so the log stays until that is confirmed
+  on the phone. It is turned on in Settings (About card) or with `?debugtaps`. **Why deferred**:
+  needs confirmation from the real phone. **Unblock**: the user confirms taps work, then delete the
+  component, its mount and the toggle. **Where**: `src/components/TapDebugLog.tsx`,
+  `src/lib/tapLog.ts`, `<TapDebugLog />` in `src/components/Layout.tsx`, the toggle in the About
+  card of `src/pages/SettingsPage.tsx`.
 
 - **Stricter lint presets.** No `recommendedTypeChecked` for the TypeScript and no `jsx-a11y`.
   **Why deferred**: out of scope for #142, which only brought `server/` and `desktop/` under the
