@@ -114,4 +114,27 @@ describe('findInternalTransferIds own-account matching', () => {
     const manual = tx({ id: 'm1', counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000 });
     expect(findInternalTransferIds([own, manual]).size).toBe(0);
   });
+
+  it('nets the partner leg that carries no counterparty number (debit side known)', () => {
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000, date: '2026-07-05' });
+    const inn = tx({ id: 'i1', account: 'B', accountNumber: OWN_B, kind: 'income', amount: 5000, date: '2026-07-06' });
+    // An equal income on a third account would make the amount matcher give up;
+    // the number names B, so the B leg is still found.
+    const other = tx({ id: 'i2', account: 'C', accountNumber: '77778899999', kind: 'income', amount: 5000, date: '2026-07-06' });
+    expect([...findInternalTransferIds([out, inn, other])].sort()).toEqual(['e1', 'i1']);
+  });
+
+  it('nets the partner leg that carries no counterparty number (credit side known)', () => {
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, kind: 'expense', amount: 5000, date: '2026-07-05' });
+    const other = tx({ id: 'e2', account: 'C', accountNumber: '77778899999', kind: 'expense', amount: 5000, date: '2026-07-05' });
+    const inn = tx({ id: 'i1', account: 'B', accountNumber: OWN_B, counterpartyAccountNumber: `NO12${OWN_A}`, kind: 'income', amount: 5000, date: '2026-07-06' });
+    expect([...findInternalTransferIds([out, other, inn])].sort()).toEqual(['e1', 'i1']);
+  });
+
+  it('leaves the partner alone when two rows on the named account could be it', () => {
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000, date: '2026-07-05' });
+    const i1 = tx({ id: 'i1', account: 'B', accountNumber: OWN_B, kind: 'income', amount: 5000, date: '2026-07-05' });
+    const i2 = tx({ id: 'i2', account: 'B', accountNumber: OWN_B, kind: 'income', amount: 5000, date: '2026-07-06' });
+    expect([...findInternalTransferIds([out, i1, i2])]).toEqual(['e1']);
+  });
 });

@@ -49,28 +49,58 @@ export function normalizeAccountNumber(raw: string | undefined): string {
  */
 export function findInternalTransferIds(txs: DailyTransaction[]): Set<string> {
   const matched = new Set<string>();
+  const expenses = txs.filter((t) => isCandidate(t) && t.kind !== 'income');
+  const incomes = txs.filter((t) => isCandidate(t) && t.kind === 'income');
+  const withinWindow = (a: DailyTransaction, b: DailyTransaction) => {
+    const da = dayNumber(a.date);
+    const db = dayNumber(b.date);
+    return Number.isFinite(da) && Number.isFinite(db) && Math.abs(da - db) <= WINDOW_DAYS;
+  };
 
   // Own-account matching: the user's own account numbers are the ones stamped on
   // their connected rows; a row paying to / receiving from one of those (and not
   // its own account) is a move between the user's accounts.
   const own = new Set<string>();
-  for (const t of txs) {
+  for (const t of [...expenses, ...incomes]) {
     const n = normalizeAccountNumber(t.accountNumber);
-    if (n && isCandidate(t)) own.add(n);
+    if (n) own.add(n);
   }
-  if (own.size) {
-    for (const t of txs) {
-      if (!isCandidate(t)) continue;
-      const cp = normalizeAccountNumber(t.counterpartyAccountNumber);
-      if (cp && own.has(cp) && cp !== normalizeAccountNumber(t.accountNumber)) matched.add(t.id);
+  const byNumber: DailyTransaction[] = [];
+  for (const t of [...expenses, ...incomes]) {
+    const cp = normalizeAccountNumber(t.counterpartyAccountNumber);
+    if (cp && own.has(cp) && cp !== normalizeAccountNumber(t.accountNumber)) {
+      matched.add(t.id);
+      byNumber.push(t);
     }
   }
 
-  const expenses = txs.filter((t) => isCandidate(t) && t.kind !== 'income');
-  const incomes = txs.filter((t) => isCandidate(t) && t.kind === 'income');
+  // Legs already paired, either direction, so no row is claimed twice.
+  const usedIncome = new Set<string>();
+  const usedExpense = new Set<string>();
+  // The other leg of a row matched by account number may carry no counterparty
+  // number itself. Look for it on the account the number names: opposite kind,
+  // same amount, within the window, and exactly one candidate.
+  for (const t of byNumber) {
+    const isIncome = t.kind === 'income';
+    if ((isIncome ? usedIncome : usedExpense).has(t.id)) continue;
+    const cp = normalizeAccountNumber(t.counterpartyAccountNumber);
+    const usedPool = isIncome ? usedExpense : usedIncome;
+    const partners = (isIncome ? expenses : incomes).filter(
+      (p) =>
+        !usedPool.has(p.id) &&
+        normalizeAccountNumber(p.accountNumber) === cp &&
+        p.amount === t.amount &&
+        withinWindow(t, p),
+    );
+    if (partners.length === 1) {
+      (isIncome ? usedIncome : usedExpense).add(t.id);
+      usedPool.add(partners[0].id);
+      matched.add(partners[0].id);
+    }
+  }
+
   if (!expenses.length || !incomes.length) return matched;
 
-  const usedIncome = new Set<string>();
   for (const e of expenses) {
     if (matched.has(e.id)) continue; // already proven by account number
     const eDay = dayNumber(e.date);

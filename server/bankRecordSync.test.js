@@ -131,6 +131,18 @@ describe('fetchMappedTransactions + recordSync', () => {
     expect(calls.filter((c) => c.from).map((c) => c.from)).toEqual([floor, floor]);
   });
 
+  it("stamps each row with its linked account's number, whitespace removed", async () => {
+    // Fictitious account numbers.
+    writeStore({ connections: [{ ...conn('aaaa1111', []), accounts: [{ uid: 'u1', iban: 'NO12 4444 5566 666' }, { uid: 'u2' }] }] });
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const ref = new URL(url).pathname.split('/')[2];
+      return { ok: true, status: 200, text: async () => JSON.stringify({ transactions: [tx(`${ref}-1`)] }) };
+    }));
+    const { rows } = await bank.fetchMappedTransactions();
+    const byAccount = Object.fromEntries(rows.map((r) => [r.account, r.accountNumber]));
+    expect(byAccount).toEqual({ 'aaaa1111:u1': 'NO1244445566666', 'aaaa1111:u2': undefined });
+  });
+
   it('logs a sync that fully fetched no connection as a failure', () => {
     writeStore({ connections: [conn('bbbb2222', ['b1'])] });
     bank.recordSync({ ok: true, added: 0, fetched: 0, total: 0, synced: [{ connectionId: 'bbbb2222-x', sessionId: 's-bbbb2222', complete: false }] });

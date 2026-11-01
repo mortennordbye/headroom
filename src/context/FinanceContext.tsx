@@ -270,8 +270,8 @@ export interface DailyTransaction {
   accountName?: string;
   bank?: string;
   /**
-   * Account numbers (IBAN or Norwegian BBAN) from bank sync: this row's own
-   * account, and the other party's. Used to spot moves between the user's own
+   * Account numbers from bank sync (an IBAN, a BBAN, or another identifier the
+   * bank uses): this row's own account, and the other party's. Used to spot moves between the user's own
    * accounts (src/lib/transfers.ts). Absent on manual rows, legacy rows, and
    * when the bank doesn't share them.
    */
