@@ -310,6 +310,18 @@ describe('mergeTransactions after a re-link (reference format change)', () => {
     expect(mergeTransactions([], relinked(other), [stored[0].id], [tombstone])).toHaveLength(1);
   });
 
+  it('keeps dropping the twins on a second marked sync (stored row and deleted row)', () => {
+    const deletedRow = mapEBTransactions([tx({ entry_reference: '2026-10-27-1', transaction_amount: { currency: 'NOK', amount: '55.00' } })], opts)[0];
+    const deletedTomb = { id: deletedRow.id, date: deletedRow.date, amount: deletedRow.amount, account: deletedRow.account, description: deletedRow.description, kind: deletedRow.kind };
+    const overlap = mapEBTransactions([
+      tx({ entry_reference: 'enc!!Q2hvY29sYXRl' }),
+      tx({ entry_reference: 'enc!!RGVsZXRlZA', transaction_amount: { currency: 'NOK', amount: '55.00' } }),
+    ], opts);
+    const s1 = mergeTransactions(stored, relinked(overlap), [deletedRow.id], [deletedTomb]);
+    const s2 = mergeTransactions(s1, relinked(overlap), [deletedRow.id], [deletedTomb]);
+    expect(s2.map((t) => t.id)).toEqual([`${prefix}2026-10-27-0`]);
+  });
+
   it('ignores tombstones on a normal sync', () => {
     expect(mergeTransactions([], refetched, [stored[0].id], [tombstone])).toHaveLength(1);
   });

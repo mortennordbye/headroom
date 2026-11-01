@@ -49,7 +49,7 @@ import { pensionAccrualRules, isPensionRuleId, PENSION_OTP_RULE_ID, PENSION_IPS_
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
-import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones } from '../lib/bankDedup';
+import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones, forgetRestoredBankRows } from '../lib/bankDedup';
 import { activeJobBreakdown } from '../lib/salary';
 import { stableStringify } from '../lib/stableStringify';
 import { sanitizePayload } from '../lib/sanitizePayload';
@@ -1418,7 +1418,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Exposed setter that records soft-deletes: when a bank-imported (eb-) row is
   // removed, remember its id in `deletedBankIds` so the server won't re-add it on
-  // the next sync/reconcile. Edits (row still present) are unaffected.
+  // the next sync/reconcile, and forget it again when the row comes back (undo).
+  // Edits (row still present) are unaffected.
   const setDailyTransactionsTracked = useCallback((val: DailyTransaction[]) => {
     const nextIds = new Set(val.map((t) => t.id));
     const removedEb = dailyTransactions
@@ -1427,6 +1428,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setDeletedBankIds((ids) => Array.from(new Set([...ids, ...removedEb.map((t) => t.id)])));
       setDeletedBankTombstones((prev) => addDeletedBankTombstones(prev, removedEb));
     }
+    setDeletedBankIds((ids) => forgetRestoredBankRows(ids, nextIds));
+    setDeletedBankTombstones((prev) => forgetRestoredBankRows(prev, nextIds));
     setDailyTransactions(val);
   }, [dailyTransactions]);
 
@@ -2987,10 +2990,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Apply the transactions a bank sync just persisted, and adopt the server's new
   // data revision so this (initiating) tab doesn't see its own sync as an
   // external change and trigger a "data changed elsewhere" reload.
+  // A row deleted here but not yet saved can still come back in the sync result;
+  // keep it deleted rather than let the tracked setter read it as restored.
   const applyBankSync = useCallback((txs: DailyTransaction[], rev?: number) => {
     if (typeof rev === 'number' && Number.isFinite(rev)) revRef.current = rev;
-    setDailyTransactionsTracked(evictSupersededPending(dedupeBankTransactions(txs)));
-  }, [setDailyTransactionsTracked]);
+    const deleted = new Set(deletedBankIds);
+    setDailyTransactionsTracked(evictSupersededPending(dedupeBankTransactions(txs.filter((t) => !deleted.has(t.id)))));
+  }, [setDailyTransactionsTracked, deletedBankIds]);
 
   // --- Demo mode: swap real data for a fictional dataset, then restore it ---
   // The real data is held in `demoSnapshot` (memory) and the auto-save effect is

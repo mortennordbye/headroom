@@ -73,14 +73,6 @@ in git and the CHANGELOG, not here.
   tombstones (and their ids) older than it. **Where**: `fetchMappedTransactions` / `startLink` /
   `removeConnection` in `server/bank.js`, `deletedBankIds` / `deletedBankTombstones` in
   `src/context/FinanceContext.tsx`.
-- **The second sync after a re-link can re-import the overlap.** `dropRelinkFormatTwins` runs only on
-  the first sync after a re-link (`relinked` is cleared by `recordSync`). If the re-link came less
-  than 7 days after the last sync, the next sync's window (`last_sync - 7d`) still reaches rows
-  dated before the old `last_sync`, now under new-format ids, and imports them beside their stored
-  old-format twins (or, for a deleted row, despite its tombstone). **Unblock**: keep the re-link
-  check on until the window has moved past the old `last_sync`, or record the dropped new-format
-  ids so later syncs skip them. **Where**: `fetchMappedTransactions` / `recordSync` /
-  `dropRelinkFormatTwins` in `server/bank.js`.
 - **Bank-id dedup regex ambiguity.** A legacy bare id whose ref starts with 8 hex chars + `-` is
   classified as connection-prefixed. **Unblock**: converge the id format, or a secondary key.
   **Where**: `src/lib/bankDedup.ts`, `dropStaleBareTwins` in `server/bank.js`.

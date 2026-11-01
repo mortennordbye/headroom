@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { DailyTransaction } from '../context/FinanceContext';
-import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones } from './bankDedup';
+import { dedupeBankTransactions, evictSupersededPending, addDeletedBankTombstones, forgetRestoredBankRows } from './bankDedup';
 
 const tx = (over: Partial<DailyTransaction>): DailyTransaction => ({
   id: 'x', date: '2026-06-28', description: 'REMA 1000', amount: 100, kind: 'expense', ...over,
@@ -129,5 +129,20 @@ describe('addDeletedBankTombstones', () => {
   it('skips manual rows and ids it already holds, and returns the same array when nothing is added', () => {
     const prev = addDeletedBankTombstones([], [tx({ id: 'eb-1' })]);
     expect(addDeletedBankTombstones(prev, [tx({ id: 'eb-1' }), tx({ id: 'manual-1' })])).toBe(prev);
+  });
+});
+
+describe('forgetRestoredBankRows', () => {
+  // Undoing a delete puts the row back; its id must leave deletedBankIds (and its
+  // tombstone go), or the next sync drops the restored row again.
+  it('drops ids and tombstones of rows that are present again', () => {
+    expect(forgetRestoredBankRows(['eb-1', 'eb-2'], new Set(['eb-1', 't1']))).toEqual(['eb-2']);
+    const tombs = addDeletedBankTombstones([], [tx({ id: 'eb-1' }), tx({ id: 'eb-2' })]);
+    expect(forgetRestoredBankRows(tombs, new Set(['eb-2'])).map((t) => t.id)).toEqual(['eb-1']);
+  });
+
+  it('returns the same array when nothing was restored', () => {
+    const ids = ['eb-1'];
+    expect(forgetRestoredBankRows(ids, new Set(['t1']))).toBe(ids);
   });
 });

@@ -125,3 +125,12 @@ export function addDeletedBankTombstones(prev: DeletedBankTombstone[], removed: 
   }
   return added.length ? [...prev, ...added] : prev;
 }
+
+// A deleted bank row that is back in the ledger (the delete was undone) is no
+// longer deleted: drop its id from `deletedBankIds` and its tombstone, or the
+// next sync filters the restored row out again. Works on either list; returns
+// `list` unchanged when nothing was restored.
+export function forgetRestoredBankRows<T extends string | { id: string }>(list: T[], present: Set<string>): T[] {
+  const next = list.filter((x) => !present.has(typeof x === 'string' ? x : x.id));
+  return next.length === list.length ? list : next;
+}
