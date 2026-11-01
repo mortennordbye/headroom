@@ -920,6 +920,7 @@ export const translations = {
       catchupMessage: 'Ta igjen {months} måneder for «{name}» ({amount})?',
       catchupConfirm: 'Ta igjen alt',
       catchupDecline: 'Bare denne måneden',
+      catchupShort: '{months} av månedene flytter ingenting: betalingen er lavere enn månedens rente.',
     },
     pensionAutomation: {
       otpRuleName: 'OTP-innskudd',
@@ -3073,6 +3074,7 @@ export const translations = {
       catchupMessage: 'Catch up {months} months for "{name}" ({amount})?',
       catchupConfirm: 'Catch up all',
       catchupDecline: 'Just this month',
+      catchupShort: '{months} of the months move nothing: the payment is below that month\'s interest.',
     },
     pensionAutomation: {
       otpRuleName: 'OTP contribution',

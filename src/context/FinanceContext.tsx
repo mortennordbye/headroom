@@ -126,10 +126,11 @@ export interface FixedExpense {
    *  guard. Set to the current month when a destination is first assigned, so the
    *  first move happens the NEXT month. */
   lastPostedMonth?: string;
-  /** 'yyyy-MM' months up to `lastPostedMonth` this expense never paid, because
-   *  a catch-up was declined. Another payment to the same loan still charges
-   *  their interest. Absent = every stamped month was paid. */
-  unpaidMonths?: string[];
+  /** 'yyyy-MM' → kr for months up to `lastPostedMonth` whose loan interest this
+   *  expense did not cover: 0 when a declined catch-up skipped the month, else
+   *  what it paid toward interest it couldn't cover. Another payment to the same
+   *  loan still charges the rest. Absent = it covered every stamped month. */
+  uncoveredMonths?: Record<string, number>;
 }
 
 // The paydown destinations reachable from a fixed expense. A strict subset of
@@ -313,7 +314,8 @@ export interface PendingCatchup {
    *  −paydown), for the confirmation message. Handlers recompute from live
    *  state, so this is display-only. */
   deltaFull: number;
-  infeasible: boolean;
+  /** Months of the catch-up whose loan interest the payment can't cover. */
+  monthsShort: number;
 }
 
 export interface CoOwner {
@@ -2685,7 +2687,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         mortgagePaymentScope: e.mortgagePaymentScope,
         startMonth: addMonthsKey(nowKey, 1),
         lastPostedMonth: e.lastPostedMonth,
-        unpaidMonths: e.unpaidMonths,
+        uncoveredMonths: e.uncoveredMonths,
       }));
     return [
       ...savingRules,
@@ -2783,18 +2785,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // What each saving moved for `month`, so an adjustment made later in the
     // month can correct the balance by the difference.
     const moved = new Map(posted.map(p => [p.rule.id, p.rule.amountByMonth?.[month] ?? p.rule.amount]));
-    // A declined loan catch-up rewrites the months it skipped; an empty list drops the field.
-    const unpaid = new Map(posted.filter(p => p.unpaidMonths).map(p => [p.rule.id, p.unpaidMonths!]));
+    // A loan posting that skipped or fell short of months rewrites them; an empty record drops the field.
+    const uncovered = new Map(posted.filter(p => p.uncoveredMonths).map(p => [p.rule.id, p.uncoveredMonths!]));
     if (rowIds.size) {
       setSavings(prev => prev.map(sv => (rowIds.has(sv.id)
         ? { ...sv, lastPostedMonth: month, postedAmount: moved.get(sv.id) }
         : sv)));
       setFixedExpenses(prev => prev.map(e => {
         if (!rowIds.has(e.id)) return e;
-        if (!unpaid.has(e.id)) return { ...e, lastPostedMonth: month };
-        const { unpaidMonths: _old, ...rest } = e;
-        const months = unpaid.get(e.id)!;
-        return { ...rest, lastPostedMonth: month, ...(months.length ? { unpaidMonths: months } : {}) };
+        if (!uncovered.has(e.id)) return { ...e, lastPostedMonth: month };
+        const { uncoveredMonths: _old, ...rest } = e;
+        const months = uncovered.get(e.id)!;
+        return { ...rest, lastPostedMonth: month, ...(Object.keys(months).length ? { uncoveredMonths: months } : {}) };
       }));
     }
     const otp = ids.has(PENSION_OTP_RULE_ID);
@@ -2836,7 +2838,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         targetKind: p.targetKind,
         monthsDue: p.monthsDue,
         deltaFull: p.newBalance - base,
-        infeasible: !!p.infeasible,
+        monthsShort: p.monthsShort ?? 0,
       };
     });
     setPendingCatchups(prev => (stableStringify(prev) === stableStringify(nextPending) ? prev : nextPending));

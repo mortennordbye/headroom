@@ -278,18 +278,18 @@ describe('BSU total deposited (optional assets field)', () => {
   });
 });
 
-describe("a fixed expense's unpaid months (optional field)", () => {
+describe("a fixed expense's uncovered months (optional field)", () => {
   const expense = { id: 'fx-loan', name: 'Lån', amount: 9_000, type: 'fixed', destinationKind: 'mortgage', lastPostedMonth: '2026-07' };
-  const withUnpaid = fullBlob({ fixedExpenses: [{ ...expense, unpaidMonths: ['2026-05', '2026-06'] }] });
+  const withUncovered = fullBlob({ fixedExpenses: [{ ...expense, uncoveredMonths: { '2026-05': 0, '2026-06': 3000 } }] });
 
   it('a blob without it loads and saves without adding it', () => {
     const saved = loadAndSave(fullBlob({ fixedExpenses: [expense] }));
-    expect('unpaidMonths' in (saved.fixedExpenses as Blob[])[0]).toBe(false);
+    expect('uncoveredMonths' in (saved.fixedExpenses as Blob[])[0]).toBe(false);
   });
 
   it('survives load, autosave and a second load', () => {
-    const saved = loadAndSave(withUnpaid);
-    expect((saved.fixedExpenses as Blob[])[0].unpaidMonths).toEqual(['2026-05', '2026-06']);
+    const saved = loadAndSave(withUncovered);
+    expect((saved.fixedExpenses as Blob[])[0].uncoveredMonths).toEqual({ '2026-05': 0, '2026-06': 3000 });
     expect(loadAndSave(saved)).toEqual(saved);
   });
 });

@@ -120,7 +120,7 @@ in git and the CHANGELOG, not here.
   it from a pause, or changing its destination sets `lastPostedMonth` to the current month without
   paying it, so another expense's catch-up on the same loan pays that month as principal only.
   **Why deferred**: out of scope for the declined catch-up fix (#338). **What would unblock**: record
-  those stamped-but-unpaid months in `unpaidMonths` too. **Where**: `src/components/ExpenseDialog.tsx`,
+  those stamped-but-unpaid months in `uncoveredMonths` (as 0) too. **Where**: `src/components/ExpenseDialog.tsx`,
   `src/components/SavingsAllocationPanel.tsx`, `computeAutomationPostings` in `src/lib/automation.ts`.
 - **MCP server clock vs browser clock** can disagree for a few hours at month end. **Where**:
   `currentMonthKey` in `src/lib/date.ts`, `mcp/derive.ts`.
