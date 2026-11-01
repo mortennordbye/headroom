@@ -748,7 +748,7 @@ export function pensionSummary(blob: ExportPayload, monthKey = osloMonthKey(), i
   const pensionableIncome = activeGrossAnnual(blob, monthKey);
   // As PensionPage: this year's base for the yearly figure, a recurring estimate
   // (last year's bonuses, no signing bonus) for the projection.
-  const otpIncludesBonuses = !!p.otpIncludesBonuses;
+  const otpIncludesBonuses = p.otpIncludesBonuses === true;
   const otpBase = otpPensionableIncome(pensionableIncome, blob.bonuses ?? [], currentYear, otpIncludesBonuses);
   const otpProjectionBase = otpProjectedPensionableIncome(pensionableIncome, blob.bonuses ?? [], currentYear, otpIncludesBonuses);
   const otpAnnualContribution = otpContribution(otpBase, p.otpEmployerPct + p.otpEmployeePct, TAX_YEAR);

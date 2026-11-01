@@ -66,6 +66,10 @@ export interface AutomationRule {
    *  that left a loan had paid (`departedPaydowns`). Its stamp still says which
    *  months' interest it charged, so no other rule charges them again. */
   paused?: boolean;
+  /** Pension OTP only: the bonus share, per contribution year, that this rule's
+   *  current month carries on top of the fixed amount, so the stamp can record
+   *  it in `Pension.otpBonusPostedByYear`. */
+  otpBonusByYear?: Record<string, number>;
 }
 
 /** Live balances/rates the runner needs to resolve absolute new values. */

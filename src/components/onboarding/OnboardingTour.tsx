@@ -385,7 +385,7 @@ function FieldsForm({ fields }: { fields: OnboardingField[] }) {
       case 'income': return String(Math.round(effectiveIncome));
       case 'savingsTarget': return String(savingsTargetPercent);
       case 'asset': return String(assets[f.key as NumericAssetKey] ?? 0);
-      case 'pension': return String(pension[f.key as keyof Pension] ?? 0);
+      case 'pension': return String(pension[f.key as Exclude<keyof Pension, 'otpBonusPostedByYear'>] ?? 0);
       case 'growthRate': return String(growthRates[f.key] ?? 0);
       case 'ownershipShare': return String(shareOpen.share);
       default: return '';

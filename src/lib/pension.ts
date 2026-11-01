@@ -60,7 +60,7 @@ export function otpPensionableIncome(
   includeBonuses: boolean,
 ): number {
   const base = Math.max(0, fixedGross);
-  if (!includeBonuses) return base;
+  if (includeBonuses !== true) return base;
   return base + sumBonuses(bonuses, `${year}-`, NOT_BONUS);
 }
 
@@ -78,37 +78,28 @@ export function otpProjectedPensionableIncome(
   includeBonuses: boolean,
 ): number {
   const base = Math.max(0, fixedGross);
-  if (!includeBonuses) return base;
+  if (includeBonuses !== true) return base;
   return base + sumBonuses(bonuses, `${year - 1}-`, NOT_RECURRING);
 }
 
 /**
- * The OTP contribution to post for `month` ('yyyy-MM'): a twelfth of the yearly
- * contribution on fixed pay, plus `totalPct` of any bonus dated in `month` when
- * `includeBonuses`. The 12G cap of the month's own year holds across that year:
- * a bonus only counts for the room left under 12G once the full year's fixed
- * pay and the year's earlier bonuses are in, so the twelve months sum to
- * `otpAnnualContribution(otpPensionableIncome(...))`. With bonuses off this is
- * the fixed twelfth every month, as before.
+ * The bonus part of the year's OTP contribution earned up to and including
+ * `month` ('yyyy-MM'): `totalPct` of the bonuses dated in that year up to the
+ * month, counted only for the room left under that year's 12G once the full
+ * year's `fixedGross` is in. Added to twelve fixed twelfths it gives
+ * `otpAnnualContribution(otpPensionableIncome(...))` for the year.
  */
-export function otpContributionForMonth(
+export function otpBonusShareToDate(
   fixedGross: number,
   bonuses: readonly OtpBonus[],
   totalPct: number,
   month: string,
-  includeBonuses: boolean,
 ): number {
   const year = Number(month.slice(0, 4));
   const fixed = Math.max(0, fixedGross);
-  const fixedPart = otpAnnualContribution(fixed, totalPct, year) / 12;
-  if (!includeBonuses) return fixedPart;
-  const yearBonuses = bonuses.filter(b => typeof b.date === 'string' && b.date.startsWith(`${year}-`));
-  const thisMonth = sumBonuses(yearBonuses, month, NOT_BONUS);
-  if (thisMonth <= 0) return fixedPart;
-  const earlier = sumBonuses(yearBonuses.filter(b => b.date.slice(0, 7) < month), `${year}-`, NOT_BONUS);
-  const before = otpAnnualContribution(fixed + earlier, totalPct, year);
-  const after = otpAnnualContribution(fixed + earlier + thisMonth, totalPct, year);
-  return fixedPart + (after - before);
+  const toDate = bonuses.filter(b => typeof b.date === 'string' && b.date.slice(0, 7) <= month);
+  const bonusTotal = sumBonuses(toDate, `${year}-`, NOT_BONUS);
+  return otpAnnualContribution(fixed + bonusTotal, totalPct, year) - otpAnnualContribution(fixed, totalPct, year);
 }
 
 /**

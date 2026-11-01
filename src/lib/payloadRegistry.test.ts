@@ -83,7 +83,7 @@ const canonicalPension: Pension = {
   otpBalance: 100, otpEmployerPct: 6, otpEmployeePct: 1, otpGrowthRate: 4, otpIncludesBonuses: true,
   ipsBalance: 200, ipsAnnualContribution: 300, ipsGrowthRate: 6, birthYear: 1988, retirementAge: 68,
   folketrygdBeholdning: 850000, folketrygdSingle: false, pensionPayoutYears: 12, afpEligible: true,
-  otpAutoPost: true, ipsAutoPost: true,
+  otpAutoPost: true, ipsAutoPost: true, otpBonusPostedByYear: { '2025': 1200, '2026': 0 },
 };
 const canonicalHomeowner: HomeownerData = {
   originalLoanAmount: 2600000, rente: 5, nedbetalingstid: 22, termingebyr: 55,

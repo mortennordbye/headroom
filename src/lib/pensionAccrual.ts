@@ -15,8 +15,10 @@
 // Growth stays where it belongs: in the projection on the Pension page.
 import { addMonthsKey } from './date';
 import type { AutomationRule } from './automation';
-import { otpContributionForMonth } from './pension';
+import { otpAnnualContribution, otpBonusShareToDate } from './pension';
 import type { BonusEntry } from '../context/FinanceContext';
+
+type OtpBonus = Pick<BonusEntry, 'date' | 'amount' | 'type'>;
 
 export const PENSION_OTP_RULE_ID = 'pension:otp';
 export const PENSION_IPS_RULE_ID = 'pension:ips';
@@ -40,8 +42,10 @@ export interface PensionAccrualInput {
   pensionableIncome: number;
   /** The scheme counts bonuses in the OTP base (`Pension.otpIncludesBonuses`). */
   otpIncludesBonuses?: boolean;
-  /** Bonus entries; each posts its OTP share in the month it is dated. */
-  bonuses?: readonly Pick<BonusEntry, 'date' | 'amount' | 'type'>[];
+  /** Bonus entries; their OTP share posts once the month they are dated is due. */
+  bonuses?: readonly OtpBonus[];
+  /** `Pension.otpBonusPostedByYear`: bonus share already in the balance, per year. */
+  otpBonusPostedByYear?: Record<string, number>;
   currentMonth: string;
 }
 
@@ -69,28 +73,35 @@ export function pensionAccrualRules(
   const startMonth = addMonthsKey(input.currentMonth, 1);
   const rules: AutomationRule[] = [];
 
-  // Fixed pay posts a twelfth of the yearly contribution every month. A bonus
-  // posts its share in the month it is dated, so it lands once, when it was
-  // paid. Each due month is priced on its own year (12G cap, that year's
-  // bonuses), so a catch-up across New Year is right; months the stamp already
-  // covers are never in the window, so nothing posts twice.
+  // Fixed pay posts a twelfth of the yearly contribution every month, each due
+  // month on its own year's 12G cap, so a catch-up across New Year is right.
+  // Bonuses are settled against what was already posted for their year
+  // (`otpBonusPostedByYear`): the newest due month carries whatever bonus share
+  // is earned to date and not yet posted. A bonus entered after its month was
+  // posted, or dated back, lands in the next posting; nothing posts twice; and
+  // a bonus edited down or deleted is never clawed back, it only holds further
+  // bonus posts until the share to date passes what was posted.
   const otpPct = input.otpEmployerPct + input.otpEmployeePct;
-  const bonuses = input.bonuses ?? [];
-  const includeBonuses = !!input.otpIncludesBonuses;
-  const otpMonthly = otpContributionForMonth(input.pensionableIncome, [], otpPct, input.currentMonth, false);
+  const fixedMonthly = (m: string) => otpAnnualContribution(input.pensionableIncome, otpPct, Number(m.slice(0, 4))) / 12;
+  const otpMonthly = fixedMonthly(input.currentMonth);
   const otpByMonth: Record<string, number> = {};
   const from = input.otpLastPostedMonth ? addMonthsKey(input.otpLastPostedMonth, 1) : startMonth;
-  for (let m = from; m <= input.currentMonth; m = addMonthsKey(m, 1)) {
-    const amount = otpContributionForMonth(input.pensionableIncome, bonuses, otpPct, m, includeBonuses);
+  for (let m = from; m < input.currentMonth; m = addMonthsKey(m, 1)) {
+    const amount = fixedMonthly(m);
     if (amount !== otpMonthly) otpByMonth[m] = amount;
   }
-  const hasByMonth = Object.keys(otpByMonth).length > 0;
-  if (input.otpAutoPost && (otpMonthly > 0 || Object.values(otpByMonth).some(a => a > 0))) {
+  const bonusByYear = input.otpIncludesBonuses === true
+    ? otpBonusDue(input.pensionableIncome, input.bonuses ?? [], otpPct, input.currentMonth, input.otpBonusPostedByYear)
+    : {};
+  const bonusDue = Object.values(bonusByYear).reduce((a, b) => a + b, 0);
+  if (bonusDue > 0) otpByMonth[input.currentMonth] = otpMonthly + bonusDue;
+  if (input.otpAutoPost && (otpMonthly > 0 || bonusDue > 0)) {
     rules.push({
       id: PENSION_OTP_RULE_ID,
       name: labels.otp,
       amount: otpMonthly,
-      ...(hasByMonth ? { amountByMonth: otpByMonth } : {}),
+      ...(Object.keys(otpByMonth).length ? { amountByMonth: otpByMonth } : {}),
+      ...(Object.keys(bonusByYear).length ? { otpBonusByYear: bonusByYear } : {}),
       targetKind: 'pensionOtp',
       startMonth,
       lastPostedMonth: input.otpLastPostedMonth,
@@ -110,4 +121,76 @@ export function pensionAccrualRules(
   }
 
   return rules;
+}
+
+const postedFor = (posted: Record<string, number> | undefined, year: number): number | undefined => {
+  const v = posted?.[String(year)];
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+};
+
+/**
+ * Bonus share to post in `month`, per contribution year: this year's share to
+ * date less what was posted for it (none recorded = nothing yet), and last
+ * year's full share less what was posted for it, so a December bonus entered in
+ * January still lands. Last year settles only when it has a record, so turning
+ * the setting on never back-posts a year the rule never tracked. A year whose
+ * posted figure is ahead (a bonus edited down) adds nothing. Years with nothing
+ * due are kept with 0 so the stamp starts tracking them.
+ */
+export function otpBonusDue(
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  totalPct: number,
+  month: string,
+  posted: Record<string, number> | undefined,
+): Record<string, number> {
+  const year = Number(month.slice(0, 4));
+  const out: Record<string, number> = {
+    [String(year)]: Math.max(0, otpBonusShareToDate(fixedGross, bonuses, totalPct, month) - (postedFor(posted, year) ?? 0)),
+  };
+  const prev = postedFor(posted, year - 1);
+  if (prev !== undefined) {
+    out[String(year - 1)] = Math.max(0, otpBonusShareToDate(fixedGross, bonuses, totalPct, `${year - 1}-12`) - prev);
+  }
+  return out;
+}
+
+/**
+ * `otpBonusPostedByYear` when OTP auto-post is switched on in `month`: the bonus
+ * share already earned this year and last year counts as already in the balance
+ * the user entered, so only bonuses from here on post. Counted as if the scheme
+ * includes bonuses, so turning that setting on later does not back-post them.
+ */
+export function otpBonusBaseline(
+  fixedGross: number,
+  bonuses: readonly OtpBonus[],
+  totalPct: number,
+  month: string,
+): Record<string, number> {
+  const year = Number(month.slice(0, 4));
+  return {
+    [String(year - 1)]: otpBonusShareToDate(fixedGross, bonuses, totalPct, `${year - 1}-12`),
+    [String(year)]: otpBonusShareToDate(fixedGross, bonuses, totalPct, month),
+  };
+}
+
+/**
+ * The new `otpBonusPostedByYear` after an OTP posting in `month` that carried
+ * `byYear`: each year's posted figure grows by what was posted, and only this
+ * year and last year are kept (older years can no longer settle).
+ */
+export function addOtpBonusPosted(
+  posted: Record<string, number> | undefined,
+  byYear: Record<string, number>,
+  month: string,
+): Record<string, number> {
+  const year = Number(month.slice(0, 4));
+  const out: Record<string, number> = {};
+  for (const y of [year - 1, year]) {
+    const before = postedFor(posted, y);
+    const add = byYear[String(y)];
+    if (before === undefined && add === undefined) continue;
+    out[String(y)] = (before ?? 0) + (add ?? 0);
+  }
+  return out;
 }

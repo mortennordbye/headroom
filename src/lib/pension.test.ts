@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { otpAnnualContribution, otpContributionForMonth, otpPensionableIncome, otpProjectedPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
+import { otpAnnualContribution, otpBonusShareToDate, otpPensionableIncome, otpProjectedPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
 
 describe('pensionFutureValue', () => {
   it('returns the starting balance for zero or negative years', () => {
@@ -127,25 +127,29 @@ describe('otpProjectedPensionableIncome', () => {
   });
 });
 
-describe('otpContributionForMonth', () => {
+describe('otpBonusShareToDate', () => {
   const bonuses = [
     { date: '2026-03-10', amount: 100_000, type: 'annual' as const },
     { date: '2026-06-10', amount: 40_000, type: 'holiday_pay' as const },
+    { date: '2026-09-10', amount: 60_000, type: 'performance' as const },
+    { date: '2025-11-10', amount: 70_000, type: 'annual' as const },
   ];
-  const months = Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}`);
 
-  it('is a twelfth of the fixed contribution every month with bonuses off', () => {
-    for (const m of months) expect(otpContributionForMonth(600_000, bonuses, 5, m, false)).toBe(2_500);
+  it('counts this year\'s bonuses dated up to the month, not holiday pay or other years', () => {
+    expect(otpBonusShareToDate(600_000, bonuses, 5, '2026-02')).toBe(0);
+    expect(otpBonusShareToDate(600_000, bonuses, 5, '2026-03')).toBe(5_000);
+    expect(otpBonusShareToDate(600_000, bonuses, 5, '2026-08')).toBe(5_000);
+    expect(otpBonusShareToDate(600_000, bonuses, 5, '2026-12')).toBe(8_000);
   });
 
-  it('adds the bonus share only in the bonus month, never for holiday pay', () => {
-    expect(otpContributionForMonth(600_000, bonuses, 5, '2026-03', true)).toBe(2_500 + 5_000);
-    expect(otpContributionForMonth(600_000, bonuses, 5, '2026-06', true)).toBe(2_500);
+  it('only fills the room under 12G left by the full year\'s fixed pay', () => {
+    // 2026 cap 1 638 588: fixed 1 600 000 leaves 38 588 of room.
+    expect(otpBonusShareToDate(1_600_000, bonuses, 5, '2026-12')).toBeCloseTo(38_588 * 0.05, 6);
+    expect(otpBonusShareToDate(2_000_000, bonuses, 5, '2026-12')).toBe(0);
   });
 
-  it('sums over the year to the capped yearly contribution', () => {
-    const total = months.reduce((s, m) => s + otpContributionForMonth(1_600_000, bonuses, 5, m, true), 0);
+  it('plus twelve fixed twelfths gives the capped yearly contribution', () => {
+    const total = otpAnnualContribution(1_600_000, 5, 2026) + otpBonusShareToDate(1_600_000, bonuses, 5, '2026-12');
     expect(total).toBeCloseTo(otpAnnualContribution(otpPensionableIncome(1_600_000, bonuses, 2026, true), 5, 2026), 6);
-    expect(total).toBeCloseTo(81_929.4, 6);
   });
 });

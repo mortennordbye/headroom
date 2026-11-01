@@ -20,6 +20,7 @@ import { SliderRow } from '../components/ui/SliderRow';
 import { ToggleRow } from '../components/ui/ToggleRow';
 import { provenanceOf } from '../lib/provenance';
 import { otpAnnualContribution as otpContribution, otpPensionableIncome, otpProjectedPensionableIncome, projectPensionWealth } from '../lib/pension';
+import { otpBonusBaseline } from '../lib/pensionAccrual';
 import { latestInflationPct } from '../lib/inflation';
 import { retirementIncomeInTodaysKroner } from '../lib/retirementIncome';
 import { currentMonthKey } from '../lib/date';
@@ -337,19 +338,28 @@ const PensionPage: React.FC = () => {
           <div className="mt-5">
             <ToggleRow
               label={t.pensionPage.otpIncludesBonusesLabel}
-              checked={!!pension.otpIncludesBonuses}
+              checked={pension.otpIncludesBonuses === true}
               onChange={(on) => updatePension('otpIncludesBonuses', on)}
               hint={t.pensionPage.otpIncludesBonusesHint}
             />
           </div>
           <p className="mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${pension.otpIncludesBonuses ? t.pensionPage.otpNoteMidBonuses : t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
+            {`${t.pensionPage.otpNotePre}${pension.otpEmployerPct}${pension.otpIncludesBonuses === true ? t.pensionPage.otpNoteMidBonuses : t.pensionPage.otpNoteMid}${formatCurrency(otpAnnualContribution)}.`}
           </p>
           {hist.isLive && (
             <AutoPostToggle
               label={pa.otpToggle}
               checked={livePension.otpAutoPost}
-              onChange={(on) => updatePension('otpAutoPost', on)}
+              onChange={(on) => {
+                updatePension('otpAutoPost', on);
+                // First switch-on: start from this month (the first post lands next
+                // month), and count the bonus share earned so far as already in the
+                // balance. A later switch-on keeps its stamp and catches up.
+                if (on && !livePension.otpLastPostedMonth) {
+                  updatePension('otpLastPostedMonth', today);
+                  updatePension('otpBonusPostedByYear', otpBonusBaseline(pensionableIncome, bonuses, otpPct, today));
+                }
+              }}
               monthly={otpFixedMonthly}
               lastPostedMonth={livePension.otpLastPostedMonth}
               blockedReason={otpAnnualContribution > 0 ? null : pa.otpNeedsIncome}
@@ -383,7 +393,10 @@ const PensionPage: React.FC = () => {
             <AutoPostToggle
               label={pa.ipsToggle}
               checked={livePension.ipsAutoPost}
-              onChange={(on) => updatePension('ipsAutoPost', on)}
+              onChange={(on) => {
+                updatePension('ipsAutoPost', on);
+                if (on && !livePension.ipsLastPostedMonth) updatePension('ipsLastPostedMonth', today);
+              }}
               monthly={ipsAnnualContribution / 12}
               lastPostedMonth={livePension.ipsLastPostedMonth}
               blockedReason={ipsAnnualContribution > 0 ? null : pa.ipsNeedsContribution}
