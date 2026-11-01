@@ -44,7 +44,7 @@ const LOAN: LoanData = {
   nedbetalingstid: 20, termingebyr: 50, etableringsgebyr: 0, betingetLaan: 0, kjoepesum: 1_100_000, gyldigTil: '',
 };
 const PENSION: Pension = {
-  otpBalance: 0, otpEmployerPct: 2, otpEmployeePct: 0, otpGrowthRate: 5, otpIncludesBonuses: false, ipsBalance: 0, ipsAnnualContribution: 0,
+  otpBalance: 0, otpEmployerPct: 2, otpEmployeePct: 0, otpGrowthRate: 5, otpIncludesBonuses: false, otpIncludesOvertime: false, ipsBalance: 0, ipsAnnualContribution: 0,
   ipsGrowthRate: 5, birthYear: 1990, retirementAge: 67, folketrygdBeholdning: 0, folketrygdSingle: true,
   pensionPayoutYears: 20, afpEligible: false, otpAutoPost: false, ipsAutoPost: false, otpBonusPostedByYear: { '2026': 500 },
 };

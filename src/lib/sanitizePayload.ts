@@ -76,6 +76,7 @@ const ARRAY_ITEM_SCHEMAS: Record<string, object> = {
   savings: { amount: 0, percent: 0, bufferTargetAmount: 0, postedAmount: 0 },
   dailyTransactions: { amount: 0 },
   bonuses: { amount: 0 },
+  overtime: { amount: 0 },
   // A percentage row carries its share here; an imported "50" as a string must
   // coerce, or the resolver reads it as absent and the row silently freezes.
   savingsAllocations: { percent: 0, amount: 0 },
@@ -126,6 +127,12 @@ export function sanitizePayload<T>(data: T, objectSchemas: NumericObjectSchemas)
     const raw = Array.isArray(pension.otpBonusPostedByYear) ? {} : pension.otpBonusPostedByYear;
     const posted = Object.fromEntries(Object.entries(coerceNumberRecord(raw)).filter(([, v]) => v >= 0));
     out.pension = { ...pension, otpBonusPostedByYear: posted };
+  }
+  // The OTP scheme's job link is an id or absent; anything else would match no pay.
+  const linked = out.pension as Record<string, unknown> | undefined;
+  if (linked && typeof linked === 'object' && 'otpJobId' in linked && typeof linked.otpJobId !== 'string') {
+    const { otpJobId: _drop, ...rest } = linked;
+    out.pension = rest;
   }
 
   for (const key of NUMBER_RECORDS) {

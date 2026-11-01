@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { otpAnnualContribution, otpBonusShareToDate, otpPensionableIncome, otpProjectedPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
+import { otpAnnualContribution, otpBonusShareToDate, otpCountedPay, otpPensionableIncome, otpProjectedPensionableIncome, pensionFutureValue, projectPensionWealth } from './pension';
 
 describe('pensionFutureValue', () => {
   it('returns the starting balance for zero or negative years', () => {
@@ -80,16 +80,16 @@ describe('otpPensionableIncome', () => {
   ];
 
   it('leaves bonuses out when the scheme bases OTP on fixed pay', () => {
-    expect(otpPensionableIncome(600_000, bonuses, 2026, false)).toBe(600_000);
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, [], { otpIncludesBonuses: false }), 2026)).toBe(600_000);
   });
 
   it('adds bonuses paid in the contribution year, not holiday pay or other years', () => {
-    expect(otpPensionableIncome(600_000, bonuses, 2026, true)).toBe(670_000);
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, [], { otpIncludesBonuses: true }), 2026)).toBe(670_000);
   });
 
   it('feeds the 12G cap: bonuses lift the base only up to 12G', () => {
     // 1.6M fixed + 70k bonus = 1.67M, above 12G (1,638,588 in 2026).
-    const base = otpPensionableIncome(1_600_000, bonuses, 2026, true);
+    const base = otpPensionableIncome(1_600_000, otpCountedPay(bonuses, [], { otpIncludesBonuses: true }), 2026);
     expect(otpAnnualContribution(base, 5, 2026)).toBeCloseTo(81_929.4, 6);
   });
 
@@ -98,14 +98,14 @@ describe('otpPensionableIncome', () => {
       { date: '2026-01-01', amount: Number.NaN, type: 'annual' as const },
       { date: '2026-01-01', amount: -5_000, type: 'other' as const },
     ];
-    expect(otpPensionableIncome(-1, bad, 2026, true)).toBe(0);
+    expect(otpPensionableIncome(-1, otpCountedPay(bad, [], { otpIncludesBonuses: true }), 2026)).toBe(0);
   });
 });
 
 describe('otpPensionableIncome — bad entries', () => {
   it('skips a bonus with no date instead of throwing', () => {
     const bad = [{ amount: 10_000, type: 'annual' as const } as unknown as { date: string; amount: number; type: 'annual' }];
-    expect(otpPensionableIncome(500_000, bad, 2026, true)).toBe(500_000);
+    expect(otpPensionableIncome(500_000, otpCountedPay(bad, [], { otpIncludesBonuses: true }), 2026)).toBe(500_000);
   });
 });
 
@@ -119,11 +119,11 @@ describe('otpProjectedPensionableIncome', () => {
   ];
 
   it('is fixed pay alone with bonuses off', () => {
-    expect(otpProjectedPensionableIncome(600_000, bonuses, 2026, false)).toBe(600_000);
+    expect(otpProjectedPensionableIncome(600_000, otpCountedPay(bonuses, [], { otpIncludesBonuses: false }), 2026)).toBe(600_000);
   });
 
   it('adds last full year\'s bonuses, without signing bonuses or holiday pay, and ignores this year\'s', () => {
-    expect(otpProjectedPensionableIncome(600_000, bonuses, 2026, true)).toBe(650_000);
+    expect(otpProjectedPensionableIncome(600_000, otpCountedPay(bonuses, [], { otpIncludesBonuses: true }), 2026)).toBe(650_000);
   });
 });
 
@@ -150,6 +150,56 @@ describe('otpBonusShareToDate', () => {
 
   it('plus twelve fixed twelfths gives the capped yearly contribution', () => {
     const total = otpAnnualContribution(1_600_000, 5, 2026) + otpBonusShareToDate(1_600_000, bonuses, 5, '2026-12');
-    expect(total).toBeCloseTo(otpAnnualContribution(otpPensionableIncome(1_600_000, bonuses, 2026, true), 5, 2026), 6);
+    expect(total).toBeCloseTo(otpAnnualContribution(otpPensionableIncome(1_600_000, otpCountedPay(bonuses, [], { otpIncludesBonuses: true }), 2026), 5, 2026), 6);
+  });
+});
+
+describe('otpCountedPay — overtime and the scheme\'s job', () => {
+  const bonuses = [
+    { date: '2026-03-15', amount: 50_000, type: 'annual' as const, jobId: 'a' },
+    { date: '2026-04-15', amount: 30_000, type: 'annual' as const, jobId: 'b' },
+    { date: '2026-05-15', amount: 10_000, type: 'other' as const },
+  ];
+  const overtime = [
+    { date: '2026-02-10', amount: 8_000, jobId: 'a' },
+    { date: '2026-06-10', amount: 4_000, jobId: 'b' },
+    { date: '2025-11-10', amount: 6_000, jobId: 'a' },
+  ];
+
+  it('leaves overtime out by default and with the setting off, as before', () => {
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, overtime, {}), 2026)).toBe(600_000);
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, overtime, { otpIncludesBonuses: true }), 2026)).toBe(690_000);
+  });
+
+  it('adds overtime paid in the year when the scheme counts it (§ 5-5 første ledd)', () => {
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, overtime, { otpIncludesOvertime: true }), 2026)).toBe(612_000);
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, overtime, { otpIncludesBonuses: true, otpIncludesOvertime: true }), 2026))
+      .toBe(702_000);
+  });
+
+  it('reads the setting as === true', () => {
+    const odd = { otpIncludesOvertime: 'yes' as unknown as boolean };
+    expect(otpCountedPay(bonuses, overtime, odd)).toEqual([]);
+  });
+
+  it('counts only the linked job\'s bonuses and overtime, leaving unlinked ones out', () => {
+    const scheme = { otpIncludesBonuses: true, otpIncludesOvertime: true, otpJobId: 'a' };
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, overtime, scheme), 2026)).toBe(658_000);
+  });
+
+  it('counts every job\'s pay when no job is linked', () => {
+    const scheme = { otpIncludesBonuses: true, otpIncludesOvertime: true, otpJobId: '' };
+    expect(otpPensionableIncome(600_000, otpCountedPay(bonuses, overtime, scheme), 2026)).toBe(702_000);
+  });
+
+  it('projects last year\'s counted overtime as recurring', () => {
+    expect(otpProjectedPensionableIncome(600_000, otpCountedPay(bonuses, overtime, { otpIncludesOvertime: true }), 2026)).toBe(606_000);
+    expect(otpProjectedPensionableIncome(600_000, otpCountedPay(bonuses, overtime, {}), 2026)).toBe(600_000);
+  });
+
+  it('feeds overtime into the share to date in the month it is dated', () => {
+    const counted = otpCountedPay(bonuses, overtime, { otpIncludesOvertime: true, otpJobId: 'a' });
+    expect(otpBonusShareToDate(600_000, counted, 5, '2026-01')).toBe(0);
+    expect(otpBonusShareToDate(600_000, counted, 5, '2026-02')).toBe(400);
   });
 });

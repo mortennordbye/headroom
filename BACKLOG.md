@@ -20,15 +20,18 @@ in git and the CHANGELOG, not here.
   up with (#355), which only changed the growth. **Unblock**: decide whether the projection should
   use the linked expense's amount, and how a paused expense counts. **Where**:
   `calcDebtBalanceByYear` in `src/lib/debt.ts`.
-- **OTP base, remaining gaps.** Bonuses are now a per-user setting, but the rest of the base is
-  fixed: overtime is always left out (it counts under innskuddspensjonsloven § 5-5 første ledd
-  unless the plan excludes it), on-call is always counted, the § 5-5 annet ledd bokstav b
-  variant (last year's pay as the base) is not modelled, and bonuses are summed across all jobs
-  instead of only the scheme's employer. Deferred to keep the bonus fix small. **Unblock**: an
-  issue deciding which plan options to expose (likely one "counts overtime" setting and a job
-  link for the scheme). **Where**: `otpPensionableIncome` and `otpBonusShareToDate` in
-  `src/lib/pension.ts`, `src/lib/pensionAccrual.ts`, `src/pages/PensionPage.tsx`,
-  `pensionSummary` in `mcp/derive.ts`.
+- **OTP base, remaining gaps.** Bonuses and overtime are per-user settings and the scheme can
+  be linked to one job, but on-call is always counted, the § 5-5 annet ledd bokstav b variant
+  (last year's pay as the base) is not modelled, and the job link only narrows bonuses and
+  overtime, not fixed salary. Bonus and overtime shares also share one posted record per year
+  (`otpBonusPostedByYear`), so turning overtime on (bonuses off) while OTP auto-post runs, with bonuses earned
+  before auto-post was switched on, holds back that year's overtime posts by the bonus share.
+  Deferred to keep the overtime and job-link fix small. **Unblock**: an issue deciding whether to
+  expose on-call and a last-year base as plan options, whether the job link should narrow fixed
+  pay (it would zero the base after a job change unless relinked), and whether the posted record
+  should split per kind. **Where**: `otpCountedPay`, `otpPensionableIncome` and
+  `otpBonusShareToDate` in `src/lib/pension.ts`, `stampUnstampedAutoPost` in
+  `src/lib/pensionAccrual.ts`, `src/pages/PensionPage.tsx`, `pensionSummary` in `mcp/derive.ts`.
 - **Not audited yet**: bank import and categorisation.
 
 ## Income and salary

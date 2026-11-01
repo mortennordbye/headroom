@@ -15,11 +15,12 @@
 // Growth stays where it belongs: in the projection on the Pension page.
 import { addMonthsKey } from './date';
 import type { AutomationRule } from './automation';
-import { otpAnnualContribution, otpBonusShareToDate } from './pension';
-import type { BonusEntry, ExportPayload, Pension } from '../context/FinanceContext';
+import { otpAnnualContribution, otpBonusShareToDate, otpCountedPay, type OtpBaseScheme, type OtpPay } from './pension';
+import type { BonusEntry, ExportPayload, OvertimeEntry, Pension } from '../context/FinanceContext';
 import { activeJobBreakdown } from './salary';
 
-type OtpBonus = Pick<BonusEntry, 'date' | 'amount' | 'type'>;
+type OtpBonus = Pick<BonusEntry, 'date' | 'amount' | 'type' | 'jobId'>;
+type OtpOvertime = Pick<OvertimeEntry, 'date' | 'amount' | 'jobId'>;
 
 export const PENSION_OTP_RULE_ID = 'pension:otp';
 export const PENSION_IPS_RULE_ID = 'pension:ips';
@@ -43,8 +44,14 @@ export interface PensionAccrualInput {
   pensionableIncome: number;
   /** The scheme counts bonuses in the OTP base (`Pension.otpIncludesBonuses`). */
   otpIncludesBonuses?: boolean;
+  /** The scheme counts overtime in the OTP base (`Pension.otpIncludesOvertime`). */
+  otpIncludesOvertime?: boolean;
+  /** The scheme's job (`Pension.otpJobId`): only its bonuses and overtime count. */
+  otpJobId?: string;
   /** Bonus entries; their OTP share posts once the month they are dated is due. */
   bonuses?: readonly OtpBonus[];
+  /** Overtime entries, posted like bonuses. */
+  overtime?: readonly OtpOvertime[];
   /** `Pension.otpBonusPostedByYear`: bonus share already in the balance, per year. */
   otpBonusPostedByYear?: Record<string, number>;
   currentMonth: string;
@@ -91,13 +98,12 @@ export function pensionAccrualRules(
     const amount = fixedMonthly(m);
     if (amount !== otpMonthly) otpByMonth[m] = amount;
   }
-  // With the setting off nothing bonus-related posts, but the years stay
-  // tracked (0 added), so turning the setting on in January still settles last
-  // year's bonuses, a December one included.
-  const due = otpBonusDue(input.pensionableIncome, input.bonuses ?? [], otpPct, input.currentMonth, input.otpBonusPostedByYear);
-  const bonusByYear = input.otpIncludesBonuses === true
-    ? due
-    : Object.fromEntries(Object.keys(due).map(y => [y, 0]));
+  // Overtime the scheme counts settles the same way, in the same record. With
+  // neither counted nothing extra posts, but the years stay tracked (0 added),
+  // so turning a setting on in January still settles last year's payments, a
+  // December one included.
+  const counted = otpCountedPay(input.bonuses ?? [], input.overtime ?? [], input);
+  const bonusByYear = otpBonusDue(input.pensionableIncome, counted, otpPct, input.currentMonth, input.otpBonusPostedByYear);
   const bonusDue = Object.values(bonusByYear).reduce((a, b) => a + b, 0);
   if (bonusDue > 0) otpByMonth[input.currentMonth] = otpMonthly + bonusDue;
   if (input.otpAutoPost && (otpMonthly > 0 || bonusDue > 0)) {
@@ -144,7 +150,7 @@ const postedFor = (posted: Record<string, number> | undefined, year: number): nu
  */
 export function otpBonusDue(
   fixedGross: number,
-  bonuses: readonly OtpBonus[],
+  bonuses: readonly OtpPay[],
   totalPct: number,
   month: string,
   posted: Record<string, number> | undefined,
@@ -163,12 +169,12 @@ export function otpBonusDue(
 /**
  * `otpBonusPostedByYear` when OTP auto-post is switched on in `month`: the bonus
  * share already earned this year and last year counts as already in the balance
- * the user entered, so only bonuses from here on post. Counted as if the scheme
- * includes bonuses, so turning that setting on later does not back-post them.
+ * the user entered, so only bonuses from here on post. `bonuses` is the pay to
+ * count (see `stampUnstampedAutoPost` for which).
  */
 export function otpBonusBaseline(
   fixedGross: number,
-  bonuses: readonly OtpBonus[],
+  bonuses: readonly OtpPay[],
   totalPct: number,
   month: string,
 ): Record<string, number> {
@@ -206,8 +212,13 @@ export function addOtpBonusPosted(
  * always next month. Stamp it to `month` the way switching on does, with the
  * bonus baseline for OTP, so the first post lands next month and nothing
  * back-posts. Anything already stamped, or switched off, is returned as is.
+ *
+ * The baseline counts the overtime the scheme counts, and bonuses as if counted
+ * (so turning bonuses on later does not back-post them), except when the scheme
+ * counts overtime but not bonuses: then bonuses are left out, since the one
+ * record per year would otherwise hold back overtime posts by the bonus share.
  */
-export function stampUnstampedAutoPost<P extends {
+export function stampUnstampedAutoPost<P extends OtpBaseScheme & {
   otpAutoPost?: boolean; ipsAutoPost?: boolean; otpEmployerPct: number; otpEmployeePct: number;
   otpLastPostedMonth?: string; ipsLastPostedMonth?: string; otpBonusPostedByYear?: Record<string, number>;
 }>(
@@ -215,15 +226,22 @@ export function stampUnstampedAutoPost<P extends {
   fixedGross: number,
   bonuses: readonly OtpBonus[],
   month: string,
+  overtime: readonly OtpOvertime[] = [],
 ): P {
   const otp = pension.otpAutoPost === true && !pension.otpLastPostedMonth;
   const ips = pension.ipsAutoPost === true && !pension.ipsLastPostedMonth;
   if (!otp && !ips) return pension;
+  const overtimeOn = pension.otpIncludesOvertime === true;
+  const baselinePay = otpCountedPay(bonuses, overtime, {
+    otpIncludesBonuses: pension.otpIncludesBonuses === true || !overtimeOn,
+    otpIncludesOvertime: overtimeOn,
+    otpJobId: pension.otpJobId,
+  });
   return {
     ...pension,
     ...(otp ? {
       otpLastPostedMonth: month,
-      otpBonusPostedByYear: otpBonusBaseline(fixedGross, bonuses, pension.otpEmployerPct + pension.otpEmployeePct, month),
+      otpBonusPostedByYear: otpBonusBaseline(fixedGross, baselinePay, pension.otpEmployerPct + pension.otpEmployeePct, month),
     } : {}),
     ...(ips ? { ipsLastPostedMonth: month } : {}),
   };
@@ -243,18 +261,19 @@ export function switchAutoPostOn<P extends Parameters<typeof stampUnstampedAutoP
   fixedGross: number,
   bonuses: readonly OtpBonus[],
   month: string,
+  overtime: readonly OtpOvertime[] = [],
 ): P {
   if (target === 'otp') {
     const on = { ...pension, otpAutoPost: true };
     if (pension.otpLastPostedMonth === month) return on;
-    return stampUnstampedAutoPost({ ...on, otpLastPostedMonth: undefined }, fixedGross, bonuses, month);
+    return stampUnstampedAutoPost({ ...on, otpLastPostedMonth: undefined }, fixedGross, bonuses, month, overtime);
   }
   const on = { ...pension, ipsAutoPost: true };
   if (pension.ipsLastPostedMonth === month) return on;
-  return stampUnstampedAutoPost({ ...on, ipsLastPostedMonth: undefined }, fixedGross, bonuses, month);
+  return stampUnstampedAutoPost({ ...on, ipsLastPostedMonth: undefined }, fixedGross, bonuses, month, overtime);
 }
 
-type LoadSlice = Pick<ExportPayload, 'pension' | 'salaries' | 'jobs' | 'bonuses'>;
+type LoadSlice = Pick<ExportPayload, 'pension' | 'salaries' | 'jobs' | 'bonuses' | 'overtime'>;
 
 /**
  * Load/import step: a `data.pension` with auto-post on but never stamped is
@@ -274,8 +293,9 @@ export function stampLoadedPension<D extends Partial<LoadSlice>>(
   const salaries = data.salaries ?? current?.salaries ?? [];
   const jobs = data.jobs ?? current?.jobs ?? [];
   const bonuses = data.bonuses ?? current?.bonuses ?? [];
+  const overtime = data.overtime ?? current?.overtime ?? [];
   const fixedGross = activeJobBreakdown(salaries, jobs, month).reduce((s, c) => s + c.gross, 0);
-  const stamped = stampUnstampedAutoPost(merged, fixedGross, bonuses, month);
+  const stamped = stampUnstampedAutoPost(merged, fixedGross, bonuses, month, overtime);
   if (stamped === merged) return data;
   const { otpLastPostedMonth, ipsLastPostedMonth, otpBonusPostedByYear } = stamped;
   return {

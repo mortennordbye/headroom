@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   pensionAccrualRules, isPensionRuleId, otpBonusBaseline, otpBonusDue, addOtpBonusPosted, switchAutoPostOn,
-  stampUnstampedAutoPost, type PensionAccrualInput,
+  stampUnstampedAutoPost, stampLoadedPension, type PensionAccrualInput,
 } from './pensionAccrual';
 import { computeAutomationPostings, type AutomationState } from './automation';
 import { addMonthsKey } from './date';
+import type { Pension } from '../context/FinanceContext';
 
 const LABELS = { otp: 'OTP', ips: 'IPS' };
 
@@ -298,5 +299,75 @@ describe('switching auto-post on', () => {
     expect(stampUnstampedAutoPost(pension, 600_000, bonuses, '2026-07')).toBe(pension);
     const on = { ...pension, otpAutoPost: true, ipsAutoPost: true };
     expect(stampUnstampedAutoPost(on, 600_000, bonuses, '2026-07')).toBe(on);
+  });
+});
+
+describe('pensionAccrualRules — OTP overtime and the scheme\'s job', () => {
+  const base = { ipsAutoPost: false, otpEmployerPct: 5, otpEmployeePct: 0, pensionableIncome: 600_000 };
+  const overtime = [{ date: '2026-03-10', amount: 20_000, jobId: 'a' }];
+  const bonuses = [{ date: '2026-03-25', amount: 100_000, type: 'annual' as const, jobId: 'b' }];
+  const due = { otpBonusPostedByYear: { '2026': 0 }, otpLastPostedMonth: '2026-02', currentMonth: '2026-03' };
+
+  it('posts the overtime share in its month when the scheme counts overtime', () => {
+    const [rule] = pensionAccrualRules(input({ ...base, ...due, otpIncludesOvertime: true, overtime }), LABELS);
+    expect(rule.amountByMonth).toEqual({ '2026-03': 2_500 + 1_000 });   // 20 000 × 5%
+    expect(rule.otpBonusByYear).toEqual({ '2026': 1_000 });
+  });
+
+  it('posts nothing for overtime with the setting off, but keeps the year tracked', () => {
+    const [rule] = pensionAccrualRules(input({ ...base, ...due, overtime }), LABELS);
+    expect(rule.amountByMonth).toBeUndefined();
+    expect(rule.otpBonusByYear).toEqual({ '2026': 0 });
+  });
+
+  it('with a job linked, posts only that job\'s bonuses and overtime', () => {
+    const scheme = { otpIncludesBonuses: true, otpIncludesOvertime: true };
+    const all = pensionAccrualRules(input({ ...base, ...due, ...scheme, overtime, bonuses }), LABELS)[0];
+    expect(all.otpBonusByYear).toEqual({ '2026': 6_000 });
+    const onlyA = pensionAccrualRules(input({ ...base, ...due, ...scheme, otpJobId: 'a', overtime, bonuses }), LABELS)[0];
+    expect(onlyA.otpBonusByYear).toEqual({ '2026': 1_000 });
+  });
+});
+
+describe('switching auto-post on — overtime', () => {
+  const pension: Parameters<typeof switchAutoPostOn>[0] = { otpAutoPost: false, ipsAutoPost: false, otpEmployerPct: 5, otpEmployeePct: 0 };
+  const bonuses = [{ date: '2026-03-25', amount: 100_000, type: 'annual' as const }];
+  const earlyOvertime = { date: '2026-04-10', amount: 20_000 };
+  const lateOvertime = { date: '2026-09-10', amount: 40_000 };
+
+  it('counts overtime earned before switching on as in the balance when the scheme counts it', () => {
+    const otp = switchAutoPostOn({ ...pension, otpIncludesOvertime: true, otpIncludesBonuses: true }, 'otp', 600_000, bonuses, '2026-07', [earlyOvertime]);
+    expect(otp.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 6_000 });
+  });
+
+  it('an overtime-only scheme leaves bonuses out of the baseline, so they do not hold back overtime posts', () => {
+    const otp = switchAutoPostOn({ ...pension, otpIncludesOvertime: true }, 'otp', 600_000, bonuses, '2026-07', [earlyOvertime]);
+    expect(otp.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 1_000 });
+    const [rule] = pensionAccrualRules(input({
+      ...otp, ipsAutoPost: false, pensionableIncome: 600_000, otpIncludesOvertime: true,
+      bonuses, overtime: [earlyOvertime, lateOvertime], currentMonth: '2026-09', otpLastPostedMonth: '2026-08',
+    }), LABELS);
+    expect(rule.otpBonusByYear).toEqual({ '2025': 0, '2026': 2_000 }); // 40 000 × 5%
+  });
+
+  it('without the overtime setting the baseline is bonuses only, as before', () => {
+    const otp = switchAutoPostOn(pension, 'otp', 600_000, bonuses, '2026-07', [earlyOvertime]);
+    expect(otp.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 5_000 });
+  });
+
+  it('a loaded pension takes its baseline from the loaded overtime', () => {
+    const defaults: Pension = {
+      otpBalance: 0, otpEmployerPct: 5, otpEmployeePct: 0, otpGrowthRate: 5, otpIncludesBonuses: false, otpIncludesOvertime: false,
+      ipsBalance: 0, ipsAnnualContribution: 0, ipsGrowthRate: 7, birthYear: 0, retirementAge: 67, folketrygdBeholdning: 0,
+      folketrygdSingle: true, pensionPayoutYears: 10, afpEligible: false, otpAutoPost: false, ipsAutoPost: false,
+    };
+    const data = {
+      pension: { ...defaults, otpAutoPost: true, otpIncludesOvertime: true },
+      salaries: [{ id: 's', jobId: 'a', effectiveDate: '2026-01', grossAnnual: 600_000, changeType: 'initial' as const }],
+      jobs: [{ id: 'a', startDate: '2026-01', endDate: null, employer: 'E', role: 'R', contractedHoursPerWeek: 37.5 }],
+      overtime: [{ id: 'o', date: '2026-04-10', hours: 10, amount: 20_000 }],
+    };
+    const out = stampLoadedPension(data, undefined, defaults, '2026-07');
+    expect(out.pension?.otpBonusPostedByYear).toEqual({ '2025': 0, '2026': 1_000 });
   });
 });
