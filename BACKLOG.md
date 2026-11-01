@@ -45,16 +45,6 @@ in git and the CHANGELOG, not here.
 
 ## Bank import
 
-- **`deletedBankIds` and `deletedBankTombstones` grow unbounded.** Neither of the obvious prunes is
-  safe. Dropping a connection's entries when it is removed would resurrect its deleted rows on a
-  re-add, because `startLink` reuses a removed connection's id prefix and the re-add refetches
-  `EB_DAYS` of history. An age rule has no fixed bound: a live connection fetches from
-  `last_sync - 7d`, which can be arbitrarily old after a long gap (a re-link keeps `last_sync`), and
-  `EB_DAYS` is an env var. Legacy `deletedBankIds` entries also carry no date. **Unblock**: a
-  persisted per-connection "oldest date any future sync can fetch" on the bank store, then prune
-  tombstones (and their ids) older than it. **Where**: `fetchMappedTransactions` / `startLink` /
-  `removeConnection` in `server/bank.js`, `deletedBankIds` / `deletedBankTombstones` in
-  `src/context/FinanceContext.tsx`.
 - **Heuristics to tune.** The keyword table (`src/lib/categorize.ts`), transfer detection
   (`src/lib/transfers.ts`, could use own-IBAN matching), transfer-suggestion thresholds
   (`src/lib/transferSuggestions.ts`, tuned on one dataset), envelope name hints (`NAME_HINTS` in

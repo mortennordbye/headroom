@@ -58,6 +58,8 @@ export function startLink(bankName?: string, connectionId?: string): Promise<{ u
 export function finishLink(code: string, state: string): Promise<{ accounts: number }>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getStatus(): Record<string, any>;
-export function fetchMappedTransactions(): Promise<MappedTransaction[]>;
-export function recordSync(): void;
+export interface SyncedConnection { connectionId: string; sessionId: string; complete: boolean }
+export function fetchMappedTransactions(): Promise<{ rows: MappedTransaction[]; synced: SyncedConnection[] }>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function recordSync(outcome?: { ok?: boolean; synced?: SyncedConnection[]; [k: string]: any }): void;
 export function removeConnection(id: string): { removed: number };

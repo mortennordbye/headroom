@@ -12,7 +12,7 @@ const { createMarketStore, makeMarketGate, parseBatch, parseListing, parseSale, 
 const { fetchPolicyRate } = require('./norgesBank');
 const bank = require('./bank');
 const { startBackupSchedule, parseCount } = require('./backup');
-const { startBankSyncSchedule } = require('./bankSync');
+const { startBankSyncSchedule, singleFlight } = require('./bankSync');
 const { resolveAuth, hashPassword, createSessionStore, parseCookies, serializeCookie, makeAuthGate } = require('./auth');
 const { isDemoMode, makeDemoGate, parseTrustProxy } = require('./demo');
 const { isWindowComplete, osloMonthKey } = require('./cpiWindow');
@@ -1129,9 +1129,9 @@ app.get('/api/bank/callback', async (req, res) => {
 // both take the same merge/record path. Records the outcome (success or failure)
 // to the rolling sync log, then returns a summary or rethrows. A missing blob
 // throws `.noBlob` (the app was never opened) and is not logged as a failure.
-async function runBankSync() {
+async function runBankSyncUnlocked() {
   try {
-    const mapped = await bank.fetchMappedTransactions();
+    const { rows: mapped, synced } = await bank.fetchMappedTransactions();
     const stored = readBlob();
     if (!stored) { const e = new Error('no finance data yet — open the app first'); e.noBlob = true; throw e; }
     const blob = stored.content;
@@ -1156,7 +1156,7 @@ async function runBankSync() {
     // The rows genuinely new this sync (id not in the prior ledger), so the
     // Settings sync-history can list *what* was pulled in, not just how many.
     const items = blob.dailyTransactions.filter((tx) => !existingIds.has(tx.id));
-    bank.recordSync({ ok: true, added, fetched: mapped.length, total, items });
+    bank.recordSync({ ok: true, added, fetched: mapped.length, total, items, synced });
     return { added, fetched: mapped.length, total, dailyTransactions: blob.dailyTransactions, rev };
   } catch (err) {
     // Log the failed attempt too, so a silent (cron or manual) failure is visible
@@ -1165,6 +1165,11 @@ async function runBankSync() {
     throw err;
   }
 }
+
+// Single flight: a manual "Sync now" during a scheduled sync (or a double click)
+// joins the running sync instead of starting a second one, so two syncs can't
+// interleave their blob writes and session-store updates.
+const runBankSync = singleFlight(runBankSyncUnlocked);
 
 app.post('/api/bank/sync', async (_req, res) => {
   try {

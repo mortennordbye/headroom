@@ -634,14 +634,21 @@ function mergeTransactions(existing, incoming, deletedIds = [], tombstones = [],
 
 // --- high-level flow used by the routes -------------------------------------
 
-function markRelink(connId, reason) {
+// Patch one connection in the store as it is on disk now, and only while it
+// still holds `sessionId`. A sync works from a snapshot read at its start;
+// writing that snapshot back would undo a markRelink, finishLink or
+// removeConnection made since. Returns whether the patch applied.
+function updateConnection(connId, sessionId, patch) {
   const store = readStore();
-  const c = store.connections.find((x) => x.id === connId);
-  if (c) {
-    c.needs_relink = true;
-    c.relink_reason = reason;
-    writeStore(store);
-  }
+  const c = store.connections.find((x) => x.id === connId && x.session_id === sessionId);
+  if (!c) return false;
+  Object.assign(c, patch);
+  writeStore(store);
+  return true;
+}
+
+function markRelink(connId, sessionId, reason) {
+  updateConnection(connId, sessionId, { needs_relink: true, relink_reason: reason });
 }
 
 /**
@@ -807,8 +814,11 @@ function getStatus() {
 }
 
 /**
- * Fetch new transactions and return them mapped. Throws { needsRelink: true }
- * (Error with .needsRelink) when consent has lapsed.
+ * Fetch new transactions and return them mapped, as `{ rows, synced }`. `synced`
+ * lists each connection the run tried, with the session it used and whether
+ * every one of its accounts was fetched (`complete`), so recordSync only marks
+ * what was really synced. Throws { needsRelink: true } (Error with .needsRelink)
+ * when consent has lapsed.
  */
 async function fetchMappedTransactions() {
   const store = readStore();
@@ -819,11 +829,12 @@ async function fetchMappedTransactions() {
   }
   let mapped = [];
   let anyValid = false;
+  const synced = [];
   for (const c of store.connections) {
     // A single expired bank flags itself for re-link but doesn't block the
     // others — we still sync every bank whose consent is live.
     if (!sessionValid(c)) {
-      markRelink(c.id, 'consent expired');
+      markRelink(c.id, c.session_id, 'consent expired');
       continue;
     }
     anyValid = true;
@@ -841,18 +852,27 @@ async function fetchMappedTransactions() {
         if (refreshed.length) c.accounts = carryAccountKeys(c.accounts, refreshed);
         c.accounts_note = note;
         if (missingIban) c.accounts_enriched = true;
-        writeStore(store);
+        updateConnection(c.id, c.session_id, {
+          accounts: c.accounts, accounts_note: c.accounts_note,
+          ...(c.accounts_enriched ? { accounts_enriched: true } : {}),
+        });
         console.log(`[bank] ${c.aspsp}: ${refreshed.length} account(s) after refresh${note ? ` (${note})` : ''}`);
       } catch (err) {
         if (missingIban) c.accounts_enriched = true;
         c.accounts_note = `fetch-failed: ${err.message}`;
-        writeStore(store);
+        updateConnection(c.id, c.session_id, { accounts_note: c.accounts_note, ...(c.accounts_enriched ? { accounts_enriched: true } : {}) });
         console.log(`[bank] account refresh failed for ${c.aspsp}: ${err.message}`);
       }
     }
     const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
-    const fromMs = lastSync ? lastSync - RESYNC_OVERLAP_DAYS * 864e5 : Date.now() - DAYS * 864e5;
+    // Never further back than EB_DAYS: a connection whose sync keeps failing
+    // keeps its old last_sync, and an ever-growing window would end in an error
+    // the bank returns for too old a date_from, failing every bank's sync.
+    const oldest = Date.now() - DAYS * 864e5;
+    const fromMs = lastSync ? Math.max(lastSync - RESYNC_OVERLAP_DAYS * 864e5, oldest) : oldest;
     const from = new Date(fromMs).toISOString().slice(0, 10);
+    const sync = { connectionId: c.id, sessionId: c.session_id, complete: false };
+    synced.push(sync);
     try {
       for (const acc of c.accounts || []) {
         const raw = await fetchTransactions(acc.uid, from);
@@ -866,9 +886,10 @@ async function fetchMappedTransactions() {
           }).map((row) => (c.relinked ? { ...row, relinkPrefix: c.idPrefix } : row)),
         );
       }
+      sync.complete = (c.accounts || []).length > 0;
     } catch (err) {
       if (err.status === 401 || err.status === 403) {
-        markRelink(c.id, `fetch ${err.status}`);
+        markRelink(c.id, c.session_id, `fetch ${err.status}`);
         continue;
       }
       throw err;
@@ -880,7 +901,7 @@ async function fetchMappedTransactions() {
     e.needsRelink = true;
     throw e;
   }
-  return mapped;
+  return { rows: mapped, synced };
 }
 
 // How many recent sync outcomes to keep in the rolling log (oldest pruned).
@@ -918,26 +939,38 @@ function appendSyncLog(log, entry, max = SYNC_LOG_MAX) {
 }
 
 /**
- * Record a sync outcome: on success, stamp `last_sync` on every live connection;
- * always append a rolling log entry (ok or error) so the Settings card can show
- * whether a cron sync ran and what it pulled. The relink flag stays until the
- * next sync's window (`last_sync` minus the overlap) starts after the re-link
- * day: until then the bank can still resend pre-re-link rows under new ids.
+ * Record a sync outcome; always append a rolling log entry (ok or error) so the
+ * Settings card can show whether a cron sync ran and what it pulled. On success,
+ * stamp `last_sync` and clear `needs_relink` only on the connections in
+ * `outcome.synced` (from fetchMappedTransactions) whose every account was
+ * fetched, and only while they still hold the session that fetch used. Not on
+ * one that hit 401/403 (that would clear the flag the same sync just set, and
+ * since a re-link keeps `last_sync`, the window the error hid would never be
+ * fetched), one with no accounts, or one re-linked while the sync ran. The
+ * relink flag stays until the next sync's window (`last_sync` minus the
+ * overlap) starts after the re-link day: until then the bank can still resend
+ * pre-re-link rows under new ids.
  */
 function recordSync(outcome = {}) {
   const store = readStore();
   const now = new Date().toISOString();
-  if (outcome.ok !== false) {
+  if (outcome.ok !== false && Array.isArray(outcome.synced)) {
     const nextFrom = new Date(Date.parse(now) - RESYNC_OVERLAP_DAYS * 864e5).toISOString().slice(0, 10);
-    for (const c of store.connections) {
-      if (sessionValid(c)) {
+    for (const s of outcome.synced) {
+      if (!s.complete) continue;
+      const c = store.connections.find((x) => x.id === s.connectionId && x.session_id === s.sessionId);
+      if (c) {
         c.last_sync = now;
         c.needs_relink = false;
         if (!c.linked_at || nextFrom > String(c.linked_at).slice(0, 10)) delete c.relinked;
       }
     }
   }
-  store.syncLog = appendSyncLog(store.syncLog, makeSyncEntry(outcome, now));
+  // A sync that fully fetched no connection didn't sync anything: log it as a failure.
+  const logged = outcome.ok !== false && Array.isArray(outcome.synced) && !outcome.synced.some((s) => s.complete)
+    ? { ok: false, error: 'no bank connection could be fully synced' }
+    : outcome;
+  store.syncLog = appendSyncLog(store.syncLog, makeSyncEntry(logged, now));
   writeStore(store);
 }
 
@@ -946,7 +979,14 @@ function recordSync(outcome = {}) {
 // so frequent restarts don't re-sync early (mirrors backup.js's newestAgeMs).
 function lastSyncAgeMs(nowMs = Date.now()) {
   const store = readStore();
+  // The newest successful sync in the log, so a connection that never stamps
+  // last_sync (no accounts) doesn't trigger a sync on every restart; connection
+  // stamps cover a store from before the log.
   let newest = 0;
+  for (const e of store.syncLog || []) {
+    const t = e && e.ok ? Date.parse(e.at) : 0;
+    if (Number.isFinite(t) && t > newest) newest = t;
+  }
   for (const c of store.connections) {
     const t = c.last_sync ? Date.parse(c.last_sync) : 0;
     if (Number.isFinite(t) && t > newest) newest = t;

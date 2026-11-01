@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { startBankSyncSchedule } from './bankSync.js';
+import { startBankSyncSchedule, singleFlight } from './bankSync.js';
 
 const nowMs = Date.parse('2026-07-11T00:00:00.000Z');
 const tick = () => new Promise((r) => setTimeout(r, 20));
@@ -54,5 +54,31 @@ describe('startBankSyncSchedule', () => {
     await tick();
     expect(logs.some((m) => m.includes('failed') && m.includes('consent expired'))).toBe(true);
     handle.stop();
+  });
+});
+
+describe('singleFlight', () => {
+  it('joins overlapping calls to one run, then starts a fresh run once it settles', async () => {
+    let runs = 0;
+    let release;
+    const run = singleFlight(() => { runs += 1; return new Promise((r) => { release = r; }); });
+    const a = run();
+    const b = run();
+    expect(b).toBe(a);
+    await tick();
+    expect(runs).toBe(1);
+    release('done');
+    expect(await a).toBe('done');
+    expect(await b).toBe('done');
+    void run();
+    await tick();
+    expect(runs).toBe(2);
+  });
+
+  it('clears after a failure so the next call retries', async () => {
+    let runs = 0;
+    const run = singleFlight(async () => { runs += 1; if (runs === 1) throw new Error('boom'); return 'ok'; });
+    await expect(run()).rejects.toThrow('boom');
+    expect(await run()).toBe('ok');
   });
 });
