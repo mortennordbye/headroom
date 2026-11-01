@@ -184,9 +184,6 @@ in git and the CHANGELOG, not here.
   recommended rules. **Where**: `eslint.config.js`.
 - **`typescript` 7 is blocked upstream.** `typescript-eslint` peers `typescript <6.1.0`.
   **Unblock**: a release widening it. **Where**: `package.json`.
-- **Revision-history prune scans every snapshot on each save** (~70-120 ms at the 200 MB cap, not
-  reachable at today's size). **Unblock**: a `bytes` column filled at insert. **Where**:
-  `server/index.js` (`historyPruneBytesStmt`, `historyListStmt`, `recordHistory`).
 - **MCP generic `set_field` / `describe_field`.** Needs the default `assets`/`loan`/`pension`/
   `homeowner`/`transition`/`fixedExpenses` constants moved into `src/lib`, and a type check for the
   ~20 weakly guarded registry keys. **Where**: `src/lib/payloadRegistry.ts`,
