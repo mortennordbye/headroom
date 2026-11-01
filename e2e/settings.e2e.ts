@@ -46,3 +46,28 @@ test('importing an export brings the exported state back', async ({ page, reques
 
   expect(await quietBlob(request)).toEqual(before);
 });
+
+test('the history grid opens a month in the editor, and Back steps out again', async ({ page, request }) => {
+  await putBlob(request, seedBlob());
+  await page.goto('/settings');
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: 'Administrer historikk' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Historikk' })).toBeVisible();
+
+  await dialog.getByRole('button', { name: /^(Rediger|Legg til)$/ }).first().click();
+  await expect(dialog.getByRole('heading', { name: /^Saldoer · / })).toBeVisible();
+
+  // Cancel drops back to the grid; editing again and pressing Back does too.
+  await dialog.getByText('Avbryt', { exact: true }).click();
+  await expect(dialog.getByRole('heading', { name: 'Historikk' })).toBeVisible();
+  await dialog.getByRole('button', { name: /^(Rediger|Legg til)$/ }).first().click();
+  await expect(dialog.getByRole('heading', { name: /^Saldoer · / })).toBeVisible();
+  await page.goBack();
+  await expect(dialog.getByRole('heading', { name: 'Historikk' })).toBeVisible();
+
+  // Back from the grid closes it and stays on the page.
+  await page.goBack();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/settings$/);
+});
