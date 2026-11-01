@@ -5,10 +5,12 @@
 // a `seasonal` config is supplied (see feriepenger.ts). Fixed expenses are
 // either one list/total for every month or resolved per month, so a past month
 // can be measured against the fixed expenses it recorded.
-import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
+import type { DailyTransaction, FixedExpense, Saving } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
-import { reconcile } from './envelopes';
+import { envelopeKeyForTx, reconcile } from './envelopes';
 import { isSpend } from './spend';
+import { savingsContributionTotal } from './savingsRate';
+import { matchSavingsToTransactions } from './savingsMatch';
 
 // Re-exported so existing importers keep working; the definition lives in
 // spend.ts so envelopes.ts can use it too (this module imports envelopes).
@@ -22,6 +24,8 @@ export interface MonthlyCashflowRow {
   /**
    * What the month moved into savings, when the caller passes `savingsFor`; else
    * 0. Kept out of `expenses`: a saving is still the user's money, not spending.
+   * A saving matched to its imported outgoing row counts that row's amount once,
+   * here, and the row leaves `expenses` (see savingsMatch.ts).
    */
   saved: number;
   net: number; // income - expenses - saved: what is left after spending and saving
@@ -57,10 +61,12 @@ export function monthlyCashflow(
   // `totalFixedExpenses` was summed from, or the two disagree. Pass functions
   // for both to resolve each month's own fixed expenses.
   fixedExpenses?: FixedExpense[] | ((month: string) => FixedExpense[]),
-  // What each month moved into savings (`savingsContributionsForMonth`). Must NOT
-  // also be inside `totalFixedExpenses`: it is reported as `saved`, apart from
-  // spending, so the cashflow classifies savings the same way as the savings rate.
-  savingsFor?: (month: string) => number,
+  // Each month's savings (`savingsForMonth`). Must NOT also be inside
+  // `totalFixedExpenses`: they are reported as `saved`, apart from spending, so
+  // the cashflow classifies savings the same way as the savings rate. Each one is
+  // matched against the month's spend rows so a one-legged savings transfer that
+  // isn't marked as a transfer counts once, as saved, not also as spending.
+  savingsFor?: (month: string) => Saving[],
 ): MonthlyCashflowRow[] {
   const spendByMonth = new Map<string, number>();
   const countByMonth = new Map<string, number>();
@@ -80,14 +86,19 @@ export function monthlyCashflow(
     // its own transactions draw it down — and only unenveloped spend adds on top.
     const fixedTotal = typeof totalFixedExpenses === 'function' ? totalFixedExpenses(month) : totalFixedExpenses;
     const fixedRows = typeof fixedExpenses === 'function' ? fixedExpenses(month) : fixedExpenses;
-    let expenses = fixedTotal + variable;
-    if (fixedRows?.length) {
-      const { totals } = reconcile(fixedRows, txs, month);
-      const unenveloped = Math.max(0, variable - totals.actual);
-      expenses = fixedTotal + unenveloped + totals.overspent;
+    const rec = fixedRows?.length ? reconcile(fixedRows, txs, month) : null;
+    const monthSavings = savingsFor ? savingsFor(month) : [];
+    // A row a fixed-expense envelope already owns can't also be a saving.
+    const matches = matchSavingsToTransactions(monthSavings, txs, month, rec ? (tx) => envelopeKeyForTx(tx, rec) !== undefined : undefined);
+    const matchedIds = new Set(matches.map((m) => m.savingId));
+    const matchedSpend = matches.reduce((sum, m) => sum + m.amount, 0);
+    let expenses = fixedTotal + variable - matchedSpend;
+    if (rec) {
+      const unenveloped = Math.max(0, variable - rec.totals.actual - matchedSpend);
+      expenses = fixedTotal + unenveloped + rec.totals.overspent;
     }
-    const rawSaved = savingsFor ? savingsFor(month) : 0;
-    const saved = Number.isFinite(rawSaved) ? Math.max(0, rawSaved) : 0;
+    // A matched saving counts what its row actually moved; the rest, as planned.
+    const saved = savingsContributionTotal(monthSavings.filter((s) => !matchedIds.has(s.id))) + matchedSpend;
     const rate = income > 0 ? Math.round(((income - expenses) / income) * 1000) / 10 : 0;
     return {
       month, income, variable, expenses, saved, net: income - expenses - saved, rate,

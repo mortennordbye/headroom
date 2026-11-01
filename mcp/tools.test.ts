@@ -787,6 +787,20 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(review.monthly.find((r) => r.month === '2026-06')!.expenses).toBe(june.expenses + june.saved);
   });
 
+  it('budget summary counts a one-legged savings transfer once, as saved', () => {
+    const b = fullFixture();
+    const before = derive.budgetSummary(b, MONTH).cashflowLast12.find((r) => r.month === '2026-06')!;
+    // Only the outgoing leg of the 2 000 kr saving is imported, not marked as a transfer.
+    b.dailyTransactions = [
+      ...b.dailyTransactions,
+      { id: 't-save', date: '2026-06-25', description: 'Til: 9876.54.32109', amount: 2000, kind: 'expense', account: 'acc-1' },
+    ];
+    const after = derive.budgetSummary(b, MONTH).cashflowLast12.find((r) => r.month === '2026-06')!;
+    expect(after.saved).toBe(2000);
+    expect(after.expenses).toBe(before.expenses);
+    expect(after.net).toBe(before.net);
+  });
+
   it('recommendations and budget summary agree on savings-rate health', () => {
     const b = fullFixture();
     b.monthlyIncomes = {};

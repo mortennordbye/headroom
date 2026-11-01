@@ -31,7 +31,7 @@ import {
 import { planPayoff, extraPaymentSavings, sumDebtByType, lendingDebtTotal, withLinkedPayments, type PayoffStrategy } from '../src/lib/debt';
 import { essentialMonthlyExpenses, fixedExpenseTotalsByType } from '../src/lib/fixedExpenseTotals';
 import { monthlyCashflow } from '../src/lib/monthlyCashflow';
-import { savingsRateStatus, savingsContributionsForMonth } from '../src/lib/savingsRate';
+import { savingsRateStatus, savingsForMonth } from '../src/lib/savingsRate';
 import { spendByCategory, categoryMoM, budgetProgress } from '../src/lib/categoryStats';
 import { topSpendInsight } from '../src/lib/insights';
 import { detectRecurring } from '../src/lib/recurring';
@@ -441,8 +441,8 @@ function perMonthFixed(blob: ExportPayload, nowKey: string) {
   const fixedFor = (month: string) => fixedExpensesForMonth(snapshots, live, month, nowKey);
   const fixedTotalFor = (month: string) => fixedFor(month).reduce((sum, item) => sum + item.amount, 0);
   const savedFor = (month: string) =>
-    savingsContributionsForMonth(savingsData, month, nowKey, effectiveIncome(blob, month));
-  const totalFor = (month: string) => fixedTotalFor(month) + savedFor(month);
+    savingsForMonth(savingsData, month, nowKey, effectiveIncome(blob, month));
+  const totalFor = (month: string) => fixedTotalFor(month) + savingsContributionTotal(savedFor(month));
   return { fixedFor, fixedTotalFor, savedFor, totalFor };
 }
 

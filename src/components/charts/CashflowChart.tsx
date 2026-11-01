@@ -14,7 +14,7 @@ import { lastNMonthKeys, currentMonthKey } from '../../lib/date';
 import { formatAxisInt } from '../../lib/format';
 import { monthlyCashflow } from '../../lib/monthlyCashflow';
 import { fixedExpensesForMonth } from '../../lib/snapshots';
-import { savingsContributionsForMonth } from '../../lib/savingsRate';
+import { savingsForMonth } from '../../lib/savingsRate';
 
 /**
  * Monthly cashflow for the last 12 months: money in (income) vs money out,
@@ -54,7 +54,7 @@ export default function CashflowChart() {
     const fixedFor = (month: string) => fixedExpensesForMonth(balanceSnapshots, fixedExpenses, month, nowKey);
     const totalFor = (month: string) => fixedFor(month).reduce((sum, item) => sum + item.amount, 0);
     const savedFor = (month: string) =>
-      savingsContributionsForMonth(savingsData, month, nowKey, monthlyIncomes[month] ?? derivedNetMonthlyFor(month));
+      savingsForMonth(savingsData, month, nowKey, monthlyIncomes[month] ?? derivedNetMonthlyFor(month));
     return monthlyCashflow(months, dailyTransactions, monthlyIncomes, Math.round(effectiveIncome), totalFor, seasonal, fixedFor, savedFor)
       .map(({ month, income, expenses, saved, net }) => ({
         label: format(new Date(`${month}-01T00:00:00`), 'MMM', { locale: dateLocale }),

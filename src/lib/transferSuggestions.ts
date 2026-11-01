@@ -12,7 +12,7 @@
 // settlement look alike from the outside, so the user confirms each one.
 import type { DailyTransaction } from '../context/FinanceContext';
 import { buildMatchHaystack, normalizeMatchText } from './text';
-import { isSpend } from './monthlyCashflow';
+import { isSpend } from './spend';
 import { findInternalTransferIds } from './transfers';
 import { matchesTransferRule, type TransferRule } from './transferRules';
 
@@ -73,6 +73,15 @@ function signalsFor(tx: DailyTransaction): TransferSignal[] {
 }
 
 /**
+ * Whether a row carries a structural transfer signal (an account number or a
+ * "Til:" prefix): what separates a transfer from a purchase of the same size.
+ */
+export function hasTransferSignal(tx: DailyTransaction): boolean {
+  const signals = signalsFor(tx);
+  return signals.includes('accountNumber') || signals.includes('toPrefix');
+}
+
+/**
  * Rank the own-account transfers worth proposing a rule for. Skips anything an
  * existing rule already covers, anything already proven internal by a matched
  * two-legged pair, and anything too small to matter.
@@ -89,9 +98,9 @@ export function suggestTransferRules(
     if (!isSpend(tx)) continue;
     if (alreadyInternal.has(tx.id)) continue;
     if (matchesTransferRule(tx, existingRules)) continue;
-    const signals = signalsFor(tx);
     // A structural signal is required: a round amount alone is just a big purchase.
-    if (!signals.includes('accountNumber') && !signals.includes('toPrefix')) continue;
+    if (!hasTransferSignal(tx)) continue;
+    const signals = signalsFor(tx);
     const key = destinationKey(tx);
     if (!key) continue;
     const g = groups.get(key) ?? { txs: [], signals: new Set<TransferSignal>() };
