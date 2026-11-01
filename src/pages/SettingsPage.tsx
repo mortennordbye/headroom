@@ -62,6 +62,7 @@ import { PaydayField } from '../components/PaydayField';
 import { RestorePointsCard } from '../components/RestorePointsCard';
 import { AiAccessCard } from '../components/AiAccessCard';
 import HistoryManagerModal from '../components/HistoryManagerModal';
+import { enabled as tapLogEnabled, setTapLog } from '../lib/tapLog';
 
 type ImportState = 'idle' | 'ready' | 'error' | 'done';
 
@@ -181,6 +182,7 @@ export default function SettingsPage() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+  const [tapLogOn] = useState(tapLogEnabled);
   const versionLabel = appVersion
     ? appVersion.version + (appVersion.sha && appVersion.sha !== 'dev' ? ` · ${appVersion.sha.slice(0, 7)}` : '')
     : '…';
@@ -1176,6 +1178,15 @@ export default function SettingsPage() {
               <DeltaChip tone="muted">{t.settings.version}: {versionLabel}</DeltaChip>
               <DeltaChip tone="muted">{t.settings.storage}: SQLite · {formatBytes(blobBytes)}</DeltaChip>
               <DeltaChip tone="muted">{totalRecords(currentPayload)} {t.settings.summary.records}</DeltaChip>
+              {/* Temporary: the tap log for the mobile first-tap bug (BACKLOG.md). */}
+              <button
+                type="button"
+                onClick={() => setTapLog(!tapLogOn)}
+                className="px-2.5 py-0.5 rounded-full border text-[12px] font-medium"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}
+              >
+                {tapLogOn ? t.settings.tapLogOff : t.settings.tapLogOn}
+              </button>
             </div>
           </div>
         </Card>

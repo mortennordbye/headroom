@@ -1,20 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
-
-// Temporary diagnostic for the "first tap on a mobile tab does nothing" report
-// (see BACKLOG.md). Off unless the URL carries ?debugtaps once; ?debugtaps=0
-// turns it off again. Developer-only, so its text is not translated.
-const KEY = 'headroom.debugtaps';
-
-function enabled(): boolean {
-  try {
-    const q = new URLSearchParams(window.location.search).get('debugtaps');
-    if (q !== null) localStorage.setItem(KEY, q === '0' ? '0' : '1');
-    return localStorage.getItem(KEY) === '1';
-  } catch {
-    return false;
-  }
-}
+import { enabled } from '../lib/tapLog';
 
 const describe = (el: Element | null) => {
   if (!el) return 'none';
