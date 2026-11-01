@@ -115,6 +115,29 @@ function resolveAgainstTarget(savings: Saving[], base: number, target: number): 
 }
 
 /**
+ * The savings list with an edit dialog's draft standing in for the row it edits
+ * (or appended, when adding), so a 'rest' row can be sized against its siblings.
+ * The draft carries the dialog's own pause state: a stored `paused` would make
+ * the resolver skip a row the user is resuming and show its stale amount.
+ */
+export function draftSavingsRows(
+  savings: Saving[],
+  original: Saving | undefined,
+  id: string,
+  draft: Pick<Saving, 'amount' | 'mode' | 'percent' | 'paused'> & { name?: string },
+): Saving[] {
+  const row: Saving = {
+    ...(original ?? { name: draft.name ?? '', destinationKind: 'portfolio' as const }),
+    id,
+    amount: draft.amount,
+    mode: draft.mode,
+    percent: draft.percent,
+    paused: draft.paused || undefined,
+  };
+  return original ? savings.map(s => (s.id === id ? row : s)) : [...savings, row];
+}
+
+/**
  * Resolve the savings for one month, honouring that month's adjustment (the
  * kroner the user chose to save this month instead of the plan) when there is
  * one. Without an adjustment this is `resolveSavingsAmounts`.

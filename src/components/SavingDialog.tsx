@@ -5,7 +5,7 @@ import { SavingsModeToggle, type SavingsMode } from './SavingsModeToggle';
 import { useFinance, type Saving, type SavingDestinationKind } from '../context/FinanceContext';
 import { currentMonthKey } from '../lib/date';
 import { parseLocaleNumber, isNonEmpty } from '../lib/validators';
-import { resolveSavingsAmounts, savingsBase, percentOfSavingsBase } from '../lib/savingsRate';
+import { resolveSavingsAmounts, savingsBase, percentOfSavingsBase, draftSavingsRows } from '../lib/savingsRate';
 
 // The add/edit dialog for a saving. Deliberately NOT the fixed-expense dialog:
 // a saving has no expense type to pick, no "what happens to the money?" (the
@@ -76,18 +76,13 @@ export default function SavingDialog({ saving, onSave, onClose }: Props) {
   // edited (or appended, when adding). A 'rest' row can only be sized against
   // its siblings, so the resolver needs the whole list, not just the draft.
   const draftId = saving?.id ?? DRAFT_ID;
-  const draftRows = useMemo(() => {
-    const draft: Saving = {
-      ...(saving ?? { name, destinationKind: 'portfolio' as const }),
-      id: draftId,
-      amount: typedAmount || 0,
-      mode,
-      percent: mode === 'percent' && typedPercent > 0 ? typedPercent : undefined,
-    };
-    return saving
-      ? savings.map(s => (s.id === draftId ? draft : s))
-      : [...savings, draft];
-  }, [saving, savings, draftId, name, typedAmount, typedPercent, mode]);
+  const draftRows = useMemo(() => draftSavingsRows(savings, saving, draftId, {
+    name,
+    amount: typedAmount || 0,
+    mode,
+    percent: mode === 'percent' && typedPercent > 0 ? typedPercent : undefined,
+    paused,
+  }), [saving, savings, draftId, name, typedAmount, typedPercent, mode, paused]);
 
   // What this saving actually moves this month. For a derived one that is not
   // the typed number, so it is resolved by the same function the budget uses.
