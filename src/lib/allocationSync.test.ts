@@ -185,6 +185,28 @@ describe('the panel and the budget agree once a paydown row is active', () => {
     expect(b.recs.recommendedSpending).toBe(50000 - 10000 - sizing.target);
   });
 
+  it('a paused or revolving paydown is spending in both', () => {
+    const allocs: SavingsAllocation[] = [
+      { id: 'd', percent: 0, mode: 'amount', amount: 2000, destinationKind: 'debt', debtId: 'card' },
+      { id: 'r', percent: 0, mode: 'rest', destinationKind: 'bsu' },
+    ];
+    const made = activateAll(allocs, [rent], 50000, 20);
+    const debts = [{ id: 'card', revolving: true }];
+    for (const [fixed, flags] of [
+      [[rent, ...made.expenses.map(x => ({ ...x, automationPaused: true }))], undefined],
+      [[rent, ...made.expenses], debts],
+    ] as const) {
+      const sizing = sizeAllocation(allocs, 50000, [...fixed], 20, undefined, flags);
+      // The paydown is spending again, so the target is a share of 38 000.
+      expect(sizing.target).toBe(7600);
+      expect(planPaydownTotal(allocs, fixed, flags)).toBe(0);
+      const live = resolveSavingsAmounts(made.savings, savingsBase(50000, [...fixed]), 20, 0);
+      const transfers = savingsContributionTotal(live);
+      const recs = calcRecommendations(50000, 50000, 12000 + transfers, 0, 20, transfers);
+      expect(transfers + recs.recommendedInvestment).toBe(sizing.target);
+    }
+  });
+
   it('a partial plan leaves the same remainder unallocated in both', () => {
     const allocs: SavingsAllocation[] = [
       { id: 'm', percent: 25, destinationKind: 'mortgage' },

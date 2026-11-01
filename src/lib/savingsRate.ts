@@ -4,7 +4,7 @@
 import type { BalanceSnapshot, FixedExpense, Saving } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 import { fixedExpensesForMonth } from './snapshots';
-import { planPaydownTotal, type SavingsAllocation } from './savingsAllocation';
+import { planPaydownTotal, type PaydownDebts, type SavingsAllocation } from './savingsAllocation';
 
 /** Finite-and-non-negative guard against a hand-edited undefined/NaN amount. */
 const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
@@ -15,10 +15,14 @@ const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max
  * subtract it as if it were consumption — and the investing recommendation must
  * count it as already set aside rather than asking for it again.
  *
- * Mortgage/debt paydown is deliberately not in here: only the principal portion
- * of those builds equity and a `FixedExpense` holds the gross payment, so
- * counting them whole would overstate the rate. They stay expenses; the savings
- * rate adds back just the principal (`monthlyPaydownPrincipal` in automation.ts).
+ * Mortgage/debt paydown is not in here: it is a `FixedExpense`, not a transfer.
+ * Two rules apply to it instead. A paydown the allocation plan set up counts
+ * as saving toward the target and in the saving/spending split, at its whole
+ * gross amount (`planPaydownTotal`). That assumes it is an extra on top of the
+ * loan's own instalment, which already covers the interest, so all of it is
+ * principal. Any other paydown is an expense whose gross payment is mostly
+ * interest. The savings-rate chart adds back only the principal of every
+ * paydown (`monthlyPaydownPrincipal` in automation.ts), plan-made or not.
  *
  * A paused saving moves nothing, so it is left out: pausing is how a month with
  * no room to save frees the money for spending.
@@ -197,6 +201,8 @@ export interface MonthSavingsInput {
   fixedExpenses: FixedExpense[];
   /** The plan rows, so the month's own loan paydowns count toward its target. */
   savingsAllocations?: SavingsAllocation[];
+  /** So a paydown onto a revolving debt stays spending (`planPaydownRow`). */
+  debts?: PaydownDebts;
 }
 
 /**
@@ -220,7 +226,7 @@ export function savingsForMonth(
   }
   const fixed = fixedExpensesForMonth(data.balanceSnapshots, data.fixedExpenses, monthKey, nowKey);
   return resolveSavingsForMonth(data.savings, savingsBase(income, fixed), data.savingsTargetPercent, monthSaving,
-    planPaydownTotal(data.savingsAllocations, fixed));
+    planPaydownTotal(data.savingsAllocations, fixed, data.debts));
 }
 
 /** What `monthKey` moved into savings: the total of `savingsForMonth`. */

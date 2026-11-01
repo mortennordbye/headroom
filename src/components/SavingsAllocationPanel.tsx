@@ -64,7 +64,9 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     { v: 'bsu', l: t.expenseDestination.bsu },
     ...savingsAccounts.map(s => ({ v: `savingsAccount:${s.id}`, l: `${t.expenseDestination.savings}: ${s.name}` })),
     ...(housingMode !== 'first_buyer' ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }] : []),
-    ...debts.map(d => ({ v: `debt:${d.id}`, l: `${t.expenseDestination.debt}: ${d.name}` })),
+    // A revolving balance is cleared every month: paying it is spending, not
+    // principal, so it is no place to send savings (see planPaydownRow).
+    ...debts.filter(d => !d.revolving).map(d => ({ v: `debt:${d.id}`, l: `${t.expenseDestination.debt}: ${d.name}` })),
   ], [t, savingsAccounts, debts, housingMode]);
 
   // The pot is the WHOLE savings target, not the slice still uncommitted.
@@ -79,13 +81,13 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   const nowKey = currentMonthKey();
   const nowIncome = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
   const sizing = useMemo(
-    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent),
-    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent],
+    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, undefined, debts),
+    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, debts],
   );
   const plan = sizing.plan;
 
   const savingsIds = savingsAccounts.map(s => s.id);
-  const debtIds = debts.map(d => d.id);
+  const debtIds = debts.filter(d => !d.revolving).map(d => d.id);
   // What each destination ALREADY moves every month, from the live expenses.
   // Two jobs: it stops a second click duplicating a transfer, and it lets each
   // row show what is actually running rather than only what is planned.
@@ -173,7 +175,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     const creating = new Set(creatable.map(r => r.id));
     const made = buildActivation(
       creatable,
-      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating),
+      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating, debts),
       // Same convention as assigning a destination by hand: the first move
       // happens NEXT month, never retroactively.
       currentMonthKey(),

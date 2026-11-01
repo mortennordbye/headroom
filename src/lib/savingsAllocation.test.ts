@@ -252,6 +252,14 @@ describe('planPaydownTotal', () => {
     ])).toBe(0);
   });
 
+  it('leaves out a paused paydown and one onto a revolving debt', () => {
+    const pm = e({ id: 'pm', amount: 2000, destinationKind: 'mortgage', allocationId: 'm' });
+    const pd = e({ id: 'pd', amount: 500, destinationKind: 'debt', debtId: 'card', allocationId: 'd' });
+    expect(planPaydownTotal(allocs, [{ ...pm, automationPaused: true }, pd])).toBe(500);
+    expect(planPaydownTotal(allocs, [pm, pd], [{ id: 'card', revolving: true }])).toBe(2000);
+    expect(planPaydownTotal(allocs, [pm, pd], [{ id: 'card' }])).toBe(2500);
+  });
+
   it('is 0 without a plan and reads a bad amount as 0', () => {
     const linked = e({ id: 'pm', amount: 2000, destinationKind: 'mortgage', allocationId: 'm' });
     expect(planPaydownTotal(undefined, [linked])).toBe(0);

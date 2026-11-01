@@ -129,10 +129,12 @@ const DashboardPage: React.FC = () => {
   // Saving is its own segment rather than part of "Faste kostnader": lumping it
   // in made this page report 45 685 kr of fixed costs where the Budget page said
   // 31 741 under the very same label. The four segments still sum to income
-  // exactly, because `remainingBudget` subtracts the whole fixed total.
-  const budgetFixed = Math.max(0, totalFixedExpenses - savingsContributions);
+  // exactly, because `remainingBudget` subtracts the whole fixed total. The
+  // plan's own loan paydowns are saving too (see planPaydownTotal).
+  const budgetFixed = Math.max(0, totalFixedExpenses - savingsContributions - planPaydown);
+  const budgetSaving = savingsContributions + planPaydown;
   const budgetUsedPctRaw = effectiveIncome > 0 ? (budgetFixed / effectiveIncome) * 100 : 0;
-  const savingPctRaw = effectiveIncome > 0 ? (savingsContributions / effectiveIncome) * 100 : 0;
+  const savingPctRaw = effectiveIncome > 0 ? (budgetSaving / effectiveIncome) * 100 : 0;
   const spentPctRaw = effectiveIncome > 0 ? (totalSpent / effectiveIncome) * 100 : 0;
   const remainingBudget = effectiveIncome - totalFixedExpenses - totalSpent;
   const remainingPctRaw = effectiveIncome > 0 ? (remainingBudget / effectiveIncome) * 100 : 0;
@@ -605,8 +607,8 @@ const DashboardPage: React.FC = () => {
 
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <LegendItem dot="var(--teal)" name={t.fixedCosts} value={formatCurrency(budgetFixed)} pct={`${budgetUsedPctRaw.toFixed(1)}%`} />
-            {savingsContributions > 0 && (
-              <LegendItem dot="var(--brass)" name={t.budgetPage.savingSlice} value={formatCurrency(savingsContributions)} pct={`${savingPctRaw.toFixed(1)}%`} />
+            {budgetSaving > 0 && (
+              <LegendItem dot="var(--brass)" name={t.budgetPage.savingSlice} value={formatCurrency(budgetSaving)} pct={`${savingPctRaw.toFixed(1)}%`} />
             )}
             <LegendItem dot="var(--warning)" name={t.monthSpent} value={formatCurrency(totalSpent)} pct={`${spentPctRaw.toFixed(1)}%`} />
             <LegendItem

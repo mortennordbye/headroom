@@ -5,7 +5,7 @@
 // rewritten.
 import type { FixedExpense, Saving } from '../context/FinanceContext';
 import {
-  destinationKey, governingRow, resolveAllocation, type AllocationPlan, type AllocationRow, type SavingsAllocation,
+  destinationKey, governingRow, planPaydownRow, resolveAllocation, type AllocationPlan, type AllocationRow, type PaydownDebts, type SavingsAllocation,
 } from './savingsAllocation';
 import { unpaidStampMonths } from './automation';
 import { percentOfSavingsBase, savingsBase, savingsTargetAmount } from './savingsRate';
@@ -38,6 +38,8 @@ const isPaydown = (a: Pick<SavingsAllocation, 'destinationKind'>) =>
  *
  * Pass the CURRENT month's income, the live fixed expenses and the base target
  * percent (not a one-month override): the result is written to live transfers.
+ * `debts` lets a paydown onto a revolving debt read as spending, as the budget
+ * reads it (`planPaydownRow`).
  */
 export function sizeAllocation(
   allocations: SavingsAllocation[],
@@ -45,12 +47,13 @@ export function sizeAllocation(
   fixedExpenses: FixedExpense[],
   savingsTargetPercent: number,
   creating: ReadonlySet<string> = new Set(),
+  debts?: PaydownDebts,
 ): AllocationSizing {
   const byId = new Map(allocations.map(a => [a.id, a]));
   const linked = new Set<string>();
   const others: FixedExpense[] = [];
   for (const e of fixedExpenses) {
-    const row = governingRow(e, byId);
+    const row = planPaydownRow(e, byId, debts);
     if (row) linked.add(row.id);
     else others.push(e);
   }

@@ -316,10 +316,14 @@ const BudgetPage: React.FC = () => {
   // large transfer read as a bill (and pushed "faste utgifter" to a share of
   // income that looked alarming). Debt/mortgage paydown deliberately stays an
   // expense — the gross payment is mostly interest and it does leave for good.
-  const spendFixedTotal = useMemo(
+  // The exception is the paydown the savings allocation set up: extra principal
+  // is saving, so "Faste kostnader" leaves it out, as the plan pills do, while
+  // the list still shows its row (and says so under the total).
+  const fixedListTotal = useMemo(
     () => viewFixedExpenses.reduce((sum, e) => sum + e.amount, 0),
     [viewFixedExpenses],
   );
+  const spendFixedTotal = fixedListTotal - planPaydown;
   const sortedSpendExpenses = useMemo(
     () => [...viewFixedExpenses].sort((a, b) => b.amount - a.amount),
     [viewFixedExpenses],
@@ -330,11 +334,11 @@ const BudgetPage: React.FC = () => {
   // transfer would shrink the target it is measured against). Shown beside the
   // savings list, which is the one place it belongs. This month's target, so a
   // month adjusted to save less isn't shown as falling short of the plan. The
-  // plan's own loan paydowns are saving, not consumption, so they are in the
-  // base and count as automated.
+  // plan's own loan paydowns are saving, not consumption, so they are out of
+  // `spendFixedTotal` and count as automated.
   const savingsTargetAmount = useMemo(
-    () => Math.max(0, Math.round((effectiveIncome - spendFixedTotal + planPaydown) * (monthSavingsTargetPercent / 100))),
-    [effectiveIncome, spendFixedTotal, planPaydown, monthSavingsTargetPercent],
+    () => Math.max(0, Math.round((effectiveIncome - spendFixedTotal) * (monthSavingsTargetPercent / 100))),
+    [effectiveIncome, spendFixedTotal, monthSavingsTargetPercent],
   );
   const savingsAutomated = savingsContributions + planPaydown;
   const savingsProgressPct = savingsTargetAmount > 0
@@ -1180,6 +1184,12 @@ const BudgetPage: React.FC = () => {
               <SectionLabel>{t.aggregate}</SectionLabel>
               <span className="text-xl font-bold font-mono text-[var(--text-1)]">{formatCurrency(spendFixedTotal)}</span>
             </div>
+            {planPaydown > 0 && (
+              <div className="flex justify-between items-baseline text-[12px]" style={{ color: 'var(--text-3)' }}>
+                <span>{t.budgetPage.planPaydownAsSaving}</span>
+                <span className="font-mono">{formatCurrency(planPaydown)}</span>
+              </div>
+            )}
             {totalMonthlyDebtService > 0 && (
               <div className="flex justify-between items-baseline text-[12px]" style={{ color: 'var(--text-3)' }}>
                 <span>{t.debtServiceMonthly}</span>
@@ -1206,7 +1216,7 @@ const BudgetPage: React.FC = () => {
             <Suspense fallback={<ChartSkeleton />}>
               <BudgetDistributionChart
                 data={sortedSpendExpenses}
-                totalFixedExpenses={spendFixedTotal}
+                totalFixedExpenses={fixedListTotal}
                 expenseColor={expenseColor}
                 formatCurrency={formatCurrency}
                 formatCurrencyShort={formatCurrencyShort}

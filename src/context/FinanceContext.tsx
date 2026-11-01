@@ -2155,8 +2155,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // The plan's own loan paydowns: saving, so they count toward the target and
   // stay out of the consumption it is a share of (see planPaydownTotal).
   const planPaydown = useMemo(
-    () => planPaydownTotal(savingsAllocations, viewFixedExpenses),
-    [savingsAllocations, viewFixedExpenses],
+    () => planPaydownTotal(savingsAllocations, viewFixedExpenses, debts),
+    [savingsAllocations, viewFixedExpenses, debts],
   );
 
   // Percentage- and rest-based savings are resolved to kroner here, so every
@@ -2182,10 +2182,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const monthSaving = savingsMonthOverrides[monthKey];
   const viewSavings = useMemo(
     () => savingsForMonth(
-      { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations },
+      { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, debts },
       monthKey, currentMonthKey(), effectiveIncome,
     ),
-    [savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, monthKey, effectiveIncome],
+    [savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, debts, monthKey, effectiveIncome],
   );
 
   // What moves into savings rather than being spent. Budgeting treats it like a
@@ -2271,12 +2271,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const nowKey = currentMonthKey();
     const income = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
     const consumption = fixedExpenses.reduce((sum, item) => sum + item.amount, 0);
-    const paydown = planPaydownTotal(savingsAllocations, fixedExpenses);
+    const paydown = planPaydownTotal(savingsAllocations, fixedExpenses, debts);
     const planContributions = savingsContributionTotal(
       resolveSavingsAmounts(savings, savingsBase(income, fixedExpenses), savingsTargetPercent, paydown),
     );
     return planMonthlySavingFor(income, consumption, planContributions, savingsTargetPercent, paydown);
-  }, [monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savings, savingsTargetPercent, savingsAllocations]);
+  }, [monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savings, savingsTargetPercent, savingsAllocations, debts]);
 
   const setMonthlyIncomeForMonth = useCallback((key: string, amount: number) => {
     setMonthlyIncomes(prev => ({ ...prev, [key]: amount }));
@@ -2738,7 +2738,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // the month being viewed: browsing last March must not decide what moves
     // today. `liveSavings` is keyed on the viewed month, so it is deliberately
     // not reused here.
-    const livePaydown = planPaydownTotal(savingsAllocations, fixedExpenses);
+    const livePaydown = planPaydownTotal(savingsAllocations, fixedExpenses, debts);
     const postingSavings = resolveSavingsAmounts(
       savings,
       savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
@@ -2805,7 +2805,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, savingsAllocations, pension, salaries, jobs, bonuses, t, assets.departedPaydowns]);
+  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, savingsAllocations, debts, pension, salaries, jobs, bonuses, t, assets.departedPaydowns]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
@@ -3013,7 +3013,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
       savingsTargetPercent,
       next,
-      planPaydownTotal(savingsAllocations, fixedExpenses),
+      planPaydownTotal(savingsAllocations, fixedExpenses, debts),
     );
     const corrections: AutomationRule[] = [];
     const nowMoved: Record<string, number> = {};
@@ -3032,7 +3032,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (Object.keys(nowMoved).length) {
       setSavings(prev => prev.map(sv => (sv.id in nowMoved ? { ...sv, postedAmount: nowMoved[sv.id] } : sv)));
     }
-  }, [savingsMonthOverrides, savings, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savingsTargetPercent, savingsAllocations, automationState, applyPostingBalances]);
+  }, [savingsMonthOverrides, savings, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savingsTargetPercent, savingsAllocations, debts, automationState, applyPostingBalances]);
 
   // One write for both figures and the marker, so answering the prompt can't
   // land as three separate saves (or leave the marker set if one of them fails).

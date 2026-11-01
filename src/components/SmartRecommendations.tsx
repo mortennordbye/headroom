@@ -169,14 +169,21 @@ export default function SmartRecommendations() {
   // Any amount from 0 to the whole pool: transfers that don't fit are cut for
   // this month (see resolveSavingsForMonth). A recorded month is read-only.
   // The adjustment is what the transfers move: the plan's paydowns are fixed
-  // expenses it can't cut, so they come off what is stored.
+  // expenses it can't cut, so the saving floors at them (said out loud, not
+  // snapped silently) and they come off what is stored.
   const monthKey = format(currentMonth, 'yyyy-MM');
   const isPastMonth = monthKey < currentMonthKey();
   const monthAdjusted = savingsMonthOverrides[monthKey] !== undefined;
+  const [paydownFloorMonth, setPaydownFloorMonth] = useState<string | null>(null);
   const commitPool = (saving: number) => {
     if (base <= 0) return;
-    setSavingsMonthOverride(monthKey, Math.max(0, Math.min(saving, base) - planPaydown));
+    const wanted = Math.min(Math.max(0, saving), base);
+    setPaydownFloorMonth(wanted < planPaydown ? monthKey : null);
+    setSavingsMonthOverride(monthKey, Math.max(0, wanted - planPaydown));
   };
+  const paydownFloorHint = paydownFloorMonth === monthKey && planPaydown > 0
+    ? t.budgetPage.paydownFloor.replace('{amount}', formatCurrency(planPaydown))
+    : undefined;
 
   const handleSpendingEdit = (newSpending: number) => commitPool(base - Math.max(0, newSpending));
   const handleSavingEdit = (newSaving: number) => commitPool(Math.max(0, newSaving));
@@ -292,9 +299,9 @@ export default function SmartRecommendations() {
               onCommit={handleSavingEdit}
               note={unfundedNote}
               readOnly={isPastMonth}
-              hint={conservativeMode && suggestedInvestment > recommendedInvestment
+              hint={paydownFloorHint ?? (conservativeMode && suggestedInvestment > recommendedInvestment
                 ? `${t.common.recommended}: ${formatCurrency(savingsContributions + planPaydown + suggestedInvestment)}`
-                : undefined}
+                : undefined)}
             />
           </div>
           {monthAdjusted && (

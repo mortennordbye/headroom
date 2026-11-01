@@ -106,6 +106,16 @@ in git and the CHANGELOG, not here.
 - **The savings target shrinks as you automate, by construction** (it's a share of the
   uncommitted residual). Surfaced in the panel rather than changed. **Where**:
   `calcRecommendations` in `src/lib/calculations.ts`.
+- **The cashflow chart and Year review still count a plan paydown as an expense.** A paydown the
+  savings allocation set up is saving everywhere the month is split into saving and spending
+  (`planPaydownTotal`), but `monthlyCashflow` takes each month's whole fixed-expense total as
+  expenses and only the savings transfers as `saved`, so these two views still show it under
+  expenses. **Why deferred**: a parallel change is reworking that cashflow code, and touching it
+  here would collide. **Unblock**: once that lands, move each month's plan paydown from
+  `fixedTotalFor` into `savedFor` (with that month's fixed expenses, allocations and debts).
+  **Where**: `src/lib/monthlyCashflow.ts`, `src/components/charts/CashflowChart.tsx`,
+  `src/pages/YearReviewPage.tsx`, `src/lib/yearReview.ts`, `perMonthFixed` and `budgetSummary`
+  in `mcp/derive.ts`.
 - **A one-legged savings transfer counts as spending and as savings in the cashflow.** When
   only the outgoing leg of a savings transfer is imported (the savings account isn't connected)
   and it isn't marked as a transfer, `monthlyCashflow` adds it to `expenses` as unenveloped spend
