@@ -23,7 +23,7 @@ import {
   calcEmergencyFundStatus, calcDebtToIncome, bufferRecommendation,
 } from '../lib/calculations';
 import { withTotalBand, BAND_DELTA_PP } from '../lib/scenarioBands';
-import { calcDebtBalanceByYear } from '../lib/debt';
+import { calcDebtByYear, debtIdsPaidByExpenses } from '../lib/debt';
 import { essentialMonthlyExpenses } from '../lib/fixedExpenseTotals';
 import GoalsSection from '../components/GoalsSection';
 import InsightBanner from '../components/InsightBanner';
@@ -297,12 +297,12 @@ const DashboardPage: React.FC = () => {
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
-    const debtByYear = calcDebtBalanceByYear(debts, 15, currentMonthKey());
+    const debtByYear = calcDebtByYear(debts, 15, currentMonthKey(), debtIdsPaidByExpenses(fixedExpenses));
     const mortgageByYear = calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, mortgageTermYears, 15);
     const run = (rates: typeof projectionRates) => calcNetWorthProjectionByBucket(projectionStart, annualSavings, rates, 15, houseByYear, debtByYear, { mortgageByYear, region, ownShare });
     return withTotalBand(run(projectionRates), projectionRates, BAND_DELTA_PP, run);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, ownShare, mortgage.balance, mortgage.ratePct, mortgageTermYears, debts, region]);
+  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, ownShare, mortgage.balance, mortgage.ratePct, mortgageTermYears, debts, fixedExpenses, region]);
 
   const projectionEndYear = projection15y[projection15y.length - 1]?.year;
   const projectionEndValue = projection15y[projection15y.length - 1]?.total ?? 0;

@@ -42,7 +42,7 @@ import { computeEquityBreakdown, sumSavings } from '../lib/equity';
 import { activeCoOwners, myHouseDebt, myHouseValue, ownershipShares } from '../lib/ownership';
 import { calcNetWorthProjectionByBucket, calcHouseEquityByYear, calcMortgageBalanceByYear } from '../lib/calculations';
 import { withTotalBand, BAND_DELTA_PP } from '../lib/scenarioBands';
-import { calcDebtBalanceByYear, sumDebtByType } from '../lib/debt';
+import { calcDebtByYear, debtIdsPaidByExpenses, sumDebtByType } from '../lib/debt';
 import { calcWealthTax, TAX_YEAR, WEALTH_PARAMS } from '../lib/norwegianTax';
 import { currentMonthKey } from '../lib/date';
 import { bsuStatus, calcBsuTaxCredit } from '../lib/bsu';
@@ -91,6 +91,7 @@ const AssetPage: React.FC = () => {
     cryptoGrowthRate,
     setCryptoGrowthRate,
     currentPlanMonthlySaving,
+    fixedExpenses,
     pension: livePension,
     updatePension,
     currentMortgage: liveMortgage,
@@ -267,7 +268,10 @@ const AssetPage: React.FC = () => {
     () => calcHouseEquityByYear(myValue, mortgage.balance, projHouseGrowth, mortgage.ratePct, projMortgageTerm, 15),
     [myValue, mortgage.balance, projHouseGrowth, mortgage.ratePct, projMortgageTerm]
   );
-  const debtByYear = useMemo(() => calcDebtBalanceByYear(debts, 15, currentMonthKey()), [debts]);
+  const debtByYear = useMemo(
+    () => calcDebtByYear(debts, 15, currentMonthKey(), debtIdsPaidByExpenses(fixedExpenses)),
+    [debts, fixedExpenses],
+  );
   const mortgageBalances = useMemo(
     () => calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, projMortgageTerm, 15),
     [mortgage.balance, mortgage.ratePct, projMortgageTerm],

@@ -83,7 +83,7 @@ describe('withTotalBand with debt', () => {
   it('wraps the plotted total (net of debt), not the stack of assets', () => {
     const start = { stocks: 50000, crypto: 0, cash: 30000, house: 400000 };
     const debt = Array.from({ length: 11 }, (_, y) => Math.max(0, 400000 - y * 40000));
-    const run = (r: typeof rates) => calcNetWorthProjectionByBucket(start, 0, r, 10, undefined, debt);
+    const run = (r: typeof rates) => calcNetWorthProjectionByBucket(start, 0, r, 10, undefined, { balance: debt, payments: Array(11).fill(0) });
     const out = withTotalBand(run(rates), rates, BAND_DELTA_PP, run);
     out.forEach(p => {
       expect(p.band[0]).toBeLessThanOrEqual(p.total);
@@ -97,7 +97,7 @@ describe('withTotalBand with debt', () => {
   it('contains a negative total when debt exceeds assets', () => {
     const start = { stocks: 20000, crypto: 0, cash: 10000, house: 0 };
     const debt = Array(6).fill(300000);
-    const run = (r: typeof rates) => calcNetWorthProjectionByBucket(start, 0, r, 5, undefined, debt);
+    const run = (r: typeof rates) => calcNetWorthProjectionByBucket(start, 0, r, 5, undefined, { balance: debt, payments: Array(6).fill(0) });
     const out = withTotalBand(run(rates), rates, BAND_DELTA_PP, run);
     out.forEach(p => {
       expect(p.total).toBeLessThan(0);

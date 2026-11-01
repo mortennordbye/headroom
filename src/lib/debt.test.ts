@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, creditFrameBreakdown, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings } from './debt';
+import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, creditFrameBreakdown, calcDebtByYear, debtIdsPaidByExpenses, debtPaydownVsPlan, extraPaymentSavings } from './debt';
 import { calcMonthlyPayment } from './calculations';
 import type { Debt, BalanceSnapshot } from '../context/FinanceContext';
 
@@ -114,19 +114,19 @@ describe('formatMonths', () => {
   });
 });
 
-describe('calcDebtBalanceByYear', () => {
+describe('calcDebtByYear', () => {
   it('returns years+1 zeros for no debts', () => {
-    expect(calcDebtBalanceByYear([], 3)).toEqual([0, 0, 0, 0]);
+    expect(calcDebtByYear([], 3).balance).toEqual([0, 0, 0, 0]);
   });
 
   it('pays an interest-free debt down at its minimum and stays at zero', () => {
     // 12 000 @ 0% with 1 000/mo clears in exactly 12 months.
     const d = debt({ balance: 12_000, rate: 0, minPayment: 1_000 });
-    expect(calcDebtBalanceByYear([d], 3)).toEqual([12_000, 0, 0, 0]);
+    expect(calcDebtByYear([d], 3).balance).toEqual([12_000, 0, 0, 0]);
   });
 
   it('declines monotonically for an amortizing debt until paid off', () => {
-    const out = calcDebtBalanceByYear([debt()], 5); // 100k @ 10%, 3k/mo ≈ 3.2 yrs
+    const out = calcDebtByYear([debt()], 5).balance; // 100k @ 10%, 3k/mo ≈ 3.2 yrs
     expect(out[0]).toBe(100_000);
     for (let y = 1; y < out.length; y++) expect(out[y]).toBeLessThanOrEqual(out[y - 1]);
     expect(out[5]).toBe(0);
@@ -134,25 +134,78 @@ describe('calcDebtBalanceByYear', () => {
 
   it('carries revolving balances flat forever', () => {
     const card = debt({ balance: 18_000, rate: 0, minPayment: 0, revolving: true });
-    expect(calcDebtBalanceByYear([card], 2)).toEqual([18_000, 18_000, 18_000]);
+    expect(calcDebtByYear([card], 2).balance).toEqual([18_000, 18_000, 18_000]);
     // Mixed: the amortizing part clears, the revolving floor remains.
-    const out = calcDebtBalanceByYear([card, debt({ balance: 12_000, rate: 0, minPayment: 1_000 })], 2);
+    const out = calcDebtByYear([card, debt({ balance: 12_000, rate: 0, minPayment: 1_000 })], 2).balance;
     expect(out).toEqual([30_000, 18_000, 18_000]);
   });
 
-  it('carries an infeasible debt at its starting balance instead of growing without bound', () => {
-    const d = debt({ balance: 500_000, rate: 25, minPayment: 100 });
-    expect(calcDebtBalanceByYear([d], 2)).toEqual([500_000, 500_000, 500_000]);
+  it('grows a debt whose payment cannot cover its interest, still charging the payment', () => {
+    // 500k @ 12 % (1 %/mo, 5 000 interest) with 4 000/mo:
+    // B_n = 500k·1.01^n − 4 000·(1.01^n − 1)/0.01 = 400 000 + 100 000·1.01^n
+    // → 512 682.50 after a year, 581 669.67 after five.
+    const d = debt({ balance: 500_000, rate: 12, minPayment: 4_000 });
+    const out = calcDebtByYear([d], 5);
+    expect(out.balance[1]).toBe(512_683);
+    expect(out.balance[5]).toBe(581_670);
+    expect(out.payments).toEqual([0, 48_000, 48_000, 48_000, 48_000, 48_000]);
+  });
+
+  it('charges the full payment, principal + interest, in the year it is paid', () => {
+    // 400k @ 12 % with 40k/mo: B_n = 4M − 3.6M·1.01^n reaches 0 in month 11. Ten
+    // full payments, then B_10·1.01 = 23 593.95: 423 593.95 paid in all.
+    const d = debt({ balance: 400_000, rate: 12, minPayment: 40_000 });
+    const out = calcDebtByYear([d], 5);
+    expect(out.balance).toEqual([400_000, 0, 0, 0, 0, 0]);
+    expect(out.payments).toEqual([0, 423_594, 0, 0, 0, 0]);
+  });
+
+  it('charges nothing for a debt a fixed expense already pays', () => {
+    const d = debt({ balance: 400_000, rate: 12, minPayment: 40_000 });
+    const out = calcDebtByYear([d], 2, undefined, new Set(['d1']));
+    expect(out.balance).toEqual([400_000, 0, 0]);
+    expect(out.payments).toEqual([0, 0, 0]);
+  });
+
+  it('charges an unlinked minimum while it rolls onto a linked debt, never the linked one', () => {
+    // Unlinked 12k and linked 24k, both 0 % at 1 000/mo. The unlinked one clears in
+    // month 12; its freed 1 000 then rolls onto the linked one (cleared in month 18)
+    // and keeps leaving. The linked 1 000 is the fixed expense's money.
+    const unlinked = debt({ id: 'u', balance: 12_000, rate: 0, minPayment: 1_000 });
+    const linked = debt({ id: 'l', balance: 24_000, rate: 0, minPayment: 1_000 });
+    const out = calcDebtByYear([unlinked, linked], 2, undefined, new Set(['l']));
+    expect(out.balance).toEqual([36_000, 12_000, 0]);
+    expect(out.payments).toEqual([0, 12_000, 6_000]);
+  });
+
+  it('charges nothing for a revolving card, or for a loan before its repayment starts', () => {
+    const card = debt({ id: 'c', balance: 18_000, rate: 0, minPayment: 0, revolving: true });
+    const studielan = debt({ id: 's', type: 'student', balance: 300_000, rate: 3, minPayment: 3_000, interestFreeUntil: '2028-07' });
+    const out = calcDebtByYear([card, studielan], 3, '2026-07');
+    expect(out.payments).toEqual([0, 0, 0, 36_000]);
   });
 
   it('holds a deferred student loan flat until its interest-free month, then amortizes', () => {
     // Interest-free until 2028-07 → 24 months of deferment from 2026-07.
     const studielan = debt({ type: 'student', balance: 300_000, rate: 3, minPayment: 3_000, interestFreeUntil: '2028-07' });
-    const out = calcDebtBalanceByYear([studielan], 5, '2026-07');
+    const out = calcDebtByYear([studielan], 5, '2026-07').balance;
     expect(out[0]).toBe(300_000);
     expect(out[1]).toBe(300_000); // still studying
     expect(out[2]).toBe(300_000); // deferment ends this month
     expect(out[3]).toBeLessThan(300_000); // now repaying
+  });
+});
+
+describe('debtIdsPaidByExpenses', () => {
+  it('collects the debts a paydown expense points at, and nothing else', () => {
+    const ids = debtIdsPaidByExpenses([
+      { destinationKind: 'debt', debtId: 'a' },
+      { destinationKind: 'debt', debtId: 'b' },
+      { destinationKind: 'mortgage' },
+      { destinationKind: 'debt' },
+      {},
+    ]);
+    expect([...ids].sort()).toEqual(['a', 'b']);
   });
 });
 

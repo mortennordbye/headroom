@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { projectForecast, forecastMortgage, type ForecastInputs, type EffectiveScenario } from './forecastProjection';
 import { currentMortgage, annualMortgageInterest } from './existingMortgage';
 import { calcTaxByRegion } from './norwegianTax';
+import { netWorthBands } from './scenarioBands';
 import { calcAmortizationSchedule, calcHouseEquityByYear, calcMortgageBalanceByYear } from './calculations';
 
 const inputs: ForecastInputs = {
@@ -129,8 +130,40 @@ describe('projectForecast', () => {
     const rows = projectForecast(withDebt, scenario({ returnPct: 0, savingsPct: 0, years: 2 }));
     expect(rows[0].netWorth).toBe(3_000_000);
     expect(rows[1].wealthTax).toBe(5_000);
-    // The loan is paid down at its minimums, so net worth rises net of the tax.
-    expect(rows[1].netWorth).toBeGreaterThan(rows[0].netWorth - 5_000);
+    // The 6 000/mo minimums leave the shares, so net worth falls by the tax and the
+    // year's interest: the principal part only turns shares into less debt.
+    const r = 0.04 / 12, g = (1 + r) ** 12;
+    const owed = 1_000_000 * g - (6_000 * (g - 1)) / r;
+    const interest = 72_000 - (1_000_000 - owed);
+    expect(rows[1].financial).toBe(4_000_000 - 5_000 - 72_000);
+    expect(Math.abs(rows[1].netWorth - (3_000_000 - 5_000 - interest))).toBeLessThanOrEqual(1);
+  });
+
+  it('takes debt repayments out of the financial assets unless a fixed expense pays them', () => {
+    // 1M in other assets, 400k @ 12 % at 40k/mo, no saving or return: cleared in
+    // month 11 for 423 593.95 in all (see debt.test). Net worth 600k today, then
+    // 1M − 423 594 = 576 406, where a free repayment would have left 1M.
+    const loan: ForecastInputs = {
+      ...inputs, mortgage: NO_MORTGAGE, startHomeValue: 0, startShares: 0, startOtherAssets: 1_000_000,
+      debts: [{ id: 'c', name: 'Loan', type: 'consumer', balance: 400_000, rate: 12, minPayment: 40_000 }],
+    };
+    const s = scenario({ returnPct: 0, savingsPct: 0, years: 5 });
+    const rows = projectForecast(loan, s);
+    expect(rows.map(r => r.netWorth)).toEqual([600_000, 576_406, 576_406, 576_406, 576_406, 576_406]);
+    // Paid by a fixed expense: already out of the saving, so not charged again.
+    const linked = projectForecast({ ...loan, debtsPaidByExpense: new Set(['c']) }, s);
+    expect(linked[1].netWorth).toBe(1_000_000);
+  });
+
+  it('reports the debt payments so the Forecast band base still follows the financial line', () => {
+    const loan: ForecastInputs = {
+      ...inputs, mortgage: NO_MORTGAGE, startHomeValue: 0, startShares: 0, startOtherAssets: 1_000_000,
+      debts: [{ id: 'c', name: 'Loan', type: 'consumer', balance: 400_000, rate: 12, minPayment: 5_000 }],
+    };
+    const rows = projectForecast(loan, scenario({ returnPct: 6, years: 5 }));
+    expect(rows.map(r => r.debtPayments)).toEqual([0, 60_000, 60_000, 60_000, 60_000, 60_000]);
+    const bands = netWorthBands(rows[0].financial, rows.map(r => r.contribution - r.wealthTax - r.debtPayments), 6, 0, 5);
+    rows.forEach((r, y) => expect(Math.abs(bands[y].base - r.financial)).toBeLessThanOrEqual(y + 1));
   });
 
   it('pays the mortgage down toward zero and never below', () => {

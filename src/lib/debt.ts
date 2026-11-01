@@ -117,18 +117,38 @@ export interface PayoffPlan {
  * highest rate; snowball the smallest balance.
  */
 export function planPayoff(debts: Debt[], extraMonthly: number, strategy: PayoffStrategy, nowMonthKey?: string): PayoffPlan {
+  return simulatePayoff(debts, extraMonthly, strategy, nowMonthKey, MAX_MONTHS, true).plan;
+}
+
+/**
+ * The rollover loop behind `planPayoff` and `calcDebtByYear`. With
+ * `stopWhenInfeasible` it gives up (planPayoff's "never") as soon as the budget
+ * can't cover a month's interest; without it the loop keeps paying for
+ * `maxMonths` and the unpaid interest compounds onto the balance.
+ * `paidByMonth[m]` is the cash paid in month m+1 and `chargedBudgetByMonth[m]`
+ * the part of that month's budget that is the minimums of the debts `charged`
+ * selects (deferred debts excluded).
+ */
+function simulatePayoff(
+  debts: Debt[], extraMonthly: number, strategy: PayoffStrategy, nowMonthKey: string | undefined,
+  maxMonths: number, stopWhenInfeasible: boolean, charged: (d: Debt) => boolean = () => true,
+): { plan: PayoffPlan; paidByMonth: number[]; chargedBudgetByMonth: number[] } {
   // Revolving debts (credit cards paid in full each month) never amortize, so
   // they're excluded from the payoff simulation — they'd otherwise show a bogus
   // "paid off in N months" that never happens. They still count in net worth.
   const active = debts.filter(d => d.balance > EPS && !d.revolving);
   const startTotal = active.reduce((s, d) => s + d.balance, 0);
+  const paidByMonth: number[] = [];
+  const chargedBudgetByMonth: number[] = [];
   if (active.length === 0) {
-    return { months: 0, totalInterest: 0, feasible: true, perDebt: [], balanceSeries: [{ month: 0, total: 0 }] };
+    const plan = { months: 0, totalInterest: 0, feasible: true, perDebt: [], balanceSeries: [{ month: 0, total: 0 }] };
+    return { plan, paidByMonth, chargedBudgetByMonth };
   }
 
   const bal = active.map(d => d.balance);
   const rate = active.map(d => d.rate / 1200);
   const minP = active.map(d => d.minPayment);
+  const isCharged = active.map(d => charged(d));
   const interest = active.map(() => 0);
   const payoffMonth = active.map(() => 0);
   // Months each debt is still interest-free / deferred (Lånekassen studielån):
@@ -144,12 +164,18 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
   const balanceSeries: { month: number; total: number }[] = [{ month: 0, total: startTotal }];
 
   let month = 0;
-  while (month < MAX_MONTHS) {
+  while (month < maxMonths) {
     // Budget this month: extra + the minimums of debts whose deferment has ended
     // (a deferred student loan isn't being paid yet, so its minimum joins the
     // budget only once repayment starts).
     let budget = extra;
-    for (let i = 0; i < minP.length; i++) if (month >= defer[i]) budget += minP[i];
+    let chargedBudget = 0;
+    for (let i = 0; i < minP.length; i++) {
+      if (month >= defer[i]) {
+        budget += minP[i];
+        if (isCharged[i]) chargedBudget += minP[i];
+      }
+    }
 
     // Accrue interest (deferred debts accrue nothing).
     let monthInterest = 0;
@@ -164,8 +190,9 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
     // Infeasible: the available budget can't even cover this month's interest.
     // Guarded by monthInterest > 0 so an all-deferred month (0 interest, maybe 0
     // budget) doesn't read as infeasible.
-    if (monthInterest > 0 && budget <= monthInterest) {
-      return { months: Infinity, totalInterest: Infinity, feasible: false, perDebt: [], balanceSeries };
+    if (stopWhenInfeasible && monthInterest > 0 && budget <= monthInterest) {
+      const plan = { months: Infinity, totalInterest: Infinity, feasible: false, perDebt: [], balanceSeries };
+      return { plan, paidByMonth, chargedBudgetByMonth };
     }
 
     let pool = budget;
@@ -186,6 +213,8 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
         pool -= pay;
       }
     }
+    paidByMonth.push(budget - pool);
+    chargedBudgetByMonth.push(chargedBudget);
 
     month += 1;
     for (let i = 0; i < bal.length; i++) {
@@ -197,7 +226,7 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
   }
 
   const feasible = bal.every(b => b <= EPS);
-  return {
+  const plan: PayoffPlan = {
     // Hitting the MAX_MONTHS cap without clearing every debt means "never pays
     // off" — report Infinity (like the interest-infeasible path) so callers
     // format it as "aldri/never" rather than a misleading "50 år".
@@ -209,26 +238,65 @@ export function planPayoff(debts: Debt[], extraMonthly: number, strategy: Payoff
     perDebt: active.map((d, i) => ({ id: d.id, payoffMonth: payoffMonth[i] === 0 ? Infinity : payoffMonth[i], interest: interest[i] })),
     balanceSeries,
   };
+  return { plan, paidByMonth, chargedBudgetByMonth };
+}
+
+/** Non-mortgage debt in a net-worth projection, index 0..years (year 0 = today). */
+export interface DebtByYear {
+  /** Debt remaining at the end of each year. */
+  balance: number[];
+  /** Cash paid on the debts during each year, principal + interest, that the
+   *  budget doesn't already spend as a fixed expense; `payments[0]` is 0. The
+   *  projections take it out of the assets, so a repayment lowers the assets by
+   *  the whole payment while the debt falls only by its principal. */
+  payments: number[];
 }
 
 /**
- * Total non-mortgage debt remaining at the end of each year, index 0..years
- * (year 0 = today). Amortizing debts pay down at their minimum payments with
- * the rollover method (freed minimums accelerate the rest, no extra budget);
- * revolving balances never amortize and are carried flat. An infeasible plan
- * (minimums can't outrun interest) carries the last simulated total forward
- * rather than growing without bound. Mirrors `calcMortgageBalanceByYear` on
- * the mortgage side, for netting debt out of net-worth projections.
+ * The debts a fixed expense already pays (a paydown destination), paused or not:
+ * the expense is in the budget, so its money is already out of the saving the
+ * projections add, and charging the debt's payment as well would count it twice.
  */
-export function calcDebtBalanceByYear(debts: Debt[], years: number, nowMonthKey?: string): number[] {
+export function debtIdsPaidByExpenses(expenses: readonly { destinationKind?: string; debtId?: string }[]): Set<string> {
+  const ids = new Set<string>();
+  for (const e of expenses) if (e.destinationKind === 'debt' && e.debtId) ids.add(e.debtId);
+  return ids;
+}
+
+/**
+ * Non-mortgage debt over `years` years for the net-worth projections, mirroring
+ * `calcMortgageBalanceByYear` on the mortgage side. Amortizing debts pay down at
+ * their minimum payments with the rollover method (freed minimums accelerate the
+ * rest, no extra budget); revolving balances never amortize and are carried
+ * flat. A debt whose payment can't cover its interest keeps being paid and grows
+ * by the interest the payment leaves unpaid.
+ *
+ * `payments` charges the minimums of the debts not in `paidByExpense` (see
+ * `debtIdsPaidByExpenses`): they keep leaving while any debt is left, as the
+ * rollover spends them, but never more than was actually paid that month.
+ */
+export function calcDebtByYear(
+  debts: Debt[], years: number, nowMonthKey?: string, paidByExpense: ReadonlySet<string> = new Set(),
+): DebtByYear {
   const revolving = debts.reduce((s, d) => (d.revolving ? s + Math.max(0, d.balance) : s), 0);
-  const series = planPayoff(debts, 0, 'avalanche', nowMonthKey).balanceSeries;
-  const out: number[] = [];
+  const { plan, paidByMonth, chargedBudgetByMonth } = simulatePayoff(
+    debts, 0, 'avalanche', nowMonthKey, years * 12, false, d => !paidByExpense.has(d.id),
+  );
+  const series = plan.balanceSeries;
+  const balance: number[] = [];
+  const payments: number[] = [];
   for (let y = 0; y <= years; y++) {
     const amortizing = series[Math.min(y * 12, series.length - 1)]?.total ?? 0;
-    out.push(Math.round(amortizing + revolving));
+    balance.push(Math.round(amortizing + revolving));
+    let paid = 0;
+    if (y > 0) {
+      for (let m = (y - 1) * 12; m < y * 12 && m < paidByMonth.length; m++) {
+        paid += Math.min(chargedBudgetByMonth[m], paidByMonth[m]);
+      }
+    }
+    payments.push(Math.round(paid));
   }
-  return out;
+  return { balance, payments };
 }
 
 // ── Non-mortgage debt payoff: plan vs actual (HISTORY_PLAN §6.4) ─────────────

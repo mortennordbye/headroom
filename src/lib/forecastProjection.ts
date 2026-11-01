@@ -5,7 +5,7 @@
 import type { Debt } from '../context/FinanceContext';
 import { calcTaxByRegion, calcWealthTax, type Region } from './norwegianTax';
 import { calcAmortizationSchedule, calcMortgageBalanceByYear } from './calculations';
-import { calcDebtBalanceByYear } from './debt';
+import { calcDebtByYear } from './debt';
 import type { CurrentMortgage } from './existingMortgage';
 import { feriepengerSurplus } from './feriepenger';
 
@@ -81,7 +81,8 @@ export interface ForecastInputs {
    *    compounding at the return plus savings minus wealth tax;
    *  - the home (`startHomeValue − mortgage.balance`, the user's share), growing
    *    at `houseGrowthPct` while the mortgage amortises, as `calcHouseEquityByYear`;
-   *  - non-mortgage `debts`, paid down at their minimums (`calcDebtBalanceByYear`).
+   *  - non-mortgage `debts`, paid down at their minimums (`calcDebtByYear`), the
+   *    payments not already in a fixed expense leaving the financial assets.
    * Shares vs other assets is split by today's ratio for the wealth tax's 80 %
    * share valuation. Wealth tax is skipped outside the Norwegian region.
    */
@@ -93,8 +94,11 @@ export interface ForecastInputs {
   houseGrowthPct: number;
   startShares: number;
   startOtherAssets: number;
-  /** Non-mortgage debts, projected with `calcDebtBalanceByYear` from `monthKey`. */
+  /** Non-mortgage debts, projected with `calcDebtByYear` from `monthKey`. */
   debts: Debt[];
+  /** Debts a fixed expense already pays (`debtIdsPaidByExpenses`), so their
+   *  payments aren't charged twice. Default none. */
+  debtsPaidByExpense?: ReadonlySet<string>;
   monthKey?: string;
   /** Holiday pay above salary in `startYear` (`holidaySurplusFor`), taxed with
    *  year 0's salary so year 0 matches the budget's net income. Default 0. */
@@ -124,6 +128,9 @@ export interface ForecastRow {
   /** Estimated formuesskatt charged this year (paid out of net worth). 0 at year
    *  0 and whenever the household is under the bunnfradrag or region ≠ 'no'. */
   wealthTax: number;
+  /** Non-mortgage debt payments (principal + interest) taken out of `financial`
+   *  this year; 0 at year 0 and for debts a fixed expense pays. */
+  debtPayments: number;
 }
 
 /**
@@ -137,7 +144,7 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
   const { currentGross, mortgage: m,
     region, customTaxRatePct, ipsAnnualContribution, startYear,
     startHomeValue, houseGrowthPct, startShares, startOtherAssets,
-    debts, monthKey, homeOwnShare = 1,
+    debts, debtsPaidByExpense, monthKey, homeOwnShare = 1,
     startHolidaySurplus = 0, feriepengesatsPct = 0 } = inputs;
   // The interest actually paid each year on the amortising schedule: the
   // rentefradrag base, so year 0 matches the app's `annualMortgageInterest`.
@@ -147,7 +154,7 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
   const financialBase = Math.max(0, startShares + startOtherAssets);
   const sharesRatio = financialBase > 0 ? Math.max(0, startShares) / financialBase : 0;
   const homeDebtByYear = calcMortgageBalanceByYear(m.balance, m.ratePct, m.amortises ? m.termYears : 0, s.years);
-  const otherDebtByYear = calcDebtBalanceByYear(debts, s.years, monthKey);
+  const otherDebtByYear = calcDebtByYear(debts, s.years, monthKey, debtsPaidByExpense);
   const out: ForecastRow[] = [];
   let gross = currentGross;
   let financial = startShares + startOtherAssets;
@@ -176,10 +183,14 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
     const net = calcTaxByRegion(gross + holidaySurplus, region, customTaxRatePct, ipsAnnualContribution, mortgageInterest).netAnnual;
     const contribution = Math.max(0, net * (s.savingsPct / 100));
     if (y > 0) {
-      // Wealth tax leaves the pot before it can compound further.
-      financial = Math.max(0, financial * (1 + s.returnPct / 100) + contribution - wealthTaxDue);
+      // Wealth tax leaves the pot before it can compound further, never taking it
+      // below zero. The year's debt payments leave it too, even below zero (a
+      // shortfall is still paid), so net worth falls by the whole payment while
+      // the debt falls only by its principal.
+      const grown = financial * (1 + s.returnPct / 100) + contribution;
+      financial = grown - Math.min(wealthTaxDue, Math.max(0, grown)) - (otherDebtByYear.payments[y] ?? 0);
     }
-    const otherDebt = otherDebtByYear[y] ?? 0;
+    const otherDebt = otherDebtByYear.balance[y] ?? 0;
     const netWorth = financial + homeValue - homeDebt - otherDebt;
     const realDeflator = Math.pow(1 + s.inflationPct / 100, y);
     out.push({
@@ -194,6 +205,7 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
       mortgage: m.amortises ? homeDebt : 0,
       homeDebt,
       wealthTax: Math.round(wealthTaxDue),
+      debtPayments: otherDebtByYear.payments[y] ?? 0,
     });
     // Assess next year's wealth tax on this year's ending composition, with the
     // financial assets split into shares vs other by today's ratio so the 80 %
@@ -202,8 +214,8 @@ export function projectForecast(inputs: ForecastInputs, s: EffectiveScenario): F
       wealthTaxDue = calcWealthTax({
         primaryHomeValue: homeValue,
         primaryHomeShare: homeOwnShare,
-        shares: financial * sharesRatio,
-        otherAssets: financial * (1 - sharesRatio),
+        shares: Math.max(0, financial) * sharesRatio,
+        otherAssets: Math.max(0, financial) * (1 - sharesRatio),
         debt: homeDebt + otherDebt,
       }).tax;
     } else {

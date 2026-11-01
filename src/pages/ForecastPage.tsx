@@ -20,6 +20,7 @@ import { netWorthBands, BAND_DELTA_PP } from '../lib/scenarioBands';
 import { projectForecast, forecastMortgage, type EffectiveScenario, type ForecastScenario, type ForecastInputs } from '../lib/forecastProjection';
 import { otpAnnualContribution, pensionFutureValue } from '../lib/pension';
 import { sumSavings } from '../lib/equity';
+import { debtIdsPaidByExpenses } from '../lib/debt';
 import { myHouseValue, ownershipShares } from '../lib/ownership';
 import { currentMonthKey } from '../lib/date';
 import { latestInflationPct } from '../lib/inflation';
@@ -33,7 +34,7 @@ const ForecastPage: React.FC = () => {
     t, totalFixedExpenses, salaries, jobs, loan, income,
     formatCurrency, region, customTaxRatePct, pension,
     planMonthlySaving, savingsContributions, growthReturnRate, inflation, annualMortgageInterest, currentMortgage, bsuTaxCredit,
-    assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts,
+    assets, houseGrowthRate, netInvestment, netCrypto, netWorth, debts, fixedExpenses,
     forecastAssumptions: fa, setForecastAssumptions, holidaySurplusFor, employerCostConfig,
   } = useFinance();
   const reduced = useReducedMotion();
@@ -186,8 +187,9 @@ const ForecastPage: React.FC = () => {
     startShares: netInvestment,
     startOtherAssets: netCrypto + sumSavings(assets) + assets.bsu + assets.bufferAccount,
     debts,
+    debtsPaidByExpense: debtIdsPaidByExpenses(fixedExpenses),
     monthKey: today,
-  }), [currentGross, startYear, startHolidaySurplus, feriepengesatsPct, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, today]);
+  }), [currentGross, startYear, startHolidaySurplus, feriepengesatsPct, mortgage, region, customTaxRatePct, pension.ipsAnnualContribution, assets, shares.own, houseGrowthRate, netInvestment, netCrypto, debts, fixedExpenses, today]);
 
   // Forecast series — scenario A always, scenario B only while comparing.
   const projection = useMemo(() => projectForecast(inputs, effA),
@@ -211,11 +213,11 @@ const ForecastPage: React.FC = () => {
   // Bear/base/bull bands (return ±3pp) so the projection doesn't read as a
   // single certain line. The return only applies to the financial assets, so the
   // bands vary that part and add back the year's home equity minus debt. The
-  // per-year contribution net of that year's wealth-tax charge is held the same
-  // across scenarios (it depends on income/savings/tax, not the return), so the
+  // per-year contribution net of that year's wealth-tax charge and debt payments is
+  // held the same across scenarios (they don't depend on the return), so the
   // band base still equals the netWorth line and only the growth rate varies.
   const chartData = useMemo(() => {
-    const bands = netWorthBands(projection[0]?.financial ?? 0, projection.map(p => p.contribution - p.wealthTax), returnPct, BAND_DELTA_PP, years);
+    const bands = netWorthBands(projection[0]?.financial ?? 0, projection.map(p => p.contribution - p.wealthTax - p.debtPayments), returnPct, BAND_DELTA_PP, years);
     return projection.map((p, i) => {
       const nonFinancial = p.netWorth - p.financial;
       return {
