@@ -87,8 +87,16 @@ in git and the CHANGELOG, not here.
   everywhere. **Where**: `src/lib/allocationSync.ts`, `src/lib/calculations.ts`,
   `src/context/FinanceContext.tsx`, `src/components/SmartRecommendations.tsx`,
   `src/pages/DashboardPage.tsx`, `mcp/derive.ts`.
-- **CashflowChart shows savings transfers as money out** (a literal cashflow view), so it disagrees
-  with the savings-rate chart. **Where**: `src/components/charts/CashflowChart.tsx`.
+- **A one-legged savings transfer counts as spending and as savings in the cashflow.** When
+  only the outgoing leg of a savings transfer is imported (the savings account isn't connected)
+  and it isn't marked as a transfer, `monthlyCashflow` adds it to `expenses` as unenveloped spend
+  and the planned saving is also reported as `saved`, so that money is counted twice. **Why
+  deferred**: the savings list has no envelope-style matching against transactions, and the old
+  chart had the same double count inside "money out". **Unblock**: reconcile each saving against
+  its matching transactions the way fixed expenses are (`reconcile` in `envelopes.ts`), or nudge
+  the user to mark the row as a transfer via `transferSuggestions`. **Where**: the expense loop in
+  `src/lib/monthlyCashflow.ts`, `src/lib/envelopes.ts`, `src/lib/transferSuggestions.ts`,
+  `src/components/charts/CashflowChart.tsx`, `mcp/derive.ts` (`budgetSummary`).
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
   `src/lib/envelopes.ts`, `src/context/FinanceContext.tsx`.
 

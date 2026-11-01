@@ -119,7 +119,7 @@ export const translations = {
     txExpense: 'Utgift',
     charts: {
       aria: {
-        cashflow: 'Kontantstrøm per måned: inntekt mot utgifter siste 12 måneder',
+        cashflow: 'Kontantstrøm per måned: inntekt mot utgifter og sparing siste 12 måneder',
         allocation: 'Fordeling av formue, ringdiagram',
         categoryTrend: 'Forbruk per kategori per måned, stablet stolpediagram',
         debtPaydownVsPlan: 'Nedbetaling av gjeld mot plan, linjediagram',
@@ -2285,7 +2285,7 @@ export const translations = {
     txExpense: 'Expense',
     charts: {
       aria: {
-        cashflow: 'Monthly cashflow: income versus expenses over the last 12 months',
+        cashflow: 'Monthly cashflow: income versus expenses and savings over the last 12 months',
         allocation: 'Asset allocation donut chart',
         categoryTrend: 'Monthly spending by category, stacked bar chart',
         debtPaydownVsPlan: 'Debt paydown versus plan, line chart',

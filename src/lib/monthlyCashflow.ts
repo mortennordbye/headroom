@@ -18,9 +18,19 @@ export interface MonthlyCashflowRow {
   month: string; // 'yyyy-MM'
   income: number;
   variable: number; // logged expense transactions in the month
-  expenses: number; // fixedExpenses + variable
-  net: number; // income - expenses
-  /** Savings rate as a percent of income; 0 when income ≤ 0. */
+  expenses: number; // fixedExpenses + variable (spending; never the savings below)
+  /**
+   * What the month moved into savings, when the caller passes `savingsFor`; else
+   * 0. Kept out of `expenses`: a saving is still the user's money, not spending.
+   */
+  saved: number;
+  net: number; // income - expenses - saved: what is left after spending and saving
+  /**
+   * Savings rate as a percent of income, (income - expenses) / income. With
+   * `savingsFor`, savings sit outside `expenses` and count as retained; without
+   * it, whatever savings the caller put in `totalFixedExpenses` count as spent.
+   * 0 when income ≤ 0.
+   */
   rate: number;
   /**
    * Whether the month has any logged spend at all. A month from before the
@@ -47,6 +57,10 @@ export function monthlyCashflow(
   // `totalFixedExpenses` was summed from, or the two disagree. Pass functions
   // for both to resolve each month's own fixed expenses.
   fixedExpenses?: FixedExpense[] | ((month: string) => FixedExpense[]),
+  // What each month moved into savings (`savingsContributionsForMonth`). Must NOT
+  // also be inside `totalFixedExpenses`: it is reported as `saved`, apart from
+  // spending, so the cashflow classifies savings the same way as the savings rate.
+  savingsFor?: (month: string) => number,
 ): MonthlyCashflowRow[] {
   const spendByMonth = new Map<string, number>();
   const countByMonth = new Map<string, number>();
@@ -72,9 +86,11 @@ export function monthlyCashflow(
       const unenveloped = Math.max(0, variable - totals.actual);
       expenses = fixedTotal + unenveloped + totals.overspent;
     }
+    const rawSaved = savingsFor ? savingsFor(month) : 0;
+    const saved = Number.isFinite(rawSaved) ? Math.max(0, rawSaved) : 0;
     const rate = income > 0 ? Math.round(((income - expenses) / income) * 1000) / 10 : 0;
     return {
-      month, income, variable, expenses, net: income - expenses, rate,
+      month, income, variable, expenses, saved, net: income - expenses - saved, rate,
       measured: (countByMonth.get(month) ?? 0) > 0,
     };
   });

@@ -124,5 +124,43 @@ describe('monthlyCashflow — per-month fixed expenses', () => {
     // June: the 1000 envelope plus 100 overspend, plus 200 savings.
     expect(rows[1].expenses).toBe(1300);
   });
+
+  it('keeps savings out of spending when passed as savingsFor instead of in the total', () => {
+    const txs = [tx({ date: '2026-06-05', amount: 1100, kind: 'expense', description: 'stroem AS' })];
+    const fixedOnly = (m: string) => byMonth[m].reduce((s, e) => s + e.amount, 0);
+    const rows = monthlyCashflow(['2026-05', '2026-06'], txs, {}, 40000, fixedOnly, null, listFor, () => 200);
+    // June: the 1000 envelope plus 100 overspend is spending; the 200 is saved.
+    expect(rows[1].expenses).toBe(1100);
+    expect(rows[1].saved).toBe(200);
+    // Net is unchanged from the old "savings inside expenses" shape.
+    expect(rows[1].net).toBe(40000 - 1300);
+  });
 });
 
+describe('monthlyCashflow — savings as their own series', () => {
+  const months = ['2026-05', '2026-06'];
+  const txs = [
+    tx({ date: '2026-06-03', amount: 200, kind: 'expense' }),
+    tx({ date: '2026-06-20', amount: 300 }),
+    tx({ date: '2026-05-01', amount: 100, kind: 'expense' }),
+  ];
+
+  it('reports savings apart from spending when savingsFor is given', () => {
+    const rows = monthlyCashflow(months, txs, {}, 40000, 10000, undefined, undefined, (m) => (m === '2026-06' ? 3000 : 0));
+    // June: spending stays 10000 + 500; the 3000 saved is its own figure.
+    expect(rows[1].expenses).toBe(10500);
+    expect(rows[1].saved).toBe(3000);
+    // Net is what is left after spending and saving.
+    expect(rows[1].net).toBe(26500);
+    // The rate counts the saving as retained: (40000 - 10500) / 40000.
+    expect(rows[1].rate).toBe(73.8);
+    expect(rows[0].saved).toBe(0);
+  });
+
+  it('reports zero saved without savingsFor, and guards a NaN or negative saving', () => {
+    expect(monthlyCashflow(months, txs, {}, 40000, 10000).every(r => r.saved === 0)).toBe(true);
+    const rows = monthlyCashflow(months, txs, {}, 40000, 10000, undefined, undefined, (m) => (m === '2026-05' ? NaN : -50));
+    expect(rows.map(r => r.saved)).toEqual([0, 0]);
+    expect(rows[1].net).toBe(29500);
+  });
+});

@@ -693,16 +693,19 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       '2026-05': { ...b.balanceSnapshots!['2026-06'], fixedExpenses: [b.fixedExpenses[0]] },
     };
     const live = derive.budgetSummary(b, MONTH);
-    // Same formula as CashflowChart: the month's own list plus its own savings,
-    // and May's snapshot recorded no savings list, so it moved nothing.
+    // Same formula as CashflowChart: the month's own list, with its own savings
+    // reported apart, and May's snapshot recorded no savings list, so it moved nothing.
     const may = live.cashflowLast12.find((r) => r.month === '2026-05')!;
     const june = live.cashflowLast12.find((r) => r.month === '2026-06')!;
-    expect(may.expenses).toBe(14000 + 0 + 4500);
-    expect(june.expenses).toBe(live.totalFixedExpenses + 2000);
+    expect(may.expenses).toBe(14000 + 4500);
+    expect(may.saved).toBe(0);
+    expect(june.expenses).toBe(live.totalFixedExpenses - live.monthlySavings + 2000);
+    expect(june.saved).toBe(live.monthlySavings);
 
+    // The year review still counts savings as money out.
     const review = derive.yearReviewSummary(b, 2026, MONTH);
-    expect(review.monthly.find((r) => r.month === '2026-05')!.expenses).toBe(may.expenses);
-    expect(review.monthly.find((r) => r.month === '2026-06')!.expenses).toBe(june.expenses);
+    expect(review.monthly.find((r) => r.month === '2026-05')!.expenses).toBe(may.expenses + may.saved);
+    expect(review.monthly.find((r) => r.month === '2026-06')!.expenses).toBe(june.expenses + june.saved);
   });
 
   it('budget and year review charge each month its own savings', () => {
@@ -715,12 +718,16 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const june = live.cashflowLast12.find((r) => r.month === '2026-06')!;
     expect(live.monthlySavings).toBe(2000);
     // May's grocery spend sits inside its envelope; June adds the unenveloped dining.
-    expect(may.expenses).toBe(fixedTotal + 500);
-    expect(june.expenses).toBe(fixedTotal + 2000 + 2000);
+    // Each month's own savings are reported apart from spending.
+    expect(may.expenses).toBe(fixedTotal);
+    expect(may.saved).toBe(500);
+    expect(june.expenses).toBe(fixedTotal + 2000);
+    expect(june.saved).toBe(2000);
+    expect(june.net).toBe(june.income - june.expenses - june.saved);
 
     const review = derive.yearReviewSummary(b, 2026, MONTH);
-    expect(review.monthly.find((r) => r.month === '2026-05')!.expenses).toBe(may.expenses);
-    expect(review.monthly.find((r) => r.month === '2026-06')!.expenses).toBe(june.expenses);
+    expect(review.monthly.find((r) => r.month === '2026-05')!.expenses).toBe(may.expenses + may.saved);
+    expect(review.monthly.find((r) => r.month === '2026-06')!.expenses).toBe(june.expenses + june.saved);
   });
 
   it('recommendations and budget summary agree on savings-rate health', () => {
