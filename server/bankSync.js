@@ -34,4 +34,15 @@ function startBankSyncSchedule({ intervalHours, runSync, lastSyncAgeMs, log = co
   };
 }
 
-module.exports = { startBankSyncSchedule };
+// Single flight: while a run of `fn` is in progress, further calls join it and
+// get the same result instead of starting a second run. The next call after it
+// settles (resolved or rejected) starts a fresh one.
+function singleFlight(fn) {
+  let inFlight = null;
+  return () => {
+    if (!inFlight) inFlight = Promise.resolve().then(fn).finally(() => { inFlight = null; });
+    return inFlight;
+  };
+}
+
+module.exports = { startBankSyncSchedule, singleFlight };

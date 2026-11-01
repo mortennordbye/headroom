@@ -807,8 +807,11 @@ function getStatus() {
 }
 
 /**
- * Fetch new transactions and return them mapped. Throws { needsRelink: true }
- * (Error with .needsRelink) when consent has lapsed.
+ * Fetch new transactions and return them mapped, as `{ rows, synced }`. `synced`
+ * lists each connection the run tried, with the session it used and whether
+ * every one of its accounts was fetched (`complete`), so recordSync only marks
+ * what was really synced. Throws { needsRelink: true } (Error with .needsRelink)
+ * when consent has lapsed.
  */
 async function fetchMappedTransactions() {
   const store = readStore();
@@ -819,6 +822,7 @@ async function fetchMappedTransactions() {
   }
   let mapped = [];
   let anyValid = false;
+  const synced = [];
   for (const c of store.connections) {
     // A single expired bank flags itself for re-link but doesn't block the
     // others — we still sync every bank whose consent is live.
@@ -853,6 +857,8 @@ async function fetchMappedTransactions() {
     const lastSync = c.last_sync ? new Date(c.last_sync).getTime() : null;
     const fromMs = lastSync ? lastSync - RESYNC_OVERLAP_DAYS * 864e5 : Date.now() - DAYS * 864e5;
     const from = new Date(fromMs).toISOString().slice(0, 10);
+    const sync = { connectionId: c.id, sessionId: c.session_id, complete: false };
+    synced.push(sync);
     try {
       for (const acc of c.accounts || []) {
         const raw = await fetchTransactions(acc.uid, from);
@@ -866,6 +872,7 @@ async function fetchMappedTransactions() {
           }).map((row) => (c.relinked ? { ...row, relinkPrefix: c.idPrefix } : row)),
         );
       }
+      sync.complete = (c.accounts || []).length > 0;
     } catch (err) {
       if (err.status === 401 || err.status === 403) {
         markRelink(c.id, `fetch ${err.status}`);
@@ -880,7 +887,7 @@ async function fetchMappedTransactions() {
     e.needsRelink = true;
     throw e;
   }
-  return mapped;
+  return { rows: mapped, synced };
 }
 
 // How many recent sync outcomes to keep in the rolling log (oldest pruned).
@@ -918,19 +925,27 @@ function appendSyncLog(log, entry, max = SYNC_LOG_MAX) {
 }
 
 /**
- * Record a sync outcome: on success, stamp `last_sync` on every live connection;
- * always append a rolling log entry (ok or error) so the Settings card can show
- * whether a cron sync ran and what it pulled. The relink flag stays until the
- * next sync's window (`last_sync` minus the overlap) starts after the re-link
- * day: until then the bank can still resend pre-re-link rows under new ids.
+ * Record a sync outcome; always append a rolling log entry (ok or error) so the
+ * Settings card can show whether a cron sync ran and what it pulled. On success,
+ * stamp `last_sync` and clear `needs_relink` only on the connections in
+ * `outcome.synced` (from fetchMappedTransactions) whose every account was
+ * fetched, and only while they still hold the session that fetch used. Not on
+ * one that hit 401/403 (that would clear the flag the same sync just set, and
+ * since a re-link keeps `last_sync`, the window the error hid would never be
+ * fetched), one with no accounts, or one re-linked while the sync ran. The
+ * relink flag stays until the next sync's window (`last_sync` minus the
+ * overlap) starts after the re-link day: until then the bank can still resend
+ * pre-re-link rows under new ids.
  */
 function recordSync(outcome = {}) {
   const store = readStore();
   const now = new Date().toISOString();
-  if (outcome.ok !== false) {
+  if (outcome.ok !== false && Array.isArray(outcome.synced)) {
     const nextFrom = new Date(Date.parse(now) - RESYNC_OVERLAP_DAYS * 864e5).toISOString().slice(0, 10);
-    for (const c of store.connections) {
-      if (sessionValid(c)) {
+    for (const s of outcome.synced) {
+      if (!s.complete) continue;
+      const c = store.connections.find((x) => x.id === s.connectionId && x.session_id === s.sessionId);
+      if (c) {
         c.last_sync = now;
         c.needs_relink = false;
         if (!c.linked_at || nextFrom > String(c.linked_at).slice(0, 10)) delete c.relinked;

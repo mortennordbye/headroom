@@ -136,8 +136,8 @@ describe('evictSupersededPending', () => {
 describe('addDeletedBankTombstones', () => {
   it("records a deleted bank row's fingerprint, without category or other display fields", () => {
     const row = tx({ id: 'eb-aaaa1111-2026-10-27-0', account: 'aaaa1111:1', category: 'groceries', merchant: 'REMA' });
-    expect(addDeletedBankTombstones([], [row])).toEqual([
-      { id: 'eb-aaaa1111-2026-10-27-0', date: '2026-06-28', amount: 100, account: 'aaaa1111:1', description: 'REMA 1000', kind: 'expense' },
+    expect(addDeletedBankTombstones([], [row], new Date('2026-10-30T10:00:00Z'))).toEqual([
+      { id: 'eb-aaaa1111-2026-10-27-0', date: '2026-06-28', amount: 100, account: 'aaaa1111:1', description: 'REMA 1000', kind: 'expense', deletedAt: '2026-10-30T10:00:00.000Z' },
     ]);
   });
 
