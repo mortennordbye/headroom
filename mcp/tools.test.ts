@@ -930,6 +930,7 @@ describe('derive: a plan-linked loan paydown is saving, as in the app', () => {
     expect(recs.budgetPlan.recommendedSpending).toBe(50000 - 10000 - target);
     // The transfers alone: the paydown is a fixed expense, not a transfer.
     expect(derive.budgetSummary(blob, MONTH).monthlySavings).toBe(6000);
+    expect(derive.budgetSummary(blob, MONTH).planLoanPaydown).toBe(2000);
   });
 
   it('the forecast seeds its cash saving without the paydown it amortizes the loan with', () => {

@@ -105,6 +105,7 @@ const DashboardPage: React.FC = () => {
     assumptionsNudgeDismissed,
     dismissAssumptionsNudge,
     profile,
+    savingsAllocations,
   } = useFinance();
   // Month names must follow the UI language (BudgetPage does the same).
   const dateLocale = lang === 'nb' ? nb : enUS;
@@ -306,12 +307,12 @@ const DashboardPage: React.FC = () => {
 
   // ─── Insight 3: 15-year projection ───
   const projection15y = useMemo(() => {
-    const debtByYear = calcDebtBalanceByYear(withLinkedPayments(debts, fixedExpenses), 15, currentMonthKey());
+    const debtByYear = calcDebtBalanceByYear(withLinkedPayments(debts, fixedExpenses, savingsAllocations), 15, currentMonthKey());
     const mortgageByYear = calcMortgageBalanceByYear(mortgage.balance, mortgage.ratePct, mortgageTermYears, 15);
     const run = (rates: typeof projectionRates) => calcNetWorthProjectionByBucket(projectionStart, annualSavings, rates, 15, houseByYear, debtByYear, { mortgageByYear, region, ownShare });
     return withTotalBand(run(projectionRates), projectionRates, BAND_DELTA_PP, run);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, ownShare, mortgage.balance, mortgage.ratePct, mortgageTermYears, debts, fixedExpenses, region]);
+  }, [netInvestment, netCrypto, cashStart, houseEquity, annualSavings, growthReturnRate, cryptoGrowthRate, cashGrowthRate, houseGrowthRate, myValue, ownShare, mortgage.balance, mortgage.ratePct, mortgageTermYears, debts, fixedExpenses, savingsAllocations, region]);
 
   const projectionEndYear = projection15y[projection15y.length - 1]?.year;
   const projectionEndValue = projection15y[projection15y.length - 1]?.total ?? 0;

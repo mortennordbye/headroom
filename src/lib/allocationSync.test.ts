@@ -204,6 +204,14 @@ describe('the panel and the budget agree once a paydown row is active', () => {
       const transfers = savingsContributionTotal(live);
       const recs = calcRecommendations(50000, 50000, 12000 + transfers, 0, 20, transfers);
       expect(transfers + recs.recommendedInvestment).toBe(sizing.target);
+      // The panel's BSU row is what the live rest transfer moves, and the
+      // paydown row takes nothing from the target.
+      const row = (id: string) => sizing.plan.rows.find(r => r.id === id)!;
+      expect(row('r').amount).toBe(live.find(sv => sv.allocationId === 'r')!.amount);
+      expect(row('r').amount).toBe(7600);
+      expect(row('d')).toMatchObject({ amount: 0, excluded: flags ? 'revolving' : 'paused', mode: 'amount' });
+      // Syncing never zeroes the paydown's own transfer.
+      expect(allocationSyncPlan(sizing, made.savings, [...fixed])).toEqual([]);
     }
   });
 
@@ -219,7 +227,7 @@ describe('the panel and the budget agree once a paydown row is active', () => {
     expect(b.savingPill).toBe(sizing.target);
   });
 
-  it('projections do not count a debt paydown twice: cash plus the loan payment is the target', () => {
+  it('projections do not count a debt paydown twice: cash plus the extra payment is the target', () => {
     const debt: Debt = { id: 'card', name: 'Card', type: 'consumer', balance: 50000, rate: 12, minPayment: 500 };
     const allocs: SavingsAllocation[] = [
       { id: 'd', percent: 0, mode: 'amount', amount: 2000, destinationKind: 'debt', debtId: 'card' },
@@ -228,12 +236,13 @@ describe('the panel and the budget agree once a paydown row is active', () => {
     const made = activateAll(allocs, [rent], 50000, 20);
     const fixed = [rent, ...made.expenses];
     const b = budgetFromLive(50000, fixed, made.savings, allocs, 20);
-    // The projection amortizes the debt at the linked payment...
-    const [projected] = withLinkedPayments([debt], fixed);
-    expect(projected.minPayment).toBe(2000);
-    // ...so its cash leaves the paydown out, and the two add up to the target.
+    // The projection pays the plan's paydown on top of the instalment...
+    const [projected] = withLinkedPayments([debt], fixed, allocs);
+    expect(projected.minPayment).toBe(500 + 2000);
+    // ...so its cash leaves the paydown out, and cash plus the extra over the
+    // instalment adds up to the target.
     expect(b.cash).toBe(6000);
-    expect(b.cash + projected.minPayment).toBe(sizeAllocation(allocs, 50000, [rent], 20).target);
+    expect(b.cash + projected.minPayment - debt.minPayment).toBe(sizeAllocation(allocs, 50000, [rent], 20).target);
   });
 });
 

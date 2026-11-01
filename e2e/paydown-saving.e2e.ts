@@ -7,6 +7,7 @@ import { test, expect, putBlob, seedBlob } from './fixtures';
 
 const INCOME = 55_000;
 const PAYDOWN = 3_000;
+const TARGET_PCT = 20;
 
 /** "21 100,00 kr" / "-1 234 kr" with whatever spaces the locale formatter uses. */
 function kr(text: string): number {
@@ -19,6 +20,7 @@ function withPlanPaydown() {
   const now = new Date();
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   blob.monthlyIncomes = { ...(blob.monthlyIncomes as Record<string, number>), [month]: INCOME };
+  blob.savingsTargetPercent = TARGET_PCT;
   blob.savingsAllocations = [
     { id: 'm', percent: 0, mode: 'amount', amount: PAYDOWN, destinationKind: 'mortgage' },
     { id: 'r', percent: 0, mode: 'rest', destinationKind: 'bsu' },
@@ -27,8 +29,8 @@ function withPlanPaydown() {
     ...(blob.fixedExpenses as object[]),
     { id: 'pm', name: 'Ekstra nedbetaling', amount: PAYDOWN, type: 'fixed', destinationKind: 'mortgage', lastPostedMonth: month, allocationId: 'm' },
   ];
-  blob.savings = (blob.savings as { name: string }[]).map((s, i) =>
-    (i === 0 ? { ...s, mode: 'rest', allocationId: 'r' } : s));
+  // Only the plan's own rest transfer, so nothing hand-made overfills the target.
+  blob.savings = [{ ...(blob.savings as object[])[0], mode: 'rest', allocationId: 'r' }];
   return blob;
 }
 
@@ -47,7 +49,10 @@ async function statCard(page: Page, title: string): Promise<number> {
 }
 
 test('Budget and Dashboard splits add up to income with a plan paydown active', async ({ page, request }) => {
-  await putBlob(request, withPlanPaydown());
+  const blob = withPlanPaydown();
+  await putBlob(request, blob);
+  // Every listed fixed expense, the paydown row included.
+  const listTotal = (blob.fixedExpenses as { amount: number }[]).reduce((sum, e) => sum + e.amount, 0);
 
   await page.goto('/budget');
   const plan = '[data-tour="budget-plan"]';
@@ -62,7 +67,12 @@ test('Budget and Dashboard splits add up to income with a plan paydown active', 
   const statFixed = await statCard(page, 'Faste Utgifter');
   const statBudget = await statCard(page, 'Budsjett / Måned');
 
-  // The paydown is in the saving, not in the fixed costs.
+  // The paydown is in the saving, not in the fixed costs: the card is the list
+  // total less the paydown, a line under the list says so, and the saving is
+  // the target share of income less the other fixed costs.
+  expect(statFixed).toBe(listTotal - PAYDOWN);
+  await expect(page.getByText('Ekstra nedbetaling fra sparefordelingen, regnet som sparing', { exact: true })).toBeVisible();
+  expect(saving).toBe(Math.round((INCOME - (listTotal - PAYDOWN)) * TARGET_PCT / 100));
   expect(saving).toBe(pieSaving);
   expect(saving).toBeGreaterThanOrEqual(PAYDOWN);
   expect(pieFixed).toBe(statFixed);

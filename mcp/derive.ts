@@ -419,9 +419,13 @@ export function budgetSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
     essentialMonthlyExpenses: Math.round(essentialMonthlyExpenses(blob.fixedExpenses ?? [])),
     fixedByType: fixedExpenseTotalsByType(blob.fixedExpenses ?? []),
     savingsTargetPercent: v.target,
-    // This month's savings transfers, resolved to kroner. `monthAdjustment` is the
-    // one-month saving the user set for this month (null = follows the plan).
+    // This month's savings TRANSFERS only, resolved to kroner. `monthAdjustment`
+    // is the one-month amount the user set for those transfers (null = follows
+    // the plan). The allocation plan's own loan paydowns are saving too but are
+    // fixed expenses, reported apart as `planLoanPaydown` (inside
+    // `totalFixedExpenses`).
     monthlySavings: Math.round(v.contributions),
+    planLoanPaydown: Math.round(v.planPaydown),
     monthAdjustment: v.monthSaving ?? null,
     // `savingsRate.trailingRate` is a share of income: compare it with
     // `savingsRateTargetOfIncomePct`, not with `savingsTargetPercent`.
@@ -532,7 +536,7 @@ export function debtAnalysis(
   strategy: PayoffStrategy = 'avalanche',
   monthKey = osloMonthKey(),
 ) {
-  const debts = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []);
+  const debts = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? [], blob.savingsAllocations);
   const baseline = planPayoff(debts, 0, strategy, monthKey);
   const withExtra = planPayoff(debts, extraMonthly, strategy, monthKey);
   return {
@@ -668,7 +672,7 @@ export function whatIfExtraDebtPayment(
   debtId: string,
   extraMonthly: number,
 ) {
-  const debt = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []).find((d) => d.id === debtId);
+  const debt = withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? [], blob.savingsAllocations).find((d) => d.id === debtId);
   if (!debt) throw new Error(`no debt with id "${debtId}"`);
   // The linked expenses' payment (never under the minimum); the extra goes on top.
   const basePayment = debt.minPayment;
@@ -963,7 +967,7 @@ export function forecast(blob: ExportPayload, overrides: ForecastOverrides = {},
       houseGrowthPct: blob.houseGrowthRate ?? 3,
       startShares: eq.netInvestment,
       startOtherAssets: eq.netCrypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
-      debts: withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? []),
+      debts: withLinkedPayments(blob.debts ?? [], blob.fixedExpenses ?? [], blob.savingsAllocations),
       monthKey,
       startHolidaySurplus,
       feriepengesatsPct,

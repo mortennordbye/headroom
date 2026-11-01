@@ -40,6 +40,10 @@ const isPaydown = (a: Pick<SavingsAllocation, 'destinationKind'>) =>
  * percent (not a one-month override): the result is written to live transfers.
  * `debts` lets a paydown onto a revolving debt read as spending, as the budget
  * reads it (`planPaydownRow`).
+ *
+ * A paydown row the budget doesn't count as saving (its expense paused, or its
+ * debt revolving) takes 0 kr of the target and is marked `excluded`, so a rest
+ * row is the same amount here as the live transfer it resolves to.
  */
 export function sizeAllocation(
   allocations: SavingsAllocation[],
@@ -51,15 +55,33 @@ export function sizeAllocation(
 ): AllocationSizing {
   const byId = new Map(allocations.map(a => [a.id, a]));
   const linked = new Set<string>();
+  const paused = new Set<string>();
   const others: FixedExpense[] = [];
   for (const e of fixedExpenses) {
     const row = planPaydownRow(e, byId, debts);
     if (row) linked.add(row.id);
-    else others.push(e);
+    else {
+      others.push(e);
+      const governed = governingRow(e, byId);
+      if (governed) paused.add(governed.id);
+    }
   }
+  const excludedAs = (a: SavingsAllocation): AllocationRow['excluded'] => {
+    if (a.destinationKind === 'debt' && debts?.some(d => d.id === a.debtId && d.revolving)) return 'revolving';
+    return paused.has(a.id) && !linked.has(a.id) ? 'paused' : undefined;
+  };
   const base = savingsBase(income, others);
   const target = savingsTargetAmount(base, savingsTargetPercent);
-  const plan = resolveAllocation(allocations, target);
+  const excluded = allocations.map(excludedAs);
+  const resolved = resolveAllocation(
+    allocations.map((a, i) => (excluded[i] ? { ...a, mode: 'amount' as const, amount: 0 } : a)),
+    target,
+  );
+  // Back to each row's own mode and settings, keeping the 0 kr it was sized at.
+  const plan = {
+    ...resolved,
+    rows: resolved.rows.map((r, i) => (excluded[i] ? { ...allocations[i], amount: 0, excluded: excluded[i] } : r)),
+  };
   const paid = plan.rows.reduce(
     (s, r) => (isPaydown(r) && (linked.has(r.id) || creating.has(r.id)) ? s + r.amount : s), 0,
   );
@@ -148,7 +170,8 @@ export function allocationSyncPlan(
   // An over-allocated plan resolves its '%' rows to 0; syncing to that would
   // zero live transfers.
   if (sizing.plan.overAllocated) return [];
-  const byId = new Map(sizing.plan.rows.map(r => [r.id, r]));
+  // A row not counted as saving is sized at 0 kr; it must not zero its transfer.
+  const byId = new Map(sizing.plan.rows.filter(r => !r.excluded).map(r => [r.id, r]));
   const out: AllocationSyncChange[] = [];
   for (const e of expenses) {
     const row = governingRow(e, byId);

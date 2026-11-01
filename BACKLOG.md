@@ -26,8 +26,13 @@ in git and the CHANGELOG, not here.
   and is kept out of the cash a projection saves, because the projection is meant to amortize the
   loan with it. Debts do (`withLinkedPayments`), but the mortgage is still projected at its
   scheduled annuity from today's balance, so the extra principal shows up only as the real
-  balance falls month by month. Predates the paydown-as-saving change, which made it a little
-  more visible (that cash share is now part of the paydown). **Unblock**: let the mortgage
+  balance falls month by month. Predates the paydown-as-saving change, which made it more
+  visible: a mortgage-paydown user's projected net worth now grows (1 - target%) x paydown a month
+  less, since that share of the target moved from cash into the unprojected paydown. **Why
+  deferred**: the mortgage projection is a closed-form annuity shared by the Dashboard, Assets,
+  Forecast and MCP forecast (and by the rentefradrag in the forecast's tax), so taking extra
+  principal means a month-by-month schedule there and its own tests, a change of its own rather
+  than part of where the budget counts the paydown. **Unblock**: let the mortgage
   projection take the linked paydown expenses as extra monthly principal, the way
   `withLinkedPayments` does for debts. **Where**: `calcHouseEquityByYear` /
   `calcMortgageBalanceByYear` in `src/lib/calculations.ts`, `forecastMortgage` in

@@ -34,6 +34,10 @@ export interface SavingsAllocation {
 export interface AllocationRow extends SavingsAllocation {
   /** The allocation's share of the target, in kr (whole kroner). */
   amount: number;
+  /** A loan paydown row that is not counted as saving: its expense is paused,
+   *  or its debt is revolving (`planPaydownRow`). It takes nothing from the
+   *  target (`amount` 0), so the other rows split it as the budget does. */
+  excluded?: 'paused' | 'revolving';
 }
 
 /**
