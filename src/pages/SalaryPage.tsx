@@ -1247,15 +1247,14 @@ const SalaryPage: React.FC = () => {
         // snapshots feed hoursAt, so each goes to the job active at its month
         // instead (left unassigned if none was) and hourly figures don't move.
         // Undo clears jobId on exactly the rows that were moved.
+        const bonusIds = bonuses.filter(b => !b.jobId).map(b => b.id);
+        const overtimeIds = overtime.filter(o => !o.jobId).map(o => o.id);
+        const hoursMoves = hoursSnapshots
+          .filter(h => !h.jobId)
+          .map(h => ({ id: h.id, jobId: jobIdForHoursSnapshot(h, sortedSalaries) }))
+          .filter((m): m is { id: string; jobId: string } => m.jobId != null);
+        const count = bonusIds.length + overtimeIds.length + hoursMoves.length;
         const assignUnassigned = (job: JobEntry) => {
-          const bonusIds = bonuses.filter(b => !b.jobId).map(b => b.id);
-          const overtimeIds = overtime.filter(o => !o.jobId).map(o => o.id);
-          const hoursMoves = hoursSnapshots
-            .filter(h => !h.jobId)
-            .map(h => ({ id: h.id, jobId: jobIdForHoursSnapshot(h, sortedSalaries) }))
-            .filter((m): m is { id: string; jobId: string } => m.jobId != null);
-          const count = bonusIds.length + overtimeIds.length + hoursMoves.length;
-          if (count === 0) return;
           bonusIds.forEach(id => updateBonus(id, { jobId: job.id }));
           overtimeIds.forEach(id => updateOvertime(id, { jobId: job.id }));
           hoursMoves.forEach(m => updateHoursSnapshot(m.id, { jobId: m.jobId }));
@@ -1389,12 +1388,12 @@ const SalaryPage: React.FC = () => {
               <div className="rounded-[8px] border p-4" style={{ borderColor: 'var(--border)' }}>
                 <div className="flex items-center justify-between gap-2 pb-3 border-b flex-wrap" style={{ borderColor: 'var(--border)' }}>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{t.salary.unassigned}</span>
-                  {laneJobs.length === 1 && (
+                  {count > 0 && laneJobs.length === 1 && (
                     <button onClick={() => assignUnassigned(laneJobs[0])} className={assignBtn}>
                       {t.salary.assignAllTo.replace('{job}', laneJobs[0].employer)}
                     </button>
                   )}
-                  {laneJobs.length > 1 && (() => {
+                  {count > 0 && laneJobs.length > 1 && (() => {
                     const target = laneJobs.find(j => j.id === assignJobId) ?? laneJobs[0];
                     return (
                       <div className="flex items-center gap-2">
