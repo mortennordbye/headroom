@@ -270,8 +270,8 @@ export function totalNonMortgageDebt(blob: ExportPayload): number {
 }
 
 /** Net worth. Mirrors FinanceContext.tsx:1831-1835. `monthKey` picks the
- *  co-owners in force (default: today). */
-export function netWorth(blob: ExportPayload, monthKey?: string): number {
+ *  co-owners in force (default: this month in Oslo). */
+export function netWorth(blob: ExportPayload, monthKey = osloMonthKey()): number {
   const { totalEquity } = computeEquityBreakdown(blob.assets, monthKey);
   return totalEquity - totalNonMortgageDebt(blob);
 }
@@ -331,7 +331,7 @@ export function overview(blob: ExportPayload, monthKey = osloMonthKey()) {
       name: g.name,
       target: g.target,
       deadline: g.deadline ?? null,
-      progressPct: g.target > 0 ? Math.round((goalCurrentValue(g, blob.assets) / g.target) * 100) : 0,
+      progressPct: g.target > 0 ? Math.round((goalCurrentValue(g, blob.assets, monthKey) / g.target) * 100) : 0,
     })),
     netWorth: Math.round(netWorth(blob, monthKey)),
     grossAnnualIncome: Math.round(gross),
@@ -522,7 +522,7 @@ export function debtAnalysis(
   };
 }
 
-function goalCurrentValue(goal: Goal, assets: Assets): number {
+function goalCurrentValue(goal: Goal, assets: Assets, monthKey: string): number {
   switch (goal.source) {
     case 'manual':
       return goal.manualCurrent ?? 0;
@@ -537,7 +537,7 @@ function goalCurrentValue(goal: Goal, assets: Assets): number {
     case 'savingsAccount':
       return (assets.savingsAccounts ?? []).find((a) => a.id === goal.savingsAccountId)?.balance ?? 0;
     case 'totalEquity':
-      return computeEquityBreakdown(assets).totalEquity;
+      return computeEquityBreakdown(assets, monthKey).totalEquity;
     default:
       return 0;
   }
@@ -558,7 +558,7 @@ export function savingsAndGoals(blob: ExportPayload, monthKey = osloMonthKey()) 
   }));
 
   const goals = (blob.goals ?? []).map((g) => {
-    const current = goalCurrentValue(g, blob.assets);
+    const current = goalCurrentValue(g, blob.assets, monthKey);
     const remaining = Math.max(0, g.target - current);
     const deadlineMonths =
       g.deadline && g.deadline >= monthKey ? monthIndex(g.deadline) - monthIndex(monthKey) : null;
@@ -1033,7 +1033,7 @@ export function mortgage(blob: ExportPayload, monthKey = osloMonthKey()) {
  * portfolio / comparison.
  */
 export function housing(blob: ExportPayload, monthKey = osloMonthKey()) {
-  const eq = computeEquityBreakdown(blob.assets);
+  const eq = computeEquityBreakdown(blob.assets, monthKey);
   const o = blob.capacityOverrides;
   const capacityDebt = lendingDebtTotal(blob.debts ?? []);
   const liquidEquity = Math.round(blob.assets.bsu + sumSavings(blob.assets) + blob.assets.bufferAccount + eq.netInvestment);
@@ -1100,14 +1100,14 @@ export function employerCost(blob: ExportPayload, monthKey = osloMonthKey()) {
 }
 
 /** Every balance with its id, for the write tools, plus recent snapshots and wealth tax. */
-export function assetsAndDebts(blob: ExportPayload) {
-  const eq = computeEquityBreakdown(blob.assets);
+export function assetsAndDebts(blob: ExportPayload, monthKey = osloMonthKey()) {
+  const eq = computeEquityBreakdown(blob.assets, monthKey);
   const snapshots = Object.keys(blob.balanceSnapshots ?? {}).sort().slice(-12);
   const nonMortgageDebt = totalNonMortgageDebt(blob);
   return {
     assets: blob.assets,
     equityBreakdown: eq,
-    netWorth: Math.round(netWorth(blob)),
+    netWorth: Math.round(netWorth(blob, monthKey)),
     debts: blob.debts ?? [],
     mortgage: { housingMode: blob.housingMode ?? 'first_buyer', homeowner: blob.homeowner ?? null, loan: blob.loan ?? null },
     savingsTransfers: blob.savings ?? [],
@@ -1115,10 +1115,10 @@ export function assetsAndDebts(blob: ExportPayload) {
     // Formuesskatt estimate as AssetPage shows it (Norway only).
     wealthTax: (blob.region ?? 'no') === 'no'
       ? calcWealthTax({
-          primaryHomeValue: myPrimaryHomeWealthValue(blob.assets),
+          primaryHomeValue: myPrimaryHomeWealthValue(blob.assets, monthKey),
           shares: blob.assets.portfolio,
           otherAssets: blob.assets.crypto + sumSavings(blob.assets) + blob.assets.bsu + blob.assets.bufferAccount,
-          debt: myHouseDebt(blob.assets) + nonMortgageDebt,
+          debt: myHouseDebt(blob.assets, monthKey) + nonMortgageDebt,
         })
       : null,
     recentSnapshots: snapshots.map((m) => ({ month: m, netWorth: netWorthFromSnapshot(blob.balanceSnapshots![m]) })),

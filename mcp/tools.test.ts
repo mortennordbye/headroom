@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ExportPayload } from '../src/context/FinanceContext';
 import { DEFAULT_EMPLOYER_COST_CONFIG } from '../src/lib/employerCost';
 import * as derive from './derive';
@@ -739,5 +739,31 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     const interest = calcAmortizationSchedule(2500000, 5.5, 25)[0].interestPaid;
     expect(s.tax!.totalTax).toBeCloseTo((720000 - 15000 - interest) * 0.3, 0);
     expect(s.marginalTaxRatePct).toBe(30);
+  });
+});
+
+describe('derive: "now" is the Oslo month, whatever the host zone', () => {
+  const prevTz = process.env.TZ;
+  beforeEach(() => {
+    process.env.TZ = 'UTC';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-31T23:30:00Z')); // still October in UTC, 1 Nov in Oslo
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    if (prevTz === undefined) delete process.env.TZ;
+    else process.env.TZ = prevTz;
+  });
+
+  it('drops a co-owner whose `until` is the UTC month but no longer the Oslo month', () => {
+    const b = fullFixture();
+    const solo = derive.assetsAndDebts(b, '2026-11');
+    b.assets.coOwners = [{ id: 'c', name: 'Samboer', ownershipPct: 50, since: '2020-01', until: '2026-10' }];
+    expect(new Date().getMonth()).toBe(9); // the host clock reads October
+    expect(derive.assetsAndDebts(b, '2026-10').equityBreakdown.houseEquity).not.toBe(solo.equityBreakdown.houseEquity);
+    const a = derive.assetsAndDebts(b);
+    expect(a.equityBreakdown.houseEquity).toBe(solo.equityBreakdown.houseEquity);
+    expect(a.netWorth).toBe(solo.netWorth);
+    expect(derive.overview(b).netWorth).toBe(solo.netWorth);
   });
 });
