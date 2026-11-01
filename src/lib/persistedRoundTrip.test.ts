@@ -303,7 +303,7 @@ describe('pension auto-post stamp on load and import', () => {
     jobs: [{ id: 'j', startDate: '2025-01', endDate: null, employer: 'Employer', role: 'Role', contractedHoursPerWeek: 37.5 }],
     bonuses: [{ id: 'b', date: '2026-03-01', amount: 100_000, type: 'annual' }],
   };
-  const unstamped = { otpAutoPost: true, ipsAutoPost: true, otpEmployerPct: 5, otpEmployeePct: 0 };
+  const unstamped = { otpAutoPost: true, ipsAutoPost: true, otpEmployerPct: 5, otpEmployeePct: 0, otpIncludesBonuses: true };
 
   it('load stamps both and records the bonus baseline', () => {
     const p = slice(loadAndSave(fullBlob({ ...pay, pension: unstamped })), 'pension');

@@ -390,6 +390,26 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(p.otpProjectionBase).toBe(720000);
   });
 
+  it('pension: overtime joins the OTP base when counted, only from the linked job, and an unknown link reads as unset', () => {
+    const b = fullFixture();
+    b.pension = { otpBalance: 100000, otpIncludesOvertime: true, otpJobId: 'j1' } as ExportPayload['pension'];
+    const p = derive.pensionSummary(b, MONTH);
+    if (!p.configured) throw new Error('expected a configured pension');
+    expect(p.otpIncludesOvertime).toBe(true);
+    expect(p.otpJobId).toBe('j1');
+    expect(p.otpBase).toBe(725000);                 // 720000 + ot1 (5000, on j1)
+    expect(p.otpAnnualContribution).toBe(36250);
+    b.overtime = [...(b.overtime ?? []), { id: 'ot2', date: '2026-05-01', hours: 4, amount: 2000, jobId: 'j2' }];
+    const linked = derive.pensionSummary(b, MONTH);
+    if (!linked.configured) throw new Error('expected a configured pension');
+    expect(linked.otpBase).toBe(725000);            // j2's overtime is left out
+    b.pension = { otpBalance: 100000, otpIncludesOvertime: true, otpJobId: 'gone' } as ExportPayload['pension'];
+    const unknown = derive.pensionSummary(b, MONTH);
+    if (!unknown.configured) throw new Error('expected a configured pension');
+    expect(unknown.otpJobId).toBeNull();
+    expect(unknown.otpBase).toBe(727000);           // every job's overtime
+  });
+
   it('pension: headline income is in today\'s kroner and equals the inTodaysKroner block', () => {
     const real = derive.pensionSummary(blob, MONTH, 3);
     const flat = derive.pensionSummary(blob, MONTH, 0);

@@ -99,6 +99,17 @@ describe('sanitizePayload', () => {
     expect(bonuses[1].amount).toBe(0);
   });
 
+  it('coerces overtime amounts and drops a non-string OTP job link', () => {
+    const out = sanitizePayload(
+      { overtime: [{ id: 'o1', date: '2026-03-15', hours: 5, amount: '4 000' }], pension: { otpBalance: 1, otpJobId: 7 } },
+      SCHEMAS,
+    );
+    expect((out.overtime as Record<string, unknown>[])[0].amount).toBe(4000);
+    expect('otpJobId' in (out.pension as Record<string, unknown>)).toBe(false);
+    const kept = sanitizePayload({ pension: { otpJobId: 'j1' } }, SCHEMAS);
+    expect((kept.pension as Record<string, unknown>).otpJobId).toBe('j1');
+  });
+
   it('coerces debts numeric fields and leaves non-numeric item fields alone', () => {
     const out = sanitizePayload(
       { debts: [{ id: 'd1', name: 'Card', type: 'credit_card', balance: '12 000', rate: '21,9', minPayment: 500 }] },

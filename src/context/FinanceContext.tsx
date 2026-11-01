@@ -46,7 +46,8 @@ import {
   computeAutomationPostings, recordDepartedPaydowns, pruneDepartedPaydowns, departedPaydownRules, type PaydownStamp,
   automationMortgage, monthlyPaydownPrincipal, type AutomationRule, type AutomationState, type AutomationTargetKind, type ResolvedPosting,
 } from '../lib/automation';
-import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, stampLoadedPension, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
+import { pensionAccrualRules, isPensionRuleId, addOtpBonusPosted, stampLoadedPension, pensionAfterJobRemoved, rebaseImportedJobLink, PENSION_OTP_RULE_ID, PENSION_IPS_RULE_ID } from '../lib/pensionAccrual';
+import { otpSchemeFor } from '../lib/pension';
 import { bufferBuilderIdsToRemove } from '../lib/bufferBuilder';
 import { accountGroupLabel, accountGroupKey } from '../lib/account';
 import { sumDebtByType, lendingDebtTotal } from '../lib/debt';
@@ -400,6 +401,13 @@ export interface Pension {
   /** The scheme counts bonuses paid in the year in the OTP base. Off by default:
    *  many schemes use fixed salary only (innskuddspensjonsloven § 5-5 annet ledd a). */
   otpIncludesBonuses: boolean;
+  /** The scheme counts overtime paid in the year in the OTP base. The law counts it
+   *  (§ 5-5 første ledd) unless the plan leaves it out, but this is off by default
+   *  so turning it on is the user's call and no saved figure changes on its own. */
+  otpIncludesOvertime: boolean;
+  /** The job whose employer runs the scheme: only its bonuses and overtime count.
+   *  Unset = every job's. */
+  otpJobId?: string;
   ipsBalance: number;                 // IPS (voluntary) current balance in kr
   ipsAnnualContribution: number;       // kr/year (NAV cap 15 000 in 2025)
   ipsGrowthRate: number;               // annual return % (default 7%)
@@ -724,6 +732,7 @@ export const DEFAULT_PENSION: Pension = {
   otpEmployeePct: 0,
   otpGrowthRate: 5,
   otpIncludesBonuses: false,
+  otpIncludesOvertime: false,
   ipsBalance: 0,
   ipsAnnualContribution: 0,
   ipsGrowthRate: 7,
@@ -1548,7 +1557,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     resetMissing: boolean,
     // Import only: the state the payload overlays, for the mortgage reconcile.
     // Also the pay and bonuses an import keeps, for the pension auto-post stamp.
-    current?: Pick<ExportPayload, 'housingMode' | 'assets' | 'homeowner' | 'transition' | 'pension' | 'salaries' | 'jobs' | 'bonuses'>,
+    current?: Pick<ExportPayload, 'housingMode' | 'assets' | 'homeowner' | 'transition' | 'pension' | 'salaries' | 'jobs' | 'bonuses' | 'overtime'>,
   ) => {
     if (raw == null) return; // first-run (null DB) / no snapshot → keep current state
     const sanitized = sanitizePayload(raw, {
@@ -1610,6 +1619,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (resetMissing && data.homeowner) data.homeowner = stampLegacyTerm(data.homeowner, currentMonthKey());
     // Pension auto-post switched on before switching on stamped the month starts
     // from now; nothing back-posts.
+    // An import that drops the job the OTP scheme links to clears the link from
+    // the next unposted month on, as removing the job does.
+    if (!resetMissing && current) data = rebaseImportedJobLink(data, current, currentMonthKey());
     data = stampLoadedPension(data, resetMissing ? undefined : current, DEFAULT_PENSION, currentMonthKey());
     applyPersistedFields(PAYLOAD_REGISTRY, setters, data, resetMissing);
   }, []);
@@ -2681,7 +2693,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     jobsCrud.remove(id);
     // Cascade: remove orphaned salaries
     setSalaries(prev => prev.filter(s => s.jobId !== id));
-  }, [jobsCrud]);
+    // The OTP scheme linked to this job falls back to every job's pay, from the
+    // next unposted month on.
+    setPension(prev => pensionAfterJobRemoved(prev, id, salaries, jobs, bonuses, overtime, currentMonthKey()));
+  }, [jobsCrud, salaries, jobs, bonuses, overtime]);
 
   const addSalary = salariesCrud.add;
   const updateSalary = salariesCrud.update;
@@ -2800,12 +2815,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         ipsLastPostedMonth: pension.ipsLastPostedMonth,
         pensionableIncome: calcActiveGrossAnnual(salaries, jobs, nowKey),
         otpIncludesBonuses: pension.otpIncludesBonuses,
+        otpIncludesOvertime: pension.otpIncludesOvertime,
+        otpJobId: otpSchemeFor(pension, jobs).otpJobId,
         otpBonusPostedByYear: pension.otpBonusPostedByYear,
         bonuses,
+        overtime,
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, savingsAllocations, debts, pension, salaries, jobs, bonuses, t, assets.departedPaydowns]);
+  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, savingsAllocations, debts, pension, salaries, jobs, bonuses, overtime, t, assets.departedPaydowns]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
