@@ -135,8 +135,6 @@ in git and the CHANGELOG, not here.
 - **Residence history isn't linked to the current home**, and Kjøpe & selge doesn't write the move
   into history. **Where**: `src/context/FinanceContext.tsx`, `src/lib/property.ts`,
   `src/pages/BoligPage.tsx`.
-- **Loan-page overrides don't persist across reloads** (page-local, like Employer cost).
-  **Where**: `src/pages/BoligPage.tsx`.
 - **Sekundærbolig tax model is simplified** (no Airbnb regime, no owner-occupied rental rule, no
   household formuesskatt, no loss benefit, no botid exemption). **Where**: `src/lib/secondHome.ts`.
 - **Market data, phases 2 and 3.** Listing search/compare tools, more filters, watch status, price
