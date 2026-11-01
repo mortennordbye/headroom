@@ -10,11 +10,11 @@ import {
 } from 'date-fns';
 import { calcRecommendations, planMonthlySavingFor } from '../lib/calculations';
 import { savingsContributionTotal, savingsBase, resolveSavingsAmounts, resolveSavingsForMonth, savingsForMonth } from '../lib/savingsRate';
+import { planPaydownTotal, type SavingsAllocation } from '../lib/savingsAllocation';
 import type { ConservativeReason } from '../lib/calculations';
 import { computeEquityBreakdown } from '../lib/equity';
 import { rewriteSnapshotCoOwners, snapshotCoOwners } from '../lib/ownership';
 import { markGainReview } from '../lib/gainReview';
-import type { SavingsAllocation } from '../lib/savingsAllocation';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { cardNetForMonth, type TaxCard } from '../lib/forskuddstrekk';
 import { feriepengerSurplus } from '../lib/feriepenger';
@@ -269,14 +269,6 @@ export interface DailyTransaction {
   account?: string;
   accountName?: string;
   bank?: string;
-  /**
-   * Account numbers from bank sync (an IBAN, a BBAN, or another identifier the
-   * bank uses): this row's own account, and the other party's. Used to spot moves between the user's own
-   * accounts (src/lib/transfers.ts). Absent on manual rows, legacy rows, and
-   * when the bank doesn't share them.
-   */
-  accountNumber?: string;
-  counterpartyAccountNumber?: string;
   /**
    * How `category` was set. 'auto' = the rule engine; 'manual' = a user edit.
    * Manual labels are never overwritten by re-sync or re-categorization.
@@ -1075,11 +1067,13 @@ interface FinanceDerivedContextType {
    *  automated. For "how much is saved each month", use `plannedMonthlySaving`. */
   recommendedInvestment: number;
   /** Automated contributions + the unallocated remainder: the selected month's
-   *  whole saving, including a one-month adjustment. */
+   *  CASH saving, including a one-month adjustment. Add `planPaydown` for the
+   *  whole saving a saving/spending split shows. */
   plannedMonthlySaving: number;
   /** The same figure from the plan alone, ignoring a one-month adjustment: what
    *  any projection should annualise, so one skipped month doesn't flatten the
-   *  future. Equals `plannedMonthlySaving` when the month isn't adjusted. */
+   *  future. Equals `plannedMonthlySaving` when the month isn't adjusted. Cash
+   *  only: a projection amortizes the loans with `planPaydown` instead. */
   planMonthlySaving: number;
   /** `planMonthlySaving` for the real current month, whatever month is being
    *  viewed. For views that project from today (Assets). */
@@ -1087,6 +1081,10 @@ interface FinanceDerivedContextType {
   /** The plan's transfers for the selected month, ignoring a one-month
    *  adjustment. Equals `savingsContributions` when the month isn't adjusted. */
   planSavingsContributions: number;
+  /** The selected month's loan paydowns the savings allocation set up
+   *  (`planPaydownTotal`). Saving, not spending: they fill part of the savings
+   *  target. Not in `plannedMonthlySaving`, which is cash. */
+  planPaydown: number;
   /** The selected month's savings target as a percent of the savings base:
    *  `savingsTargetPercent`, or the month's adjustment restated as a percent. */
   monthSavingsTargetPercent: number;
@@ -2146,6 +2144,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     () => savingsBase(effectiveIncome, viewFixedExpenses),
     [effectiveIncome, viewFixedExpenses],
   );
+  // The plan's own loan paydowns: saving, so they count toward the target and
+  // stay out of the consumption it is a share of (see planPaydownTotal).
+  const planPaydown = useMemo(
+    () => planPaydownTotal(savingsAllocations, viewFixedExpenses),
+    [savingsAllocations, viewFixedExpenses],
+  );
 
   // Percentage- and rest-based savings are resolved to kroner here, so every
   // total, chart and the automation runner below read one derived amount rather
@@ -2153,8 +2157,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // actually applied in that month, and re-deriving it against today's income
   // would rewrite history.
   const liveSavings = useMemo(
-    () => resolveSavingsAmounts(savings, savingsPool, savingsTargetPercent),
-    [savings, savingsPool, savingsTargetPercent],
+    () => resolveSavingsAmounts(savings, savingsPool, savingsTargetPercent, planPaydown),
+    [savings, savingsPool, savingsTargetPercent, planPaydown],
   );
   // Memoized because the snapshot branch's `?? []` fallback is a fresh array on
   // every render, which would invalidate every memo keyed on this.
@@ -2170,10 +2174,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const monthSaving = savingsMonthOverrides[monthKey];
   const viewSavings = useMemo(
     () => savingsForMonth(
-      { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses },
+      { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations },
       monthKey, currentMonthKey(), effectiveIncome,
     ),
-    [savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, monthKey, effectiveIncome],
+    [savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, monthKey, effectiveIncome],
   );
 
   // What moves into savings rather than being spent. Budgeting treats it like a
@@ -2217,23 +2221,28 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [incomeSeries]);
 
   // An adjusted month's kroner restated as the percent calcRecommendations takes,
-  // against the same pool (income − consumption) it divides by.
+  // against the same pool (income − consumption) it divides by. The plan's
+  // paydowns are saving, so they are in that pool and on top of the adjustment.
+  const targetPool = savingsPool + planPaydown;
   const monthSavingsTargetPercent = monthSaving === undefined
     ? savingsTargetPercent
-    : savingsPool > 0 ? Math.min(100, (monthSaving / savingsPool) * 100) : 0;
+    : targetPool > 0 ? Math.min(100, ((monthSaving + planPaydown) / targetPool) * 100) : 0;
 
   const { recommendedSpending, recommendedInvestment, suggestedInvestment, conservativeMode, conservativeReason } = useMemo(() =>
     // savingsContributions is passed so the target is a share of CONSUMPTION,
     // not of everything: automating a transfer must not shrink the base the next
-    // target is computed from. See calcRecommendations.
-    calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, monthSavingsTargetPercent, savingsContributions),
-  [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, monthSavingsTargetPercent, savingsContributions]);
+    // target is computed from. See calcRecommendations. The plan's paydowns are
+    // saving too, so they count as set aside.
+    calcRecommendations(effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, monthSavingsTargetPercent,
+      savingsContributions + planPaydown),
+  [effectiveIncome, averageIncome, totalFixedExpenses, incomeVolatility, monthSavingsTargetPercent, savingsContributions, planPaydown]);
 
   // The whole month's saving: what already moves automatically PLUS whatever is
   // still unallocated. `recommendedInvestment` alone is only the remainder, so
   // long-range projections that used it went to zero for the most disciplined
   // case — a fully automated target — and understated net worth by the entire
-  // contribution. Anything asking "how much do they save a month?" wants this.
+  // contribution. Anything asking "how much do they save a month?" wants this,
+  // plus `planPaydown` (cash only here: projections amortize the loans with it).
   const plannedMonthlySaving = savingsContributions + Math.max(0, recommendedInvestment);
 
   const planSavingsContributions = useMemo(() => savingsContributionTotal(planViewSavings), [planViewSavings]);
@@ -2242,10 +2251,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const planContributions = planSavingsContributions;
     const consumption = totalFixedExpenses - savingsContributions;
     const plan = calcRecommendations(effectiveIncome, averageIncome, consumption + planContributions,
-      incomeVolatility, savingsTargetPercent, planContributions);
+      incomeVolatility, savingsTargetPercent, planContributions + planPaydown);
     return planContributions + Math.max(0, plan.recommendedInvestment);
   }, [monthSaving, plannedMonthlySaving, planSavingsContributions, totalFixedExpenses, savingsContributions,
-      effectiveIncome, averageIncome, incomeVolatility, savingsTargetPercent]);
+      effectiveIncome, averageIncome, incomeVolatility, savingsTargetPercent, planPaydown]);
 
   // The same plan for the real current month, so a view that projects from today
   // (Assets) doesn't follow the month being browsed elsewhere. The current month
@@ -2254,11 +2263,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const nowKey = currentMonthKey();
     const income = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
     const consumption = fixedExpenses.reduce((sum, item) => sum + item.amount, 0);
+    const paydown = planPaydownTotal(savingsAllocations, fixedExpenses);
     const planContributions = savingsContributionTotal(
-      resolveSavingsAmounts(savings, savingsBase(income, fixedExpenses), savingsTargetPercent),
+      resolveSavingsAmounts(savings, savingsBase(income, fixedExpenses), savingsTargetPercent, paydown),
     );
-    return planMonthlySavingFor(income, consumption, planContributions, savingsTargetPercent);
-  }, [monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savings, savingsTargetPercent]);
+    return planMonthlySavingFor(income, consumption, planContributions, savingsTargetPercent, paydown);
+  }, [monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savings, savingsTargetPercent, savingsAllocations]);
 
   const setMonthlyIncomeForMonth = useCallback((key: string, amount: number) => {
     setMonthlyIncomes(prev => ({ ...prev, [key]: amount }));
@@ -2720,10 +2730,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // the month being viewed: browsing last March must not decide what moves
     // today. `liveSavings` is keyed on the viewed month, so it is deliberately
     // not reused here.
+    const livePaydown = planPaydownTotal(savingsAllocations, fixedExpenses);
     const postingSavings = resolveSavingsAmounts(
       savings,
       savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
       savingsTargetPercent,
+      livePaydown,
     );
     // Adjusted months move their own amount, resolved against that month's income.
     const adjusted = Object.entries(savingsMonthOverrides).map(([m, kr]) => [m, resolveSavingsForMonth(
@@ -2785,7 +2797,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, pension, salaries, jobs, bonuses, t, assets.departedPaydowns]);
+  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, savingsAllocations, pension, salaries, jobs, bonuses, t, assets.departedPaydowns]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
@@ -2993,6 +3005,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
       savingsTargetPercent,
       next,
+      planPaydownTotal(savingsAllocations, fixedExpenses),
     );
     const corrections: AutomationRule[] = [];
     const nowMoved: Record<string, number> = {};
@@ -3011,7 +3024,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (Object.keys(nowMoved).length) {
       setSavings(prev => prev.map(sv => (sv.id in nowMoved ? { ...sv, postedAmount: nowMoved[sv.id] } : sv)));
     }
-  }, [savingsMonthOverrides, savings, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savingsTargetPercent, automationState, applyPostingBalances]);
+  }, [savingsMonthOverrides, savings, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savingsTargetPercent, savingsAllocations, automationState, applyPostingBalances]);
 
   // One write for both figures and the marker, so answering the prompt can't
   // land as three separate saves (or leave the marker set if one of them fails).
@@ -3467,7 +3480,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
-    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, currentPlanMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
+    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, currentPlanMonthlySaving, planSavingsContributions, planPaydown, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, currentMortgage: currentMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, paydownPrincipal, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,
@@ -3477,7 +3490,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     derivedMonthlyIncome, grossAnnualIncome, isMonthlyIncomeOverridden,
     prevMonthIncome, prevMonthSpending, currentMonthSpending, effectiveIncome, averageIncome, incomeSeries,
     derivedNetMonthlyFor,
-    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, currentPlanMonthlySaving, planSavingsContributions, monthSavingsTargetPercent,
+    recommendedSpending, recommendedInvestment, plannedMonthlySaving, planMonthlySaving, currentPlanMonthlySaving, planSavingsContributions, planPaydown, monthSavingsTargetPercent,
     suggestedInvestment, conservativeMode, conservativeReason,
     totalDebt, capacityDebt, netWorth, studentDebt, currentMortgageNow, annualMortgageInterest, bsuTaxCredit, holidaySurplusFor,
     totalResidual, totalFixedExpenses, savingsContributions, paydownPrincipal, viewSavings, viewFixedExpenses, fixedExpensesFromSnapshot,

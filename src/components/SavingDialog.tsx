@@ -37,7 +37,7 @@ const parseTarget = (v: string): Pick<Saving, 'destinationKind' | 'savingsAccoun
 
 export default function SavingDialog({ saving, onSave, onClose }: Props) {
   const {
-    t, assets, formatCurrency, savings, viewFixedExpenses, effectiveIncome, savingsTargetPercent,
+    t, assets, formatCurrency, savings, viewFixedExpenses, effectiveIncome, savingsTargetPercent, planPaydown,
   } = useFinance();
   const accounts = assets.savingsAccounts ?? [];
   const targetOptions = [
@@ -91,9 +91,9 @@ export default function SavingDialog({ saving, onSave, onClose }: Props) {
     // A blank or garbage share moves nothing — say 0 rather than falling back on
     // the kroner stored underneath, which is only what it last resolved to.
     if (mode === 'percent' && !(typedPercent > 0)) return 0;
-    return resolveSavingsAmounts(draftRows, base, savingsTargetPercent)
+    return resolveSavingsAmounts(draftRows, base, savingsTargetPercent, planPaydown)
       .find(s => s.id === draftId)?.amount ?? 0;
-  }, [mode, typedAmount, typedPercent, draftRows, draftId, base, savingsTargetPercent]);
+  }, [mode, typedAmount, typedPercent, draftRows, draftId, base, savingsTargetPercent, planPaydown]);
 
   // Carry the current figure across when the unit changes: leaving kr for % takes
   // the share that keeps the same kroner moving, and coming back pins whatever

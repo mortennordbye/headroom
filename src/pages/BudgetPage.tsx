@@ -224,7 +224,7 @@ const BudgetPage: React.FC = () => {
     internalTransferIds,
     savingsTargetPercent,
     monthSavingsTargetPercent,
-    planSavingsContributions, paydownPrincipal,
+    planSavingsContributions, paydownPrincipal, planPaydown,
     payday,
     labelRules,
     region,
@@ -329,15 +329,18 @@ const BudgetPage: React.FC = () => {
   // it: a share of income minus CONSUMPTION (never of everything, or automating a
   // transfer would shrink the target it is measured against). Shown beside the
   // savings list, which is the one place it belongs. This month's target, so a
-  // month adjusted to save less isn't shown as falling short of the plan.
+  // month adjusted to save less isn't shown as falling short of the plan. The
+  // plan's own loan paydowns are saving, not consumption, so they are in the
+  // base and count as automated.
   const savingsTargetAmount = useMemo(
-    () => Math.max(0, Math.round((effectiveIncome - spendFixedTotal) * (monthSavingsTargetPercent / 100))),
-    [effectiveIncome, spendFixedTotal, monthSavingsTargetPercent],
+    () => Math.max(0, Math.round((effectiveIncome - spendFixedTotal + planPaydown) * (monthSavingsTargetPercent / 100))),
+    [effectiveIncome, spendFixedTotal, planPaydown, monthSavingsTargetPercent],
   );
+  const savingsAutomated = savingsContributions + planPaydown;
   const savingsProgressPct = savingsTargetAmount > 0
-    ? (savingsContributions / savingsTargetAmount) * 100
+    ? (savingsAutomated / savingsTargetAmount) * 100
     : 0;
-  const savingsRemaining = Math.max(0, savingsTargetAmount - savingsContributions);
+  const savingsRemaining = Math.max(0, savingsTargetAmount - savingsAutomated);
 
   const spendGroups = useMemo(() => {
     const order: ExpenseType[] = ['fixed', 'variable', 'subscription', 'insurance'];
@@ -1255,7 +1258,7 @@ const BudgetPage: React.FC = () => {
             <div className="space-y-1.5 text-[12px]">
               <div className="flex justify-between">
                 <span style={{ color: 'var(--text-2)' }}>{t.budgetPage.savingsAutomated}</span>
-                <span className="font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>{formatCurrency(savingsContributions)}</span>
+                <span className="font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>{formatCurrency(savingsAutomated)}</span>
               </div>
               <div className="flex justify-between">
                 <span style={{ color: 'var(--text-2)' }}>{t.budgetPage.savingsRemaining}</span>

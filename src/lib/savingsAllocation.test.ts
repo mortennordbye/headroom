@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  resolveAllocation, isCreatableRow, destinationKey,
+  resolveAllocation, isCreatableRow, destinationKey, planPaydownTotal,
   type SavingsAllocation, type AllocationRow,
 } from './savingsAllocation';
+import type { FixedExpense } from '../context/FinanceContext';
 
 const alloc = (percent: number, over: Partial<SavingsAllocation> = {}): SavingsAllocation => ({
   id: `a-${percent}-${over.destinationKind ?? 'portfolio'}-${over.savingsAccountId ?? over.debtId ?? ''}`,
@@ -223,5 +224,38 @@ describe('resolveAllocation — rest rows', () => {
     const plan = resolveAllocation([krRow('a', 500), restRow('b')], 0);
     expect(plan.rows.map(r => r.amount)).toEqual([500, 0]);
     expect(plan.overReason).toBe('fixed');
+  });
+});
+
+describe('planPaydownTotal', () => {
+  const allocs: SavingsAllocation[] = [
+    { id: 'm', percent: 20, destinationKind: 'mortgage' },
+    { id: 'd', percent: 10, destinationKind: 'debt', debtId: 'card' },
+    { id: 'b', percent: 70, destinationKind: 'bsu' },
+  ];
+  const e = (p: Partial<FixedExpense> & Pick<FixedExpense, 'id' | 'amount'>): FixedExpense => ({ name: p.id, ...p });
+
+  it('sums the loan paydowns the plan created, while their row still governs them', () => {
+    expect(planPaydownTotal(allocs, [
+      e({ id: 'rent', amount: 10000 }),
+      e({ id: 'pm', amount: 2000, destinationKind: 'mortgage', allocationId: 'm' }),
+      e({ id: 'pd', amount: 500, destinationKind: 'debt', debtId: 'card', allocationId: 'd' }),
+    ])).toBe(2500);
+  });
+
+  it('leaves out a paydown set up by hand, one whose row is gone or points elsewhere', () => {
+    expect(planPaydownTotal(allocs, [
+      e({ id: 'hand', amount: 3000, destinationKind: 'mortgage' }),
+      e({ id: 'gone', amount: 700, destinationKind: 'mortgage', allocationId: 'deleted' }),
+      e({ id: 'moved', amount: 900, destinationKind: 'mortgage', allocationId: 'b' }),
+      e({ id: 'otherDebt', amount: 400, destinationKind: 'debt', debtId: 'loan', allocationId: 'd' }),
+    ])).toBe(0);
+  });
+
+  it('is 0 without a plan and reads a bad amount as 0', () => {
+    const linked = e({ id: 'pm', amount: 2000, destinationKind: 'mortgage', allocationId: 'm' });
+    expect(planPaydownTotal(undefined, [linked])).toBe(0);
+    expect(planPaydownTotal([], [linked])).toBe(0);
+    expect(planPaydownTotal(allocs, [{ ...linked, amount: NaN }])).toBe(0);
   });
 });

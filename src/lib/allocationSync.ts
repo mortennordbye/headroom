@@ -5,7 +5,7 @@
 // rewritten.
 import type { FixedExpense, Saving } from '../context/FinanceContext';
 import {
-  destinationKey, resolveAllocation, type AllocationPlan, type AllocationRow, type SavingsAllocation,
+  destinationKey, governingRow, resolveAllocation, type AllocationPlan, type AllocationRow, type SavingsAllocation,
 } from './savingsAllocation';
 import { unpaidStampMonths } from './automation';
 import { percentOfSavingsBase, savingsBase, savingsTargetAmount } from './savingsRate';
@@ -22,25 +22,15 @@ export interface AllocationSizing {
 const isPaydown = (a: Pick<SavingsAllocation, 'destinationKind'>) =>
   a.destinationKind === 'mortgage' || a.destinationKind === 'debt';
 
-/** The row a linked expense belongs to, if that row still exists and still
- *  points where the expense pays. */
-function governingRow<R extends SavingsAllocation>(
-  e: FixedExpense, byId: Map<string, R>,
-): R | undefined {
-  const row = e.allocationId ? byId.get(e.allocationId) : undefined;
-  if (!row || !e.destinationKind) return undefined;
-  return destinationKey(row) === destinationKey({ destinationKind: e.destinationKind, debtId: e.debtId })
-    ? row : undefined;
-}
-
 /**
  * Size the allocation, the one sizing both activating it and syncing it use,
  * so syncing right after activating changes nothing.
  *
  * The pot is the savings target with the plan's own paydowns left out of the
- * spending it is a share of. A mortgage or debt paydown is spending, so counting
- * the plan's own would shrink the target every time the plan paid more, and the
- * figures would move again on every sync. Savings never enter the base.
+ * spending it is a share of: they are saving (`planPaydownTotal`), the same
+ * target the budget reads. Counting them as spending would also shrink the
+ * target every time the plan paid more, and the figures would move again on
+ * every sync. Savings never enter the base.
  *
  * A '%' saving is a share of the real base, which is what the paydowns leave:
  * `percentBase` takes off the paydown rows already linked to an expense plus

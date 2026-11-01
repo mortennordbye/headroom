@@ -9,7 +9,7 @@
 // into fixed expenses explicitly, and those post through the normal automation
 // runner (src/lib/automation.ts). That keeps one path to a balance change and
 // keeps the amounts inside the budget, where the savings-rate math can see them.
-import type { AllocationDestinationKind } from '../context/FinanceContext';
+import type { AllocationDestinationKind, FixedExpense } from '../context/FinanceContext';
 
 export interface SavingsAllocation {
   id: string;
@@ -174,4 +174,40 @@ export function destinationKey(
   if (d.destinationKind === 'savingsAccount') return `savingsAccount:${d.savingsAccountId ?? ''}`;
   if (d.destinationKind === 'debt') return `debt:${d.debtId ?? ''}`;
   return d.destinationKind;
+}
+
+/** The fields of a fixed expense that tie it to an allocation row. */
+type LinkedExpense = Pick<FixedExpense, 'amount' | 'allocationId' | 'destinationKind' | 'debtId'>;
+
+/** The row a linked expense belongs to, if that row still exists and still
+ *  points where the expense pays. */
+export function governingRow<R extends SavingsAllocation>(
+  e: LinkedExpense, byId: ReadonlyMap<string, R>,
+): R | undefined {
+  const row = e.allocationId ? byId.get(e.allocationId) : undefined;
+  if (!row || !e.destinationKind) return undefined;
+  return destinationKey(row) === destinationKey({ destinationKind: e.destinationKind, debtId: e.debtId })
+    ? row : undefined;
+}
+
+/**
+ * What the plan's own loan paydowns move a month: the fixed expenses an
+ * allocation row created to pay extra on the mortgage or a debt, while that row
+ * still governs them. Extra principal raises net worth like a deposit, so this is
+ * SAVING wherever the month is split into saving and spending: it counts toward
+ * the savings target, never as consumption the target is a share of.
+ *
+ * It is not cash, though. A projection already amortizes the loan with the
+ * payment (`withLinkedPayments`), so it must not add this to the cash it saves.
+ */
+export function planPaydownTotal(
+  allocations: readonly SavingsAllocation[] | undefined,
+  fixedExpenses: readonly LinkedExpense[],
+): number {
+  if (!allocations?.length) return 0;
+  const byId = new Map(allocations.map(a => [a.id, a]));
+  return fixedExpenses.reduce(
+    (sum, e) => (governingRow(e, byId) && Number.isFinite(e.amount) && e.amount > 0 ? sum + e.amount : sum),
+    0,
+  );
 }
