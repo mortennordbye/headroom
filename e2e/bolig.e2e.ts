@@ -53,3 +53,22 @@ test('a legacy blob with drifted copies loads the homeowner copy and converges o
   expect(blob.homeowner).not.toHaveProperty('currentMortgageBalance');
   expect(blob.transition).not.toHaveProperty('currentMortgageBalance');
 });
+
+test('a notified rate shows as upcoming until its month, then is the rate', async ({ page, request }) => {
+  const upcoming = seedBlob();
+  upcoming.homeowner = { ...upcoming.homeowner, rente: 4.11, notifiedRate: 6.37, notifiedRateFrom: '2099-01' };
+  await putBlob(request, upcoming);
+  await page.goto('/bolig');
+  const card = currentLoanCard(page);
+  await expect(card).toContainText('Varslet nominell rente');
+  await expect(card).toContainText('4.11%');
+  await expect(card).toContainText('6.37%');
+
+  const due = seedBlob();
+  due.homeowner = { ...due.homeowner, rente: 4.11, notifiedRate: 6.37, notifiedRateFrom: '2020-01' };
+  await putBlob(request, due);
+  await page.reload();
+  await expect(card).toContainText('6.37%');
+  await expect(card).not.toContainText('4.11%');
+  await expect(card).not.toContainText('Varslet nominell rente');
+});

@@ -45,6 +45,7 @@ import { yearReview, availableReportYears } from '../src/lib/yearReview';
 import { currentMonthKey, lastNMonthKeys, addMonthsKey, monthsBetween, yearOf } from '../src/lib/date';
 import { effectiveRemainingMonths, paymentTermMonths, splitTermMonths, termMonthsFromYears } from '../src/lib/loanTerm';
 import { currentMortgage, annualMortgageInterest as yearOneMortgageInterest } from '../src/lib/existingMortgage';
+import { withNotifiedRate } from '../src/lib/notifiedRate';
 import {
   calcTaxByRegion,
   calcMarginalTaxRate,
@@ -131,7 +132,7 @@ export function grossAnnualIncome(blob: ExportPayload, monthKey: string): number
  * term an old blob lacks, as the app's load merges them in.
  */
 function mortgageOwed(blob: ExportPayload, monthKey = currentMonthKey()) {
-  const h = blob.homeowner;
+  const h = withNotifiedRate(blob.homeowner, monthKey);
   const homeowner = { ...h, rente: h?.rente ?? 5.5, nedbetalingstid: h?.nedbetalingstid ?? 25 };
   return currentMortgage(blob.housingMode, blob.assets, homeowner, blob.transition, monthKey);
 }
@@ -810,7 +811,7 @@ export function pensionSummary(blob: ExportPayload, monthKey = currentMonthKey()
 function activeMortgage(blob: ExportPayload, monthKey: string) {
   const mode = blob.housingMode ?? 'first_buyer';
   const homeowner = mode === 'homeowner';
-  const h = blob.homeowner;
+  const h = withNotifiedRate(blob.homeowner, monthKey);
   const loanRate = blob.loan?.rente ?? 5.5;
   const loanTerm = blob.loan?.nedbetalingstid ?? 25;
   const hasTerm = h?.nedbetalingstid != null;
@@ -941,12 +942,14 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
   const monthlyFee = housingMode === 'homeowner' ? blob.homeowner?.termingebyr ?? 0 : blob.loan?.termingebyr ?? 0;
   const monthlyPayment = calcMonthlyPayment(m.balance, m.ratePct, m.termYears) + monthlyFee;
   const shares = ownershipShares(blob.assets, monthKey);
-  const status = housingMode === 'homeowner' && blob.homeowner
+  // The rate as of monthKey: a notified rate whose month has come is the rate.
+  const h = withNotifiedRate(blob.homeowner, monthKey);
+  const status = housingMode === 'homeowner' && h
     ? calcHomeownerMortgageStatus(
         mortgageOwed(blob, monthKey).fullBalance,
-        blob.homeowner.originalLoanAmount,
-        blob.homeowner.rente,
-        paymentTermMonths(blob.homeowner) / 12,
+        h.originalLoanAmount,
+        h.rente,
+        paymentTermMonths(h) / 12,
         RENTEFRADRAG_RATE_PCT,
       )
     : null;
@@ -978,8 +981,8 @@ export function mortgage(blob: ExportPayload, monthKey = currentMonthKey()) {
       myMonthlyPayment: housingMode === 'homeowner' ? Math.round(monthlyPayment * shares.debt) : null,
     },
     status: status ? { ...status, annualTaxDeduction: status.annualTaxDeduction * shares.debt } : null,
-    notifiedRate: blob.homeowner?.notifiedRate != null
-      ? { ratePct: blob.homeowner.notifiedRate, from: blob.homeowner.notifiedRateFrom ?? null }
+    notifiedRate: h?.notifiedRate != null
+      ? { ratePct: h.notifiedRate, from: h.notifiedRateFrom ?? null }
       : null,
     timeline,
     // Only an owned home has a value to measure against (BoligPage shows these to homeowners only).
