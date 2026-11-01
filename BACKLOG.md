@@ -107,6 +107,18 @@ in git and the CHANGELOG, not here.
   everywhere. **Where**: `src/lib/allocationSync.ts`, `src/lib/calculations.ts`,
   `src/context/FinanceContext.tsx`, `src/components/SmartRecommendations.tsx`,
   `src/pages/DashboardPage.tsx`, `mcp/derive.ts`.
+- **Some one-legged savings transfers are still counted twice in the cashflow.** The cashflow
+  and year review match a planned saving to its imported outgoing row only when the payee after
+  "Til:" is the saving's name (`savingsMatch.ts`), so a real purchase can never vanish. Accepted
+  misses, where the old double count stays: the transfer drifts more than 1 % from the plan; a
+  saving is split over several transfers, or several savings go out as one; the transfer lands in
+  another month; a 'rest' or percent saving resolved from estimated income differs from what was
+  sent; the destination text isn't the saving's name. **Why deferred**: matching on text any
+  looser lets bill payments (every nettgiro and avtalegiro has "til:" and an account number)
+  claim a saving. **Unblock**: store an account number on each saving and compare it with the
+  row's `counterpartyAccountNumber` (captured since #358); that match needs no name or amount
+  heuristics. **Where**: `src/lib/savingsMatch.ts`, `src/context/FinanceContext.tsx` (`Saving`),
+  `src/lib/transfers.ts` (`normalizeAccountNumber`).
 - **Cross-month envelope rollover.** Unused envelope room doesn't carry over. **Where**:
   `src/lib/envelopes.ts`, `src/context/FinanceContext.tsx`.
 

@@ -22,22 +22,63 @@ const ids = (savings: Saving[], txs: DailyTransaction[], opts = {}) =>
 describe('matchSavingsToTransactions', () => {
   const buffer = [kr('s1', 'Buffer', 3000)];
 
-  it('matches a row with a transfer signal that names the saving', () => {
-    expect(ids(buffer, [tx({ id: 't1', description: 'Til: 1234.56.78901 Buffer' })])).toEqual(['s1:t1']);
-    expect(ids(buffer, [tx({ id: 't1', description: 'Overføring 1234 56 78901 buffer' })])).toEqual(['s1:t1']);
+  it('matches realistic own-savings transfer texts', () => {
+    const ferie = [kr('s1', 'Ferie', 3000)];
+    for (const description of [
+      'Til: Buffer',
+      'Overføring til: Buffer 1234.56.78901',
+      'Til: Bufferkonto',
+      'Til: 1234.56.78901 Buffer',
+      'Til: Buffer Betalt: 25.10.26',
+      'To: Buffer',
+      'Til: sparekonto buffer',
+    ]) {
+      expect(ids(buffer, [tx({ id: 't1', description })]), description).toEqual(['s1:t1']);
+    }
+    expect(ids(ferie, [tx({ id: 't1', description: 'Til: Ferie sparing' })])).toEqual(['s1:t1']);
   });
 
-  it('never matches on a transfer signal alone', () => {
+  it('compares NFC-normalised text, so a decomposed "å" still matches', () => {
+    const boat = [kr('s1', 'B\u00e5t', 3000)];
+    expect(ids(boat, [tx({ id: 't1', description: 'Til: B\u00e5tkonto' })])).toEqual(['s1:t1']);
+    expect(ids(boat, [tx({ id: 't1', description: 'Til: Ba\u030atkonto' })])).toEqual(['s1:t1']);
+    expect(ids([kr('s1', 'Ba\u030at', 3000)], [tx({ id: 't1', description: 'Til: B\u00e5t' })])).toEqual(['s1:t1']);
+  });
+
+  it('never matches a bill payment that merely contains the saving name', () => {
+    const cases: [string, string][] = [
+      ['Bil', 'Nettgiro til: Møller Bil Oslo AS'],
+      ['Bil', 'Avtalegiro til: Santander Consumer Bank Bil-lån 9710.05.12345'],
+      ['Bil', 'Til: Bil-lån'],
+      ['Forsikring', 'Avtalegiro til: Gjensidige Forsikring 1234.56.78901'],
+      ['Strøm', 'Avtalegiro til: Tibber Strøm'],
+      ['Bolig', 'Til: OBOS Bolig AS'],
+      ['Ferie', 'Nettgiro til: Ferie & Fritid AS'],
+      ['BSU', 'Til: BSU-lån Husbanken'],
+      ['Sparing', 'Nettgiro til: Sparebank 1 Sparing Forsikring'],
+      ['Buffer', 'Til: Buffer KID 123456789'],
+      ['Buffer', 'eFaktura til: Buffer'],
+    ];
+    for (const [name, description] of cases) {
+      expect(ids([kr('s1', name, 3000)], [tx({ description })]), description).toEqual([]);
+    }
+  });
+
+  it('never matches a transfer to some other payee', () => {
     expect(ids(buffer, [tx({ description: 'Nettgiro til: 1234.56.78901 snekker' })])).toEqual([]);
     expect(ids(buffer, [tx({ description: 'Til: Kredittkort', amount: 2980 })])).toEqual([]);
     expect(ids(buffer, [tx({ merchant: 'Vipps*Ola Nordmann', description: 'Til: Ola' })])).toEqual([]);
+    expect(ids(buffer, [tx({ description: 'Til: Buffer snekker' })])).toEqual([]);
   });
 
-  it('never matches on the name alone', () => {
+  it('needs a "Til:" destination; the name alone or "to:" mid-text never matches', () => {
     expect(ids(buffer, [tx({ description: 'Overføring buffer' })])).toEqual([]);
+    expect(ids(buffer, [tx({ description: 'Overføring 1234 56 78901 buffer' })])).toEqual([]);
+    expect(ids(buffer, [tx({ description: 'Ref to: Buffer' })])).toEqual([]);
+    expect(ids(buffer, [tx({ description: 'Buffer' })])).toEqual([]);
   });
 
-  it('matches the name as a whole word only', () => {
+  it('requires the whole destination to be the name', () => {
     const bil = [kr('s1', 'Bil', 3000)];
     expect(ids(bil, [tx({ description: 'Til: 1234.56.78901 BILIA SERVICE OSLO' })])).toEqual([]);
     expect(ids(bil, [tx({ id: 't1', description: 'Til: 1234.56.78901 Bil' })])).toEqual(['s1:t1']);
@@ -69,13 +110,13 @@ describe('matchSavingsToTransactions', () => {
     expect(ids(buffer, rows)).toEqual([]);
   });
 
-  it('matches none when one row names two same-sized savings', () => {
-    const two = [kr('s1', 'Bil', 3000), kr('s2', 'Ferie', 3000)];
-    expect(ids(two, [tx({ description: 'Til: 1111.22.33333 Bil og ferie' })])).toEqual([]);
+  it('matches none when one row could be either of two same-named savings', () => {
+    const two = [kr('s1', 'Buffer', 3000), kr('s2', 'Buffer', 3000)];
+    expect(ids(two, [tx({ description: 'Til: Buffer' })])).toEqual([]);
   });
 
   it('skips a saving whose leg was already netted as a transfer that month', () => {
-    const carpenter = tx({ id: 't1', description: 'Nettgiro til: 9999.88.77777 Buffer snekker' });
+    const carpenter = tx({ id: 't1', description: 'Til: 9999.88.77777 Buffer' });
     const netted = [tx({ id: 'n1', description: 'Til: 1234.56.78901 Buffer', amount: 2995 })];
     expect(ids(buffer, [carpenter], { netted })).toEqual([]);
     // A netted row in another month says nothing about this one.

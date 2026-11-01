@@ -216,11 +216,11 @@ describe('monthlyCashflow — a one-legged savings transfer', () => {
   });
 
   it('does not let a netted leg claim a second same-sized row', () => {
-    // The saving's real leg was netted as a transfer; a carpenter paid by
-    // nettgiro the same month must stay spending.
+    // The saving's real leg was netted as a transfer; another same-sized row
+    // to the same name that month must stay spending.
     const netted = [leg({ id: 'n1', description: 'Til: 1234.56.78901 Buffer' })];
-    const carpenter = leg({ id: 'c1', description: 'Nettgiro til: 9999.88.77777 Buffer snekker' });
-    const row = run([carpenter], plan(() => buffer, netted));
+    const second = leg({ id: 'c1', description: 'Til: 9999.88.77777 Buffer' });
+    const row = run([second], plan(() => buffer, netted));
     expect(row.expenses).toBe(13000);
     expect(row.saved).toBe(3000);
   });
