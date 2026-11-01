@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findInternalTransferIds } from './transfers';
+import { findInternalTransferIds, normalizeAccountNumber } from './transfers';
 import type { DailyTransaction } from '../context/FinanceContext';
 
 const tx = (o: Partial<DailyTransaction>): DailyTransaction => ({
@@ -55,5 +55,63 @@ describe('findInternalTransferIds', () => {
     ];
     const ids = findInternalTransferIds(rows);
     expect([...ids].sort()).toEqual(['e1', 'e2', 'i1', 'i2']);
+  });
+});
+
+// Fictitious account numbers (not real accounts).
+const OWN_A = '11112233333';
+const OWN_B = '44445566666';
+
+describe('normalizeAccountNumber', () => {
+  it('reduces a Norwegian IBAN to its 11-digit BBAN', () => {
+    expect(normalizeAccountNumber('NO12 4444 5566 666')).toBe(OWN_B);
+    expect(normalizeAccountNumber('no1244445566666')).toBe(OWN_B);
+  });
+
+  it('strips formatting from a BBAN and keeps foreign IBANs whole', () => {
+    expect(normalizeAccountNumber('4444.55.66666')).toBe(OWN_B);
+    expect(normalizeAccountNumber('SE45 5000 0000 0583 9825 7466')).toBe('SE4550000000058398257466');
+  });
+
+  it('returns empty for missing input', () => {
+    expect(normalizeAccountNumber(undefined)).toBe('');
+    expect(normalizeAccountNumber('  ')).toBe('');
+  });
+});
+
+describe('findInternalTransferIds own-account matching', () => {
+  it('marks a payment to one of the own accounts even when the amounts differ', () => {
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000 });
+    const inn = tx({ id: 'i1', account: 'B', accountNumber: `NO12${OWN_B}`, counterpartyAccountNumber: `NO99${OWN_A}`, kind: 'income', amount: 4990 });
+    expect([...findInternalTransferIds([out, inn])].sort()).toEqual(['e1', 'i1']);
+  });
+
+  it('resolves a pair the amount matcher finds ambiguous', () => {
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000 });
+    const i1 = tx({ id: 'i1', account: 'B', accountNumber: OWN_B, counterpartyAccountNumber: OWN_A, kind: 'income', amount: 5000 });
+    const i2 = tx({ id: 'i2', account: 'C', kind: 'income', amount: 5000, description: 'Refund' });
+    expect([...findInternalTransferIds([out, i1, i2])].sort()).toEqual(['e1', 'i1']);
+  });
+
+  it('marks the leg whose counterparty is own even when the other leg is outside the window', () => {
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000, date: '2026-07-01' });
+    const other = tx({ id: 'x1', account: 'B', accountNumber: OWN_B, kind: 'expense', amount: 300, date: '2026-07-01' });
+    expect([...findInternalTransferIds([out, other])]).toEqual(['e1']);
+  });
+
+  it('leaves payments to accounts that are not the user\'s alone', () => {
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: '99998877777', kind: 'expense', amount: 5000 });
+    expect(findInternalTransferIds([out]).size).toBe(0);
+  });
+
+  it('ignores a counterparty equal to the row\'s own account', () => {
+    const out = tx({ id: 'e1', account: 'A', accountNumber: OWN_A, counterpartyAccountNumber: OWN_A, kind: 'expense', amount: 5000 });
+    expect(findInternalTransferIds([out]).size).toBe(0);
+  });
+
+  it('ignores manual rows (no connected account) even with a matching number', () => {
+    const own = tx({ id: 'x1', account: 'B', accountNumber: OWN_B, kind: 'expense', amount: 1 });
+    const manual = tx({ id: 'm1', counterpartyAccountNumber: OWN_B, kind: 'expense', amount: 5000 });
+    expect(findInternalTransferIds([own, manual]).size).toBe(0);
   });
 });

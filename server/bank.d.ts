@@ -12,6 +12,9 @@ export interface MappedTransaction {
   account?: string;
   bank?: string;
   accountName?: string;
+  // This account's number and the counterparty's (IBAN or BBAN), when known.
+  accountNumber?: string;
+  counterpartyAccountNumber?: string;
   // Categories are assigned client-side; the server only carries them forward
   // across a re-sync (see mergeTransactions).
   category?: string;
@@ -32,6 +35,7 @@ export interface MapOptions {
   account?: string;
   bank?: string;
   accountName?: string;
+  accountNumber?: string;
 }
 
 export const EB_ID_PREFIX: string;

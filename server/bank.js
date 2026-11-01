@@ -342,6 +342,17 @@ function pickMerchant(tx) {
   return party || undefined;
 }
 
+// The counterparty's account number (IBAN, or BBAN / other identification),
+// when the feed carries one, whitespace stripped. Lets the client spot a move to
+// or from one of the user's own accounts (src/lib/transfers.ts).
+function pickCounterpartyAccount(tx, kind) {
+  const acct = kind === 'expense' ? tx.creditor_account : tx.debtor_account;
+  if (!acct) return undefined;
+  const id = acct.iban || acct.bban || (acct.other && acct.other.identification);
+  const clean = typeof id === 'string' ? id.replace(/\s+/g, '') : '';
+  return clean || undefined;
+}
+
 function pickDescription(tx) {
   const party = pickMerchant(tx);
   if (party) return party;
@@ -384,6 +395,7 @@ function mapEBTransaction(tx, opts = {}) {
   const kind = indicator === 'CRDT' ? 'income'
     : indicator === 'DBIT' ? 'expense'
       : (parsed < 0 ? 'expense' : 'income');
+  const counterpartyAccountNumber = pickCounterpartyAccount(tx, kind);
   return {
     id: stableId(tx, prefix),
     date,
@@ -399,6 +411,10 @@ function mapEBTransaction(tx, opts = {}) {
     ...(opts.account ? { account: opts.account } : {}),
     ...(opts.bank ? { bank: opts.bank } : {}),
     ...(opts.accountName ? { accountName: opts.accountName } : {}),
+    // Account numbers (this account's, and the other party's) so the client can
+    // net out moves between the user's own accounts. Absent when unknown.
+    ...(opts.accountNumber ? { accountNumber: opts.accountNumber } : {}),
+    ...(counterpartyAccountNumber ? { counterpartyAccountNumber } : {}),
     // Provisional until the bank books it (only present when includePending let
     // this row through). A booked twin later evicts it — see evictSupersededPending.
     ...(tx.status && tx.status !== 'BOOK' ? { pending: true } : {}),
@@ -883,6 +899,7 @@ async function fetchMappedTransactions() {
             account: accountKey(c, acc),
             bank: c.aspsp || undefined,
             accountName: acc.name || acc.product || '',
+            accountNumber: acc.iban ? String(acc.iban).replace(/\s+/g, '') : undefined,
           }).map((row) => (c.relinked ? { ...row, relinkPrefix: c.idPrefix } : row)),
         );
       }

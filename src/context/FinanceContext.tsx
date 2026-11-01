@@ -270,6 +270,14 @@ export interface DailyTransaction {
   accountName?: string;
   bank?: string;
   /**
+   * Account numbers (IBAN or Norwegian BBAN) from bank sync: this row's own
+   * account, and the other party's. Used to spot moves between the user's own
+   * accounts (src/lib/transfers.ts). Absent on manual rows, legacy rows, and
+   * when the bank doesn't share them.
+   */
+  accountNumber?: string;
+  counterpartyAccountNumber?: string;
+  /**
    * How `category` was set. 'auto' = the rule engine; 'manual' = a user edit.
    * Manual labels are never overwritten by re-sync or re-categorization.
    * Missing on legacy rows — treat as 'auto'.

@@ -58,7 +58,7 @@ in git and the CHANGELOG, not here.
 ## Bank import
 
 - **Heuristics to tune.** The keyword table (`src/lib/categorize.ts`), transfer detection
-  (`src/lib/transfers.ts`, could use own-IBAN matching), transfer-suggestion thresholds
+  (`src/lib/transfers.ts`), transfer-suggestion thresholds
   (`src/lib/transferSuggestions.ts`, tuned on one dataset), envelope name hints (`NAME_HINTS` in
   `src/lib/envelopes.ts`). Pending rows with amount drift (tips, forex) aren't matched to their
   booked twin by design.
@@ -67,7 +67,11 @@ in git and the CHANGELOG, not here.
 - **Bank endpoints are unauthenticated** like the rest of the app on a no-auth deploy. **Where**:
   `server/index.js`.
 - **Legacy rows are unlabeled.** Transactions imported before multi-account support have no
-  `account`/`bank` and can't be back-attributed.
+  `account`/`bank` and can't be back-attributed. Likewise, rows synced before account numbers
+  were captured have no `accountNumber`/`counterpartyAccountNumber`, so own-account transfer
+  matching only covers rows the bank returns again (sync window). **Unblock**: a one-off full
+  re-fetch within the bank's history limit. **Where**: `server/bank.js` (`fetchMappedTransactions`
+  window), `src/lib/transfers.ts`.
 
 ## Budget and savings UI
 
