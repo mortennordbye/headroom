@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.16.1](https://github.com/mortennordbye/headroom/compare/v3.16.0...v3.16.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* grow a debt the payment can't keep up with in net-worth projections ([#355](https://github.com/mortennordbye/headroom/issues/355)) ([824f980](https://github.com/mortennordbye/headroom/commit/824f9806eaedb590fb574ddd651efe4c43b6b85f))
+* let the OTP base include bonuses when the scheme counts them ([#353](https://github.com/mortennordbye/headroom/issues/353)) ([a45086f](https://github.com/mortennordbye/headroom/commit/a45086f407f1f3edb0a843900ab05ac52bfc3709))
+
 ## [3.16.0](https://github.com/mortennordbye/headroom/compare/v3.15.0...v3.16.0) (2026-11-01)
 
 
