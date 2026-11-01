@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { Suspense, useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useSearchParams } from 'react-router';
 import {
   ChevronLeft,
@@ -22,6 +22,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 import OnboardingTour from './onboarding/OnboardingTour';
 import HistoryManagerModal from './HistoryManagerModal';
 import GlossaryModal from './GlossaryModal';
+import RouteFallback from './RouteFallback';
 
 import { NAV_ITEMS, NAV_GROUPS, MORE_ROUTES, ALWAYS_VISIBLE_NAV, groupForPath, navKeyForPath, navIconForPath } from './navItems';
 import { SegmentedControl } from './ui/SegmentedControl';
@@ -430,7 +431,14 @@ const Layout: React.FC = () => {
             </button>
           </div>
         )}
-        <Outlet />
+        {/* Keyed by route so each page gets a fresh boundary. Navigation runs in a
+            transition, and a transition never swaps already-shown content for a
+            fallback: with one shared boundary, a tap on a page whose code isn't
+            loaded yet left the old page up, unchanged, until the chunk arrived.
+            A new boundary shows the skeleton at once. */}
+        <Suspense key={location.pathname} fallback={<RouteFallback />}>
+          <Outlet />
+        </Suspense>
       </main>
 
       {/* ─── Mobile "Mer" sheet ──────────────── */}
