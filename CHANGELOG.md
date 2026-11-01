@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.15.0](https://github.com/mortennordbye/headroom/compare/v3.14.2...v3.15.0) (2026-11-01)
+
+
+### Features
+
+* tell savings rows apart and show the destination balance ([#346](https://github.com/mortennordbye/headroom/issues/346)) ([894eb70](https://github.com/mortennordbye/headroom/commit/894eb709396970bfe980e3ce708cf74f8ba863bc))
+
+
+### Bug Fixes
+
+* record bank sync only for connections it fully fetched, one sync at a time ([#349](https://github.com/mortennordbye/headroom/issues/349)) ([88c9d1a](https://github.com/mortennordbye/headroom/commit/88c9d1ac81c8670ad5c9019f5f0d78fa216d51a8))
+* show savings as their own series in the cashflow chart ([#351](https://github.com/mortennordbye/headroom/issues/351)) ([2819d1c](https://github.com/mortennordbye/headroom/commit/2819d1c703c3e7cab59c457a8258c31d940a8ea1))
+
 ## [3.14.2](https://github.com/mortennordbye/headroom/compare/v3.14.1...v3.14.2) (2026-11-01)
 
 
