@@ -47,7 +47,7 @@ export default function UpdatePrompt() {
   return (
     <div
       role="alert"
-      className="fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-[8px]"
+      className="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 z-50 flex items-center gap-3 px-4 py-3 rounded-[8px]"
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
     >
       <span className="text-[13px]">{t.updatePrompt.message}</span>
