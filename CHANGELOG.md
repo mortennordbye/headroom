@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.17.0](https://github.com/mortennordbye/headroom/compare/v3.16.1...v3.17.0) (2026-11-01)
+
+
+### Features
+
+* treat payments to the user's own account numbers as internal transfers ([#358](https://github.com/mortennordbye/headroom/issues/358)) ([c6d0740](https://github.com/mortennordbye/headroom/commit/c6d0740a8e5bca453607745427c4262511ae5e07))
+
+
+### Bug Fixes
+
+* project a linked debt at the payment its fixed expense makes ([#357](https://github.com/mortennordbye/headroom/issues/357)) ([f4846ae](https://github.com/mortennordbye/headroom/commit/f4846ae9b47624191ccf0afc2d1c1d0b93b22021))
+
 ## [3.16.1](https://github.com/mortennordbye/headroom/compare/v3.16.0...v3.16.1) (2026-11-01)
 
 
