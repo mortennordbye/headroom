@@ -2666,9 +2666,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setSalaries(prev => prev.filter(s => s.jobId !== id));
     // The OTP scheme linked to this job falls back to every job's pay, from the
     // next unposted month on.
-    const nowKey = currentMonthKey();
-    setPension(prev => pensionAfterJobRemoved(
-      prev, id, calcActiveGrossAnnual(salaries, jobs, nowKey), bonuses, overtime, jobs, nowKey));
+    setPension(prev => pensionAfterJobRemoved(prev, id, salaries, jobs, bonuses, overtime, currentMonthKey()));
   }, [jobsCrud, salaries, jobs, bonuses, overtime]);
 
   const addSalary = salariesCrud.add;
