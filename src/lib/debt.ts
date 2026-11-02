@@ -266,6 +266,13 @@ export function withLinkedPayments(
   });
 }
 
+/** Sum of every debt's monthly minimum payment, revolving lines included. A
+ *  missing or non-finite `minPayment` counts as 0 so one broken row can't turn
+ *  the whole total into NaN. */
+export function totalMinPayments(debts: Debt[]): number {
+  return debts.reduce((sum, d) => sum + finite(d.minPayment), 0);
+}
+
 /**
  * Total non-mortgage debt remaining at the end of each year, index 0..years
  * (year 0 = today). Amortizing debts pay down at their minimum payments with
