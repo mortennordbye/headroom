@@ -176,10 +176,6 @@ in git and the CHANGELOG, not here.
   count only the principal in that case. **Where**: the loan interest handling in
   `computeAutomationPostings` in `src/lib/automation.ts`, `planPaydownTotal` in
   `src/lib/savingsAllocation.ts`.
-- **`totalMonthlyDebtService` has no finite guard.** The Budget page sums each debt's raw
-  `minPayment`, so a hand-edited NaN or undefined shows as "NaN kr". **Why deferred**: found in
-  review, unrelated to the paydown change. **Unblock**: sum through the shared finite guard (as
-  `withLinkedPayments` does). **Where**: `totalMonthlyDebtService` in `src/pages/BudgetPage.tsx`.
 - **`targetRateOfIncome` overshoots once the target is fully automated.** It adds the target share
   of the residual left after the transfers on top of the transfers themselves, so with the whole
   target automated the target line reads above what the plan sets aside. **Why deferred**: found

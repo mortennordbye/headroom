@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, creditFrameBreakdown, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings, withLinkedPayments } from './debt';
+import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, creditFrameBreakdown, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings, withLinkedPayments, totalMinPayments } from './debt';
 import { calcMonthlyPayment } from './calculations';
 import type { Debt, BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
 
@@ -419,5 +419,21 @@ describe('extraPaymentSavings', () => {
     expect(r.feasible).toBe(false);
     expect(r.monthsSaved).toBe(0);
     expect(r.interestSaved).toBe(0);
+  });
+});
+
+describe('totalMinPayments', () => {
+  it('counts a missing or NaN minPayment as 0 instead of poisoning the sum', () => {
+    const debts = [
+      debt({ id: 'a', minPayment: 1000 }),
+      debt({ id: 'b', minPayment: undefined as unknown as number }),
+      debt({ id: 'c', minPayment: NaN }),
+    ];
+    expect(totalMinPayments(debts)).toBe(1000);
+  });
+
+  it('includes revolving lines, as the Budget page always has', () => {
+    const debts = [debt({ id: 'a', minPayment: 1000 }), debt({ id: 'b', revolving: true, minPayment: 500 })];
+    expect(totalMinPayments(debts)).toBe(1500);
   });
 });
