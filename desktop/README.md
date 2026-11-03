@@ -55,6 +55,11 @@ a `chore(main): release x.y.z` PR up to date. Merging that PR cuts the GitHub re
 the installers to it, in the same run. The version comes from release-please, which also writes it
 into `package.json`, `server/package.json` and this package.
 
+The release then points the cask in
+[`mortennordbye/homebrew-tap`](https://github.com/mortennordbye/homebrew-tap) at the new DMGs
+(`.github/workflows/homebrew-tap.yml`). The release App must be installed on that repository. If the
+update fails, the release itself is unaffected and the workflow can be re-run by hand.
+
 The build (without the release) also runs on any PR touching `desktop/` or `server/`, so a break
 shows up there rather than at release time.
 
