@@ -9,7 +9,7 @@
 // into fixed expenses explicitly, and those post through the normal automation
 // runner (src/lib/automation.ts). That keeps one path to a balance change and
 // keeps the amounts inside the budget, where the savings-rate math can see them.
-import type { AllocationDestinationKind, Debt, FixedExpense } from '../context/FinanceContext';
+import type { AllocationDestinationKind, Debt, FixedExpense, HousingMode } from '../context/FinanceContext';
 
 export interface SavingsAllocation {
   id: string;
@@ -35,9 +35,10 @@ export interface AllocationRow extends SavingsAllocation {
   /** The allocation's share of the target, in kr (whole kroner). */
   amount: number;
   /** A loan paydown row that is not counted as saving: its expense is paused,
-   *  or its debt is revolving (`planPaydownRow`). It takes nothing from the
-   *  target (`amount` 0), so the other rows split it as the budget does. */
-  excluded?: 'paused' | 'revolving';
+   *  its debt is revolving, or it pays a mortgage a first-time buyer doesn't
+   *  have (`planPaydownRow`). It takes nothing from the target (`amount` 0), so
+   *  the other rows split it as the budget does. */
+  excluded?: 'paused' | 'revolving' | 'noMortgage';
 }
 
 /**
@@ -201,13 +202,16 @@ export type PaydownDebts = readonly Pick<Debt, 'id' | 'revolving'>[] | undefined
  * The row an expense pays down a loan for, when it counts as the plan's saving:
  * its row still governs it (`governingRow`), it isn't paused (a paused expense
  * moves nothing onto the loan, as `withLinkedPayments` and
- * `monthlyPaydownPrincipal` read it), and it doesn't pay a revolving debt (a
- * balance cleared every month is spending, never principal).
+ * `monthlyPaydownPrincipal` read it), it doesn't pay a revolving debt (a
+ * balance cleared every month is spending, never principal), and it doesn't pay
+ * the mortgage of a first-time buyer (there is none, so the automation runner
+ * posts nothing).
  */
 export function planPaydownRow<R extends SavingsAllocation>(
-  e: LinkedExpense, byId: ReadonlyMap<string, R>, debts?: PaydownDebts,
+  e: LinkedExpense, byId: ReadonlyMap<string, R>, debts?: PaydownDebts, housingMode?: HousingMode,
 ): R | undefined {
   if (e.automationPaused) return undefined;
+  if (e.destinationKind === 'mortgage' && housingMode === 'first_buyer') return undefined;
   if (e.destinationKind === 'debt' && debts?.some(d => d.id === e.debtId && d.revolving)) return undefined;
   return governingRow(e, byId);
 }
@@ -228,11 +232,12 @@ export function planPaydownTotal(
   allocations: readonly SavingsAllocation[] | undefined,
   fixedExpenses: readonly LinkedExpense[],
   debts?: PaydownDebts,
+  housingMode?: HousingMode,
 ): number {
   if (!allocations?.length) return 0;
   const byId = new Map(allocations.map(a => [a.id, a]));
   return fixedExpenses.reduce(
-    (sum, e) => (planPaydownRow(e, byId, debts) && Number.isFinite(e.amount) && e.amount > 0 ? sum + e.amount : sum),
+    (sum, e) => (planPaydownRow(e, byId, debts, housingMode) && Number.isFinite(e.amount) && e.amount > 0 ? sum + e.amount : sum),
     0,
   );
 }

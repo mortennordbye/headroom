@@ -56,7 +56,6 @@ describe('SavingsAllocationPanel — mortgage target in first-buyer mode', () =>
   it('keeps a mortgage row on the mortgage, not the first option', () => {
     const html = render('first_buyer', [MORTGAGE_ROW]);
     expect(selectedValue(html)).toBe('mortgage');
-    expect(selectedValue(html)).not.toBe('bufferAccount');
   });
 
   it('marks that option invalid and the select in the negative colour', () => {
@@ -65,6 +64,17 @@ describe('SavingsAllocationPanel — mortgage target in first-buyer mode', () =>
     expect(html).toContain(mortgageLabel);
     expect(html).toContain('aria-invalid="true"');
     expect(html).toContain('color:var(--negative)');
+  });
+
+  it('does not offer to create a transfer for that row', () => {
+    const html = render('first_buyer', [MORTGAGE_ROW]);
+    expect(html).not.toContain(t.savingsAllocation.create.replace('{count}', '1'));
+  });
+
+  it('shows 0 kr for that row', () => {
+    const html = render('first_buyer', [{ ...MORTGAGE_ROW, percent: 50 }]);
+    expect(html).toContain('0 kr');
+    expect(html).not.toContain('5000 kr');
   });
 
   it('lists no mortgage option in first-buyer mode without a mortgage row', () => {

@@ -1,7 +1,7 @@
 // Trailing savings-rate health, derived from the same `monthlyCashflow` rows
 // that feed SavingsRateChart. Pure + unit-tested so the Budget page can flag a
 // slipping rate without re-deriving the money math in a component.
-import type { BalanceSnapshot, FixedExpense, Saving } from '../context/FinanceContext';
+import type { BalanceSnapshot, FixedExpense, Saving, HousingMode } from '../context/FinanceContext';
 import { feriepengerMonthlyNet, type FeriepengerConfig } from './feriepenger';
 import { fixedExpensesForMonth } from './snapshots';
 import { planPaydownTotal, type PaydownDebts, type SavingsAllocation } from './savingsAllocation';
@@ -203,6 +203,8 @@ export interface MonthSavingsInput {
   savingsAllocations?: SavingsAllocation[];
   /** So a paydown onto a revolving debt stays spending (`planPaydownRow`). */
   debts?: PaydownDebts;
+  /** So a first-time buyer's mortgage paydown stays spending (`planPaydownRow`). */
+  housingMode?: HousingMode;
 }
 
 /**
@@ -226,7 +228,7 @@ export function savingsForMonth(
   }
   const fixed = fixedExpensesForMonth(data.balanceSnapshots, data.fixedExpenses, monthKey, nowKey);
   return resolveSavingsForMonth(data.savings, savingsBase(income, fixed), data.savingsTargetPercent, monthSaving,
-    planPaydownTotal(data.savingsAllocations, fixed, data.debts));
+    planPaydownTotal(data.savingsAllocations, fixed, data.debts, data.housingMode));
 }
 
 /** What `monthKey` moved into savings: the total of `savingsForMonth`. */

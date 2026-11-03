@@ -2167,7 +2167,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // The plan's own loan paydowns: saving, so they count toward the target and
   // stay out of the consumption it is a share of (see planPaydownTotal).
   const planPaydown = useMemo(
-    () => planPaydownTotal(savingsAllocations, viewFixedExpenses, debts),
+    () => planPaydownTotal(savingsAllocations, viewFixedExpenses, debts, housingMode),
     [savingsAllocations, viewFixedExpenses, debts],
   );
 
@@ -2194,10 +2194,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const monthSaving = savingsMonthOverrides[monthKey];
   const viewSavings = useMemo(
     () => savingsForMonth(
-      { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, debts },
+      { savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, debts, housingMode },
       monthKey, currentMonthKey(), effectiveIncome,
     ),
-    [savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, debts, monthKey, effectiveIncome],
+    [savings, savingsTargetPercent, savingsMonthOverrides, balanceSnapshots, fixedExpenses, savingsAllocations, debts, housingMode, monthKey, effectiveIncome],
   );
 
   // What moves into savings rather than being spent. Budgeting treats it like a
@@ -2283,7 +2283,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const nowKey = currentMonthKey();
     const income = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
     const consumption = fixedExpenses.reduce((sum, item) => sum + item.amount, 0);
-    const paydown = planPaydownTotal(savingsAllocations, fixedExpenses, debts);
+    const paydown = planPaydownTotal(savingsAllocations, fixedExpenses, debts, housingMode);
     const planContributions = savingsContributionTotal(
       resolveSavingsAmounts(savings, savingsBase(income, fixedExpenses), savingsTargetPercent, paydown),
     );
@@ -2753,7 +2753,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     // the month being viewed: browsing last March must not decide what moves
     // today. `liveSavings` is keyed on the viewed month, so it is deliberately
     // not reused here.
-    const livePaydown = planPaydownTotal(savingsAllocations, fixedExpenses, debts);
+    const livePaydown = planPaydownTotal(savingsAllocations, fixedExpenses, debts, housingMode);
     const postingSavings = resolveSavingsAmounts(
       savings,
       savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
@@ -3031,7 +3031,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       savingsBase(monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey), fixedExpenses),
       savingsTargetPercent,
       next,
-      planPaydownTotal(savingsAllocations, fixedExpenses, debts),
+      planPaydownTotal(savingsAllocations, fixedExpenses, debts, housingMode),
     );
     const corrections: AutomationRule[] = [];
     const nowMoved: Record<string, number> = {};

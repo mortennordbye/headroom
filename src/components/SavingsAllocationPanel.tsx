@@ -95,8 +95,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   const nowKey = currentMonthKey();
   const nowIncome = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
   const sizing = useMemo(
-    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, undefined, debts),
-    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, debts],
+    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, undefined, debts, housingMode),
+    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, debts, housingMode],
   );
   const plan = sizing.plan;
 
@@ -119,11 +119,13 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     // fixed expenses, so they are committed there rather than in `savings`.
     for (const e of viewFixedExpenses) {
       if (!e.destinationKind || e.automationPaused) continue;
+      // The runner posts nothing to a mortgage a first-time buyer doesn't have.
+      if (e.destinationKind === 'mortgage' && housingMode === 'first_buyer') continue;
       const k = destinationKey({ destinationKind: e.destinationKind, debtId: e.debtId });
       m.set(k, (m.get(k) ?? 0) + e.amount);
     }
     return m;
-  }, [viewSavings, viewFixedExpenses]);
+  }, [viewSavings, viewFixedExpenses, housingMode]);
   const committedTotal = [...committedByKey.values()].reduce((s, n) => s + n, 0);
 
   const creatable = plan.rows.filter(
@@ -146,10 +148,10 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
 
   const labelFor = (row: AllocationRow) =>
     options.find(o => o.v === destinationKey(row))?.l ?? sa.targetMissing;
-  // Shown in the negative colour: a revolving debt, or a target the options
-  // keep only so the select doesn't fall back on the first one.
+  // Shown in the negative colour: a target the options keep only so the select
+  // doesn't fall back on the first one.
   const invalidTarget = (row: AllocationRow) =>
-    row.excluded === 'revolving' || !!options.find(o => o.v === destinationKey(row))?.invalid;
+    !!options.find(o => o.v === destinationKey(row))?.invalid;
 
   /**
    * The percentage that keeps `row` at the kroner it is moving right now, for
@@ -193,7 +195,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     const creating = new Set(creatable.map(r => r.id));
     const made = buildActivation(
       creatable,
-      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating, debts),
+      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating, debts, housingMode),
       // Same convention as assigning a destination by hand: the first move
       // happens NEXT month, never retroactively.
       currentMonthKey(),
@@ -397,7 +399,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
               )}
               {row.excluded && (
                 <span className="text-[10.5px] font-medium" style={{ color: 'var(--warning)' }}>
-                  {row.excluded === 'paused' ? sa.notCountedPaused : sa.notCountedRevolving}
+                  {row.excluded === 'paused' ? sa.notCountedPaused
+                    : row.excluded === 'noMortgage' ? sa.notCountedFirstBuyer : sa.notCountedRevolving}
                 </span>
               )}
               <span className="ml-auto text-[13px] font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>
