@@ -258,6 +258,10 @@ describe('planPaydownTotal', () => {
     expect(planPaydownTotal(allocs, [{ ...pm, automationPaused: true }, pd])).toBe(500);
     expect(planPaydownTotal(allocs, [pm, pd], [{ id: 'card', revolving: true }])).toBe(2000);
     expect(planPaydownTotal(allocs, [pm, pd], [{ id: 'card' }])).toBe(2500);
+    // A first-time buyer has no mortgage, so the runner moves nothing onto it.
+    expect(planPaydownTotal(allocs, [pm, pd], [{ id: 'card' }], 'first_buyer')).toBe(500);
+    expect(planPaydownTotal(allocs, [pm, pd], [{ id: 'card' }], 'homeowner')).toBe(2500);
+    expect(planPaydownTotal(allocs, [pm, pd], [{ id: 'card' }], 'transitioning')).toBe(2500);
   });
 
   it('is 0 without a plan and reads a bad amount as 0', () => {

@@ -940,6 +940,17 @@ describe('derive: a plan-linked loan paydown is saving, as in the app', () => {
     return { blob: b, target: sizing.target };
   }
 
+  it('does not count a mortgage paydown as saving for a first-time buyer', () => {
+    const b = fixture();
+    b.housingMode = 'first_buyer';
+    b.monthlyIncomes = { [MONTH]: 50000 };
+    b.savingsAllocations = [{ id: 'm', percent: 100, destinationKind: 'mortgage' }];
+    b.fixedExpenses = [{ id: 'p', name: 'Paydown', amount: 2000, type: 'fixed', destinationKind: 'mortgage', allocationId: 'm' }];
+    expect(derive.budgetSummary(b, MONTH).planLoanPaydown).toBe(0);
+    b.housingMode = 'homeowner';
+    expect(derive.budgetSummary(b, MONTH).planLoanPaydown).toBe(2000);
+  });
+
   it("the MCP's saving and unallocated match the allocation panel's target", () => {
     const { blob, target } = planned();
     const recs = derive.recommendations(blob, MONTH);

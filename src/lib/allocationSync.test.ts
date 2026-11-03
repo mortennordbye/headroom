@@ -248,6 +248,36 @@ describe('the panel and the budget agree once a paydown row is active', () => {
 
 // Property check: drive the panel's flow (activate, edit, sync, income change)
 // over random plans and assert the sizing is consistent by construction.
+describe('sizeAllocation: a first-time buyer has no mortgage', () => {
+  const allocs: SavingsAllocation[] = [
+    { id: 'm', percent: 50, destinationKind: 'mortgage' },
+    { id: 'r', percent: 50, mode: 'rest', destinationKind: 'bsu' },
+  ];
+  const rent = { id: 'x', name: 'Rent', amount: 10000, type: 'fixed' } as FixedExpense;
+  const paydown = {
+    id: 'p', name: 'Paydown', amount: 2000, type: 'fixed', destinationKind: 'mortgage', allocationId: 'm',
+  } as FixedExpense;
+
+  it('sizes the mortgage row at 0 kr and gives its share to the rest row', () => {
+    const { plan, target } = sizeAllocation(allocs, 50000, [rent], 20, undefined, undefined, 'first_buyer');
+    expect(target).toBe(8000);
+    expect(plan.rows.find(r => r.id === 'm')).toMatchObject({ amount: 0, excluded: 'noMortgage', percent: 50 });
+    expect(plan.rows.find(r => r.id === 'r')!.amount).toBe(8000);
+  });
+
+  it('reads a linked paydown as spending, and sync leaves it alone', () => {
+    const sizing = sizeAllocation(allocs, 50000, [rent, paydown], 20, undefined, undefined, 'first_buyer');
+    expect(sizing.target).toBe(7600);
+    expect(allocationSyncPlan(sizing, [], [rent, paydown])).toEqual([]);
+  });
+
+  it('still counts the row for a homeowner', () => {
+    const { plan } = sizeAllocation(allocs, 50000, [rent], 20, undefined, undefined, 'homeowner');
+    expect(plan.rows.find(r => r.id === 'm')).toMatchObject({ amount: 4000 });
+    expect(plan.rows.find(r => r.id === 'm')!.excluded).toBeUndefined();
+  });
+});
+
 describe('allocation activate/sync properties', () => {
   type St = { income: number; pct: number; fixed: FixedExpense[]; savings: Saving[]; allocs: SavingsAllocation[] };
   let n = 0;

@@ -3,7 +3,7 @@
 // is authoritative, but only for what it made: a saving or expense is matched
 // by its `allocationId` and nothing else, so a transfer set up by hand is never
 // rewritten.
-import type { FixedExpense, Saving } from '../context/FinanceContext';
+import type { FixedExpense, HousingMode, Saving } from '../context/FinanceContext';
 import {
   destinationKey, governingRow, planPaydownRow, resolveAllocation, type AllocationPlan, type AllocationRow, type PaydownDebts, type SavingsAllocation,
 } from './savingsAllocation';
@@ -39,10 +39,11 @@ const isPaydown = (a: Pick<SavingsAllocation, 'destinationKind'>) =>
  * Pass the CURRENT month's income, the live fixed expenses and the base target
  * percent (not a one-month override): the result is written to live transfers.
  * `debts` lets a paydown onto a revolving debt read as spending, as the budget
- * reads it (`planPaydownRow`).
+ * reads it (`planPaydownRow`), and `housingMode` does the same for a first-time
+ * buyer's mortgage paydown.
  *
- * A paydown row the budget doesn't count as saving (its expense paused, or its
- * debt revolving) takes 0 kr of the target and is marked `excluded`, so a rest
+ * A paydown row the budget doesn't count as saving (its expense paused, its debt
+ * revolving, or a mortgage a first-time buyer doesn't have) takes 0 kr of the target and is marked `excluded`, so a rest
  * row is the same amount here as the live transfer it resolves to.
  */
 export function sizeAllocation(
@@ -52,13 +53,14 @@ export function sizeAllocation(
   savingsTargetPercent: number,
   creating: ReadonlySet<string> = new Set(),
   debts?: PaydownDebts,
+  housingMode?: HousingMode,
 ): AllocationSizing {
   const byId = new Map(allocations.map(a => [a.id, a]));
   const linked = new Set<string>();
   const paused = new Set<string>();
   const others: FixedExpense[] = [];
   for (const e of fixedExpenses) {
-    const row = planPaydownRow(e, byId, debts);
+    const row = planPaydownRow(e, byId, debts, housingMode);
     if (row) linked.add(row.id);
     else {
       others.push(e);
@@ -67,6 +69,7 @@ export function sizeAllocation(
     }
   }
   const excludedAs = (a: SavingsAllocation): AllocationRow['excluded'] => {
+    if (a.destinationKind === 'mortgage' && housingMode === 'first_buyer') return 'noMortgage';
     if (a.destinationKind === 'debt' && debts?.some(d => d.id === a.debtId && d.revolving)) return 'revolving';
     return paused.has(a.id) && !linked.has(a.id) ? 'paused' : undefined;
   };

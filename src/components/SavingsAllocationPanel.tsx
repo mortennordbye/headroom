@@ -63,7 +63,13 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     { v: 'portfolio', l: t.expenseDestination.portfolio },
     { v: 'bsu', l: t.expenseDestination.bsu },
     ...savingsAccounts.map(s => ({ v: `savingsAccount:${s.id}`, l: `${t.expenseDestination.savings}: ${s.name}` })),
-    ...(housingMode !== 'first_buyer' ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }] : []),
+    // A first-time buyer has no mortgage. A row that still points at one (set
+    // up as a homeowner) keeps the option, marked invalid, like a revolving debt.
+    ...(housingMode !== 'first_buyer'
+      ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }]
+      : savingsAllocations.some(a => a.destinationKind === 'mortgage')
+        ? [{ v: 'mortgage', l: `${t.expenseDestination.mortgage} (${t.savingsAllocation.notCountedFirstBuyer})`, invalid: true }]
+        : []),
     // A revolving balance is cleared every month: paying it is spending, not
     // principal, so it is no place to send savings (see planPaydownRow). A row
     // that already points at one keeps it, marked invalid, so the select shows
@@ -89,8 +95,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
   const nowKey = currentMonthKey();
   const nowIncome = monthlyIncomes[nowKey] ?? derivedNetMonthlyFor(nowKey);
   const sizing = useMemo(
-    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, undefined, debts),
-    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, debts],
+    () => sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, undefined, debts, housingMode),
+    [savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, debts, housingMode],
   );
   const plan = sizing.plan;
 
@@ -113,11 +119,13 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     // fixed expenses, so they are committed there rather than in `savings`.
     for (const e of viewFixedExpenses) {
       if (!e.destinationKind || e.automationPaused) continue;
+      // The runner posts nothing to a mortgage a first-time buyer doesn't have.
+      if (e.destinationKind === 'mortgage' && housingMode === 'first_buyer') continue;
       const k = destinationKey({ destinationKind: e.destinationKind, debtId: e.debtId });
       m.set(k, (m.get(k) ?? 0) + e.amount);
     }
     return m;
-  }, [viewSavings, viewFixedExpenses]);
+  }, [viewSavings, viewFixedExpenses, housingMode]);
   const committedTotal = [...committedByKey.values()].reduce((s, n) => s + n, 0);
 
   const creatable = plan.rows.filter(
@@ -140,6 +148,10 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
 
   const labelFor = (row: AllocationRow) =>
     options.find(o => o.v === destinationKey(row))?.l ?? sa.targetMissing;
+  // Shown in the negative colour: a target the options keep only so the select
+  // doesn't fall back on the first one.
+  const invalidTarget = (row: AllocationRow) =>
+    !!options.find(o => o.v === destinationKey(row))?.invalid;
 
   /**
    * The percentage that keeps `row` at the kroner it is moving right now, for
@@ -183,7 +195,7 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     const creating = new Set(creatable.map(r => r.id));
     const made = buildActivation(
       creatable,
-      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating, debts),
+      sizeAllocation(savingsAllocations, nowIncome, fixedExpenses, savingsTargetPercent, creating, debts, housingMode),
       // Same convention as assigning a destination by hand: the first move
       // happens NEXT month, never retroactively.
       currentMonthKey(),
@@ -324,8 +336,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                   value={destinationKey(row)}
                   onChange={e => setTarget(row.id, e.target.value)}
                   aria-label={sa.targetLabel}
-                  aria-invalid={row.excluded === 'revolving' || undefined}
-                  style={row.excluded === 'revolving' ? { color: 'var(--negative)' } : undefined}
+                  aria-invalid={invalidTarget(row) || undefined}
+                  style={invalidTarget(row) ? { color: 'var(--negative)' } : undefined}
                 >
                   {options.map(o => <option key={o.v} value={o.v} disabled={o.invalid}>{o.l}</option>)}
                 </select>
@@ -367,6 +379,12 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                   // amount dropped to nothing on a click that promised not to
                   // change it. Only on a real change, so re-clicking the mode
                   // you are already in cannot round the share you typed.
+                  // A row sized at 0 kr because it isn't counted keeps its stored
+                  // figures, so they return if the row counts again.
+                  if (row.excluded) {
+                    updateSavingsAllocation(row.id, { mode: m });
+                    return;
+                  }
                   const changed = m !== (row.mode ?? 'percent');
                   const percent = changed && m === 'percent' ? percentFor(row) : undefined;
                   updateSavingsAllocation(row.id, {
@@ -387,7 +405,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
               )}
               {row.excluded && (
                 <span className="text-[10.5px] font-medium" style={{ color: 'var(--warning)' }}>
-                  {row.excluded === 'paused' ? sa.notCountedPaused : sa.notCountedRevolving}
+                  {row.excluded === 'paused' ? sa.notCountedPaused
+                    : row.excluded === 'noMortgage' ? sa.notCountedFirstBuyer : sa.notCountedRevolving}
                 </span>
               )}
               <span className="ml-auto text-[13px] font-mono tabular-nums" style={{ color: 'var(--text-1)' }}>

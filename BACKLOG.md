@@ -162,23 +162,13 @@ in git and the CHANGELOG, not here.
   `src/components/charts/CashflowChart.tsx`, `src/pages/YearReviewPage.tsx`,
   `src/lib/yearReview.ts`, `src/lib/savingsMatch.ts`, `perMonthFixed` and `budgetSummary` in
   `mcp/derive.ts`.
-- **A mortgage plan paydown still counts as saving in first-buyer mode.** `planPaydownRow` checks
-  the row, the pause flag and revolving debts, not the housing mode, while the automation runner
-  skips mortgage rules when `housingMode` is `first_buyer` (there is no mortgage), so the budget
-  counts a paydown that moves nothing. **Why deferred**: found in review after the
-  paydown-as-saving change; it needs the housing mode threaded through every `planPaydownTotal`
-  caller. **Unblock**: pass `housingMode` (or a "has mortgage" flag) to `planPaydownRow` and treat
-  a mortgage paydown as not counted in `first_buyer`, with the panel marking the row like a paused
-  one. **Where**: `planPaydownRow` in `src/lib/savingsAllocation.ts`, `sizeAllocation` in
-  `src/lib/allocationSync.ts`, the mortgage skip in `computeAutomationPostings`
-  (`src/lib/automation.ts`), `src/context/FinanceContext.tsx`, `savingsView` in `mcp/derive.ts`.
-- **The allocation panel's select falls back to the first option for a mortgage row in
-  first-buyer mode.** The mortgage option is only listed outside `first_buyer`, so a row that
-  already targets it has no matching `<option>` and the select shows "Bufferkonto". **Why
-  deferred**: found in review; same shape as the revolving-debt fix but a different condition.
-  **Unblock**: keep the mortgage option when a row targets it, disabled and marked invalid, as is
-  done for a revolving debt. **Where**: the `options` list in
-  `src/components/SavingsAllocationPanel.tsx`.
+- **A target the options don't list still shows the wrong one.** A plan row whose debt or savings
+  account was deleted has no matching option, so the select shows "Bufferkonto". `ExpenseDialog` does
+  the same for a mortgage expense in first-buyer mode, and saves the mortgage while showing a debt.
+  **Why deferred**: found in review of the first-buyer mortgage fix, and each needs its own
+  wording. **Unblock**: add a disabled option for whatever target is missing, as the panel now does
+  for a mortgage or a revolving debt. **Where**: `options` in
+  `src/components/SavingsAllocationPanel.tsx`, `debtOptions` in `src/components/ExpenseDialog.tsx`.
 - **The runner charges loan interest against a plan paydown when the regular instalment isn't a
   linked expense.** If the only expense linked to a loan is the plan's extra paydown, the
   automation runner treats it as the whole payment and takes the month's interest out of it, so

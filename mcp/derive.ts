@@ -220,7 +220,7 @@ export function savingsView(blob: ExportPayload, monthKey: string) {
   const savings = blob.savings ?? [];
   const monthSaving = blob.savingsMonthOverrides?.[monthKey];
   // The plan's own loan paydowns: saving, not consumption. Mirrors `planPaydown`.
-  const planPaydown = planPaydownTotal(blob.savingsAllocations, fixed, blob.debts);
+  const planPaydown = planPaydownTotal(blob.savingsAllocations, fixed, blob.debts, blob.housingMode ?? 'first_buyer');
   const plan = resolveSavingsAmounts(savings, pool, target, planPaydown);
   const view = monthSaving === undefined ? plan : resolveSavingsForMonth(savings, pool, target, monthSaving, planPaydown);
   const contributions = savingsContributionTotal(view);
@@ -451,6 +451,7 @@ function perMonthFixed(blob: ExportPayload, nowKey: string) {
     fixedExpenses: live,
     savingsAllocations: blob.savingsAllocations,
     debts: blob.debts,
+    housingMode: blob.housingMode ?? 'first_buyer',
   };
   const fixedFor = (month: string) => fixedExpensesForMonth(snapshots, live, month, nowKey);
   const fixedTotalFor = (month: string) => fixedFor(month).reduce((sum, item) => sum + item.amount, 0);

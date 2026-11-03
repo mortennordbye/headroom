@@ -396,6 +396,7 @@ describe('savingsForMonth / savingsContributionsForMonth', () => {
     ({ fixedExpenses, savings } as unknown as BalanceSnapshot);
 
   const data = (over: Partial<MonthSavingsInput> = {}): MonthSavingsInput => ({
+    housingMode: 'homeowner',
     savings: [kr('buffer', 1000), pct('fund', 10)],
     savingsTargetPercent: 50,
     savingsMonthOverrides: {},
@@ -504,6 +505,7 @@ describe('the plan\'s loan paydowns count toward the target', () => {
 
   it('savingsForMonth reads the month\'s own plan-linked paydowns', () => {
     const data: MonthSavingsInput = {
+      housingMode: 'homeowner',
       savings: [rest],
       savingsTargetPercent: 20,
       savingsMonthOverrides: {},
