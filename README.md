@@ -62,8 +62,11 @@ and open it like any other program. No Docker, no terminal.
 On a Mac you can use [Homebrew](https://brew.sh) instead. It picks the right file for your chip:
 
 ```bash
-brew install --cask mortennordbye/tap/headroom
+brew install --cask mortennordbye/tap/headroom-finance
 ```
+
+Use that full name. Plain `headroom` in Homebrew is a different app, and installing or upgrading it
+replaces this one.
 
 Not sure which Mac you have? Click the Apple menu, then **About This Mac**. If the Chip line says
 Apple, take the arm64 file.
@@ -172,7 +175,7 @@ For how the wrapper works and how releases are cut, see [`desktop/README.md`](de
 
 New versions never touch your data. To move to a newer version:
 
-**The desktop app (A), installed with Homebrew:** run `brew upgrade --cask headroom`.
+**The desktop app (A), installed with Homebrew:** run `brew upgrade --cask headroom-finance`.
 
 **The desktop app (A), installed from a download:** it tells you. On launch it checks whether a newer release exists and, if so,
 offers to open the download page — or to skip that version and stop asking about it. You can also

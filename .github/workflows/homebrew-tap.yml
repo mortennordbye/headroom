@@ -1,7 +1,7 @@
 name: Homebrew tap
 
 # Points the cask in mortennordbye/homebrew-tap at a release, so
-# `brew upgrade --cask headroom` picks it up. Called by the release workflow once
+# `brew upgrade --cask headroom-finance` picks it up. Called by the release workflow once
 # the installers and SHA256SUMS.txt are attached. Run by hand to redo a release
 # whose update failed.
 on:
@@ -64,10 +64,10 @@ jobs:
             -e "s/^  version \".*\"/  version \"$VERSION\"/" \
             -e "s/^  sha256 arm: +\"[0-9a-f]+\"/  sha256 arm:   \"$arm\"/" \
             -e "s/^         intel: +\"[0-9a-f]+\"/         intel: \"$intel\"/" \
-            Casks/headroom.rb
+            Casks/headroom-finance.rb
           rm SHA256SUMS.txt
-          grep -q "$arm" Casks/headroom.rb
-          grep -q "$intel" Casks/headroom.rb
+          grep -q "$arm" Casks/headroom-finance.rb
+          grep -q "$intel" Casks/headroom-finance.rb
 
       - name: Commit and push
         env:
