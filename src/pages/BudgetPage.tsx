@@ -61,6 +61,7 @@ import { CHART } from '../lib/chartColors';
 import { CategoryBreakdown } from '../components/CategoryBreakdown';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { ChartSkeleton } from '../components/ui/Skeleton';
+import BudgetDistributionChart from '../components/BudgetDistributionChart';
 import CategoryTrendChart from '../components/charts/CategoryTrendChart';
 import { CategoryBudgets } from '../components/CategoryBudgets';
 import { MonthlyAccountSpend } from '../components/MonthlyAccountSpend';
@@ -74,7 +75,6 @@ import { SectionLabel } from '../components/ui/SectionLabel';
 
 // Recharts (~150 KB gz) is lazy-loaded so it stays off the first-paint critical
 // path of the default (Budget) route; it's precached after the first visit.
-const BudgetDistributionChart = lazy(() => import('../components/BudgetDistributionChart'));
 const SavingsRateChart = lazy(() => import('../components/charts/SavingsRateChart'));
 const SpendingHeatmap = lazy(() => import('../components/charts/SpendingHeatmap'));
 
@@ -300,13 +300,6 @@ const BudgetPage: React.FC = () => {
   // Informational only — not folded into totalFixedExpenses (which drives budget
   // math); surfaces the monthly minimum debt service alongside fixed costs.
   const totalMonthlyDebtService = totalMinPayments(debts);
-  // Sort biggest-first so the distribution reads as a clean ranking. Uses the
-  // month's recorded expenses when time-travelling (see viewFixedExpenses).
-  // The distribution chart mirrors the Faste utgifter table, so it plots the same
-  // rows against the same total (see sortedSpendExpenses). Savings has its own
-  // table and its own slice in the plan breakdown; including it here would make
-  // the percentages disagree with the table directly above it.
-
   // Group the fixed-expense list by type so each category (Fast / Variabel /
   // Abonnement / Forsikring) reads as its own labelled block. Every expense is
   // still shown; only the visual grouping changes. Untyped legacy rows fall into
@@ -325,10 +318,6 @@ const BudgetPage: React.FC = () => {
     [viewFixedExpenses],
   );
   const spendFixedTotal = fixedListTotal - planPaydown;
-  const sortedSpendExpenses = useMemo(
-    () => [...viewFixedExpenses].sort((a, b) => b.amount - a.amount),
-    [viewFixedExpenses],
-  );
 
   // The savings target in kroner, resolved the same way calcRecommendations does
   // it: a share of income minus CONSUMPTION (never of everything, or automating a
@@ -1201,30 +1190,17 @@ const BudgetPage: React.FC = () => {
         </Card>
 
         {/* Distribution of the expenses to its left — plan-side, no transactions.
-            Sits in the middle and takes the widest share: it is the one card
-            whose readability is bound by width (label + bar + value) rather than
-            by row height. Its height follows the row count rather than
-            stretching to match its neighbours.
+            It shows the same rows as the Faste utgifter table, for the month in view
+            (see viewFixedExpenses), so the two always agree. Savings has its own table
+            and its own slice in the plan breakdown. It takes the widest share because
+            its readability is bound by width (name + amount + share on one line).
             The category/trend/budget charts that used to share this card moved
             below the divider, since they are transaction-derived. */}
         <Card padding="none" className="lg:col-span-5 p-5 md:p-7 flex flex-col gap-5">
           <SectionLabel className="pb-4 border-b border-[var(--border)]">
             {t.distributionAnalysis}
           </SectionLabel>
-          {/* Height follows the row count (~40px a bar) rather than stretching to a
-              neighbour, so the bars sit at a readable density whatever the list size. */}
-          <div className="w-full flex-1" style={{ minHeight: Math.max(320, sortedSpendExpenses.length * 34) }}>
-            <Suspense fallback={<ChartSkeleton />}>
-              <BudgetDistributionChart
-                data={sortedSpendExpenses}
-                totalFixedExpenses={fixedListTotal}
-                expenseColor={expenseColor}
-                formatCurrency={formatCurrency}
-                formatCurrencyShort={formatCurrencyShort}
-                ofFixedCostsLabel={t.common.ofFixedCosts}
-              />
-            </Suspense>
-          </div>
+          <BudgetDistributionChart expenses={viewFixedExpenses} expenseColor={expenseColor} />
         </Card>
 
         {/* Saving — its own table, deliberately NOT part of the fixed-expense list.
