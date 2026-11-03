@@ -277,6 +277,11 @@ in git and the CHANGELOG, not here.
   because it would silently bypass the check for everyone. **Unblock**: a free way to sign, or the
   owner changing that decision. **Where**: `desktop/electron-builder.yml`,
   `desktop/build/entitlements.mac.plist`.
+- **The update notice ignores Homebrew.** A brew install still gets the new-version notice and the
+  offer to open the download page, when it should run `brew upgrade --cask headroom-finance`. **Why
+  deferred**: noted while documenting the move to brew; the app can't yet tell how it was installed.
+  **Unblock**: detect a brew install (for example the Caskroom) or mention the brew command in the
+  notice for everyone. **Where**: `desktop/update.js`, `desktop/main.js`.
 - **The update check only notifies.** Self-install needs both platforms signed, and macOS stays
   unsigned. **Where**:
   `desktop/update.js`, `desktop/main.js`.
