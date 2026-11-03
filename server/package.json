@@ -1,6 +1,6 @@
 {
   "name": "budget-server",
-  "version": "3.17.2",
+  "version": "3.18.0",
   "main": "index.js",
   "dependencies": {
     "better-sqlite3": "^13.0.3",
