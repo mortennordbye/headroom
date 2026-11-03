@@ -160,7 +160,7 @@ jobs:
 
       - name: Temporary launch timing
         if: runner.os == 'macOS'
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: bash .tmp-smoke/run.sh
 
       # Windows code signing, free for open source via SignPath Foundation. This
