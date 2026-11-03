@@ -179,6 +179,15 @@ New versions never touch your data. To move to a newer version:
 
 **The desktop app (A), installed with Homebrew:** run `brew upgrade --cask headroom-finance`.
 
+**Moving a downloaded desktop app to Homebrew:** quit Headroom, then run the command below. It replaces
+the app in Applications, and your data stays where it is in a separate folder. You will likely need to
+click **Open Anyway** again the next time you open it. After that, update with the upgrade command above
+and ignore the app's own new-version notice.
+
+```bash
+brew install --cask --force mortennordbye/tap/headroom-finance
+```
+
 **The desktop app (A), installed from a download:** it tells you. On launch it checks whether a newer release exists and, if so,
 offers to open the download page — or to skip that version and stop asking about it. You can also
 just download the new installer from the
