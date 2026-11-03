@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.2](https://github.com/mortennordbye/headroom/compare/v3.17.1...v3.17.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* count a plan-linked loan paydown as saving everywhere ([#364](https://github.com/mortennordbye/headroom/issues/364)) ([f51724a](https://github.com/mortennordbye/headroom/commit/f51724adb998c4604c0e0807a8a0a81b61878038))
+* make the desktop app start faster and show its window at once ([#372](https://github.com/mortennordbye/headroom/issues/372)) ([9df968d](https://github.com/mortennordbye/headroom/commit/9df968dc697b079d2440770377d9f9848fb7a841))
+
 ## [3.17.1](https://github.com/mortennordbye/headroom/compare/v3.17.0...v3.17.1) (2026-11-01)
 
 
