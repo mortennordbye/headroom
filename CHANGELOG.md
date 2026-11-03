@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.18.1](https://github.com/mortennordbye/headroom/compare/v3.18.0...v3.18.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* keep the Budget debt-service total finite when a debt has no minPayment ([#370](https://github.com/mortennordbye/headroom/issues/370)) ([840a121](https://github.com/mortennordbye/headroom/commit/840a121a329310e28a5337543c8ede2c45b8de8d))
+* stop counting a first-time buyer's mortgage paydown as saving ([#371](https://github.com/mortennordbye/headroom/issues/371)) ([9bf93e2](https://github.com/mortennordbye/headroom/commit/9bf93e25454a5e7b383b66641170497e4ae4faaa))
+
 ## [3.18.0](https://github.com/mortennordbye/headroom/compare/v3.17.2...v3.18.0) (2026-11-03)
 
 
