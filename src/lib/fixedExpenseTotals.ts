@@ -7,7 +7,7 @@
 import type { FixedExpense, ExpenseType } from '../context/FinanceContext';
 
 /** Finite-and-non-negative guard against a hand-edited undefined/NaN amount. */
-const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
+export const amount = (n: number | undefined): number => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
 
 // Untyped legacy/imported rows count as 'fixed' — matching `expenseColor`'s
 // `type ?? 'fixed'` fallback on the Budget page.

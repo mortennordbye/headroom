@@ -9,6 +9,8 @@ interface ProgressBarProps {
   trackColor?: string;
   /** Square-ish 3px corners (category/goal lists) instead of pill ends. */
   square?: boolean;
+  /** Keeps a tiny non-zero fill visible. An empty bar stays empty. */
+  minFillPx?: number;
   className?: string;
 }
 
@@ -18,7 +20,7 @@ interface ProgressBarProps {
  * money-math bug class CLAUDE.md warns about.
  */
 export function ProgressBar({
-  pct, color, heightClass = 'h-2', trackColor = 'var(--bg-elev)', square = false, className = '',
+  pct, color, heightClass = 'h-2', trackColor = 'var(--bg-elev)', square = false, minFillPx, className = '',
 }: ProgressBarProps) {
   const width = Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0;
   const radius = square ? 'rounded-[3px]' : 'rounded-full';
@@ -26,7 +28,7 @@ export function ProgressBar({
     <div className={`${heightClass} ${radius} overflow-hidden ${className}`} style={{ background: trackColor }}>
       <div
         className={`h-full ${radius} transition-[width] duration-300`}
-        style={{ width: `${width}%`, background: color }}
+        style={{ width: `${width}%`, minWidth: width > 0 ? minFillPx : undefined, background: color }}
       />
     </div>
   );

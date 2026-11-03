@@ -58,7 +58,7 @@ test('Budget and Dashboard splits add up to income with a plan paydown active', 
   const plan = '[data-tour="budget-plan"]';
   await expect(page.locator(plan)).toBeVisible();
   // The paydown's row is listed once the stored blob has loaded.
-  await expect(page.getByText('Ekstra nedbetaling', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ekstra nedbetaling', { exact: true }).first()).toBeVisible();
   const canSpend = await valueBeside(page, `${plan} [role="presentation"]`, 'Kan bruke');
   const saving = await valueBeside(page, `${plan} [role="presentation"]`, 'Sparing');
   const pieFixed = await valueBeside(page, `${plan} [role="button"][aria-pressed]`, 'Faste Utgifter');
