@@ -273,13 +273,17 @@ in git and the CHANGELOG, not here.
 
 - **Windows signing is wired but off** until the SignPath Foundation application is approved and the
   secrets are set. **Where**: `.github/workflows/desktop-build.yml`, `desktop/README.md`.
-- **macOS is unsigned** until there's an Apple Developer account. **Where**:
-  `desktop/electron-builder.yml`, `desktop/build/entitlements.mac.plist`.
-- **Homebrew cask updates are not proven yet.** The release App can't reach the tap, so releases
-  don't update the cask, and the Gatekeeper warning remains under brew until the app is signed.
+- **macOS stays unsigned.** The owner decided not to pay for an Apple Developer account, so the
+  Gatekeeper warning stays for DMG and Homebrew installs. Stripping quarantine in the cask was rejected
+  because it would silently bypass the check for everyone. **Unblock**: a free way to sign, or the
+  owner changing that decision. **Where**: `desktop/electron-builder.yml`,
+  `desktop/build/entitlements.mac.plist`.
+- **Homebrew cask updates are not proven yet.** The first automatic update to the tap and a real
+  upgrade have not been checked.
   **Unblock**: the steps in `docs/homebrew-follow-up.md`. **Where**:
   `.github/workflows/homebrew-tap.yml`, `docs/homebrew-follow-up.md`.
-- **The update check only notifies.** Self-install needs both platforms signed. **Where**:
+- **The update check only notifies.** Self-install needs both platforms signed, and macOS stays
+  unsigned. **Where**:
   `desktop/update.js`, `desktop/main.js`.
 - **Launch from a disk image or with Gatekeeper is still slow.** Running from a freshly mounted DMG
   took about 3 s to a visible window on an M4 Pro, against 0.5 s from a local copy, and nothing tells
