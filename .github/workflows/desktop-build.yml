@@ -158,6 +158,11 @@ jobs:
         working-directory: desktop
         run: npm run verify
 
+      - name: Temporary launch timing
+        if: runner.os == 'macOS'
+        timeout-minutes: 15
+        run: bash .tmp-smoke/run.sh
+
       # Windows code signing, free for open source via SignPath Foundation. This
       # is what turns "Windows protected your PC — unknown publisher" into a
       # named publisher; nothing else about the installer can.
