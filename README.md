@@ -56,8 +56,18 @@ and open it like any other program. No Docker, no terminal.
 | Your computer | File to download |
 |---|---|
 | Mac with Apple chip (M1 and newer) | `Headroom-<version>-arm64.dmg` |
-| Mac with Intel chip | `Headroom-<version>.dmg` |
+| Mac with Intel chip | `Headroom-<version>-x64.dmg` |
 | Windows | `Headroom-Setup-<version>.exe` |
+
+On a Mac you can use [Homebrew](https://brew.sh) instead. It picks the right file for your chip:
+
+```bash
+brew install --cask mortennordbye/tap/headroom-finance
+```
+
+Use that full name. Plain `headroom` in Homebrew is a different app, and upgrading it replaces this
+one. Its cleanup also deletes the folder that holds this app's data, so never run
+`brew uninstall --zap headroom`.
 
 Not sure which Mac you have? Click the Apple menu, then **About This Mac**. If the Chip line says
 Apple, take the arm64 file.
@@ -65,7 +75,7 @@ Apple, take the arm64 file.
 ### Installing
 
 **macOS** — open the `.dmg` and drag Headroom into the Applications folder, then eject the disk
-image.
+image. With Homebrew there is nothing more to do here.
 
 **Windows** — run the `.exe`. It installs for your user only, so it does not ask for an
 administrator password, and it adds a Start menu and desktop shortcut.
@@ -84,7 +94,9 @@ section where it says Headroom was blocked, and click **Open Anyway**. Confirm w
 your password. (On macOS 14 and older you can instead right-click the app and choose **Open**.
 Apple removed that shortcut for unsigned apps in macOS 15.)
 
-You only do this once. After that it opens by double-clicking like anything else.
+After that it opens by double-clicking like anything else, though the warning can come back after
+you install an update. Installing with Homebrew does not avoid this warning, because Homebrew marks
+the app the same way a browser does.
 
 Want to check the file is the one CI built before you run it? Every release also carries a
 `SHA256SUMS.txt`. Compare it against your download with `sha256sum -c SHA256SUMS.txt` (macOS:
@@ -165,7 +177,9 @@ For how the wrapper works and how releases are cut, see [`desktop/README.md`](de
 
 New versions never touch your data. To move to a newer version:
 
-**The desktop app (A):** it tells you. On launch it checks whether a newer release exists and, if so,
+**The desktop app (A), installed with Homebrew:** run `brew upgrade --cask headroom-finance`.
+
+**The desktop app (A), installed from a download:** it tells you. On launch it checks whether a newer release exists and, if so,
 offers to open the download page — or to skip that version and stop asking about it. You can also
 just download the new installer from the
 [latest release](https://github.com/mortennordbye/headroom/releases/latest) yourself. Either way,
