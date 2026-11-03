@@ -275,6 +275,9 @@ in git and the CHANGELOG, not here.
   secrets are set. **Where**: `.github/workflows/desktop-build.yml`, `desktop/README.md`.
 - **macOS is unsigned** until there's an Apple Developer account. **Where**:
   `desktop/electron-builder.yml`, `desktop/build/entitlements.mac.plist`.
+- **Homebrew install is not live yet.** The tap repository needs the owner to create it, and the
+  Gatekeeper warning remains under brew until the app is signed. **Unblock**: the steps in
+  `docs/homebrew-follow-up.md`. **Where**: PR #373, `docs/homebrew-follow-up.md`.
 - **The update check only notifies.** Self-install needs both platforms signed. **Where**:
   `desktop/update.js`, `desktop/main.js`.
 - **Launch from a disk image or with Gatekeeper is still slow.** Running from a freshly mounted DMG
