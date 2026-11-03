@@ -37,7 +37,9 @@ let failed = false;
 // One error dialog, then out. Guarded because a dead server trips both the exit
 // handler and the readiness timeout.
 function fatal(message) {
-  if (failed) return;
+  // The window is up during startup, so quitting then is ordinary. It kills the
+  // server, which the readiness wait must not report as a failure to start.
+  if (failed || quitting) return;
   failed = true;
   if (serverProcess) serverProcess.kill();
   dialog.showErrorBox('Headroom could not start', message);
@@ -164,10 +166,12 @@ async function checkForUpdate() {
 }
 
 // The Intel build runs on an Apple chip through Rosetta, which makes everything
-// slower. Nothing tells the user that happened, so say it here.
+// slower. Nothing tells the user that happened, so say it here. Returns whether it
+// did: the page it links to is the latest release, so an update prompt would be a
+// second dialog offering the same download.
 async function warnIfTranslated() {
-  if (!app.isPackaged || process.platform !== 'darwin' || !app.runningUnderARM64Translation) return;
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!app.isPackaged || process.platform !== 'darwin' || !app.runningUnderARM64Translation) return false;
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: 'info',
     title: 'Wrong version for this Mac',
@@ -178,6 +182,7 @@ async function warnIfTranslated() {
     cancelId: 1,
   });
   if (response === 0) shell.openExternal(LATEST_PAGE);
+  return true;
 }
 
 async function start() {
@@ -200,7 +205,7 @@ async function start() {
   if (mainWindow) mainWindow.loadURL(origin);
   // Not awaited: the app is usable while this runs, and a failure here must not
   // reach start()'s catch, which treats what it gets as fatal.
-  warnIfTranslated().then(checkForUpdate).catch((err) => console.error(`[update] check failed: ${err.message}`));
+  warnIfTranslated().then((warned) => (warned ? null : checkForUpdate())).catch((err) => console.error(`[update] check failed: ${err.message}`));
 }
 
 // A second instance would open a second server against the same SQLite file.
