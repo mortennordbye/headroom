@@ -278,10 +278,6 @@ in git and the CHANGELOG, not here.
   because it would silently bypass the check for everyone. **Unblock**: a free way to sign, or the
   owner changing that decision. **Where**: `desktop/electron-builder.yml`,
   `desktop/build/entitlements.mac.plist`.
-- **Homebrew cask updates are not proven yet.** The first automatic update to the tap and a real
-  upgrade have not been checked.
-  **Unblock**: the steps in `docs/homebrew-follow-up.md`. **Where**:
-  `.github/workflows/homebrew-tap.yml`, `docs/homebrew-follow-up.md`.
 - **The update check only notifies.** Self-install needs both platforms signed, and macOS stays
   unsigned. **Where**:
   `desktop/update.js`, `desktop/main.js`.

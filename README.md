@@ -93,8 +93,9 @@ section where it says Headroom was blocked, and click **Open Anyway**. Confirm w
 your password. (On macOS 14 and older you can instead right-click the app and choose **Open**.
 Apple removed that shortcut for unsigned apps in macOS 15.)
 
-You only do this once. After that it opens by double-clicking like anything else. Installing with
-Homebrew does not avoid this warning, because Homebrew marks the app the same way a browser does.
+After that it opens by double-clicking like anything else, though the warning can come back after
+you install an update. Installing with Homebrew does not avoid this warning, because Homebrew marks
+the app the same way a browser does.
 
 Want to check the file is the one CI built before you run it? Every release also carries a
 `SHA256SUMS.txt`. Compare it against your download with `sha256sum -c SHA256SUMS.txt` (macOS:
