@@ -204,7 +204,7 @@ export interface MonthSavingsInput {
   /** So a paydown onto a revolving debt stays spending (`planPaydownRow`). */
   debts?: PaydownDebts;
   /** So a first-time buyer's mortgage paydown stays spending (`planPaydownRow`). */
-  housingMode?: HousingMode;
+  housingMode: HousingMode;
 }
 
 /**

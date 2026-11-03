@@ -73,7 +73,7 @@ describe('SavingsAllocationPanel — mortgage target in first-buyer mode', () =>
 
   it('shows 0 kr for that row', () => {
     const html = render('first_buyer', [{ ...MORTGAGE_ROW, percent: 50 }]);
-    expect(html).toContain('0 kr');
+    expect(html.match(/<span class="ml-auto[^>]*>([^<]*)<\/span>/)?.[1]).toBe('0 kr');
     expect(html).not.toContain('5000 kr');
   });
 

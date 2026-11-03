@@ -138,6 +138,7 @@ describe('cashflowSavingsForMonth', () => {
   const rent: FixedExpense[] = [{ id: 'rent', name: 'Rent', amount: 10000, type: 'fixed' }];
   const snap = (savings: Saving[]) => ({ fixedExpenses: rent, savings } as unknown as BalanceSnapshot);
   const data = (over: Partial<MonthSavingsInput> = {}): MonthSavingsInput => ({
+    housingMode: 'homeowner',
     savings: [kr('s1', 'Buffer', 3000)],
     savingsTargetPercent: 50,
     savingsMonthOverrides: {},

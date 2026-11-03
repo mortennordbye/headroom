@@ -379,6 +379,12 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                   // amount dropped to nothing on a click that promised not to
                   // change it. Only on a real change, so re-clicking the mode
                   // you are already in cannot round the share you typed.
+                  // A row sized at 0 kr because it isn't counted keeps its stored
+                  // figures, so they return if the row counts again.
+                  if (row.excluded) {
+                    updateSavingsAllocation(row.id, { mode: m });
+                    return;
+                  }
                   const changed = m !== (row.mode ?? 'percent');
                   const percent = changed && m === 'percent' ? percentFor(row) : undefined;
                   updateSavingsAllocation(row.id, {

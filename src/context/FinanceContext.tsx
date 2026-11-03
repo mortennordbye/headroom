@@ -2166,9 +2166,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
   // The plan's own loan paydowns: saving, so they count toward the target and
   // stay out of the consumption it is a share of (see planPaydownTotal).
+  // A recorded past month keeps the housing mode it had: selling a home later
+  // doesn't undo the paydowns that month posted.
+  const viewHousingMode = monthKey < currentMonthKey()
+    ? balanceSnapshots[monthKey]?.housingMode ?? housingMode
+    : housingMode;
   const planPaydown = useMemo(
-    () => planPaydownTotal(savingsAllocations, viewFixedExpenses, debts, housingMode),
-    [savingsAllocations, viewFixedExpenses, debts],
+    () => planPaydownTotal(savingsAllocations, viewFixedExpenses, debts, viewHousingMode),
+    [savingsAllocations, viewFixedExpenses, debts, viewHousingMode],
   );
 
   // Percentage- and rest-based savings are resolved to kroner here, so every
@@ -2288,7 +2293,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       resolveSavingsAmounts(savings, savingsBase(income, fixedExpenses), savingsTargetPercent, paydown),
     );
     return planMonthlySavingFor(income, consumption, planContributions, savingsTargetPercent, paydown);
-  }, [monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savings, savingsTargetPercent, savingsAllocations, debts]);
+  }, [monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savings, savingsTargetPercent, savingsAllocations, debts, housingMode]);
 
   const setMonthlyIncomeForMonth = useCallback((key: string, amount: number) => {
     setMonthlyIncomes(prev => ({ ...prev, [key]: amount }));
@@ -2823,7 +2828,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         currentMonth: nowKey,
       }, { otp: t.pensionAutomation.otpRuleName, ips: t.pensionAutomation.ipsRuleName }),
     ];
-  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, savingsAllocations, debts, pension, salaries, jobs, bonuses, overtime, t, assets.departedPaydowns]);
+  }, [savings, savingsMonthOverrides, fixedExpenses, monthlyIncomes, derivedNetMonthlyFor, savingsTargetPercent, savingsAllocations, debts, housingMode, pension, salaries, jobs, bonuses, overtime, t, assets.departedPaydowns]);
 
   // Build the runner's balance/rate snapshot from live state (memoized so the
   // effect and the confirm/decline handlers share one source).
@@ -3050,7 +3055,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (Object.keys(nowMoved).length) {
       setSavings(prev => prev.map(sv => (sv.id in nowMoved ? { ...sv, postedAmount: nowMoved[sv.id] } : sv)));
     }
-  }, [savingsMonthOverrides, savings, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savingsTargetPercent, savingsAllocations, debts, automationState, applyPostingBalances]);
+  }, [savingsMonthOverrides, savings, monthlyIncomes, derivedNetMonthlyFor, fixedExpenses, savingsTargetPercent, savingsAllocations, debts, housingMode, automationState, applyPostingBalances]);
 
   // One write for both figures and the marker, so answering the prompt can't
   // land as three separate saves (or leave the marker set if one of them fails).
