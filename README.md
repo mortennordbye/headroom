@@ -65,8 +65,8 @@ On a Mac you can use [Homebrew](https://brew.sh) instead. It picks the right fil
 brew install --cask mortennordbye/tap/headroom-finance
 ```
 
-Use that full name. Plain `headroom` in Homebrew is a different app, and installing or upgrading it
-replaces this one.
+Use that full name. Plain `headroom` in Homebrew is a different app, and upgrading it replaces this
+one.
 
 Not sure which Mac you have? Click the Apple menu, then **About This Mac**. If the Chip line says
 Apple, take the arm64 file.
