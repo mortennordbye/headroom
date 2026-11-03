@@ -1,0 +1,84 @@
+name: Homebrew tap
+
+# Points the cask in mortennordbye/homebrew-tap at a release, so
+# `brew upgrade --cask headroom-finance` picks it up. Called by the release workflow once
+# the installers and SHA256SUMS.txt are attached. Run by hand to redo a release
+# whose update failed.
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+    secrets:
+      RELEASE_APP_CLIENT_ID:
+        required: true
+      RELEASE_APP_PRIVATE_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, without the v (for example 3.17.2).
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  update-cask:
+    name: Update cask
+    runs-on: ubuntu-latest
+    steps:
+      # GITHUB_TOKEN only reaches this repository, so this uses the release App,
+      # scoped to the tap. The App must be installed on that repository.
+      - name: Get token for the tap
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homebrew-tap
+
+      - name: Checkout the tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-tap
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Update the version and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          gh release download "v$VERSION" --repo "$SOURCE_REPO" --pattern SHA256SUMS.txt
+          sum() { awk -v f="Headroom-$VERSION-$1.dmg" '$2 == f { print $1 }' SHA256SUMS.txt; }
+          arm=$(sum arm64)
+          intel=$(sum x64)
+          # Fail rather than publish a cask that can't install.
+          [[ "$arm" =~ ^[0-9a-f]{64}$ && "$intel" =~ ^[0-9a-f]{64}$ ]]
+          sed -i -E \
+            -e "s/^  version \".*\"/  version \"$VERSION\"/" \
+            -e "s/^  sha256 arm: +\"[0-9a-f]+\"/  sha256 arm:   \"$arm\"/" \
+            -e "s/^         intel: +\"[0-9a-f]+\"/         intel: \"$intel\"/" \
+            Casks/headroom-finance.rb
+          rm SHA256SUMS.txt
+          grep -q "$arm" Casks/headroom-finance.rb
+          grep -q "$intel" Casks/headroom-finance.rb
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Cask already at $VERSION."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "headroom $VERSION"
+          git push

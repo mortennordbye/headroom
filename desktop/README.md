@@ -11,8 +11,9 @@ What differs from the container:
   `%APPDATA%\Headroom\data`) instead of a volume.
 - `HOST=127.0.0.1`, so the listener is loopback-only (the container relies on the compose port
   mapping for that).
-- The service worker is cleared at startup. It buys nothing when the assets are already local and
-  would only reintroduce the stale-shell problem after an app update.
+- There is no service worker. It buys nothing when the assets are already local and would only
+  reintroduce the stale-shell problem after an app update. The SPA skips registering it when the user
+  agent says Electron, and `main.js` clears any registration left by an older version.
 - It checks for a new release on launch (`update.js`), which the browser and container versions have
   no need for.
 
@@ -53,6 +54,11 @@ a `chore(main): release x.y.z` PR up to date. Merging that PR cuts the GitHub re
 `.github/workflows/release.yml` then builds macOS arm64, macOS x64 and Windows x64 and attaches
 the installers to it, in the same run. The version comes from release-please, which also writes it
 into `package.json`, `server/package.json` and this package.
+
+The release then points the cask in
+[`mortennordbye/homebrew-tap`](https://github.com/mortennordbye/homebrew-tap) at the new DMGs
+(`.github/workflows/homebrew-tap.yml`). The release App must be installed on that repository. If the
+update fails, the release itself is unaffected and the workflow can be re-run by hand.
 
 The build (without the release) also runs on any PR touching `desktop/` or `server/`, so a break
 shows up there rather than at release time.
