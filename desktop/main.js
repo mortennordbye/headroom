@@ -26,6 +26,10 @@ const PORT_TRIES = 20;
 // Mirrors --bg in src/index.css so the window doesn't flash white before the
 // SPA paints.
 const BACKGROUND = '#0E100D';
+// Shown until the server answers, so a slow start doesn't look like a frozen window.
+const SPLASH = `data:text/html,${encodeURIComponent(
+  `<!doctype html><title>Headroom</title><body style="margin:0;height:100vh;display:grid;place-items:center;background:${BACKGROUND};color:#9A9C8C;font:14px -apple-system,system-ui,sans-serif">Starting Headroom…`,
+)}`;
 
 let serverProcess = null;
 let mainWindow = null;
@@ -124,15 +128,24 @@ function createWindow() {
     }
   });
   mainWindow.on('closed', () => { mainWindow = null; });
-  // At launch the window is up before the server is, and start() loads it.
-  if (serverReady) mainWindow.loadURL(origin);
+  // At launch the window is up before the server is, and start() moves it on.
+  mainWindow.loadURL(serverReady ? origin : SPLASH);
 }
 
-function readSkippedVersion() {
+function readState() {
   try {
-    return JSON.parse(fs.readFileSync(UPDATE_STATE, 'utf8')).skippedVersion ?? null;
+    return JSON.parse(fs.readFileSync(UPDATE_STATE, 'utf8')) ?? {};
   } catch {
-    return null; // no file yet, or it got mangled — either way, nothing is skipped
+    return {}; // no file yet, or it got mangled — either way, nothing is remembered
+  }
+}
+
+function rememberInState(change) {
+  try {
+    fs.writeFileSync(UPDATE_STATE, `${JSON.stringify({ ...readState(), ...change })}\n`);
+  } catch (err) {
+    // Worst case the prompt comes back next launch. Not worth a second dialog.
+    console.error(`[update] could not save the choice: ${err.message}`);
   }
 }
 
@@ -143,7 +156,7 @@ async function checkForUpdate() {
   // released tag between releases — every `npm start` would nag.
   if (!app.isPackaged) return;
   const current = app.getVersion();
-  const version = await findUpdate({ currentVersion: current, skippedVersion: readSkippedVersion() });
+  const version = await findUpdate({ currentVersion: current, skippedVersion: readState().skippedVersion ?? null });
   if (!version || !mainWindow || mainWindow.isDestroyed()) return;
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: 'info',
@@ -155,14 +168,7 @@ async function checkForUpdate() {
     cancelId: 1,
   });
   if (response === 0) shell.openExternal(LATEST_PAGE);
-  if (response === 2) {
-    try {
-      fs.writeFileSync(UPDATE_STATE, `${JSON.stringify({ skippedVersion: version })}\n`);
-    } catch (err) {
-      // Worst case the prompt comes back next launch. Not worth a second dialog.
-      console.error(`[update] could not remember the skipped version: ${err.message}`);
-    }
-  }
+  if (response === 2) rememberInState({ skippedVersion: version });
 }
 
 // The Intel build runs on an Apple chip through Rosetta, which makes everything
@@ -171,17 +177,18 @@ async function checkForUpdate() {
 // second dialog offering the same download.
 async function warnIfTranslated() {
   if (!app.isPackaged || process.platform !== 'darwin' || !app.runningUnderARM64Translation) return false;
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (!mainWindow || mainWindow.isDestroyed() || readState().rosettaNoticeDismissed) return false;
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: 'info',
     title: 'Wrong version for this Mac',
     message: 'This is the Intel version of Headroom',
     detail: 'Your Mac has an Apple chip, so this version runs slower than it should. Download the file ending in -arm64.dmg and install it over this one. Your data stays untouched.',
-    buttons: ['Download', 'Later'],
+    buttons: ['Download', 'Later', "Don't show again"],
     defaultId: 0,
     cancelId: 1,
   });
   if (response === 0) shell.openExternal(LATEST_PAGE);
+  if (response === 2) rememberInState({ rosettaNoticeDismissed: true });
   return true;
 }
 
