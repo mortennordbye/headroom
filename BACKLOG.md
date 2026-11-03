@@ -159,13 +159,6 @@ in git and the CHANGELOG, not here.
   one. **Where**: `planPaydownRow` in `src/lib/savingsAllocation.ts`, `sizeAllocation` in
   `src/lib/allocationSync.ts`, the mortgage skip in `computeAutomationPostings`
   (`src/lib/automation.ts`), `src/context/FinanceContext.tsx`, `savingsView` in `mcp/derive.ts`.
-- **The allocation panel's select falls back to the first option for a mortgage row in
-  first-buyer mode.** The mortgage option is only listed outside `first_buyer`, so a row that
-  already targets it has no matching `<option>` and the select shows "Bufferkonto". **Why
-  deferred**: found in review; same shape as the revolving-debt fix but a different condition.
-  **Unblock**: keep the mortgage option when a row targets it, disabled and marked invalid, as is
-  done for a revolving debt. **Where**: the `options` list in
-  `src/components/SavingsAllocationPanel.tsx`.
 - **The runner charges loan interest against a plan paydown when the regular instalment isn't a
   linked expense.** If the only expense linked to a loan is the plan's extra paydown, the
   automation runner treats it as the whole payment and takes the month's interest out of it, so

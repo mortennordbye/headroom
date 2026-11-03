@@ -63,7 +63,13 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
     { v: 'portfolio', l: t.expenseDestination.portfolio },
     { v: 'bsu', l: t.expenseDestination.bsu },
     ...savingsAccounts.map(s => ({ v: `savingsAccount:${s.id}`, l: `${t.expenseDestination.savings}: ${s.name}` })),
-    ...(housingMode !== 'first_buyer' ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }] : []),
+    // A first-time buyer has no mortgage. A row that still points at one (set
+    // up as a homeowner) keeps the option, marked invalid, like a revolving debt.
+    ...(housingMode !== 'first_buyer'
+      ? [{ v: 'mortgage', l: t.expenseDestination.mortgage }]
+      : savingsAllocations.some(a => a.destinationKind === 'mortgage')
+        ? [{ v: 'mortgage', l: `${t.expenseDestination.mortgage} (${t.savingsAllocation.notCountedFirstBuyer})`, invalid: true }]
+        : []),
     // A revolving balance is cleared every month: paying it is spending, not
     // principal, so it is no place to send savings (see planPaydownRow). A row
     // that already points at one keeps it, marked invalid, so the select shows
@@ -140,6 +146,10 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
 
   const labelFor = (row: AllocationRow) =>
     options.find(o => o.v === destinationKey(row))?.l ?? sa.targetMissing;
+  // Shown in the negative colour: a revolving debt, or a target the options
+  // keep only so the select doesn't fall back on the first one.
+  const invalidTarget = (row: AllocationRow) =>
+    row.excluded === 'revolving' || !!options.find(o => o.v === destinationKey(row))?.invalid;
 
   /**
    * The percentage that keeps `row` at the kroner it is moving right now, for
@@ -324,8 +334,8 @@ export const SavingsAllocationPanel: React.FC<PanelProps> = ({ bare = false }) =
                   value={destinationKey(row)}
                   onChange={e => setTarget(row.id, e.target.value)}
                   aria-label={sa.targetLabel}
-                  aria-invalid={row.excluded === 'revolving' || undefined}
-                  style={row.excluded === 'revolving' ? { color: 'var(--negative)' } : undefined}
+                  aria-invalid={invalidTarget(row) || undefined}
+                  style={invalidTarget(row) ? { color: 'var(--negative)' } : undefined}
                 >
                   {options.map(o => <option key={o.v} value={o.v} disabled={o.invalid}>{o.l}</option>)}
                 </select>
