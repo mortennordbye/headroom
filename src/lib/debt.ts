@@ -267,10 +267,10 @@ export function withLinkedPayments(
 }
 
 /** Sum of every debt's monthly minimum payment, revolving lines included. A
- *  missing or non-finite `minPayment` counts as 0 so one broken row can't turn
- *  the whole total into NaN. */
+ *  missing, non-finite or negative `minPayment` counts as 0 so one broken row
+ *  can't turn the whole total into NaN or cancel another debt's payment. */
 export function totalMinPayments(debts: Debt[]): number {
-  return debts.reduce((sum, d) => sum + finite(d.minPayment), 0);
+  return debts.reduce((sum, d) => sum + Math.max(0, finite(d.minPayment)), 0);
 }
 
 /**

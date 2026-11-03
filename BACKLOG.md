@@ -14,6 +14,19 @@ in git and the CHANGELOG, not here.
   app models one person. **Unblock**: an issue covering a marital-status field. **Where**:
   `src/lib/norwegianTax.ts`, `annualMortgageInterest` in `src/context/FinanceContext.tsx` and
   `mcp/derive.ts`.
+- **The Budget debt-service line disagrees with the debt section.** It sums raw minimums, so it
+  leaves out linked extra payments (a 1000 minimum with a linked 3000 shows 1000, Assets uses 3000),
+  counts a deferred loan that has nothing due, and counts a revolving line the payoff logic ignores.
+  **Why deferred**: all predate the finite guard, and they change a shown figure. **Unblock**: decide
+  what the line means, then build it from `withLinkedPayments`. **Where**: `totalMinPayments` in
+  `src/lib/debt.ts`, `totalMonthlyDebtService` in `src/pages/BudgetPage.tsx`.
+- **A missing `minPayment` still reaches the payoff maths.** `coerceBySchema` only coerces a key that
+  exists, so an absent `minPayment` survives loading. `simulatePayoff` then adds `undefined` to its
+  budget in `planPayoff`, and the debt-service line counts that debt as 0 with no sign anything is
+  missing. **Why deferred**: found in review of the debt-service guard, and fixing it at the load
+  boundary touches guarded persistence code. **Unblock**: fill absent schema keys with 0 for debts in
+  `sanitizePayload`, with a way to show a payment is unknown. **Where**: `src/lib/sanitizePayload.ts`,
+  `simulatePayoff` in `src/lib/debt.ts`.
 - **Deferred studielån with a linked expense.** While `interestFreeUntil` is in the future, the
   projections hold a student loan flat, but the paydown automation has no notion of deferment and
   posts a linked expense's payment into it every month, so the Assets balance falls while the

@@ -432,6 +432,11 @@ describe('totalMinPayments', () => {
     expect(totalMinPayments(debts)).toBe(1000);
   });
 
+  it("doesn't let a negative minPayment cancel another debt's", () => {
+    const debts = [debt({ id: 'a', minPayment: 1000 }), debt({ id: 'b', minPayment: -1000 })];
+    expect(totalMinPayments(debts)).toBe(1000);
+  });
+
   it('includes revolving lines, as the Budget page always has', () => {
     const debts = [debt({ id: 'a', minPayment: 1000 }), debt({ id: 'b', revolving: true, minPayment: 500 })];
     expect(totalMinPayments(debts)).toBe(1500);
