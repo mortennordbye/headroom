@@ -34,6 +34,7 @@ import { AccountBadge } from '../components/AccountBadge';
 import { accountGroupKey } from '../lib/account';
 import { txDisplayName } from '../lib/labelRules';
 import { buildMatchHaystack, normalizeMatchText } from '../lib/text';
+import { totalMinPayments } from '../lib/debt';
 import FunBudget from '../components/FunBudget';
 import PayslipImportModal from '../components/PayslipImportModal';
 import { format, isSameMonth, startOfMonth } from 'date-fns';
@@ -298,7 +299,7 @@ const BudgetPage: React.FC = () => {
 
   // Informational only — not folded into totalFixedExpenses (which drives budget
   // math); surfaces the monthly minimum debt service alongside fixed costs.
-  const totalMonthlyDebtService = debts.reduce((sum, d) => sum + d.minPayment, 0);
+  const totalMonthlyDebtService = totalMinPayments(debts);
   // Sort biggest-first so the distribution reads as a clean ranking. Uses the
   // month's recorded expenses when time-travelling (see viewFixedExpenses).
   // The distribution chart mirrors the Faste utgifter table, so it plots the same
