@@ -11,8 +11,9 @@ What differs from the container:
   `%APPDATA%\Headroom\data`) instead of a volume.
 - `HOST=127.0.0.1`, so the listener is loopback-only (the container relies on the compose port
   mapping for that).
-- The service worker is cleared at startup. It buys nothing when the assets are already local and
-  would only reintroduce the stale-shell problem after an app update.
+- There is no service worker. It buys nothing when the assets are already local and would only
+  reintroduce the stale-shell problem after an app update. The SPA skips registering it when the user
+  agent says Electron, and `main.js` clears any registration left by an older version.
 - It checks for a new release on launch (`update.js`), which the browser and container versions have
   no need for.
 

@@ -56,7 +56,7 @@ and open it like any other program. No Docker, no terminal.
 | Your computer | File to download |
 |---|---|
 | Mac with Apple chip (M1 and newer) | `Headroom-<version>-arm64.dmg` |
-| Mac with Intel chip | `Headroom-<version>.dmg` |
+| Mac with Intel chip | `Headroom-<version>-x64.dmg` |
 | Windows | `Headroom-Setup-<version>.exe` |
 
 Not sure which Mac you have? Click the Apple menu, then **About This Mac**. If the Chip line says

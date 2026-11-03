@@ -277,6 +277,11 @@ in git and the CHANGELOG, not here.
   `desktop/electron-builder.yml`, `desktop/build/entitlements.mac.plist`.
 - **The update check only notifies.** Self-install needs both platforms signed. **Where**:
   `desktop/update.js`, `desktop/main.js`.
+- **Launch from a disk image or with Gatekeeper is still slow.** Running from a freshly mounted DMG
+  took about 3 s to a visible window on an M4 Pro, against 0.5 s from a local copy, and nothing tells
+  the user to move the app. Not fixed because `app.moveToApplicationsFolder()` has not been tried on an
+  ad-hoc signed build, and the quarantine cost has not been measured because the Gatekeeper prompt
+  needs a person. **Unblock**: try both on a quarantined download. **Where**: `desktop/main.js`.
 - **Bank linking is untested in the desktop app.** The callback lands in the system browser and
   breaks if the port moves off 3737. **Unblock**: a `headroom://` protocol handler. **Where**:
   `desktop/main.js`, `server/bank.js`.

@@ -30,6 +30,7 @@ const BACKGROUND = '#0E100D';
 let serverProcess = null;
 let mainWindow = null;
 let origin = null;
+let serverReady = false;
 let quitting = false;
 let failed = false;
 
@@ -106,10 +107,8 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: BACKGROUND,
     title: 'Headroom',
-    show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
-  mainWindow.once('ready-to-show', () => mainWindow.show());
   // Anything that isn't the local app — a bank's BankID page, an outbound link —
   // belongs in the user's real browser, not inside this window.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -123,7 +122,8 @@ function createWindow() {
     }
   });
   mainWindow.on('closed', () => { mainWindow = null; });
-  mainWindow.loadURL(origin);
+  // At launch the window is up before the server is, and start() loads it.
+  if (serverReady) mainWindow.loadURL(origin);
 }
 
 function readSkippedVersion() {
@@ -163,6 +163,23 @@ async function checkForUpdate() {
   }
 }
 
+// The Intel build runs on an Apple chip through Rosetta, which makes everything
+// slower. Nothing tells the user that happened, so say it here.
+async function warnIfTranslated() {
+  if (!app.isPackaged || process.platform !== 'darwin' || !app.runningUnderARM64Translation) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Wrong version for this Mac',
+    message: 'This is the Intel version of Headroom',
+    detail: 'Your Mac has an Apple chip, so this version runs slower than it should. Download the file ending in -arm64.dmg and install it over this one. Your data stays untouched.',
+    buttons: ['Download', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response === 0) shell.openExternal(LATEST_PAGE);
+}
+
 async function start() {
   const port = await pickPort();
   if (!port) {
@@ -172,13 +189,18 @@ async function start() {
   // The SPA registers a service worker for the browser/PWA build. Here it buys
   // nothing (the assets are already local) and only adds the stale-shell failure
   // mode after an app update, so drop any registration left by a previous run.
-  await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] });
-  startServer(port);
-  if (!(await waitForServer())) return fatal('The Headroom server did not start in time.');
+  const cleared = session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] });
+  // Show the window now: a slow or cold start should look like an app starting,
+  // not a Dock icon that seems to do nothing.
   createWindow();
+  startServer(port);
+  const [ready] = await Promise.all([waitForServer(), cleared]);
+  if (!ready) return fatal('The Headroom server did not start in time.');
+  serverReady = true;
+  if (mainWindow) mainWindow.loadURL(origin);
   // Not awaited: the app is usable while this runs, and a failure here must not
   // reach start()'s catch, which treats what it gets as fatal.
-  checkForUpdate().catch((err) => console.error(`[update] check failed: ${err.message}`));
+  warnIfTranslated().then(checkForUpdate).catch((err) => console.error(`[update] check failed: ${err.message}`));
 }
 
 // A second instance would open a second server against the same SQLite file.
