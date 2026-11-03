@@ -60,11 +60,6 @@ The release then points the cask in
 (`.github/workflows/homebrew-tap.yml`). The release App must be installed on that repository. If the
 update fails, the release itself is unaffected and the workflow can be re-run by hand.
 
-The cask is called `headroom-finance` because Homebrew's own `headroom` cask is an unrelated app
-(`com.extraheadroom.headroom`), and `brew upgrade --cask headroom` replaces this app with it. That
-cask's `zap` also trashes `~/Library/Application Support/Headroom`, which holds this app's database,
-so never run `brew uninstall --zap headroom` on a machine with real data.
-
 The build (without the release) also runs on any PR touching `desktop/` or `server/`, so a break
 shows up there rather than at release time.
 

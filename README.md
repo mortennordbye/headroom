@@ -66,7 +66,8 @@ brew install --cask mortennordbye/tap/headroom-finance
 ```
 
 Use that full name. Plain `headroom` in Homebrew is a different app, and upgrading it replaces this
-one.
+one. Its cleanup also deletes the folder that holds this app's data, so never run
+`brew uninstall --zap headroom`.
 
 Not sure which Mac you have? Click the Apple menu, then **About This Mac**. If the Chip line says
 Apple, take the arm64 file.
