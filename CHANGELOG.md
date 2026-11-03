@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.18.0](https://github.com/mortennordbye/headroom/compare/v3.17.2...v3.18.0) (2026-11-03)
+
+
+### Features
+
+* install and upgrade the Mac app with Homebrew ([#373](https://github.com/mortennordbye/headroom/issues/373)) ([47d1246](https://github.com/mortennordbye/headroom/commit/47d1246c229eb450206fd6082d152e4679c8e739))
+
+
+### Bug Fixes
+
+* rename the Homebrew cask so upgrades keep the right app ([#376](https://github.com/mortennordbye/headroom/issues/376)) ([162755e](https://github.com/mortennordbye/headroom/commit/162755eec811ed65f6341a414252683021edd54a))
+
 ## [3.17.2](https://github.com/mortennordbye/headroom/compare/v3.17.1...v3.17.2) (2026-11-03)
 
 
