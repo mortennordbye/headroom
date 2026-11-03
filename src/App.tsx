@@ -8,6 +8,11 @@ import GainReviewPrompt from './components/GainReviewPrompt';
 import LoginScreen from './components/LoginScreen';
 import Layout from './components/Layout';
 
+// This component is what registers the service worker. The desktop app serves its
+// assets locally and updates through its installer, so there it would only re-fetch
+// and re-cache every asset on each launch (desktop/main.js clears it at startup).
+const IS_DESKTOP = navigator.userAgent.includes('Electron');
+
 // Code-split per route: each page bundle is fetched only when navigated to.
 // Once a bundle has loaded (by a visit or the idle preload below), the page
 // renders straight from it. A bare lazy() would still suspend for one beat on its
@@ -93,7 +98,7 @@ function App() {
           </BrowserRouter>
         </ErrorBoundary>
       </AuthGate>
-      <UpdatePrompt />
+      {!IS_DESKTOP && <UpdatePrompt />}
       <CatchupPrompt />
       <GainReviewPrompt />
     </FinanceProvider>

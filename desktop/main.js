@@ -26,17 +26,24 @@ const PORT_TRIES = 20;
 // Mirrors --bg in src/index.css so the window doesn't flash white before the
 // SPA paints.
 const BACKGROUND = '#0E100D';
+// Shown until the server answers, so a slow start doesn't look like a frozen window.
+const SPLASH = `data:text/html,${encodeURIComponent(
+  `<!doctype html><title>Headroom</title><body style="margin:0;height:100vh;display:grid;place-items:center;background:${BACKGROUND};color:#9A9C8C;font:14px -apple-system,system-ui,sans-serif">Starting Headroom…`,
+)}`;
 
 let serverProcess = null;
 let mainWindow = null;
 let origin = null;
+let serverReady = false;
 let quitting = false;
 let failed = false;
 
 // One error dialog, then out. Guarded because a dead server trips both the exit
 // handler and the readiness timeout.
 function fatal(message) {
-  if (failed) return;
+  // The window is up during startup, so quitting then is ordinary. It kills the
+  // server, which the readiness wait must not report as a failure to start.
+  if (failed || quitting) return;
   failed = true;
   if (serverProcess) serverProcess.kill();
   dialog.showErrorBox('Headroom could not start', message);
@@ -106,10 +113,8 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: BACKGROUND,
     title: 'Headroom',
-    show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
-  mainWindow.once('ready-to-show', () => mainWindow.show());
   // Anything that isn't the local app — a bank's BankID page, an outbound link —
   // belongs in the user's real browser, not inside this window.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -123,14 +128,24 @@ function createWindow() {
     }
   });
   mainWindow.on('closed', () => { mainWindow = null; });
-  mainWindow.loadURL(origin);
+  // At launch the window is up before the server is, and start() moves it on.
+  mainWindow.loadURL(serverReady ? origin : SPLASH);
 }
 
-function readSkippedVersion() {
+function readState() {
   try {
-    return JSON.parse(fs.readFileSync(UPDATE_STATE, 'utf8')).skippedVersion ?? null;
+    return JSON.parse(fs.readFileSync(UPDATE_STATE, 'utf8')) ?? {};
   } catch {
-    return null; // no file yet, or it got mangled — either way, nothing is skipped
+    return {}; // no file yet, or it got mangled — either way, nothing is remembered
+  }
+}
+
+function rememberInState(change) {
+  try {
+    fs.writeFileSync(UPDATE_STATE, `${JSON.stringify({ ...readState(), ...change })}\n`);
+  } catch (err) {
+    // Worst case the prompt comes back next launch. Not worth a second dialog.
+    console.error(`[update] could not save the choice: ${err.message}`);
   }
 }
 
@@ -141,7 +156,7 @@ async function checkForUpdate() {
   // released tag between releases — every `npm start` would nag.
   if (!app.isPackaged) return;
   const current = app.getVersion();
-  const version = await findUpdate({ currentVersion: current, skippedVersion: readSkippedVersion() });
+  const version = await findUpdate({ currentVersion: current, skippedVersion: readState().skippedVersion ?? null });
   if (!version || !mainWindow || mainWindow.isDestroyed()) return;
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: 'info',
@@ -153,14 +168,28 @@ async function checkForUpdate() {
     cancelId: 1,
   });
   if (response === 0) shell.openExternal(LATEST_PAGE);
-  if (response === 2) {
-    try {
-      fs.writeFileSync(UPDATE_STATE, `${JSON.stringify({ skippedVersion: version })}\n`);
-    } catch (err) {
-      // Worst case the prompt comes back next launch. Not worth a second dialog.
-      console.error(`[update] could not remember the skipped version: ${err.message}`);
-    }
-  }
+  if (response === 2) rememberInState({ skippedVersion: version });
+}
+
+// The Intel build runs on an Apple chip through Rosetta, which makes everything
+// slower. Nothing tells the user that happened, so say it here. Returns whether it
+// did: the page it links to is the latest release, so an update prompt would be a
+// second dialog offering the same download.
+async function warnIfTranslated() {
+  if (!app.isPackaged || process.platform !== 'darwin' || !app.runningUnderARM64Translation) return false;
+  if (!mainWindow || mainWindow.isDestroyed() || readState().rosettaNoticeDismissed) return false;
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Wrong version for this Mac',
+    message: 'This is the Intel version of Headroom',
+    detail: 'Your Mac has an Apple chip, so this version runs slower than it should. Download the file ending in -arm64.dmg and install it over this one. Your data stays untouched.',
+    buttons: ['Download', 'Later', "Don't show again"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response === 0) shell.openExternal(LATEST_PAGE);
+  if (response === 2) rememberInState({ rosettaNoticeDismissed: true });
+  return true;
 }
 
 async function start() {
@@ -172,13 +201,18 @@ async function start() {
   // The SPA registers a service worker for the browser/PWA build. Here it buys
   // nothing (the assets are already local) and only adds the stale-shell failure
   // mode after an app update, so drop any registration left by a previous run.
-  await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] });
-  startServer(port);
-  if (!(await waitForServer())) return fatal('The Headroom server did not start in time.');
+  const cleared = session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] });
+  // Show the window now: a slow or cold start should look like an app starting,
+  // not a Dock icon that seems to do nothing.
   createWindow();
+  startServer(port);
+  const [ready] = await Promise.all([waitForServer(), cleared]);
+  if (!ready) return fatal('The Headroom server did not start in time.');
+  serverReady = true;
+  if (mainWindow) mainWindow.loadURL(origin);
   // Not awaited: the app is usable while this runs, and a failure here must not
   // reach start()'s catch, which treats what it gets as fatal.
-  checkForUpdate().catch((err) => console.error(`[update] check failed: ${err.message}`));
+  warnIfTranslated().then((warned) => (warned ? null : checkForUpdate())).catch((err) => console.error(`[update] check failed: ${err.message}`));
 }
 
 // A second instance would open a second server against the same SQLite file.
