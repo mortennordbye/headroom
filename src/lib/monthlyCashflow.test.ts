@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isSpend, monthlyCashflow } from './monthlyCashflow';
-import type { CashflowSavings } from './savingsMatch';
+import { cashflowSavingsForMonth, type CashflowSavings } from './savingsMatch';
 import type { DailyTransaction, FixedExpense, Saving } from '../context/FinanceContext';
 
 const tx = (over: Partial<DailyTransaction>): DailyTransaction => ({
@@ -238,5 +238,37 @@ describe('monthlyCashflow — a one-legged savings transfer', () => {
     expect(row.variable).toBe(900);
     expect(row.expenses).toBe(1000);
     expect(row.saved).toBe(3000);
+  });
+});
+
+describe('monthlyCashflow — a plan-linked loan paydown', () => {
+  const month = '2026-06';
+  // Income 50 000, fixed 20 000 of which 3 000 is the plan's extra mortgage paydown, no other saving.
+  const run = (paydown: Partial<FixedExpense> = {}) => {
+    const fixed: FixedExpense[] = [
+      { id: 'rent', name: 'Fellesutgifter', amount: 17000, type: 'fixed' },
+      { id: 'p', name: 'Ekstra nedbetaling', amount: 3000, type: 'fixed', destinationKind: 'mortgage', allocationId: 'm', ...paydown },
+    ];
+    const data = {
+      savings: [], savingsTargetPercent: 0, savingsMonthOverrides: {}, balanceSnapshots: {}, fixedExpenses: fixed,
+      savingsAllocations: [{ id: 'm', percent: 100, destinationKind: 'mortgage' as const }],
+      debts: [], housingMode: 'homeowner' as const,
+    };
+    const savings: CashflowSavings = { forMonth: (m) => cashflowSavingsForMonth(data, m, month, 50000), netted: [] };
+    return monthlyCashflow([month], [], { [month]: 50000 }, 50000, 20000, null, fixed, savings)[0];
+  };
+
+  it('counts the paydown once, as saved, not as an expense', () => {
+    const row = run();
+    expect(row.expenses).toBe(17000);
+    expect(row.saved).toBe(3000);
+    expect(row.net).toBe(30000);
+    expect(row.rate).toBe(66);
+  });
+
+  it('keeps a paused paydown as an expense', () => {
+    const row = run({ automationPaused: true });
+    expect(row.expenses).toBe(20000);
+    expect(row.saved).toBe(0);
   });
 });

@@ -25,6 +25,8 @@
 import type { DailyTransaction, Saving } from '../context/FinanceContext';
 import { isSpend } from './spend';
 import { savingsForMonth, type MonthSavingsInput } from './savingsRate';
+import { planPaydownTotal } from './savingsAllocation';
+import { fixedExpensesForMonth } from './snapshots';
 
 /** How far a row's amount may sit from the saving: 1 %, at least 1 kr. */
 export function savingsMatchTolerance(amount: number): number {
@@ -35,6 +37,12 @@ export function savingsMatchTolerance(amount: number): number {
 export interface MonthSavings {
   savings: Saving[];
   matchable: boolean;
+  /**
+   * The plan's own loan paydowns that month (`planPaydownTotal`): fixed
+   * expenses, but saving, so the cashflow moves them out of the fixed total
+   * and into `saved`. Must be summed from the same fixed list as the total.
+   */
+  paydown?: number;
 }
 
 /** What `monthlyCashflow` needs to report savings and match their imported legs. */
@@ -57,9 +65,11 @@ export function cashflowSavingsForMonth(
   income: number,
 ): MonthSavings {
   const recorded = data.balanceSnapshots[monthKey]?.fixedExpenses !== undefined;
+  const fixed = fixedExpensesForMonth(data.balanceSnapshots, data.fixedExpenses, monthKey, nowKey);
   return {
     savings: savingsForMonth(data, monthKey, nowKey, income),
     matchable: monthKey >= nowKey || recorded,
+    paydown: planPaydownTotal(data.savingsAllocations, fixed, data.debts, data.housingMode),
   };
 }
 

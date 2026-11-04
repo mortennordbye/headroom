@@ -67,7 +67,9 @@ export function monthlyCashflow(
   // for both to resolve each month's own fixed expenses.
   fixedExpenses?: FixedExpense[] | ((month: string) => FixedExpense[]),
   // Each month's savings (`cashflowSavingsForMonth`). Must NOT also be inside
-  // `totalFixedExpenses`: they are reported as `saved`, apart from spending, so
+  // `totalFixedExpenses`, except the plan's loan paydowns (`paydown`), which are
+  // fixed expenses and are moved out of that total here. They are reported as
+  // `saved`, apart from spending, so
   // the cashflow classifies savings the same way as the savings rate. Each one is
   // matched against the month's spend rows so a one-legged savings transfer that
   // isn't marked as a transfer counts once, as saved, not also as spending.
@@ -88,10 +90,13 @@ export function monthlyCashflow(
     // double-charges any bill that is both budgeted and imported. With them,
     // an enveloped bill costs max(budgeted, actual) — the budget is reserved and
     // its own transactions draw it down — and only unenveloped spend adds on top.
-    const fixedTotal = typeof totalFixedExpenses === 'function' ? totalFixedExpenses(month) : totalFixedExpenses;
     const fixedRows = typeof fixedExpenses === 'function' ? fixedExpenses(month) : fixedExpenses;
     const rec = fixedRows?.length ? reconcile(fixedRows, txs, month) : null;
-    const { savings: monthSavings, matchable } = savings ? savings.forMonth(month) : { savings: [], matchable: false };
+    const { savings: monthSavings, matchable, paydown = 0 } = savings ? savings.forMonth(month) : { savings: [], matchable: false };
+    // The plan's loan paydowns are saving: out of the fixed total, into `saved`.
+    // Their rows stay in the reconciliation, so an imported payment is still
+    // absorbed by its envelope rather than counted as spending.
+    const fixedTotal = (typeof totalFixedExpenses === 'function' ? totalFixedExpenses(month) : totalFixedExpenses) - paydown;
     // A row a fixed-expense envelope already owns can't also be a saving.
     const matches = matchable
       ? matchSavingsToTransactions(monthSavings, txs, month, {
@@ -109,7 +114,7 @@ export function monthlyCashflow(
       expenses = fixedTotal + unenveloped + rec.totals.overspent;
     }
     // A matched saving counts what its row actually moved; the rest, as planned.
-    const saved = savingsContributionTotal(monthSavings.filter((s) => !matchedIds.has(s.id))) + matchedSpend;
+    const saved = savingsContributionTotal(monthSavings.filter((s) => !matchedIds.has(s.id))) + matchedSpend + paydown;
     return {
       month, income, variable, expenses, saved, net: income - expenses - saved, rate: cashflowRate(income, expenses),
       // A month whose only rows are matched savings legs logged no spending.

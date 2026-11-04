@@ -150,18 +150,14 @@ in git and the CHANGELOG, not here.
 - **The savings target shrinks as you automate, by construction** (it's a share of the
   uncommitted residual). Surfaced in the panel rather than changed. **Where**:
   `calcRecommendations` in `src/lib/calculations.ts`.
-- **The cashflow chart and Year review still count a plan paydown as an expense.** A paydown the
-  savings allocation set up is saving everywhere the month is split into saving and spending
-  (`planPaydownTotal`), but `monthlyCashflow` takes each month's whole fixed-expense total as
-  expenses and only the savings transfers as `saved`, so these two views still show it under
-  expenses. **Why deferred**: it was left out of the paydown-as-saving change while #363 was
-  reworking that cashflow code, to avoid a collision; #363 has merged, so nothing blocks it now
-  beyond keeping that change small. **Unblock**: move each month's plan paydown out of the fixed
-  total and into the month's savings (`cashflowSavingsForMonth`), with that month's fixed
-  expenses, allocations and debts. **Where**: `src/lib/monthlyCashflow.ts`,
-  `src/components/charts/CashflowChart.tsx`, `src/pages/YearReviewPage.tsx`,
-  `src/lib/yearReview.ts`, `src/lib/savingsMatch.ts`, `perMonthFixed` and `budgetSummary` in
-  `mcp/derive.ts`.
+- **Year review counts every saving as spending.** `monthlyCashflow` now reports a plan paydown
+  under `saved` like a savings transfer (#369), but `yearReview` folds `saved` back into
+  `expenses` on purpose (#363), so its "Spending" column, net and savings rate still treat
+  saving, paydown included, as money out. **Why deferred**: showing saving apart there changes
+  the Year review's savings rate for every savings transfer, not just the paydown, which reverses
+  a deliberate choice. **Unblock**: decide whether the Year review should split spending from
+  saving like the cashflow chart. **Where**: `yearReview` in `src/lib/yearReview.ts`,
+  `src/pages/YearReviewPage.tsx`, `yearReviewSummary` in `mcp/derive.ts`.
 - **A target the options don't list still shows the wrong one.** A plan row whose debt or savings
   account was deleted has no matching option, so the select shows "Bufferkonto". `ExpenseDialog` does
   the same for a mortgage expense in first-buyer mode, and saves the mortgage while showing a debt.
