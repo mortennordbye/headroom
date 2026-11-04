@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.19.0](https://github.com/mortennordbye/headroom/compare/v3.18.1...v3.19.0) (2026-11-04)
+
+
+### Features
+
+* **budget:** show the distribution as a type split and ranked rows ([#380](https://github.com/mortennordbye/headroom/issues/380)) ([b1d6597](https://github.com/mortennordbye/headroom/commit/b1d6597770cf0e617d1b720aed28f360fae6e048))
+
+
+### Bug Fixes
+
+* **deps:** bump the npm-minor-patch group with 3 updates ([#383](https://github.com/mortennordbye/headroom/issues/383)) ([6e0394d](https://github.com/mortennordbye/headroom/commit/6e0394daa0690168754ad55830f29409df690d64))
+* **deps:** bump the server-desktop group across 2 directories with 2 updates ([#384](https://github.com/mortennordbye/headroom/issues/384)) ([b68971d](https://github.com/mortennordbye/headroom/commit/b68971dca245a6dfe2279226917254aa598b6719))
+
 ## [3.18.1](https://github.com/mortennordbye/headroom/compare/v3.18.0...v3.18.1) (2026-11-03)
 
 
