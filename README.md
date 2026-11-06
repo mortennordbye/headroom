@@ -1,14 +1,14 @@
 <div align="center">
 
+<img src="public/icon-512.png" alt="" width="112" height="112">
+
 # Headroom
 
 ### Budgets · Assets · Investments · Loan modeling
 
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vite.dev/) [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/) [![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-
-[![CI](https://github.com/mortennordbye/headroom/actions/workflows/build.yml/badge.svg)](https://github.com/mortennordbye/headroom/actions/workflows/build.yml) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mortennordbye/headroom/badge)](https://scorecard.dev/viewer/?uri=github.com/mortennordbye/headroom)
-
-[![License](https://img.shields.io/github/license/mortennordbye/headroom?style=flat-square)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/commits/main) [![Issues](https://img.shields.io/github/issues/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/issues) [![Stars](https://img.shields.io/github/stars/mortennordbye/headroom?style=flat-square)](https://github.com/mortennordbye/headroom/stargazers)
+[![React](https://img.shields.io/badge/React-19-c9a24a?style=flat-square&labelColor=463c1f&logo=react&logoColor=white)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-463c1f?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Vite](https://img.shields.io/badge/Vite-463c1f?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/) [![Docker](https://img.shields.io/badge/Docker-463c1f?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![SQLite](https://img.shields.io/badge/SQLite-463c1f?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)<br>
+[![CI](https://img.shields.io/github/actions/workflow/status/mortennordbye/headroom/build.yml?branch=main&style=flat-square&labelColor=463c1f&label=ci)](https://github.com/mortennordbye/headroom/actions/workflows/build.yml) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/mortennordbye/headroom?style=flat-square&labelColor=463c1f&label=openssf%20scorecard)](https://scorecard.dev/viewer/?uri=github.com/mortennordbye/headroom)<br>
+[![License](https://img.shields.io/github/license/mortennordbye/headroom?style=flat-square&labelColor=463c1f&color=c9a24a)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/headroom?style=flat-square&labelColor=463c1f&color=c9a24a)](https://github.com/mortennordbye/headroom/commits/main) [![Issues](https://img.shields.io/github/issues/mortennordbye/headroom?style=flat-square&labelColor=463c1f&color=c9a24a)](https://github.com/mortennordbye/headroom/issues) [![Stars](https://img.shields.io/github/stars/mortennordbye/headroom?style=flat-square&labelColor=463c1f&color=c9a24a)](https://github.com/mortennordbye/headroom/stargazers)
 
 ### [**Try the live demo → headroom.nordbye.it**](https://headroom.nordbye.it)
 
@@ -25,7 +25,6 @@ A self-hosted personal finance tracker. Track monthly budgets, manage assets and
 | ![Dashboard](screenshots/dashboard.png) | ![Budget](screenshots/budget.png) |
 
 ![Net worth](screenshots/assets.png)
-
 </div>
 
 ## Features
