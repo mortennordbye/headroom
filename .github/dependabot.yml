@@ -12,16 +12,25 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(deps):"
     groups:
       github-actions:
+        update-types: ["minor", "patch"]
+        patterns: ["*"]
+      # The auto-merge workflow reads this exact group name.
+      security:
+        applies-to: security-updates
         patterns: ["*"]
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "fix(deps):"
     # Keep the base image on the Node LTS line. Digest and minor refreshes still
@@ -34,12 +43,18 @@ updates:
         update-types: ["version-update:semver-major"]
     groups:
       docker:
+        update-types: ["minor", "patch"]
+        patterns: ["*"]
+      security:
+        applies-to: security-updates
         patterns: ["*"]
 
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "fix(deps):"
       prefix-development: "chore(deps-dev):"
@@ -48,7 +63,7 @@ updates:
       npm-minor-patch:
         update-types: ["minor", "patch"]
       # Without this, security updates ignore groups entirely and arrive as one
-      # PR per package. The name is load-bearing: dependabot-auto-merge.yml keys
+      # PR per package. The name is load-bearing: dependabot-automerge.yml keys
       # off it to merge security fixes at any size, majors included. Keep the two
       # in sync.
       security:
@@ -66,6 +81,8 @@ updates:
       - "/desktop"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "fix(deps):"
       prefix-development: "chore(deps-dev):"

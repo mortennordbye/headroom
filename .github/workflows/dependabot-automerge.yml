@@ -1,0 +1,16 @@
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  auto-merge:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: mortennordbye/.github/.github/workflows/dependabot-automerge.yml@f4772051702542c8db5190ad8cae097590b08830 # v1
+    with:
+      allow-major: false
+    secrets: inherit
