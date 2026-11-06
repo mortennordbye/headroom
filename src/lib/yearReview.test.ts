@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { yearReview, availableReportYears, type YearReviewInput } from './yearReview';
-import type { DailyTransaction } from '../context/FinanceContext';
+import type { DailyTransaction, FixedExpense } from '../context/FinanceContext';
+import { cashflowSavingsForMonth } from './savingsMatch';
 
 const tx = (over: Partial<DailyTransaction>): DailyTransaction => ({
   id: Math.random().toString(36).slice(2),
@@ -73,6 +74,34 @@ describe('yearReview', () => {
     // Feb: the 1000 envelope + 100 overspend, + 200 savings = 1300.
     expect(r.monthly.map((row) => row.expenses)).toEqual([1000, 1300]);
     expect(r.totalSpending).toBe(2300);
+  });
+
+  it('counts a plan-linked paydown once in money out, like any saving', () => {
+    const month = '2025-03';
+    const fixed: FixedExpense[] = [
+      { id: 'rent', name: 'Fellesutgifter', amount: 17000, type: 'fixed' },
+      { id: 'p', name: 'Ekstra nedbetaling', amount: 3000, type: 'fixed', destinationKind: 'mortgage', allocationId: 'm' },
+    ];
+    const data = {
+      savings: [], savingsTargetPercent: 0, savingsMonthOverrides: {}, balanceSnapshots: {}, fixedExpenses: fixed,
+      savingsAllocations: [{ id: 'm', percent: 100, destinationKind: 'mortgage' as const }],
+      debts: [], housingMode: 'homeowner' as const,
+    };
+    const r = yearReview(2025, baseInput({
+      nowMonthKey: month,
+      incomeByMonth: { [month]: 50000 },
+      totalFixedExpenses: (m: string) => (m === month ? 20000 : 0),
+      fixedExpenses: (m: string) => (m === month ? fixed : []),
+      savings: {
+        forMonth: (m) => (m === month ? cashflowSavingsForMonth(data, m, month, 50000) : { savings: [], matchable: false }),
+        netted: [],
+      },
+    }));
+    const row = r.monthly.find((x) => x.month === month)!;
+    // The review counts savings as money out, so the paydown sits there once, not twice.
+    expect(row.expenses).toBe(20000);
+    expect(row.net).toBe(30000);
+    expect(r.totalSpending).toBe(20000);
   });
 
   it('caps the current year at the current month (no future months)', () => {

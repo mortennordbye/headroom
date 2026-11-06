@@ -964,6 +964,20 @@ describe('derive: a plan-linked loan paydown is saving, as in the app', () => {
     expect(derive.budgetSummary(blob, MONTH).planLoanPaydown).toBe(2000);
   });
 
+  it('the cashflow reports the paydown as saved, not as an expense, as CashflowChart does', () => {
+    const { blob } = planned();
+    const row = derive.budgetSummary(blob, MONTH).cashflowLast12.find((r) => r.month === MONTH)!;
+    // Paused, the same 2 000 kr row moves nothing onto the loan and stays a plain expense.
+    const pausedBlob = { ...blob, fixedExpenses: blob.fixedExpenses.map((e) => (e.allocationId === 'd' ? { ...e, automationPaused: true } : e)) };
+    const paused = derive.budgetSummary(pausedBlob, MONTH).cashflowLast12.find((r) => r.month === MONTH)!;
+    expect(row.saved).toBe(6000 + 2000);
+    expect(row.expenses).toBe(paused.expenses - 2000);
+    expect(row.net).toBe(row.income - row.expenses - row.saved);
+    // The year review still counts all saving as money out, the paydown once.
+    const review = derive.yearReviewSummary(blob, Number(MONTH.slice(0, 4)), MONTH);
+    expect(review.monthly.find((r) => r.month === MONTH)!.expenses).toBe(row.expenses + row.saved);
+  });
+
   it('the forecast seeds its cash saving without the paydown it amortizes the loan with', () => {
     const { blob } = planned();
     blob.forecastAssumptions = undefined;
