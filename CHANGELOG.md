@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.1](https://github.com/mortennordbye/headroom/compare/v3.19.0...v3.19.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* report a plan-linked paydown as saved in the cashflow ([#382](https://github.com/mortennordbye/headroom/issues/382)) ([386495e](https://github.com/mortennordbye/headroom/commit/386495e0d945fbe35ca97bd9ba720319cf9303e8))
+
 ## [3.19.0](https://github.com/mortennordbye/headroom/compare/v3.18.1...v3.19.0) (2026-11-04)
 
 
