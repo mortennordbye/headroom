@@ -116,7 +116,7 @@ Tests: `npm test` (Vitest, run once), `npm run test:watch`, or a single file `np
 Run, and make pass:
 
 ```bash
-npx tsc -b && npm run lint && npm test
+npx tsc -b && npx tsc -p mcp/tsconfig.json --noEmit && npm run lint && npm test
 ```
 
 For changes with runtime UI surface, also `make build` and smoke-test the affected page in the browser (0 console errors). Remember the SW cache gotcha above when verifying UI changes.
@@ -212,7 +212,7 @@ src/
 
 What an unattended maintainer run (a verksted stage) is told about this repo. It reads only this section, so keep it self-contained.
 
-**Verify:** `npm ci && npm ci --prefix server && npx tsc -b && npm run lint && npm test`. Must pass before any PR is opened; CI runs the same and is what gates a merge.
+**Verify:** `npm ci && npm ci --prefix server && npx tsc -b && npx tsc -p mcp/tsconfig.json --noEmit && npm run lint && npm test`. Must pass before any PR is opened; CI runs the same and is what gates a merge.
 
 **Audit:** `npm outdated`, `npm audit --omit=dev`, `npm outdated --prefix server`.
 
