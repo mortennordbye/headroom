@@ -216,7 +216,7 @@ git pull
 make build
 ```
 
-Because you re-attach the same `-v headroom_data:/data` volume, or reuse the same Docker Compose volume via `make build`, **all your budgets, transactions, and settings carry over untouched.** Only `docker-compose down -v` or deleting the volume by hand ever removes data.
+Because you re-attach the same `-v headroom_data:/data` volume, or reuse the same Docker Compose volume via `make build`, **all your budgets, transactions, and settings carry over untouched.** Only `docker compose down -v` or deleting the volume by hand ever removes data.
 
 > **Tip:** before a big update, it costs nothing to take a snapshot first — `make backup`, or **Settings → Export** in the app (see [Data persistence](#data-persistence)).
 
@@ -386,7 +386,7 @@ protects the API, but pointing it at your own data volume still serves that data
 to the internet on `GET /api/data`.
 
 ```yaml
-# docker-compose snippet for a demo instance
+# Docker Compose snippet for a demo instance
 environment:
   DEMO_MODE: "1"
   ALLOWED_HOSTS: "demo.example.com"
@@ -403,7 +403,7 @@ Everything you enter lives in one SQLite database inside the named Docker volume
 - Updating to a new version (see [Updating](#updating))
 
 **Your data is only removed if you explicitly delete it:**
-- `docker-compose down -v` (the `-v` deletes the volume), or
+- `docker compose down -v` (the `-v` deletes the volume), or
 - `docker volume rm headroom_data`
 
 ### Backups
