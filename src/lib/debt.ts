@@ -356,14 +356,23 @@ export function debtPaydownVsPlan(
   };
 }
 
+/** Words for formatMonths, from `t.debt.duration` in the translations table. */
+export interface DurationWords {
+  never: string;
+  paidOff: string;
+  year: string;
+  years: string;
+  month: string;
+}
+
 /** Human-friendly "X år Y mnd" / "X yr Y mo" for a month count. */
-export function formatMonths(months: number, lang: 'nb' | 'en'): string {
-  if (!isFinite(months)) return lang === 'nb' ? 'aldri' : 'never';
-  if (months <= 0) return lang === 'nb' ? 'nedbetalt' : 'paid off';
+export function formatMonths(months: number, words: DurationWords): string {
+  if (!isFinite(months)) return words.never;
+  if (months <= 0) return words.paidOff;
   const y = Math.floor(months / 12);
   const m = months % 12;
-  const yr = lang === 'nb' ? 'år' : (y === 1 ? 'yr' : 'yrs');
-  const mo = lang === 'nb' ? 'mnd' : 'mo';
+  const yr = y === 1 ? words.year : words.years;
+  const mo = words.month;
   if (y === 0) return `${m} ${mo}`;
   if (m === 0) return `${y} ${yr}`;
   return `${y} ${yr} ${m} ${mo}`;
