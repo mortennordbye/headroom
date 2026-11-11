@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.19.2](https://github.com/mortennordbye/headroom/compare/v3.19.1...v3.19.2) (2026-11-11)
+
+
+### Bug Fixes
+
+* **deps:** bump the npm-minor-patch group with 7 updates ([#396](https://github.com/mortennordbye/headroom/issues/396)) ([d06eb23](https://github.com/mortennordbye/headroom/commit/d06eb235b7668e97b8cf770a97192b242f0ef12c))
+* **deps:** bump the server-desktop group across 2 directories with 2 updates ([#394](https://github.com/mortennordbye/headroom/issues/394)) ([57af6a3](https://github.com/mortennordbye/headroom/commit/57af6a393eab7d849122a984ac7ab592661d7e00))
+
 ## [3.19.1](https://github.com/mortennordbye/headroom/compare/v3.19.0...v3.19.1) (2026-11-09)
 
 
