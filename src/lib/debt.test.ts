@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { amortize, planPayoff, formatMonths, sumDebtByType, lendingDebtTotal, creditFrameBreakdown, calcDebtBalanceByYear, debtPaydownVsPlan, extraPaymentSavings, withLinkedPayments, totalMinPayments } from './debt';
 import { calcMonthlyPayment } from './calculations';
+import { translations } from '../i18n/translations';
 import type { Debt, BalanceSnapshot, FixedExpense } from '../context/FinanceContext';
 
 const debt = (over: Partial<Debt> = {}): Debt => ({
@@ -97,20 +98,24 @@ describe('planPayoff', () => {
 });
 
 describe('formatMonths', () => {
+  const en = translations.en.debt.duration;
+  const nb = translations.nb.debt.duration;
+
   it('formats an infinite payoff as never/aldri', () => {
-    expect(formatMonths(Infinity, 'en')).toBe('never');
-    expect(formatMonths(Infinity, 'nb')).toBe('aldri');
+    expect(formatMonths(Infinity, en)).toBe('never');
+    expect(formatMonths(Infinity, nb)).toBe('aldri');
   });
 
   it('formats zero as paid off', () => {
-    expect(formatMonths(0, 'en')).toBe('paid off');
-    expect(formatMonths(0, 'nb')).toBe('nedbetalt');
+    expect(formatMonths(0, en)).toBe('paid off');
+    expect(formatMonths(0, nb)).toBe('nedbetalt');
   });
 
   it('formats years and months', () => {
-    expect(formatMonths(14, 'en')).toBe('1 yr 2 mo');
-    expect(formatMonths(24, 'nb')).toBe('2 år');
-    expect(formatMonths(5, 'nb')).toBe('5 mnd');
+    expect(formatMonths(14, en)).toBe('1 yr 2 mo');
+    expect(formatMonths(25, en)).toBe('2 yrs 1 mo');
+    expect(formatMonths(24, nb)).toBe('2 år');
+    expect(formatMonths(5, nb)).toBe('5 mnd');
   });
 });
 

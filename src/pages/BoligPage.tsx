@@ -678,7 +678,6 @@ const BoligPage: React.FC = () => {
             schedule={amortizationSchedule}
             chartData={chartData}
             t={t}
-            lang={lang}
             formatCurrency={formatCurrency}
             principal={loan.laanebelop}
             annualRatePct={loan.rente}
@@ -889,7 +888,6 @@ const BoligPage: React.FC = () => {
             schedule={homeownerAmortization}
             chartData={homeownerChartData}
             t={t}
-            lang={lang}
             formatCurrency={formatCurrency}
             principal={mortgageBalance}
             annualRatePct={homeowner.rente}
@@ -1085,7 +1083,6 @@ interface AmortizationAccordionProps {
   schedule: ReturnType<typeof calcAmortizationSchedule>;
   chartData: ReturnType<typeof calcAmortizationSchedule>;
   t: ReturnType<typeof import('../context/FinanceContext').useFinance>['t'];
-  lang: 'nb' | 'en';
   formatCurrency: (n: number) => string;
   /** Extra-payment what-if inputs: the loan and its scheduled annuity payment. */
   principal: number;
@@ -1093,7 +1090,7 @@ interface AmortizationAccordionProps {
   basePayment: number;
 }
 
-function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, formatCurrency, principal, annualRatePct, basePayment }: AmortizationAccordionProps) {
+function AmortizationAccordion({ show, onToggle, schedule, chartData, t, formatCurrency, principal, annualRatePct, basePayment }: AmortizationAccordionProps) {
   const reduced = useReducedMotion();
   const [extra, setExtra] = useState(0);
   const savings = useMemo(
@@ -1142,9 +1139,9 @@ function AmortizationAccordion({ show, onToggle, schedule, chartData, t, lang, f
             {extra > 0 && savings.feasible ? (
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: t.loanPage.extraPaymentTimeSaved, value: formatMonths(savings.monthsSaved, lang), pos: true },
+                  { label: t.loanPage.extraPaymentTimeSaved, value: formatMonths(savings.monthsSaved, t.debt.duration), pos: true },
                   { label: t.loanPage.extraPaymentInterestSaved, value: formatCurrency(Math.round(savings.interestSaved)), pos: true },
-                  { label: t.loanPage.extraPaymentNewPayoff, value: formatMonths(savings.extraMonths, lang), pos: false },
+                  { label: t.loanPage.extraPaymentNewPayoff, value: formatMonths(savings.extraMonths, t.debt.duration), pos: false },
                 ].map((s) => (
                   <div key={s.label} className="rounded-[8px] p-3 border bg-[var(--bg-raised)] border-[var(--border)]">
                     <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-2)] mb-1">{s.label}</div>
