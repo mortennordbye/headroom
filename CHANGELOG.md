@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.3](https://github.com/mortennordbye/headroom/compare/v3.19.2...v3.19.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* **deps:** bump the npm-minor-patch group with 7 updates ([#405](https://github.com/mortennordbye/headroom/issues/405)) ([d32106c](https://github.com/mortennordbye/headroom/commit/d32106cd5d37692eb2f8013135a5ebd009307563))
+
 ## [3.19.2](https://github.com/mortennordbye/headroom/compare/v3.19.1...v3.19.2) (2026-11-11)
 
 
