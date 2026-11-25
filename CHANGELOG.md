@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.23.0](https://github.com/mortennordbye/headroom/compare/v3.22.0...v3.23.0) (2026-11-25)
+
+
+### Features
+
+* compare the company model with public accounts ([#421](https://github.com/mortennordbye/headroom/issues/421)) ([6b12b9c](https://github.com/mortennordbye/headroom/commit/6b12b9c42886f007ed330152bf1422142fceba96))
+* show SSB market pay for IT occupations ([#419](https://github.com/mortennordbye/headroom/issues/419)) ([8d424cf](https://github.com/mortennordbye/headroom/commit/8d424cfd30555a88f38ec3cdcb14d6f2db3caad4))
+
 ## [3.22.0](https://github.com/mortennordbye/headroom/compare/v3.21.0...v3.22.0) (2026-11-25)
 
 
