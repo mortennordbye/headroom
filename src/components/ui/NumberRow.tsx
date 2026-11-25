@@ -13,19 +13,23 @@ export function NumberRow({
   suffix,
   badge,
   onBlank,
+  placeholder,
 }: {
   label: string;
-  value: number;
+  /** Null shows an empty field (with the placeholder). */
+  value: number | null;
   onCommit: (v: number) => void;
   suffix?: string;
   badge?: ReactNode;
   /** Called instead of committing 0 when the field is left empty. */
   onBlank?: () => void;
+  placeholder?: string;
 }) {
-  const [draft, setDraft] = useState(value.toString());
+  const shown = value == null ? '' : value.toString();
+  const [draft, setDraft] = useState(shown);
   // Re-sync the editable draft when the committed value changes from outside.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setDraft(value.toString()); }, [value]);
+  useEffect(() => { setDraft(shown); }, [shown]);
   return (
     <div>
       <div className="flex items-baseline justify-between mb-2 gap-2">
@@ -38,9 +42,10 @@ export function NumberRow({
       <input
         type="number"
         value={draft}
+        placeholder={placeholder}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
-          if (onBlank && draft.trim() === '') { setDraft(value.toString()); onBlank(); return; }
+          if (onBlank && draft.trim() === '') { setDraft(shown); onBlank(); return; }
           const n = parseLocaleNumber(draft);
           onCommit(Number.isFinite(n) ? n : 0);
         }}

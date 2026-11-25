@@ -34,7 +34,8 @@ export interface QuickAnswers {
   realizationPct: number;
   bonusPct: number;          // bonus pool, % of the result before bonus
   officeMode: OfficeMode;
-  desks: number;
+  /** Missing: one desk per FTE. */
+  desks?: number;
   annualRent: number;        // kr per year
   tripsPerYear: number;
 }
@@ -65,7 +66,6 @@ export const QUICK_DEFAULTS: QuickAnswers = {
   realizationPct: 95,
   bonusPct: 15,
   officeMode: 'desks',
-  desks: 50,
   annualRent: 3_600_000,
   tripsPerYear: 2,
 };
@@ -121,9 +121,9 @@ export function quickDeliveryFte(a: QuickAnswers): number {
   return Math.max(0, fin(a.totalFte) - Math.max(0, fin(a.nonBilling)) - Math.max(0, fin(a.onBench)));
 }
 
-/** The office cost per year: desks × the desk price, or the yearly rent. */
+/** The office cost per year: desks (default one per FTE) × the desk price, or the yearly rent. */
 export function quickOfficeCost(a: QuickAnswers): number {
-  return a.officeMode === 'rent' ? Math.max(0, fin(a.annualRent)) : Math.max(0, fin(a.desks)) * QUICK_KR_PER_DESK;
+  return a.officeMode === 'rent' ? Math.max(0, fin(a.annualRent)) : Math.max(0, fin(a.desks ?? a.totalFte)) * QUICK_KR_PER_DESK;
 }
 
 /**
@@ -203,9 +203,10 @@ export function sanitizeQuickAnswers(v: unknown): QuickAnswers {
     realizationPct: num(a.realizationPct, d.realizationPct, 0, 100),
     bonusPct: num(a.bonusPct, d.bonusPct, 0, 50),
     officeMode: a.officeMode === 'rent' ? 'rent' : 'desks',
-    desks: num(a.desks, d.desks, 0, 100_000),
     annualRent: num(a.annualRent, d.annualRent, 0, 1_000_000_000),
     tripsPerYear: num(a.tripsPerYear, d.tripsPerYear, 0, 52),
+    // Kept only when it was given, so a missing desk count follows the FTE answer.
+    ...(coerceNumber(a.desks) !== undefined ? { desks: num(a.desks, 0, 0, 100_000) } : {}),
   };
 }
 

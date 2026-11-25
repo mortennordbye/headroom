@@ -247,6 +247,15 @@ export function CompanyModelPanel({
               />
               <Row label={c.rowAvailable} value={`${nf(h.available)} ${t.common.hourUnit}`} muted />
               <Row label={c.rowShare} sub={self && h.available > 0 ? `${(y.billableHours / h.available * 100).toLocaleString(locale, { maximumFractionDigits: 1 })} %` : '–'} value="" />
+              {model.self && self && (
+                <Row
+                  label={c.selfOwn}
+                  sub={c.selfOwnSub
+                    .replace('{pct}', (model.self.billablePct ?? self.billablePct).toLocaleString(locale, { maximumFractionDigits: 1 }))
+                    .replace('{rate}', nf(model.self.hourlyRate ?? self.hourlyRate))}
+                  value={<Button size="sm" variant="secondary" onClick={() => setModel((m) => { const { self: _self, ...rest } = m; return rest; })}>{c.selfClear}</Button>}
+                />
+              )}
               <Row label={c.rowBillable} value={`${nf(y.billableHours)} ${t.common.hourUnit}`} emphasis />
             </div>
           </Section>

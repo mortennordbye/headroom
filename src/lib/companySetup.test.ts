@@ -74,6 +74,9 @@ describe('buildModelFromAnswers', () => {
     const desks = buildModelFromAnswers(answers({ desks: 40, tripsPerYear: 3 }), base());
     expect(desks.costs.find((c) => c.id === 'office')).toMatchObject({ amount: 40 * QUICK_KR_PER_DESK, per: 'company' });
     expect(desks.costs.find((c) => c.id === 'social')).toMatchObject({ amount: 3 * QUICK_KR_PER_TRIP + QUICK_KR_EVENTS, per: 'head' });
+    const perFte = buildModelFromAnswers(answers({ totalFte: 30 }), base());
+    expect(perFte.costs.find((c) => c.id === 'office')?.amount).toBe(30 * QUICK_KR_PER_DESK);
+    expect(perFte.quick?.answers).not.toHaveProperty('desks');
     const rent = buildModelFromAnswers(answers({ officeMode: 'rent', annualRent: 2_500_000 }), base());
     expect(rent.costs.find((c) => c.id === 'office')?.amount).toBe(2_500_000);
   });

@@ -551,6 +551,21 @@ describe('your own billable share and rate (model.self)', () => {
     expect(r.you.listRate).toBeCloseTo(1650, 6);
   });
 
+  it('"Lagre som utgangspunkt" writes the levers into your own share and rate too, so your numbers stay the same', () => {
+    const m = model({ self: { billablePct: 97, hourlyRate: 1500 }, levers: { utilizationPp: 6, ratePct: 8, salaryPct: 0, realizationPp: -3 } });
+    const before = calcCompany(m, ctx);
+    const saved = applyLevers(m);
+    expect(saved.self).toEqual({ billablePct: 100, hourlyRate: 1620 });
+    const after = calcCompany(saved, ctx);
+    const yb = youEconomics(m, ctx, before);
+    const ya = youEconomics(saved, ctx, after);
+    expect(after.you.billableHours).toBeCloseTo(before.you.billableHours, 6);
+    expect(after.you.listRate).toBeCloseTo(before.you.listRate, 6);
+    expect(ya.keep).toBeCloseTo(yb.keep, 4);
+    expect(ya.fairGross!).toBeCloseTo(yb.fairGross!, 2);
+    expect(applyLevers(model({ self: { hourlyRate: 1000 }, levers: { ...NEUTRAL_LEVERS, ratePct: 10 } })).self).toEqual({ hourlyRate: 1100 });
+  });
+
   it('a set billable-hours override still wins', () => {
     const r = calcCompany(model({ self: { billablePct: 50 } }), { ...ctx, selfBillableHoursOverride: 1200 });
     expect(r.you.billableHours).toBe(1200);

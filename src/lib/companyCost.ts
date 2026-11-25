@@ -519,10 +519,18 @@ export function utilizationCurve(model: CompanyModel, ctx: CompanyContext, from 
  * The levers only ever move the groups, so the results do not change.
  */
 export function applyLevers(model: CompanyModel): CompanyModel {
+  const l = model.levers;
+  const s = model.self;
+  // Your own share and rate move with the levers as your group does (calcCompany), so they are written too.
+  const self: CompanySelf | undefined = s && {
+    ...(s.billablePct != null ? { billablePct: clamp(fin(s.billablePct) + fin(l.utilizationPp), 0, 100) } : {}),
+    ...(s.hourlyRate != null ? { hourlyRate: Math.max(0, fin(s.hourlyRate) * (1 + fin(l.ratePct) / 100)) } : {}),
+  };
   return {
     ...model,
-    groups: model.groups.map((g) => leveredGroup(g, model.levers)),
+    groups: model.groups.map((g) => leveredGroup(g, l)),
     levers: { ...NEUTRAL_LEVERS },
+    ...(self ? { self } : {}),
   };
 }
 

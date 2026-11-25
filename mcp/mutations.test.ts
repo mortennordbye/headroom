@@ -46,6 +46,7 @@ import {
 import { companyContext } from './derive';
 import {
   calcCompany,
+  youEconomics,
   sanitizeCompanyModel,
   DEFAULT_COMPANY_MODEL,
   LEVER_RANGES,
@@ -751,14 +752,34 @@ describe('company model writes store a sanitized model', () => {
     expect(changes).toEqual([{ field: 'companyModel', before: null, after: blob.companyModel }]);
   });
 
-  it('applyLevers keeps every result the same', () => {
+  it('applyLevers keeps every result the same, also with your own share and rate', () => {
     const blob = structuredClone(fullFixture());
-    const before = calcCompany(blob.companyModel!, ctx);
+    blob.companyModel = { ...blob.companyModel!, self: { billablePct: 90, hourlyRate: 1400 } };
+    const before = calcCompany(blob.companyModel, ctx);
+    const yBefore = youEconomics(blob.companyModel, ctx, before);
     updateCompanySettings(blob, { applyLevers: true });
     const after = calcCompany(blob.companyModel!, ctx);
+    const yAfter = youEconomics(blob.companyModel!, ctx, after);
     expect(after.ebit).toBeCloseTo(before.ebit, 6);
     expect(after.you.realCost).toBeCloseTo(before.you.realCost, 6);
     expect(after.revenue).toBeCloseTo(before.revenue, 6);
+    expect(after.you.billableHours).toBeCloseTo(before.you.billableHours, 6);
+    expect(after.you.listRate).toBeCloseTo(before.you.listRate, 6);
+    expect(yAfter.keep).toBeCloseTo(yBefore.keep, 4);
+  });
+
+  it('self: given fields change, null clears, bounds hold, and the change list says so', () => {
+    const blob = structuredClone(fullFixture());
+    const set = updateCompanySettings(blob, { self: { billablePct: 92 } });
+    expect(blob.companyModel?.self).toEqual({ billablePct: 92 });
+    expect(set).toEqual([{ field: 'companyModel.self.billablePct', before: null, after: 92 }]);
+    updateCompanySettings(blob, { self: { hourlyRate: 1600 } });
+    expect(blob.companyModel?.self).toEqual({ billablePct: 92, hourlyRate: 1600 });
+    updateCompanySettings(blob, { self: { billablePct: 140 } });
+    expect(blob.companyModel?.self?.billablePct).toBe(100);
+    const cleared = updateCompanySettings(blob, { self: null });
+    expect(blob.companyModel).not.toHaveProperty('self');
+    expect(cleared).toContainEqual({ field: 'companyModel.self.hourlyRate', before: 1600, after: null });
   });
 
   it('given levers are applied after they are set and clamped', () => {
@@ -786,6 +807,23 @@ describe('company model writes store a sanitized model', () => {
       const changes = write(blob);
       expect(blob.companyModel?.quick?.edited).toBe(true);
       expect(changes).toContainEqual({ field: 'companyModel.quick.edited', before: false, after: true });
+    });
+
+    it('a selfGroupId change marks the quick setup as hand-edited', () => {
+      const blob = withQuick();
+      upsertCompanyGroup(blob, { id: 'tl', create: true, name: 'Team leads', kind: 'delivery', count: 0, avgGross: 1, billablePct: 50, hourlyRate: 1 });
+      blob.companyModel = { ...blob.companyModel!, quick: { ...blob.companyModel!.quick!, edited: false } };
+      updateCompanySettings(blob, { selfGroupId: 'tl' });
+      expect(blob.companyModel?.quick?.edited).toBe(true);
+    });
+
+    it('an upsert that changes nothing, or applyLevers with the levers at 0, keeps edited false', () => {
+      const blob = withQuick();
+      const count = blob.companyModel!.groups[0].count;
+      upsertCompanyGroup(blob, { id: 'kons', create: false, count });
+      upsertCompanyCostLine(blob, { id: 'it', create: false, amount: blob.companyModel!.costs.find((c) => c.id === 'it')!.amount });
+      updateCompanySettings(blob, { applyLevers: true });
+      expect(blob.companyModel?.quick?.edited).toBe(false);
     });
 
     it('a settings change that does not touch groups or costs keeps edited false', () => {

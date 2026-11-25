@@ -734,7 +734,11 @@ export function companyChanges(before: CompanyModel, after: CompanyModel): Field
  */
 function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyModel): FieldChange[] {
   const before = sanitizeCompanyModel(blob.companyModel);
-  const after = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
+  const edited = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
+  // A change to the groups, the cost lines or your group is a hand edit: the quick setup
+  // then asks before it builds the model again. A write that changes none of them leaves the flag alone.
+  const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId]);
+  const after = shape(edited) !== shape(before) ? markQuickEdited(edited) : edited;
   // No stored model: the whole example model is stored now, so say so.
   const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
   blob.companyModel = after;
@@ -758,8 +762,7 @@ export function upsertCompanyGroup(
   args: { id: string; create: boolean } & CompanyGroupFields,
 ): FieldChange[] {
   const { id, create, ...fields } = args;
-  return writeCompany(blob, (m0) => {
-    const m = markQuickEdited(m0);
+  return writeCompany(blob, (m) => {
     if (!create) {
       const prev = m.groups.find((g) => g.id === id);
       // A group that becomes delivery needs a billable share and a rate, as on create.
@@ -789,7 +792,7 @@ export function upsertCompanyGroup(
 
 /** Remove a role group. When it was your group, your group moves to the first delivery group. */
 export function deleteCompanyGroup(blob: ExportPayload, args: { id: string }): FieldChange[] {
-  return writeCompany(blob, (m) => markQuickEdited({ ...m, groups: removeById(m.groups, args.id, 'companyModel.groups', 'company group').list }));
+  return writeCompany(blob, (m) => ({ ...m, groups: removeById(m.groups, args.id, 'companyModel.groups', 'company group').list }));
 }
 
 /** Create (create=true, caller supplies a fresh id) or update a cost line. On create, label and amount are required. */
@@ -798,8 +801,7 @@ export function upsertCompanyCostLine(
   args: { id: string; create: boolean } & CompanyCostLineFields,
 ): FieldChange[] {
   const { id, create, ...fields } = args;
-  return writeCompany(blob, (m0) => {
-    const m = markQuickEdited(m0);
+  return writeCompany(blob, (m) => {
     if (!create) {
       const { list } = patchById(m.costs, id, fields, 'companyModel.costs', 'company cost line');
       checkCostLine(list.find((c) => c.id === id)!);
@@ -815,7 +817,7 @@ export function upsertCompanyCostLine(
 }
 
 export function deleteCompanyCostLine(blob: ExportPayload, args: { id: string }): FieldChange[] {
-  return writeCompany(blob, (m) => markQuickEdited({ ...m, costs: removeById(m.costs, args.id, 'companyModel.costs', 'company cost line').list }));
+  return writeCompany(blob, (m) => ({ ...m, costs: removeById(m.costs, args.id, 'companyModel.costs', 'company cost line').list }));
 }
 
 export interface CompanySettingsFields {
@@ -826,6 +828,8 @@ export interface CompanySettingsFields {
   levers?: Partial<CompanyLevers>;
   /** Target margin on you for the fair salary, % (0-60); null = the company margin before bonus. */
   targetMarginPct?: number | null;
+  /** Your own billable share and list rate where they differ from your group; null = use the group's. */
+  self?: { billablePct?: number; hourlyRate?: number } | null;
   /** "Lagre som utgangspunkt": write the levers (after `levers` above) into the groups and set them to 0. */
   applyLevers?: boolean;
 }
@@ -836,9 +840,9 @@ const definedOnly = <T extends object>(patch: Partial<T> | undefined): Partial<T
 
 /** Change the model's settings. Only given fields change; levers are clamped to their slider range. */
 export function updateCompanySettings(blob: ExportPayload, args: CompanySettingsFields): FieldChange[] {
-  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, applyLevers: apply } = args;
+  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, self, applyLevers: apply } = args;
   if (mode === undefined && selfGroupId === undefined && hours === undefined && bonus === undefined
-    && levers === undefined && targetMarginPct === undefined && !apply) {
+    && levers === undefined && targetMarginPct === undefined && self === undefined && !apply) {
     throw new Error('no company settings provided');
   }
   return writeCompany(blob, (m) => {
@@ -854,8 +858,8 @@ export function updateCompanySettings(blob: ExportPayload, args: CompanySettings
       hours: { ...m.hours, ...definedOnly(hours) },
       bonus: { ...m.bonus, ...definedOnly(bonus) },
       levers: { ...m.levers, ...definedOnly(levers) },
+      self: self === null ? undefined : { ...m.self, ...definedOnly(self ?? {}) },
     });
-    // Writing the levers into the groups is a change to the groups, as a hand edit.
-    return apply ? markQuickEdited(applyLevers(next)) : next;
+    return apply ? applyLevers(next) : next;
   });
 }
