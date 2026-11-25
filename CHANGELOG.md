@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.20.0](https://github.com/mortennordbye/headroom/compare/v3.19.3...v3.20.0) (2026-11-25)
+
+
+### Features
+
+* add Avansert company model to employer cost ([#411](https://github.com/mortennordbye/headroom/issues/411)) ([50679a6](https://github.com/mortennordbye/headroom/commit/50679a66165d9b681ea7aacdbce61178af95e76a))
+* **mcp:** add company model tools ([#413](https://github.com/mortennordbye/headroom/issues/413)) ([0496b81](https://github.com/mortennordbye/headroom/commit/0496b81f3f2945d7cc1bee55072872a2bdd9ff59))
+
 ## [3.19.3](https://github.com/mortennordbye/headroom/compare/v3.19.2...v3.19.3) (2026-11-25)
 
 
