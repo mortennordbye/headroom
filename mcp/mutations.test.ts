@@ -494,6 +494,17 @@ const cases: {
     }),
   },
   {
+    name: 'update_company_settings (targetMarginPct is set, listed and reset to null)',
+    touched: ['companyModel'],
+    mutate: (b) => updateCompanySettings(b, { targetMarginPct: 18 }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.targetMarginPct).toBe(18);
+      expect(changes).toEqual([{ field: 'companyModel.targetMarginPct', before: null, after: 18 }]);
+      expect(updateCompanySettings(b, { targetMarginPct: null })).toEqual([{ field: 'companyModel.targetMarginPct', before: 18, after: null }]);
+      expect(b.companyModel?.targetMarginPct).toBeNull();
+    },
+  },
+  {
     name: 'update_company_settings (selfGroupId)',
     touched: ['companyModel'],
     mutate: (b) => updateCompanySettings(b, { selfGroupId: 'cg2' }),

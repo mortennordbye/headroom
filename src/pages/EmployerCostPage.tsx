@@ -254,7 +254,9 @@ const EmployerCostPage: React.FC = () => {
             {ec.heroLabel}
           </div>
           <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
-            {t.employerCostPage.heroBefore}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.employerCostPage.heroEmphasis}</em>{t.employerCostPage.heroAfter}
+            {advanced ? cm.heroBefore : t.employerCostPage.heroBefore}
+            <em className="font-serif italic" style={{ color: 'var(--brass)' }}>{advanced ? cm.heroEmphasis : t.employerCostPage.heroEmphasis}</em>
+            {advanced ? cm.heroAfter : t.employerCostPage.heroAfter}
           </h1>
           <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
             {advanced ? cm.subtitle : ec.subtitle}

@@ -18,6 +18,7 @@ import { Button } from './ui/Button';
 import { SegmentedControl } from './ui/SegmentedControl';
 import { FitText } from './ui/FitText';
 import { HourWaterfallChart, UtilizationCurveChart } from './CompanyModelCharts';
+import { CompanyMeCard, CompanyExplainers } from './CompanyMeCard';
 
 const LEVERS: Array<{ key: keyof CompanyLevers; unit: string }> = [
   { key: 'utilizationPp', unit: 'pp' },
@@ -100,6 +101,20 @@ export function CompanyModelPanel({
 
   return (
     <div className="space-y-6 md:space-y-7">
+      <CompanyMeCard model={model} setModel={setModel} ctx={ctx} result={r} />
+      <CompanyExplainers />
+
+      {/* Everything else, folded: tiles, waterfall, levers, curve, people, hours, costs, result. */}
+      <details className="group/details">
+        <summary
+          className="rounded-[8px] border p-6 md:p-8 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden"
+          style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)' }}
+        >
+          <SectionLabel>
+            {c.detailsTitle} <span aria-hidden className="inline-block transition-transform group-open/details:rotate-90">▸</span>
+          </SectionLabel>
+        </summary>
+        <div className="mt-6 md:mt-7 space-y-6 md:space-y-7">
       {/* Tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <SummaryTile label={c.tileOwn} value={kr(y.ownCost)} sub={c.tileOwnSub} color="var(--teal)" />
@@ -265,6 +280,8 @@ export function CompanyModelPanel({
           </Section>
         </div>
       </div>
+        </div>
+      </details>
     </div>
   );
 }

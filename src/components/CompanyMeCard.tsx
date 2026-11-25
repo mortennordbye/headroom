@@ -1,0 +1,334 @@
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { RotateCcw } from 'lucide-react';
+import { useFinance } from '../context/FinanceContext';
+import {
+  youEconomics, TARGET_MARGIN_RANGE,
+  type CompanyModel, type CompanyContext, type CompanyResult, type YouBreakdownPart,
+} from '../lib/companyCost';
+import { Card } from './ui/Card';
+import { SectionLabel } from './ui/SectionLabel';
+import { NumberRow } from './ui/NumberRow';
+import { Button } from './ui/Button';
+
+/** Fill `{key}` slots in a translated string with React nodes. */
+function fill(template: string, values: Record<string, ReactNode>): ReactNode[] {
+  return template.split(/\{(\w+)\}/).map((part, i) => (i % 2 ? <span key={i}>{values[part] ?? part}</span> : part));
+}
+
+/** Render `**bold**` spans of a translated string. */
+function rich(text: string): ReactNode[] {
+  return text.split(/\*\*(.+?)\*\*/).map((part, i) => (i % 2 ? <b key={i} style={{ color: 'var(--text-1)' }}>{part}</b> : part));
+}
+
+const BAR_COLOR: Record<YouBreakdownPart['kind'], string> = {
+  salary: 'var(--text-1)',
+  onCosts: 'var(--teal)',
+  bench: 'var(--rust)',
+  support: 'var(--slate)',
+  office: 'var(--text-3)',
+  other: 'var(--text-3)',
+  kept: 'var(--forest-light)',
+};
+
+interface AxisMarker {
+  key: string;
+  value: number;
+  label: string;
+  color: string;
+  above: boolean;
+}
+
+/** Round tick step for a salary axis span: at most 5 intervals. */
+function tickStep(span: number): number {
+  return [50_000, 100_000, 200_000, 250_000, 500_000, 1_000_000, 2_000_000, 5_000_000].find((s) => span / s <= 5) ?? 10_000_000;
+}
+
+/**
+ * The top card of Avansert: what the company keeps on you, the fair salary, the
+ * one-year kroner bar and the salary axis with a "what if" slider. All numbers
+ * come from youEconomics in src/lib/companyCost.ts. The slider is local state
+ * only: it never writes the model or the salary page.
+ */
+export function CompanyMeCard({
+  model, setModel, ctx, result,
+}: {
+  model: CompanyModel;
+  setModel: Dispatch<SetStateAction<CompanyModel>>;
+  ctx: CompanyContext;
+  result: CompanyResult;
+}) {
+  const { t, lang, formatCurrencyShort } = useFinance();
+  const c = t.companyModel;
+  const locale = lang === 'nb' ? 'nb-NO' : 'en-US';
+  const nf = (v: number, d = 0) => (Math.abs(v) < 0.5 * 10 ** -d ? 0 : v).toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
+  const kr = formatCurrencyShort;
+  const k = (v: number) => `${v < 0 ? '−' : ''}${nf(Math.abs(v) / 1000)}k`;
+  const mill = (v: number) => c.millions.replace('{v}', `${v < 0 ? '−' : ''}${nf(Math.abs(v) / 1e6, 2)}`);
+  const b = (v: ReactNode) => <b className="font-mono font-medium" style={{ color: 'var(--text-1)' }}>{v}</b>;
+
+  const now = result.you.gross;
+  const [whatIf, setWhatIf] = useState<number | null>(null);
+  const gross = whatIf ?? now;
+  const y = youEconomics(model, ctx, result, gross);
+  const fair = y.fairGross;
+  const ceiling = y.ceilingGross;
+
+  // ── Kroner bar: office and other cost lines share one segment ──
+  const office = y.breakdown.filter((p) => p.kind === 'office' || p.kind === 'other');
+  const officeTotal = office.reduce((s, p) => s + p.value, 0);
+  const segs = [
+    ...y.breakdown.filter((p) => p.kind !== 'office' && p.kind !== 'other' && p.kind !== 'kept').map((p) => ({
+      key: p.key,
+      label: p.kind === 'salary' ? c.barSalary : p.kind === 'onCosts' ? c.barOnCosts : p.label || '–',
+      value: p.value,
+      color: BAR_COLOR[p.kind],
+      extra: '',
+    })),
+    {
+      key: 'office', label: c.barOffice, value: officeTotal, color: BAR_COLOR.office,
+      extra: c.barOfficeTip.replace('{office}', kr(office.find((p) => p.kind === 'office')?.value ?? 0)).replace('{other}', kr(office.find((p) => p.kind === 'other')?.value ?? 0)),
+    },
+    { key: 'kept', label: c.barKept, value: y.keep, color: BAR_COLOR.kept, extra: '' },
+  ];
+  const shown = segs.filter((s) => s.value > 0);
+  const shownTotal = shown.reduce((s, x) => s + x.value, 0);
+  const [hover, setHover] = useState<string | null>(null);
+  const hovered = shown.find((s) => s.key === hover);
+  const hoverCenter = (() => {
+    if (!hovered || shownTotal <= 0) return 50;
+    let before = 0;
+    for (const s of shown) { if (s.key === hovered.key) break; before += s.value; }
+    return Math.min(85, Math.max(15, (before + hovered.value / 2) / shownTotal * 100));
+  })();
+
+  // ── Salary axis: its range comes from now, fair and ceiling (not the slider) ──
+  const anchors = [now, fair, ceiling].filter((v): v is number => v != null && v > 0);
+  const span0 = anchors.length ? Math.max(...anchors) - Math.min(...anchors) : 0;
+  const pad = Math.max(100_000, span0 * 0.25);
+  const step = tickStep(anchors.length ? span0 + 2 * pad : 1_000_000);
+  const lo = anchors.length ? Math.max(0, Math.floor((Math.min(...anchors) - pad) / step) * step) : 0;
+  const hi = anchors.length ? Math.ceil((Math.max(...anchors) + pad) / step) * step : 1_000_000;
+  const x = (v: number) => (hi > lo ? (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo) * 100 : 0);
+  const ticks: number[] = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
+  // One marker per line; a later PR adds the market salary here.
+  const markers: AxisMarker[] = [
+    ...(ceiling != null ? [{ key: 'ceiling', value: ceiling, label: `${c.axisCeiling} ${k(ceiling)}`, color: 'var(--rust)', above: true }] : []),
+    ...(fair != null ? [{ key: 'fair', value: fair, label: `${c.axisFair} ${k(fair)}`, color: 'var(--forest-light)', above: false }] : []),
+  ];
+  // The "Nå" label sits below the axis like "Rimelig": hide it when they would overlap (wider labels on a phone).
+  const nowFairGap = fair != null ? Math.abs(x(now) - x(fair)) : 100;
+  const nowLabelClass = nowFairGap < 9 ? 'hidden' : nowFairGap < 24 ? 'hidden sm:block' : '';
+  const labelLeft = (v: number) => `${Math.min(94, Math.max(6, x(v)))}%`;
+
+  // ── Target margin ──
+  const shownTarget = Math.round(y.targetMarginPct * 10) / 10;
+  const commitTarget = (v: number) => {
+    if (y.targetIsCompany && Math.abs(v - shownTarget) < 0.05) return; // a blur without an edit keeps the default
+    setModel((m) => ({ ...m, targetMarginPct: Math.min(TARGET_MARGIN_RANGE.max, Math.max(TARGET_MARGIN_RANGE.min, v)) }));
+  };
+
+  const lineTemplate = y.raise.bonusDrop > 0 ? c.meLine : c.meLineNoBonus;
+  const fairDiff = fair != null ? gross - fair : 0;
+
+  return (
+    <Card padding="lg">
+      {/* Two headline numbers. Ranges come in a later PR; the sub lines leave room for them. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="min-w-0">
+          <SectionLabel>{c.meKeep}</SectionLabel>
+          <div className="mt-2 font-mono font-semibold leading-[1.1] text-[30px] md:text-[40px] tabular-nums" style={{ color: y.keep < 0 ? 'var(--negative)' : 'var(--brass)' }}>
+            {kr(y.keep)}
+          </div>
+          <div className="mt-1.5 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>{c.meKeepSub.replace('{pct}', nf(y.keepPct))}</div>
+        </div>
+        <div className="min-w-0">
+          <SectionLabel>{c.meFair}</SectionLabel>
+          {fair != null ? (
+            <>
+              <div className="mt-2 font-mono font-semibold leading-[1.1] text-[30px] md:text-[40px] tabular-nums" style={{ color: 'var(--positive)' }}>
+                {c.meFairValue.replace('{v}', kr(Math.round(fair / 10_000) * 10_000))}
+              </div>
+              <div className="mt-1.5 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>
+                {c.meFairSub.replace('{now}', kr(gross)).replace('{diff}', `${fairDiff < 0 ? '−' : '+'}${k(Math.abs(fairDiff))}`)}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mt-2 font-mono font-semibold leading-[1.1] text-[30px] md:text-[40px]" style={{ color: 'var(--text-3)' }}>{c.meFairNone}</div>
+              <div className="mt-1.5 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.meFairNoneSub}</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-4 text-[14px] leading-[1.6]" style={{ color: 'var(--text-2)' }}>
+        {fill(lineTemplate, {
+          revenue: b(mill(y.revenue)),
+          cost: b(mill(y.ownCost + y.share)),
+          share: b(`${nf(y.salarySharePct)} %`),
+          companyShare: `${nf(y.companySalarySharePct)} %`,
+          raiseCost: b(kr(Math.round(y.raise.cost / 1000) * 1000)),
+          dropPct: `${nf(y.raise.cost > 0 ? y.raise.bonusDrop / y.raise.cost * 100 : 0)} %`,
+          drop: kr(Math.round(y.raise.bonusDrop / 100) * 100),
+        })}
+      </p>
+
+      {/* One year for you, in kroner */}
+      <SectionLabel className="mt-5">{c.barTitle}</SectionLabel>
+      <div className="relative">
+        {hovered && (
+          <div
+            role="tooltip"
+            className="absolute bottom-full mb-2 -translate-x-1/2 pointer-events-none z-10 rounded-[6px] border px-2.5 py-2 text-[12px] whitespace-nowrap"
+            style={{ left: `${hoverCenter}%`, background: 'var(--bg-3)', borderColor: 'var(--brass-dim)', color: 'var(--text-2)' }}
+          >
+            <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>{hovered.label}</div>
+            <div className="font-mono font-semibold text-[14px] my-0.5" style={{ color: 'var(--text-1)' }}>{kr(hovered.value)}</div>
+            <div>{c.barTipPct.replace('{pct}', nf(y.revenue > 0 ? hovered.value / y.revenue * 100 : 0))}{hovered.extra && ` · ${hovered.extra}`}</div>
+          </div>
+        )}
+        <div className="flex gap-[2px] h-[22px] mt-2.5 mb-2" onMouseLeave={() => setHover(null)}>
+          {shown.map((s, i) => (
+            <div
+              key={s.key}
+              role="img"
+              aria-label={`${s.label}: ${kr(s.value)}`}
+              onMouseEnter={() => setHover(s.key)}
+              className="transition-opacity"
+              style={{
+                flex: s.value,
+                background: s.color,
+                opacity: hover && hover !== s.key ? 0.5 : 1,
+                borderRadius: `${i === 0 ? 4 : 2}px ${i === shown.length - 1 ? 4 : 2}px ${i === shown.length - 1 ? 4 : 2}px ${i === 0 ? 4 : 2}px`,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
+        <span>{b(kr(y.revenue))} {c.barInvoiced}</span>
+        {segs.map((s) => (
+          <span key={s.key} className="inline-flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: s.color }} />
+            {s.label} {b(k(s.value))}
+          </span>
+        ))}
+        {y.keep < 0 && <span style={{ color: 'var(--negative)' }}>{c.meLoss}</span>}
+      </div>
+
+      {/* Salary axis + what-if slider */}
+      <div className="mt-6 flex items-baseline justify-between gap-2 mb-2">
+        <SectionLabel>{c.axisTitle}</SectionLabel>
+        <span className="text-[18px] font-semibold tabular-nums whitespace-nowrap">
+          {whatIf == null ? c.axisNow : c.axisWhatIf} {nf(gross)}<span className="text-[12px] ml-1 font-normal" style={{ color: 'var(--text-3)' }}>kr</span>
+          {whatIf != null && whatIf !== now && (
+            <span className="ml-2 text-[12px] font-mono" style={{ color: whatIf > now ? 'var(--positive)' : 'var(--negative)' }}>
+              {whatIf > now ? '+' : '−'}{nf(Math.abs(whatIf - now))}
+            </span>
+          )}
+        </span>
+      </div>
+      <div
+        className="relative h-[120px] mx-1"
+        role="img"
+        aria-label={c.axisAria.replace('{now}', kr(now)).replace('{fair}', fair != null ? kr(fair) : '–').replace('{ceiling}', ceiling != null ? kr(ceiling) : '–')}
+      >
+        <div className="absolute left-0 right-0 top-[57px] h-[6px] rounded-full" style={{ background: 'var(--rule)' }} />
+        {ticks.map((v, i) => (
+          <div key={v} className="absolute top-[58px]" style={{ left: `${x(v)}%` }}>
+            <div className="w-px h-[6px] -translate-x-1/2" style={{ background: 'var(--text-3)' }} />
+            {/* Every other label on a phone, so they do not overlap. */}
+            <div className={`absolute top-[10px] -translate-x-1/2 text-[11px] font-mono whitespace-nowrap ${i % 2 ? 'hidden sm:block' : ''}`} style={{ color: 'var(--text-3)' }}>{c.millions.replace('{v}', nf(v / 1e6, 1))}</div>
+          </div>
+        ))}
+        {markers.map((m) => (
+          <div key={m.key}>
+            <div className="absolute w-[2px] -translate-x-1/2" style={{ left: `${x(m.value)}%`, top: m.above ? 24 : 60, height: 36, background: m.color }} />
+            <div className="absolute -translate-x-1/2 text-[12px] font-semibold whitespace-nowrap" style={{ left: labelLeft(m.value), top: m.above ? 2 : 100, color: m.color }}>{m.label}</div>
+          </div>
+        ))}
+        <div className="absolute w-4 h-4 rounded-full -translate-x-1/2 border-2" style={{ left: `${x(now)}%`, top: 52, background: 'var(--brass)', borderColor: 'var(--bg-2)' }} />
+        {nowLabelClass !== 'hidden' && (
+          <div className={`absolute -translate-x-1/2 text-[12px] font-semibold whitespace-nowrap ${nowLabelClass}`} style={{ left: labelLeft(now), top: 100, color: 'var(--brass)' }}>{c.axisNow} {k(now)}</div>
+        )}
+        {whatIf != null && whatIf !== now && (
+          <div className="absolute w-[14px] h-[14px] rounded-full -translate-x-1/2 border-2" style={{ left: `${x(whatIf)}%`, top: 53, borderColor: 'var(--text-1)' }} />
+        )}
+      </div>
+      <input
+        type="range"
+        min={lo}
+        max={hi}
+        step={10_000}
+        value={Math.min(hi, Math.max(lo, gross))}
+        onChange={(e) => setWhatIf(Number(e.target.value))}
+        aria-label={c.sliderAria}
+        className="w-full mt-2"
+        style={{ accentColor: 'var(--forest-light)' }}
+      />
+      <p className="mt-1 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.sliderHint}</p>
+
+      {/* Target margin; the other two columns (occupation, what matters most) come in later PRs. */}
+      <div className="mt-5 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-6" style={{ borderColor: 'var(--rule)' }}>
+        <div>
+          <NumberRow
+            label={c.targetTitle}
+            value={shownTarget}
+            onCommit={commitTarget}
+            suffix="%"
+            badge={(
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap"
+                style={y.targetIsCompany
+                  ? { background: 'var(--positive-bg)', color: 'var(--positive)' }
+                  : { background: 'var(--surface-5)', color: 'var(--text-3)' }}
+              >
+                {y.targetIsCompany ? c.targetCompany : c.targetOwn}
+              </span>
+            )}
+          />
+          {!y.targetIsCompany && (
+            <Button size="sm" variant="secondary" className="mt-2" leadingIcon={<RotateCcw />} onClick={() => setModel((m) => ({ ...m, targetMarginPct: null }))}>
+              {c.targetReset}
+            </Button>
+          )}
+          <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.targetHint}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** The two folded explainers under the card. */
+export function CompanyExplainers() {
+  const { t } = useFinance();
+  const c = t.companyModel;
+  return (
+    <>
+      <Explainer title={c.explainMoneyTitle}>
+        <p>{rich(c.explainMoneyBody)}</p>
+      </Explainer>
+      <Explainer title={c.explainArgsTitle}>
+        <ul className="list-disc pl-5 space-y-1">
+          {[c.argBench, c.argRisk, c.argRecruit, c.argBonus, c.argMarket].map((a) => <li key={a}>{rich(a)}</li>)}
+        </ul>
+      </Explainer>
+    </>
+  );
+}
+
+function Explainer({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Card padding="lg">
+      <details className="group">
+        <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+          <SectionLabel>
+            {title} <span aria-hidden className="inline-block transition-transform group-open:rotate-90">▸</span>
+          </SectionLabel>
+        </summary>
+        <div className="mt-4 text-[14px] leading-[1.6] max-w-3xl" style={{ color: 'var(--text-2)' }}>{children}</div>
+      </details>
+    </Card>
+  );
+}
