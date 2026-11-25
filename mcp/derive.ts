@@ -92,6 +92,24 @@ import {
   planSavingsRateSeries,
 } from '../src/lib/savingsRate';
 import { planPaydownTotal } from '../src/lib/savingsAllocation';
+import {
+  calcCompany,
+  breakEvenUtilization,
+  sanitizeCompanyModel,
+  NEUTRAL_LEVERS,
+  type CompanyContext,
+  type CompanyLevers,
+  type CompanyModel,
+} from '../src/lib/companyCost';
+import {
+  upsertCompanyGroup,
+  deleteCompanyGroup,
+  upsertCompanyCostLine,
+  deleteCompanyCostLine,
+  updateCompanySettings,
+  type CompanyGroupFields,
+  type CompanyCostLineFields,
+} from './mutations';
 
 // ---- shared helpers -------------------------------------------------------
 
@@ -1230,5 +1248,129 @@ export function queryTransactions(blob: ExportPayload, q: TransactionQuery) {
     totalIncome: Math.round(income),
     expensesByCategory: Object.fromEntries(Object.entries(byCategory).map(([k, v]) => [k, Math.round(v)])),
     transactions: matches.slice(0, limit),
+  };
+}
+
+// ---- company model (employer-cost page, Avansert) ---------------------------
+
+/**
+ * The company model's outside inputs, as EmployerCostPage builds them: your
+ * gross from the salary system or this page's override, hours per day from the
+ * billing settings, holiday pay and AGA from the cost settings.
+ */
+export function companyContext(blob: ExportPayload, monthKey = osloMonthKey()): CompanyContext {
+  const isNo = (blob.region ?? 'no') === 'no';
+  return {
+    year: TAX_YEAR,
+    hoursPerDay: { ...DEFAULT_BILLING_CONFIG, ...blob.billingConfig }.hoursPerDay,
+    ownGross: blob.employerSalaryOverride ?? activeGrossAnnual(blob, monthKey),
+    otpPct: blob.pension?.otpEmployerPct ?? 5,
+    costConfig: { ...DEFAULT_EMPLOYER_COST_CONFIG, ...blob.employerCostConfig },
+    holidayPayInSalary: isNo,
+    otpCap: isNo,
+  };
+}
+
+/** The headline numbers of one model run, for current / simulated / baseline comparisons. */
+function companyNumbers(model: CompanyModel, ctx: CompanyContext, levers: CompanyLevers) {
+  const r = calcCompany(model, ctx, levers);
+  return {
+    realCost: r.you.realCost,
+    ownCost: r.you.ownCost,
+    share: r.you.share,
+    billableHours: r.you.billableHours,
+    breakEvenRate: r.you.breakEvenRate,
+    breakEvenUtilizationPct: breakEvenUtilization(model, ctx, levers)?.utilizationPct ?? null,
+    overheadPerBillableHour: r.overheadPerBillableHour,
+    meanUtilizationPct: r.meanUtilizationPct,
+    revenue: r.revenue,
+    peopleCost: r.peopleCost,
+    linesTotal: r.linesTotal,
+    pool: r.pool,
+    bonus: r.bonus,
+    ebit: r.ebit,
+    marginPct: r.marginPct,
+    tax: r.tax,
+    afterTax: r.afterTax,
+    revenuePerFte: r.kpis.revenuePerFte,
+    grossMarginPerFte: r.kpis.grossMarginPerFte,
+  };
+}
+type CompanyNumbers = ReturnType<typeof companyNumbers>;
+
+function companyDelta(from: CompanyNumbers, to: CompanyNumbers) {
+  return Object.fromEntries(Object.entries(to).map(([k, v]) => {
+    const b = from[k as keyof CompanyNumbers];
+    return [k, v != null && b != null ? v - b : null];
+  })) as Record<keyof CompanyNumbers, number | null>;
+}
+
+/** The stored company model and its full result. Mirrors CompanyModelPanel. */
+export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
+  const model = sanitizeCompanyModel(blob.companyModel);
+  const ctx = companyContext(blob, monthKey);
+  const result = calcCompany(model, ctx);
+  const now = companyNumbers(model, ctx, model.levers);
+  const baseline = companyNumbers(model, ctx, NEUTRAL_LEVERS);
+  return {
+    monthKey,
+    mode: model.mode,
+    model,
+    inputs: { ownGross: ctx.ownGross, salaryFromOverride: blob.employerSalaryOverride != null, hoursPerDay: ctx.hoursPerDay, year: ctx.year },
+    result,
+    breakEvenUtilization: breakEvenUtilization(model, ctx),
+    summary: now,
+    // The levers at 0: the groups as saved. Delta is now minus baseline.
+    vsBaseline: { baseline, delta: companyDelta(baseline, now) },
+    notes: 'tax is an estimate: max(0, EBIT) x corporate tax %. share = overhead pool / delivery FTE; realCost = ownCost + share.',
+  };
+}
+
+export type CompanyGroupPatch = { id?: string; remove?: boolean } & CompanyGroupFields;
+export type CompanyCostLinePatch = { id?: string; remove?: boolean } & CompanyCostLineFields;
+export interface CompanySimulation {
+  levers?: Partial<CompanyLevers>;
+  groups?: CompanyGroupPatch[];
+  costs?: CompanyCostLinePatch[];
+}
+
+/**
+ * The company model with lever values and group / cost-line patches applied,
+ * through the same builders and sanitizer the write tools use. Saves nothing.
+ * A patch without id adds a row, with id and remove=true removes it, and with
+ * id and fields changes it.
+ */
+export function simulateCompany(blob: ExportPayload, sim: CompanySimulation, monthKey = osloMonthKey()) {
+  const ctx = companyContext(blob, monthKey);
+  const current = sanitizeCompanyModel(blob.companyModel);
+  // A scratch blob: the builders touch only companyModel.
+  const scratch = { companyModel: structuredClone(current) } as ExportPayload;
+  (sim.groups ?? []).forEach(({ id, remove, ...fields }, i) => {
+    if (remove) {
+      if (!id) throw new Error('remove needs the id of the group');
+      deleteCompanyGroup(scratch, { id });
+    } else {
+      upsertCompanyGroup(scratch, { id: id ?? `sim-group-${i + 1}`, create: !id, ...fields });
+    }
+  });
+  (sim.costs ?? []).forEach(({ id, remove, ...fields }, i) => {
+    if (remove) {
+      if (!id) throw new Error('remove needs the id of the cost line');
+      deleteCompanyCostLine(scratch, { id });
+    } else {
+      upsertCompanyCostLine(scratch, { id: id ?? `sim-cost-${i + 1}`, create: !id, ...fields });
+    }
+  });
+  if (sim.levers) updateCompanySettings(scratch, { levers: sim.levers });
+  const simulated = sanitizeCompanyModel(scratch.companyModel);
+  const before = companyNumbers(current, ctx, current.levers);
+  const after = companyNumbers(simulated, ctx, simulated.levers);
+  return {
+    monthKey,
+    saved: false,
+    current: before,
+    simulated: after,
+    delta: companyDelta(before, after),
+    simulatedModel: simulated,
   };
 }

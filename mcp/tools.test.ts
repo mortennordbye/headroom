@@ -17,6 +17,15 @@ import { DEFAULT_FORECAST_ASSUMPTIONS, EMPTY_SCENARIO } from '../src/lib/forecas
 import { retirementIncomeInTodaysKroner } from '../src/lib/retirementIncome';
 import { buildActivation, sizeAllocation } from '../src/lib/allocationSync';
 import type { SavingsAllocation } from '../src/lib/savingsAllocation';
+import {
+  calcCompany,
+  breakEvenUtilization,
+  sanitizeCompanyModel,
+  DEFAULT_COMPANY_MODEL,
+  LEVER_RANGES,
+  NEUTRAL_LEVERS,
+  type CompanyContext,
+} from '../src/lib/companyCost';
 
 const MONTH = '2026-06';
 
@@ -266,6 +275,8 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     mortgage: (b: ExportPayload) => derive.mortgage(b, MONTH),
     housing: (b: ExportPayload) => derive.housing(b, MONTH),
     employerCost: (b: ExportPayload) => derive.employerCost(b, MONTH),
+    companyModel: (b: ExportPayload) => derive.companyModelSummary(b, MONTH),
+    simulateCompany: (b: ExportPayload) => derive.simulateCompany(b, { levers: { utilizationPp: -5 } }, MONTH),
     assetsAndDebts: (b: ExportPayload) => derive.assetsAndDebts(b),
     queryTransactions: (b: ExportPayload) => derive.queryTransactions(b, {}),
   };
@@ -730,6 +741,83 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
     expect(e.grossAnnual).toBe(720000);
     expect(e.billableHoursPerYear).toBe(1560); // 1950 * 80%
     expect(e.billed.marginPct).toBeCloseTo(20, 0);
+  });
+
+  describe('company model', () => {
+    const ctx: CompanyContext = {
+      year: TAX_YEAR, hoursPerDay: 7.5, ownGross: 720000, otpPct: 5,
+      costConfig: { ...DEFAULT_EMPLOYER_COST_CONFIG, ...blob.employerCostConfig },
+      holidayPayInSalary: true, otpCap: true,
+    };
+
+    it('builds the page\'s inputs: gross from the salary system, else the page override', () => {
+      expect(derive.companyContext(blob, MONTH)).toEqual(ctx);
+      expect(derive.companyContext({ ...blob, employerSalaryOverride: 900000 }, MONTH).ownGross).toBe(900000);
+    });
+
+    it('get_company_model: the numbers are calcCompany\'s on the stored model', () => {
+      const s = derive.companyModelSummary(blob, MONTH);
+      const r = calcCompany(blob.companyModel!, ctx);
+      expect(s.mode).toBe('advanced');
+      expect(s.model).toEqual(blob.companyModel);
+      expect(s.result).toEqual(r);
+      expect(s.summary).toMatchObject({
+        realCost: r.you.realCost, ownCost: r.you.ownCost, share: r.you.share, breakEvenRate: r.you.breakEvenRate,
+        overheadPerBillableHour: r.overheadPerBillableHour, revenue: r.revenue, peopleCost: r.peopleCost,
+        bonus: r.bonus, ebit: r.ebit, marginPct: r.marginPct, tax: r.tax,
+        breakEvenUtilizationPct: breakEvenUtilization(blob.companyModel!, ctx)!.utilizationPct,
+      });
+      const base = calcCompany(blob.companyModel!, ctx, NEUTRAL_LEVERS);
+      expect(s.vsBaseline.delta.ebit).toBeCloseTo(r.ebit - base.ebit, 6);
+      expect(s.vsBaseline.delta.ebit).not.toBe(0); // the fixture's levers are off 0
+    });
+
+    it('get_company_model: no stored model gives the default model, as the app shows it', () => {
+      const { companyModel: _omit, ...rest } = blob;
+      expect(derive.companyModelSummary(rest as ExportPayload, MONTH).model).toEqual(DEFAULT_COMPANY_MODEL);
+    });
+
+    it('simulate_company: matches calcCompany on the same model and saves nothing', () => {
+      const input = structuredClone(blob);
+      const sim = derive.simulateCompany(input, {
+        levers: { ratePct: 5, utilizationPp: 99 },
+        groups: [
+          { id: 'cg3', remove: true },
+          { id: 'cg2', count: 5 },
+          { name: 'Juniors', kind: 'delivery', count: 2, avgGross: 600000, billablePct: 80, hourlyRate: 1000 },
+        ],
+        costs: [{ id: 'cc1', amount: 1_000_000 }, { label: 'Travel', amount: 100000, per: 'company' }],
+      }, MONTH);
+      expect(input).toEqual(blob); // nothing written to the blob
+
+      const m = sanitizeCompanyModel({
+        ...blob.companyModel,
+        groups: [
+          { ...blob.companyModel!.groups[0] },
+          { ...blob.companyModel!.groups[1], count: 5 },
+          { id: 'sim-group-3', name: 'Juniors', kind: 'delivery', count: 2, avgGross: 600000, billablePct: 80, hourlyRate: 1000, realizationPct: 100 },
+        ],
+        costs: [
+          { ...blob.companyModel!.costs[0], amount: 1_000_000 },
+          ...blob.companyModel!.costs.slice(1),
+          { id: 'sim-cost-2', label: 'Travel', amount: 100000, per: 'company' },
+        ],
+        levers: { ...blob.companyModel!.levers, ratePct: 5, utilizationPp: 99 }, // clamped by the sanitizer
+      });
+      expect(sim.simulatedModel).toEqual(m);
+      expect(m.levers.utilizationPp).toBe(LEVER_RANGES.utilizationPp.max);
+      const r = calcCompany(m, ctx);
+      expect(sim.simulated).toMatchObject({ realCost: r.you.realCost, ebit: r.ebit, revenue: r.revenue, overheadPerBillableHour: r.overheadPerBillableHour });
+      expect(sim.current.ebit).toBe(calcCompany(blob.companyModel!, ctx).ebit);
+      expect(sim.delta.ebit).toBeCloseTo(sim.simulated.ebit - sim.current.ebit, 6);
+    });
+
+    it('simulate_company: no changes give a zero delta, and a bad id errors', () => {
+      const sim = derive.simulateCompany(blob, {}, MONTH);
+      expect(sim.simulated).toEqual(sim.current);
+      expect(() => derive.simulateCompany(blob, { groups: [{ id: 'nope', count: 1 }] }, MONTH)).toThrow(/no company group/);
+      expect(() => derive.simulateCompany(blob, { costs: [{ remove: true }] }, MONTH)).toThrow(/needs the id/);
+    });
   });
 
   it('query transactions: filters combine and totals cover all matches', () => {

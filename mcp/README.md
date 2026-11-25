@@ -102,6 +102,8 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 | `get_mortgage` | Active mortgage: payment, remaining term (years + months), payoff month and timeline, LTV, paydown vs plan, yearly amortization, and the user's ownership and loan share with co-owners |
 | `get_housing` | Borrowing capacity (with manual overrides), planned purchase, second-home scenarios and portfolio |
 | `get_employer_cost` | Employer cost, break-even/target/billed hourly rate, margin, fair salary |
+| `get_company_model` | The company model behind the employer-cost page's Avansert mode (groups, cost lines, hours, bonus, levers) and its results: your own and real cost, your overhead share, break-even rate and utilization, overhead per billable hour, revenue, people cost, bonus, EBIT, margin, estimated tax, KPIs, and the change against the levers at 0 |
+| `simulate_company` | Saves nothing. Lever values plus group and cost-line patches (add, change or remove by id) on the stored company model; returns current, simulated and delta |
 | `get_assets_and_debts` | Every balance with its id, equity breakdown, BSU room, wealth-tax estimate, recent snapshots |
 | `query_transactions` | Filter by date, category, text, amount, kind; totals and per-category sums over all matches |
 | `what_if` | `prepay_vs_invest` or `extra_debt_payment` scenarios |
@@ -119,6 +121,7 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 | Rules | `add_rule`, `delete_rule` (`type`: `category` / `label` / `transfer`) |
 | Balances | `update_asset`, `upsert_savings_account`, `delete_savings_account`, `upsert_debt`, `delete_debt`, `update_current_mortgage`, `update_loan`, `set_co_owners` |
 | Income | `set_monthly_income`, `add_salary`, `add_bonus` |
+| Company model | `upsert_company_group`, `delete_company_group`, `upsert_company_cost_line`, `delete_company_cost_line`, `update_company_settings` |
 | Settings | `update_assumptions`, `set_ai_context`, `set_profile` |
 | Undo | `restore_revision` |
 
@@ -145,6 +148,11 @@ Notes on a few of them:
   update only the provided fields when called with one.
 - `add_rule` replaces an existing rule of the same type with the same match text.
 - `add_salary` requires an existing `jobId`; `add_bonus` checks it when given.
+- The company-model tools store `companyModel` sanitized as a whole (the default
+  model when none was stored). Your group stays a delivery group: if it becomes
+  support or is deleted, it moves to the first delivery group. Levers are clamped
+  to the slider range. `update_company_settings` with `applyLevers: true` is
+  "Lagre som utgangspunkt": the levers go into the groups and are set to 0.
 
 **Housing market (opt-in, off by default):**
 

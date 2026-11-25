@@ -19,6 +19,11 @@
 //   the months it paid aren't charged interest again.
 // - setCoOwners also rewrites the co-owners stored in `balanceSnapshots`, as
 //   FinanceContext.setCoOwners does, so history shows the share in force each month.
+//
+// The company-model builders store `companyModel` whole and sanitized (the
+// default model when none was stored, as the app shows it). Their diff lists
+// every value that changed, side effects included (your group moving to another
+// delivery group, applied levers).
 
 import type {
   ExportPayload,
@@ -44,6 +49,17 @@ import { rewriteSnapshotCoOwners, sanitizeCoOwners, validateCoOwners, type CoOwn
 import { currentResidence } from '../src/lib/property';
 import { addDeletedBankTombstones } from '../src/lib/bankDedup';
 import { recordDepartedPaydowns } from '../src/lib/automation';
+import {
+  sanitizeCompanyModel,
+  ensureDeliverySelf,
+  applyLevers,
+  type CompanyModel,
+  type CompanyGroup,
+  type CompanyGroupKind,
+  type CompanyCostLine,
+  type CostLinePer,
+  type CompanyLevers,
+} from '../src/lib/companyCost';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -663,4 +679,141 @@ export function addBonus(blob: ExportPayload, args: BonusEntry): FieldChange[] {
   };
   blob.bonuses = [...(blob.bonuses ?? []), bonus];
   return [diff(`bonuses[${bonus.id}]`, null, bonus)];
+}
+
+// ── Company model (employer-cost page, Avansert) ────────────────────────────
+
+export const COMPANY_GROUP_KINDS: readonly CompanyGroupKind[] = ['delivery', 'support'];
+export const COST_LINE_PERS: readonly CostLinePer[] = ['company', 'head', 'pctOfSalary'];
+export type CompanyGroupFields = Partial<Omit<CompanyGroup, 'id'>>;
+export type CompanyCostLineFields = Partial<Omit<CompanyCostLine, 'id'>>;
+
+/** Every value that differs between two sanitized models, rows matched by id. */
+function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[] {
+  const out: FieldChange[] = [];
+  const field = (path: string, b: unknown, a: unknown) => {
+    if (JSON.stringify(b) !== JSON.stringify(a)) out.push(diff(`companyModel.${path}`, b, a));
+  };
+  field('mode', before.mode, after.mode);
+  field('selfGroupId', before.selfGroupId, after.selfGroupId);
+  for (const part of ['hours', 'bonus', 'levers'] as const) {
+    const b = before[part] as unknown as Record<string, unknown>;
+    const a = after[part] as unknown as Record<string, unknown>;
+    for (const k of Object.keys(a)) field(`${part}.${k}`, b[k], a[k]);
+  }
+  const rows = <T extends { id: string }>(path: string, b: T[], a: T[]) => {
+    for (const x of b) {
+      const y = a.find((r) => r.id === x.id);
+      if (!y) out.push(diff(`companyModel.${path}[${x.id}]`, x, null));
+      else for (const k of Object.keys(y) as (keyof T)[]) field(`${path}[${x.id}].${String(k)}`, x[k], y[k]);
+    }
+    for (const y of a) if (!b.some((x) => x.id === y.id)) out.push(diff(`companyModel.${path}[${y.id}]`, null, y));
+  };
+  rows('groups', before.groups, after.groups);
+  rows('costs', before.costs, after.costs);
+  return out;
+}
+
+/**
+ * Edit the stored company model (the default model when none is stored, as the
+ * app shows it) and store the result sanitized, with your group kept a delivery
+ * group. Touches only `companyModel`.
+ */
+function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyModel): FieldChange[] {
+  const before = sanitizeCompanyModel(blob.companyModel);
+  const after = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
+  blob.companyModel = after;
+  return companyChanges(before, after);
+}
+
+/**
+ * Create (create=true, caller supplies a fresh id) or update a role group. On
+ * create, name/kind/count/avgGross are required, and billablePct/hourlyRate too
+ * for a delivery group (a support group defaults to 0 for both).
+ */
+export function upsertCompanyGroup(
+  blob: ExportPayload,
+  args: { id: string; create: boolean } & CompanyGroupFields,
+): FieldChange[] {
+  const { id, create, ...fields } = args;
+  return writeCompany(blob, (m) => {
+    if (!create) return { ...m, groups: patchById(m.groups, id, fields, 'companyModel.groups', 'company group').list };
+    if (m.groups.some((g) => g.id === id)) throw new Error(`a company group with id "${id}" already exists`);
+    const { name, kind, count, avgGross, billablePct, hourlyRate, realizationPct } = fields;
+    if (!name || !kind || count === undefined || avgGross === undefined) {
+      throw new Error('name, kind, count and avgGross are required to create a company group');
+    }
+    if (kind === 'delivery' && (billablePct === undefined || hourlyRate === undefined)) {
+      throw new Error('billablePct and hourlyRate are required for a delivery group');
+    }
+    const group: CompanyGroup = {
+      id, name, kind, count, avgGross,
+      billablePct: billablePct ?? 0,
+      hourlyRate: hourlyRate ?? 0,
+      realizationPct: realizationPct ?? 100,
+    };
+    return { ...m, groups: [...m.groups, group] };
+  });
+}
+
+/** Remove a role group. When it was your group, your group moves to the first delivery group. */
+export function deleteCompanyGroup(blob: ExportPayload, args: { id: string }): FieldChange[] {
+  return writeCompany(blob, (m) => ({ ...m, groups: removeById(m.groups, args.id, 'companyModel.groups', 'company group').list }));
+}
+
+/** Create (create=true, caller supplies a fresh id) or update a cost line. On create, label and amount are required. */
+export function upsertCompanyCostLine(
+  blob: ExportPayload,
+  args: { id: string; create: boolean } & CompanyCostLineFields,
+): FieldChange[] {
+  const { id, create, ...fields } = args;
+  return writeCompany(blob, (m) => {
+    if (!create) return { ...m, costs: patchById(m.costs, id, fields, 'companyModel.costs', 'company cost line').list };
+    if (m.costs.some((c) => c.id === id)) throw new Error(`a company cost line with id "${id}" already exists`);
+    const { label, amount, per } = fields;
+    if (!label || amount === undefined) throw new Error('label and amount are required to create a company cost line');
+    return { ...m, costs: [...m.costs, { id, label, amount, per: per ?? 'company' }] };
+  });
+}
+
+export function deleteCompanyCostLine(blob: ExportPayload, args: { id: string }): FieldChange[] {
+  return writeCompany(blob, (m) => ({ ...m, costs: removeById(m.costs, args.id, 'companyModel.costs', 'company cost line').list }));
+}
+
+export interface CompanySettingsFields {
+  mode?: CompanyModel['mode'];
+  selfGroupId?: string;
+  hours?: Partial<CompanyModel['hours']>;
+  bonus?: Partial<CompanyModel['bonus']>;
+  levers?: Partial<CompanyLevers>;
+  /** "Lagre som utgangspunkt": write the levers (after `levers` above) into the groups and set them to 0. */
+  applyLevers?: boolean;
+}
+
+/** Only the defined fields of a patch, so an omitted field keeps its value. */
+const definedOnly = <T extends object>(patch: Partial<T> | undefined): Partial<T> =>
+  Object.fromEntries(Object.entries(patch ?? {}).filter(([, v]) => v !== undefined)) as Partial<T>;
+
+/** Change the model's settings. Only given fields change; levers are clamped to their slider range. */
+export function updateCompanySettings(blob: ExportPayload, args: CompanySettingsFields): FieldChange[] {
+  const { mode, selfGroupId, hours, bonus, levers, applyLevers: apply } = args;
+  if (mode === undefined && selfGroupId === undefined && hours === undefined && bonus === undefined
+    && levers === undefined && !apply) {
+    throw new Error('no company settings provided');
+  }
+  return writeCompany(blob, (m) => {
+    if (selfGroupId !== undefined && !m.groups.some((g) => g.id === selfGroupId && g.kind === 'delivery')) {
+      throw new Error(`no delivery group with id "${selfGroupId}"`);
+    }
+    // Clamp the levers first, so "apply" writes what the sliders show.
+    const next = sanitizeCompanyModel({
+      ...m,
+      ...(mode !== undefined ? { mode } : {}),
+      ...(selfGroupId !== undefined ? { selfGroupId } : {}),
+      hours: { ...m.hours, ...definedOnly(hours) },
+      bonus: { ...m.bonus, ...definedOnly(bonus) },
+      levers: { ...m.levers, ...definedOnly(levers) },
+    });
+    return apply ? applyLevers(next) : next;
+  });
 }

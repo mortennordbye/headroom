@@ -47,8 +47,16 @@ import {
   BONUS_TYPES,
   addSalary,
   addBonus,
+  COMPANY_GROUP_KINDS,
+  COST_LINE_PERS,
+  upsertCompanyGroup,
+  deleteCompanyGroup,
+  upsertCompanyCostLine,
+  deleteCompanyCostLine,
+  updateCompanySettings,
 } from '../mutations';
 import type { DebtType, SalaryChangeType, BonusType } from '../../src/context/FinanceContext';
+import { LEVER_RANGES, BONUS_POOL_MAX_PCT, type CompanyGroupKind, type CostLinePer } from '../../src/lib/companyCost';
 
 const readWrite = { readOnlyHint: false, openWorldHint: false } as const;
 const categoryEnum = z.enum(CATEGORY_KEYS as unknown as [CategoryKey, ...CategoryKey[]]);
@@ -62,6 +70,34 @@ const salaryChangeEnum = z.enum(SALARY_CHANGE_TYPES as unknown as [SalaryChangeT
 const bonusTypeEnum = z.enum(BONUS_TYPES as unknown as [BonusType, ...BonusType[]]);
 const kindEnum = z.enum(['expense', 'income']);
 const kr = z.number().min(0);
+const pct = z.number().min(0).max(100);
+
+/** Fields of a company role group; shared with simulate_company. */
+export const companyGroupFields = {
+  name: z.string().min(1).max(200).optional().describe("Role name, e.g. 'Konsulenter'."),
+  kind: z.enum(COMPANY_GROUP_KINDS as unknown as [CompanyGroupKind, ...CompanyGroupKind[]]).optional()
+    .describe('"delivery" bills clients and shares the overhead; "support" (management, HR) is overhead.'),
+  count: z.number().min(0).max(100_000).optional().describe('FTE, decimals allowed. Your own group counts you too.'),
+  avgGross: kr.optional().describe('Average fixed gross salary per FTE in kr per year.'),
+  billablePct: pct.optional().describe('Billable share of AVAILABLE hours (after holidays, sick and internal time), %.'),
+  hourlyRate: kr.optional().describe('List price per hour in kr.'),
+  realizationPct: pct.optional().describe('Share of the list price the client really pays, %. Default 100 on create.'),
+};
+
+/** Fields of a company cost line; shared with simulate_company. */
+export const companyCostLineFields = {
+  label: z.string().min(1).max(200).optional(),
+  amount: kr.optional().describe('kr per year (per="company"), kr per head per year (per="head"), or % of total salary (per="pctOfSalary").'),
+  per: z.enum(COST_LINE_PERS as unknown as [CostLinePer, ...CostLinePer[]]).optional().describe('Default "company" on create.'),
+};
+
+const leverFields = {
+  utilizationPp: z.number().optional().describe(`Delivery groups' billable share, percentage points (${LEVER_RANGES.utilizationPp.min} to ${LEVER_RANGES.utilizationPp.max}; clamped).`),
+  ratePct: z.number().optional().describe(`All hourly rates, % (${LEVER_RANGES.ratePct.min} to ${LEVER_RANGES.ratePct.max}; clamped).`),
+  salaryPct: z.number().optional().describe(`The groups' salaries, % (${LEVER_RANGES.salaryPct.min} to ${LEVER_RANGES.salaryPct.max}; clamped). Your own salary comes from the salary page.`),
+  realizationPp: z.number().optional().describe(`All realization, percentage points (${LEVER_RANGES.realizationPp.min} to ${LEVER_RANGES.realizationPp.max}; clamped).`),
+};
+export const companyLeversSchema = z.object(leverFields);
 
 async function run(build: (blob: ExportPayload) => FieldChange[]) {
   try {
@@ -515,6 +551,80 @@ export function registerWriteTools(server: McpServer) {
       annotations: { title: 'Add a bonus', ...readWrite, destructiveHint: false, idempotentHint: false },
     },
     (args) => run((blob) => addBonus(blob, { id: crypto.randomUUID(), ...args })),
+  );
+
+  // ── Company model (employer-cost page, Avansert) ──────────────────────────
+
+  server.registerTool(
+    'upsert_company_group',
+    {
+      title: 'Create or update a company role group',
+      description:
+        'Without id: add a role group to the company model (name, kind, count, avgGross required; billablePct and hourlyRate too for a delivery group). With id (from get_company_model model.groups): change only the provided fields. Your own group stays a delivery group: if it becomes support, your group moves to the first delivery group.',
+      inputSchema: { id: z.string().min(1).optional(), ...companyGroupFields },
+      annotations: { title: 'Create or update a company role group', ...readWrite, destructiveHint: true, idempotentHint: false },
+    },
+    ({ id, ...rest }) => run((blob) => upsertCompanyGroup(blob, { id: id ?? crypto.randomUUID(), create: !id, ...rest })),
+  );
+
+  server.registerTool(
+    'delete_company_group',
+    {
+      title: 'Delete a company role group',
+      description: 'Remove a role group (id from get_company_model model.groups). If it was your group, your group moves to the first delivery group.',
+      inputSchema: { id: z.string().min(1) },
+      annotations: { title: 'Delete a company role group', ...readWrite, destructiveHint: true, idempotentHint: true },
+    },
+    (args) => run((blob) => deleteCompanyGroup(blob, args)),
+  );
+
+  server.registerTool(
+    'upsert_company_cost_line',
+    {
+      title: 'Create or update a company cost line',
+      description:
+        'Without id: add a cost line to the company model (label and amount required, per defaults to "company"). With id (from get_company_model model.costs): change only the provided fields. Cost lines plus the support groups make the overhead pool.',
+      inputSchema: { id: z.string().min(1).optional(), ...companyCostLineFields },
+      annotations: { title: 'Create or update a company cost line', ...readWrite, destructiveHint: true, idempotentHint: false },
+    },
+    ({ id, ...rest }) => run((blob) => upsertCompanyCostLine(blob, { id: id ?? crypto.randomUUID(), create: !id, ...rest })),
+  );
+
+  server.registerTool(
+    'delete_company_cost_line',
+    {
+      title: 'Delete a company cost line',
+      description: 'Remove a cost line (id from get_company_model model.costs).',
+      inputSchema: { id: z.string().min(1) },
+      annotations: { title: 'Delete a company cost line', ...readWrite, destructiveHint: true, idempotentHint: true },
+    },
+    (args) => run((blob) => deleteCompanyCostLine(blob, args)),
+  );
+
+  server.registerTool(
+    'update_company_settings',
+    {
+      title: 'Update company model settings',
+      description:
+        'Change the company model settings. Only provided fields change. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
+      inputSchema: {
+        mode: z.enum(['simple', 'advanced']).optional(),
+        selfGroupId: z.string().min(1).optional().describe('Your group: the id of a delivery group (from get_company_model model.groups).'),
+        hours: z.object({
+          sickPct: pct.optional().describe('Sick leave, % of the hours left after holidays.'),
+          internalPct: pct.optional().describe('Internal (non-billable) time, % of the hours left after holidays.'),
+          holidayDays: z.number().min(0).max(366).optional().describe('Holiday (ferie) weekdays per year.'),
+        }).optional(),
+        bonus: z.object({
+          poolPct: z.number().min(0).max(BONUS_POOL_MAX_PCT).optional().describe(`Bonus pool, % of the result before bonus (0-${BONUS_POOL_MAX_PCT}).`),
+          includesHolidayPay: z.boolean().optional().describe('The bonus also earns holiday pay.'),
+        }).optional(),
+        levers: companyLeversSchema.optional(),
+        applyLevers: z.boolean().optional().describe('true: write the levers into the groups and set them to 0.'),
+      },
+      annotations: { title: 'Update company model settings', ...readWrite, destructiveHint: true, idempotentHint: false },
+    },
+    (fields) => run((blob) => updateCompanySettings(blob, fields)),
   );
 
   server.registerTool(
