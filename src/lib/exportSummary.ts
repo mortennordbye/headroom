@@ -75,7 +75,7 @@ export function summarizeExport(p: Partial<ExportPayload>): SummarySection[] {
         { key: 'assets', kind: 'flag', present: p.assets != null },
         { key: 'pension', kind: 'flag', present: p.pension != null },
         { key: 'loanHousing', kind: 'flag', present: p.loan != null },
-        { key: 'employerCost', kind: 'flag', present: p.employerCostConfig != null || p.billingConfig != null },
+        { key: 'employerCost', kind: 'flag', present: p.employerCostConfig != null || p.billingConfig != null || p.companyModel != null },
         { key: 'preferences', kind: 'flag', present: hasPreferences(p) },
       ],
     },

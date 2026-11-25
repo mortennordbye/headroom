@@ -24,6 +24,7 @@ import { dedupeBankTransactions } from './bankDedup';
 import { migrateSavingsAccounts, migrateSnapshotSavings, partitionSavings, mergeStoredSavings } from './savingsMigration';
 import { sanitizeCoOwners, sanitizeSnapshotCoOwners } from './ownership';
 import { sanitizeTaxCard } from './forskuddstrekk';
+import { sanitizeCompanyModel, DEFAULT_COMPANY_MODEL } from './companyCost';
 import { coerceNumber } from './sanitizePayload';
 
 // Every persisted field. `currentMonth` is view state — added by the callers
@@ -194,6 +195,12 @@ export function makePayloadRegistry(d: PayloadDefaults): PayloadRegistry {
     billingConfig: {
       group: 'reset', demo: 'personal', default: DEFAULT_BILLING_CONFIG,
       read: mergedWith('billingConfig', DEFAULT_BILLING_CONFIG),
+    },
+    // Company model behind the employer-cost page's Avansert mode. A malformed
+    // model is repaired to a valid one, not dropped.
+    companyModel: {
+      group: 'reset', demo: 'personal', default: DEFAULT_COMPANY_MODEL,
+      read: (data) => (data.companyModel === undefined ? ABSENT : sanitizeCompanyModel(data.companyModel)),
     },
     // Legacy blobs pre-date this flag — absent → treated as onboarded (true) on
     // load so existing users never re-trigger the first-run tour.

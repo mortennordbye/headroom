@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import {
   getDaysInMonth,
   startOfMonth,
@@ -17,6 +17,7 @@ import { rewriteSnapshotCoOwners, snapshotCoOwners } from '../lib/ownership';
 import { markGainReview } from '../lib/gainReview';
 import { calcTaxByRegion, IPS_MAX_DEDUCTION } from '../lib/norwegianTax';
 import { cardNetForMonth, type TaxCard } from '../lib/forskuddstrekk';
+import { DEFAULT_COMPANY_MODEL, type CompanyModel } from '../lib/companyCost';
 import { feriepengerSurplus } from '../lib/feriepenger';
 import { calcBsuTaxCredit, bsuDepositedAfterPosting } from '../lib/bsu';
 import type { SecondHomeScenario, BoligAssumptions } from '../lib/secondHome';
@@ -1037,6 +1038,9 @@ interface FinanceDataContextType {
   updateEmployerCostConfig: (key: keyof EmployerCostConfig, value: number) => void;
   billingConfig: BillingRateConfig;
   updateBillingConfig: <K extends keyof BillingRateConfig>(key: K, value: BillingRateConfig[K]) => void;
+  /** The employer-cost page's company model (Enkel/Avansert mode, groups, costs, levers). */
+  companyModel: CompanyModel;
+  setCompanyModel: Dispatch<SetStateAction<CompanyModel>>;
   inflation: InflationPoint[];
   inflationStale: boolean;
   /** Force a fresh SSB inflation fetch, bypassing the server's attempt cooldown. */
@@ -1268,6 +1272,7 @@ export interface ExportPayload {
   taxCard?: TaxCard | null;
   employerCostConfig?: EmployerCostConfig;
   billingConfig?: BillingRateConfig;
+  companyModel?: CompanyModel;
   hiddenNavItems?: string[];
   onboardingCompleted?: boolean;
   assumptionsNudgeDismissed?: boolean;
@@ -1418,6 +1423,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [taxCard, setTaxCard] = useState<TaxCard | null>(null);
   const [employerCostConfig, setEmployerCostConfig] = useState<EmployerCostConfig>(DEFAULT_EMPLOYER_COST_CONFIG);
   const [billingConfig, setBillingConfig] = useState<BillingRateConfig>(DEFAULT_BILLING_CONFIG);
+  const [companyModel, setCompanyModel] = useState<CompanyModel>(DEFAULT_COMPANY_MODEL);
   const [hiddenNavItems, setHiddenNavItems] = useState<string[]>([]);
   const [assumptionsNudgeDismissed, setAssumptionsNudgeDismissed] = useState(false);
   const [incomeReminderDismissedMonth, setIncomeReminderDismissedMonth] = useState('');
@@ -1531,7 +1537,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     savingsTargetPercent, growthReturnRate, forecastAssumptions, houseGrowthRate, cashGrowthRate, cryptoGrowthRate,
     displayCurrency, nokToUsd, customCurrencyCode, customCurrencyRate,
     jobs, salaries, bonuses, overtime, hoursSnapshots, goals, savingsAllocations,
-    region, customTaxRatePct, taxCard, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    region, customTaxRatePct, taxCard, employerCostConfig, billingConfig, companyModel, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, savingsMonthOverrides, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
@@ -1541,7 +1547,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     housingMode, homeowner, transition, residences, secondHomeScenarios, boligAssumptions, lang, savingsTargetPercent, growthReturnRate, forecastAssumptions,
     houseGrowthRate, cashGrowthRate, cryptoGrowthRate, displayCurrency, nokToUsd,
     customCurrencyCode, customCurrencyRate, jobs, salaries, bonuses, overtime, hoursSnapshots,
-    goals, savingsAllocations, region, customTaxRatePct, taxCard, employerCostConfig, billingConfig, hiddenNavItems, onboardingCompleted,
+    goals, savingsAllocations, region, customTaxRatePct, taxCard, employerCostConfig, billingConfig, companyModel, hiddenNavItems, onboardingCompleted,
     assumptionsNudgeDismissed, incomeReminderDismissedMonth, conservativeNudgeDismissedMonth, savingsMonthOverrides, payday, aiContext, profile,
     capacityOverrides, employerSalaryOverride,
     dismissedLinkSuggestions, dismissedRecurringSuggestions, transferHintDismissed, automationEnabled,
@@ -1588,7 +1594,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       overtime: setOvertime, hoursSnapshots: setHoursSnapshots, goals: setGoals,
       savingsAllocations: setSavingsAllocations, region: setRegion,
       customTaxRatePct: setCustomTaxRatePct, taxCard: setTaxCard, employerCostConfig: setEmployerCostConfig,
-      billingConfig: setBillingConfig, hiddenNavItems: setHiddenNavItems,
+      billingConfig: setBillingConfig, companyModel: setCompanyModel, hiddenNavItems: setHiddenNavItems,
       onboardingCompleted: setOnboardingCompleted, assumptionsNudgeDismissed: setAssumptionsNudgeDismissed,
       incomeReminderDismissedMonth: setIncomeReminderDismissedMonth,
       conservativeNudgeDismissedMonth: setConservativeNudgeDismissedMonth,
@@ -3274,6 +3280,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setGoals([]);
     setEmployerCostConfig(DEFAULT_EMPLOYER_COST_CONFIG);
     setBillingConfig(DEFAULT_BILLING_CONFIG);
+    setCompanyModel(DEFAULT_COMPANY_MODEL);
     setAiContext('');
     // A full wipe is effectively a fresh start — re-run the guided setup from the top.
     setOnboardingCompleted(false);
@@ -3469,6 +3476,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     automationEnabled, setAutomationEnabled, pendingCatchups, confirmCatchup, declineCatchup,
     resolveGainReview,
     employerCostConfig, updateEmployerCostConfig, billingConfig, updateBillingConfig,
+    companyModel, setCompanyModel,
     inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris,
     policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
@@ -3500,7 +3508,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     automationEnabled, setAutomationEnabled, pendingCatchups, confirmCatchup, declineCatchup,
     resolveGainReview,
     employerCostConfig, updateEmployerCostConfig,
-    billingConfig, updateBillingConfig, inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
+    billingConfig, updateBillingConfig, companyModel, inflation, inflationStale, refreshInflation, wageStats, wageStatsStale,
     kvmpris, kvmprisStale, loadKvmpris, refreshKvmpris,
     policyRate, policyRateAsOf, policyRateStale, refreshPolicyRate,
     importAll, buildPayload, resetAll, restoreAssetTaxDefaults,
