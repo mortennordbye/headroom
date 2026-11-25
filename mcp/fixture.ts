@@ -133,6 +133,25 @@ export function fullFixture(): ExportPayload {
     // --- consulting ---
     employerCostConfig: { feriepengesatsPct: 12, payrollTaxPct: 14.1, overheadAnnual: 50000, overheadPct: 0 },
     billingConfig: { workHoursPerYear: 1950, utilizationPct: 80, billableHoursOverride: null, targetMarginPct: 20, hoursPerDay: 7.5, billedHourly: null, solveFor: 'rate' },
+    // Already in the sanitizer's shape, so it round-trips unchanged. The levers
+    // are off 0, so applying them has an effect.
+    companyModel: {
+      mode: 'advanced',
+      groups: [
+        { id: 'cg1', name: 'Consultants', kind: 'delivery', count: 20, avgGross: 800000, billablePct: 85, hourlyRate: 1250, realizationPct: 95 },
+        { id: 'cg2', name: 'Leads', kind: 'delivery', count: 3, avgGross: 950000, billablePct: 60, hourlyRate: 1450, realizationPct: 95 },
+        { id: 'cg3', name: 'Management', kind: 'support', count: 2, avgGross: 1100000, billablePct: 10, hourlyRate: 1600, realizationPct: 95 },
+      ],
+      selfGroupId: 'cg1',
+      hours: { sickPct: 4, internalPct: 5, holidayDays: 25 },
+      costs: [
+        { id: 'cc1', label: 'Office', amount: 1500000, per: 'company' },
+        { id: 'cc2', label: 'IT', amount: 25000, per: 'head' },
+        { id: 'cc3', label: 'Pension admin', amount: 0.7, per: 'pctOfSalary' },
+      ],
+      bonus: { poolPct: 15, includesHolidayPay: true },
+      levers: { utilizationPp: 2, ratePct: 3, salaryPct: 0, realizationPp: 0 },
+    },
 
     // --- profile ---
     profile: { name: 'Alex Doe', birthDate: '1990-05-01' },

@@ -15,6 +15,8 @@ import type { ExportPayload } from '../src/context/FinanceContext';
 import { fullFixture, topLevelKeys } from './fixture';
 import { setCategoryBudget, deleteTransaction } from './mutations';
 import { freePort } from './freePort';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 let PORT: number;
 let BASE: string;
@@ -422,5 +424,70 @@ describe('a legacy mortgage balance is migrated on read, and saved only by a wri
     expect(stored.assets.houseDebt).toBe(2_500_000);
     expect(stored.homeowner).not.toHaveProperty('currentMortgageBalance');
     expect(stored.transition).not.toHaveProperty('currentMortgageBalance');
+  });
+});
+
+describe('company model tools through the MCP protocol', () => {
+  let mcp: Client;
+
+  beforeAll(async () => {
+    const { createServer } = await import('./createServer'); // after HEADROOM_URL is set
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await createServer().server.connect(serverSide);
+    mcp = new Client({ name: 'test', version: '1.0.0' });
+    await mcp.connect(clientSide);
+  });
+
+  afterAll(async () => {
+    await mcp?.close();
+  });
+
+  async function call<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+    const r = (await mcp.callTool({ name, arguments: args })) as { content: { text: string }[]; isError?: boolean };
+    if (r.isError) throw new Error(r.content[0].text);
+    return JSON.parse(r.content[0].text) as T;
+  }
+  const groupIds = async () =>
+    (await call<{ model: { groups: { id: string }[] } }>('get_company_model')).model.groups.map((g) => g.id);
+
+  // Compared with the stored blob, not the fixture: earlier tests leave bank rows
+  // that the server's reconcile keeps through a reseed.
+  it('a group added through MCP reads back, and undo_change removes it again', async () => {
+    const before = await getBlob();
+    const added = await call<{ rev: number; changed: { field: string }[] }>('upsert_company_group', {
+      name: 'Juniors', kind: 'delivery', count: 3, avgGross: 600000, billablePct: 80, hourlyRate: 1000,
+    });
+    const newId = added.changed[0].field.match(/groups\[(.+)\]/)![1];
+    expect(await groupIds()).toEqual(['cg1', 'cg2', 'cg3', newId]);
+    const stored = await getBlob();
+    expect({ ...stored, companyModel: before.companyModel }).toEqual(before);
+
+    const undone = await call<{ keys: string[] }>('undo_change', { rev: added.rev });
+    expect(undone.keys).toEqual(['companyModel']);
+    expect(await groupIds()).toEqual(['cg1', 'cg2', 'cg3']);
+    expect(await getBlob()).toEqual(before);
+  });
+
+  it('a first write with no stored model reports the whole model, and undo removes it again', async () => {
+    await client.applyMutation((b) => {
+      delete b.companyModel;
+      return b;
+    });
+    const before = await getBlob();
+    const out = await call<{ rev: number; changed: { field: string; before: unknown }[] }>('update_company_settings', { mode: 'advanced' });
+    expect(out.changed).toEqual([expect.objectContaining({ field: 'companyModel', before: null })]);
+    expect((await getBlob()).companyModel?.mode).toBe('advanced');
+    await call('undo_change', { rev: out.rev });
+    expect(await getBlob()).toEqual(before);
+  });
+
+  it('simulate_company saves nothing', async () => {
+    const before = await getBlob();
+    const r0 = await currentRev();
+    const sim = await call<{ saved: boolean; delta: { ebit: number } }>('simulate_company', { levers: { utilizationPp: -10 } });
+    expect(sim.saved).toBe(false);
+    expect(sim.delta.ebit).toBeLessThan(0);
+    expect(await currentRev()).toBe(r0);
+    expect(await getBlob()).toEqual(before);
   });
 });

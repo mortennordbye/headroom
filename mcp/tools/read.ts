@@ -8,6 +8,7 @@ import { latestInflationPct, DEFAULT_INFLATION_PCT } from '../../src/lib/inflati
 import { jsonResult, errorResult } from '../util';
 import * as derive from '../derive';
 import { CATEGORY_KEYS } from '../../src/lib/categories';
+import { companyGroupFields, companyCostLineFields, companyLeversSchema } from './write';
 
 const readOnly = { readOnlyHint: true, openWorldHint: false } as const;
 const yearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
@@ -312,7 +313,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Employer cost & billing',
       description:
-        'What the user costs their employer (salary, holiday pay, employer tax, pension, overhead), break-even and target hourly rates, the billed rate\'s margin, and the fair salary at the target margin. Follows the solve-for mode saved on the page.',
+        'What the user costs their employer (salary, holiday pay, employer tax, pension, overhead), break-even and target hourly rates, the billed rate\'s margin, and the fair salary at the target margin. Follows the solve-for mode saved on the page. It always gives the Enkel (simple) calculation; when companyModel.mode is "advanced" the page uses the real cost and the model\'s billable hours instead, so use get_company_model for those numbers.',
       inputSchema: {},
       annotations: { title: 'Employer cost & billing', ...readOnly },
     },
@@ -320,6 +321,56 @@ export function registerReadTools(server: McpServer) {
       try {
         const { blob } = await getData();
         return jsonResult(derive.employerCost(blob));
+      } catch (e) {
+        return errorResult(String((e as Error).message));
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_company_model',
+    {
+      title: 'Company model',
+      description:
+        'The company model behind the employer-cost page\'s Avansert mode: role groups, cost lines, hours, bonus and levers (with ids for the company write tools), and its results. summary has your own cost, your share of the overhead, your real cost, break-even hourly rate and utilization, overhead per billable hour, revenue, people cost, bonus, EBIT, margin and an estimated tax; result has every line (groups, cost lines, hours, KPIs). vsBaseline is the change against the levers at 0. Your gross comes from the salary page (or its override on the employer-cost page), as in get_employer_cost. mode says which mode the page shows.',
+      inputSchema: {},
+      annotations: { title: 'Company model', ...readOnly },
+    },
+    async () => {
+      try {
+        const { blob } = await getData();
+        return jsonResult(derive.companyModelSummary(blob));
+      } catch (e) {
+        return errorResult(String((e as Error).message));
+      }
+    },
+  );
+
+  server.registerTool(
+    'simulate_company',
+    {
+      title: 'Simulate the company model',
+      description:
+        'Try changes to the company model without saving anything. levers replace the given stored lever values (clamped to their range). groups and costs are patches: without id adds a row (same required fields as upsert_company_group / upsert_company_cost_line; an add must not pass an id), with id and remove=true (and no other fields) removes it, with id and fields changes those fields. Added rows get the ids sim-group-N / sim-cost-N (N = the patch\'s place in its list, from 1); they cannot be changed or removed in the same call. Returns current, simulated and delta (simulated minus current) for the main numbers, and the simulated model. Save with the company write tools.',
+      inputSchema: {
+        levers: companyLeversSchema.optional(),
+        groups: z.array(z.object({
+          id: z.string().min(1).optional().describe('An existing group id to change or remove. Omit to add a group.'),
+          remove: z.boolean().optional().describe('true removes the group with this id; pass no other fields.'),
+          ...companyGroupFields,
+        })).max(100).optional(),
+        costs: z.array(z.object({
+          id: z.string().min(1).optional().describe('An existing cost line id to change or remove. Omit to add a cost line.'),
+          remove: z.boolean().optional().describe('true removes the cost line with this id; pass no other fields.'),
+          ...companyCostLineFields,
+        })).max(100).optional(),
+      },
+      annotations: { title: 'Simulate the company model', ...readOnly },
+    },
+    async (sim) => {
+      try {
+        const { blob } = await getData();
+        return jsonResult(derive.simulateCompany(blob, sim));
       } catch (e) {
         return errorResult(String((e as Error).message));
       }

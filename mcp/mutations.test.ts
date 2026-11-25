@@ -36,7 +36,20 @@ import {
   setMonthlyIncome,
   addSalary,
   addBonus,
+  upsertCompanyGroup,
+  deleteCompanyGroup,
+  upsertCompanyCostLine,
+  deleteCompanyCostLine,
+  updateCompanySettings,
 } from './mutations';
+import { companyContext } from './derive';
+import {
+  calcCompany,
+  sanitizeCompanyModel,
+  DEFAULT_COMPANY_MODEL,
+  LEVER_RANGES,
+  NEUTRAL_LEVERS,
+} from '../src/lib/companyCost';
 
 // Run a builder on a fresh clone; return the before-snapshot, the mutated blob, and the diff.
 function applyOn(mutate: (blob: ExportPayload) => FieldChange[]) {
@@ -378,6 +391,123 @@ const cases: {
       id: 'b-new', date: '2026-06-15', amount: 20000, type: 'performance', jobId: 'j1', includeInBudget: true,
     }),
   },
+  {
+    name: 'upsert_company_group (create delivery)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyGroup(b, { id: 'cg-new', create: true, name: 'Juniors', kind: 'delivery', count: 4, avgGross: 600000, billablePct: 80, hourlyRate: 1000 }),
+    assertChange: (b) => expect(b.companyModel?.groups.at(-1)).toEqual({
+      id: 'cg-new', name: 'Juniors', kind: 'delivery', count: 4, avgGross: 600000, billablePct: 80, hourlyRate: 1000, realizationPct: 100,
+    }),
+  },
+  {
+    name: 'upsert_company_group (create support defaults billable and rate to 0)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyGroup(b, { id: 'cg-new', create: true, name: 'HR', kind: 'support', count: 1, avgGross: 650000 }),
+    assertChange: (b) => expect(b.companyModel?.groups.at(-1)).toMatchObject({ billablePct: 0, hourlyRate: 0, realizationPct: 100 }),
+  },
+  {
+    name: 'upsert_company_group (update one field)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyGroup(b, { id: 'cg2', create: false, count: 4 }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.groups.find((g) => g.id === 'cg2')).toMatchObject({ count: 4, avgGross: 950000 });
+      expect(changes).toEqual([{ field: 'companyModel.groups[cg2].count', before: 3, after: 4 }]);
+    },
+  },
+  {
+    name: 'upsert_company_group (your group made support moves your group)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyGroup(b, { id: 'cg1', create: false, kind: 'support' }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.selfGroupId).toBe('cg2');
+      expect(changes).toContainEqual({ field: 'companyModel.selfGroupId', before: 'cg1', after: 'cg2' });
+    },
+  },
+  {
+    name: 'delete_company_group (your group)',
+    touched: ['companyModel'],
+    mutate: (b) => deleteCompanyGroup(b, { id: 'cg1' }),
+    assertChange: (b) => {
+      expect(b.companyModel?.groups.map((g) => g.id)).toEqual(['cg2', 'cg3']);
+      expect(b.companyModel?.selfGroupId).toBe('cg2');
+    },
+  },
+  {
+    name: 'upsert_company_cost_line (create, per defaults to company)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyCostLine(b, { id: 'cc-new', create: true, label: 'Travel', amount: 200000 }),
+    assertChange: (b) => expect(b.companyModel?.costs.at(-1)).toEqual({ id: 'cc-new', label: 'Travel', amount: 200000, per: 'company' }),
+  },
+  {
+    name: 'upsert_company_cost_line (update)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyCostLine(b, { id: 'cc2', create: false, amount: 30000, per: 'head' }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.costs.find((c) => c.id === 'cc2')).toEqual({ id: 'cc2', label: 'IT', amount: 30000, per: 'head' });
+      // per is unchanged, so only the amount is reported.
+      expect(changes).toEqual([{ field: 'companyModel.costs[cc2].amount', before: 25000, after: 30000 }]);
+    },
+  },
+  {
+    name: 'delete_company_cost_line',
+    touched: ['companyModel'],
+    mutate: (b) => deleteCompanyCostLine(b, { id: 'cc1' }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.costs.map((c) => c.id)).toEqual(['cc2', 'cc3']);
+      expect(changes).toEqual([{
+        field: 'companyModel.costs[cc1]', before: { id: 'cc1', label: 'Office', amount: 1500000, per: 'company' }, after: null,
+      }]);
+    },
+  },
+  {
+    name: 'upsert_company_group (support made delivery keeps its billable share and rate)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyGroup(b, { id: 'cg3', create: false, kind: 'delivery' }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.groups.find((g) => g.id === 'cg3')).toMatchObject({ kind: 'delivery', billablePct: 10, hourlyRate: 1600 });
+      expect(changes).toEqual([{ field: 'companyModel.groups[cg3].kind', before: 'support', after: 'delivery' }]);
+    },
+  },
+  {
+    name: 'upsert_company_cost_line (pctOfSalary at 100)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyCostLine(b, { id: 'cc3', create: false, amount: 100 }),
+    assertChange: (b) => expect(b.companyModel?.costs.find((c) => c.id === 'cc3')?.amount).toBe(100),
+  },
+  {
+    name: 'update_company_settings (only given fields change)',
+    touched: ['companyModel'],
+    mutate: (b) => updateCompanySettings(b, { mode: 'simple', hours: { sickPct: 5 }, bonus: { poolPct: 20 } }),
+    assertChange: (b) => expect(b.companyModel).toMatchObject({
+      mode: 'simple',
+      hours: { sickPct: 5, internalPct: 5, holidayDays: 25 },
+      bonus: { poolPct: 20, includesHolidayPay: true },
+      levers: { utilizationPp: 2, ratePct: 3, salaryPct: 0, realizationPp: 0 },
+    }),
+  },
+  {
+    name: 'update_company_settings (levers clamp to the slider range)',
+    touched: ['companyModel'],
+    mutate: (b) => updateCompanySettings(b, { levers: { ratePct: 40, utilizationPp: -99 } }),
+    assertChange: (b) => expect(b.companyModel?.levers).toEqual({
+      utilizationPp: LEVER_RANGES.utilizationPp.min, ratePct: LEVER_RANGES.ratePct.max, salaryPct: 0, realizationPp: 0,
+    }),
+  },
+  {
+    name: 'update_company_settings (selfGroupId)',
+    touched: ['companyModel'],
+    mutate: (b) => updateCompanySettings(b, { selfGroupId: 'cg2' }),
+    assertChange: (b) => expect(b.companyModel?.selfGroupId).toBe('cg2'),
+  },
+  {
+    name: 'update_company_settings (applyLevers writes them into the groups)',
+    touched: ['companyModel'],
+    mutate: (b) => updateCompanySettings(b, { applyLevers: true }),
+    assertChange: (b) => {
+      expect(b.companyModel?.levers).toEqual(NEUTRAL_LEVERS);
+      expect(b.companyModel?.groups.find((g) => g.id === 'cg1')).toMatchObject({ billablePct: 87, hourlyRate: 1287.5 });
+    },
+  },
 ];
 
 describe('write builders preserve all other data', () => {
@@ -455,6 +585,26 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
     ['set_monthly_income (clear missing)', () => setMonthlyIncome(fresh(), { month: '2020-01', clear: true }), /no income override/],
     ['add_salary (unknown job)', () => addSalary(fresh(), { id: 'x', jobId: 'nope', effectiveDate: '2026-07', grossAnnual: 1, changeType: 'raise' }), /no job/],
     ['add_bonus (unknown job)', () => addBonus(fresh(), { id: 'x', date: '2026-07-01', amount: 1, type: 'other', jobId: 'nope' }), /no job/],
+    ['upsert_company_group (unknown id)', () => upsertCompanyGroup(fresh(), { id: 'nope', create: false, count: 1 }), /no company group/],
+    ['upsert_company_group (no fields)', () => upsertCompanyGroup(fresh(), { id: 'cg1', create: false }), /no company group fields/],
+    ['upsert_company_group (create with a taken id)', () => upsertCompanyGroup(fresh(), { id: 'cg1', create: true, name: 'A', kind: 'support', count: 1, avgGross: 1 }), /already exists/],
+    ['upsert_company_group (create without avgGross)', () => upsertCompanyGroup(fresh(), { id: 'x', create: true, name: 'A', kind: 'support', count: 1 }), /required/],
+    ['upsert_company_group (delivery without rate)', () => upsertCompanyGroup(fresh(), { id: 'x', create: true, name: 'A', kind: 'delivery', count: 1, avgGross: 1, billablePct: 80 }), /billablePct and hourlyRate/],
+    ['delete_company_group', () => deleteCompanyGroup(fresh(), { id: 'nope' }), /no company group/],
+    ['upsert_company_cost_line (unknown id)', () => upsertCompanyCostLine(fresh(), { id: 'nope', create: false, amount: 1 }), /no company cost line/],
+    ['upsert_company_cost_line (create without amount)', () => upsertCompanyCostLine(fresh(), { id: 'x', create: true, label: 'A' }), /required/],
+    ['delete_company_cost_line', () => deleteCompanyCostLine(fresh(), { id: 'nope' }), /no company cost line/],
+    ['upsert_company_cost_line (create pctOfSalary over 100)', () => upsertCompanyCostLine(fresh(), { id: 'x', create: true, label: 'A', amount: 101, per: 'pctOfSalary' }), /100 or less/],
+    ['upsert_company_cost_line (update amount of a pctOfSalary line over 100)', () => upsertCompanyCostLine(fresh(), { id: 'cc3', create: false, amount: 150 }), /100 or less/],
+    ['upsert_company_cost_line (update per to pctOfSalary on a kr line)', () => upsertCompanyCostLine(fresh(), { id: 'cc2', create: false, per: 'pctOfSalary' }), /100 or less/],
+    ['upsert_company_group (support made delivery without a rate)', () => {
+      const b = fresh();
+      upsertCompanyGroup(b, { id: 'hr', create: true, name: 'HR', kind: 'support', count: 1, avgGross: 1 });
+      return upsertCompanyGroup(b, { id: 'hr', create: false, kind: 'delivery', billablePct: 50 });
+    }, /billablePct and hourlyRate/],
+    ['update_company_settings (no fields)', () => updateCompanySettings(fresh(), {}), /no company settings/],
+    ['update_company_settings (support group as yours)', () => updateCompanySettings(fresh(), { selfGroupId: 'cg3' }), /no delivery group/],
+    ['update_company_settings (unknown group as yours)', () => updateCompanySettings(fresh(), { selfGroupId: 'nope' }), /no delivery group/],
   ] as const)('%s throws', (_name, call, msg) => {
     expect(call).toThrow(msg);
   });
@@ -559,5 +709,49 @@ describe('delete_fixed_expense on a paydown expense', () => {
     deleteFixedExpense(blob, { id: 'f1' });
     expect(blob.assets.departedPaydowns).toBeUndefined();
     expect('departedPaydowns' in blob.assets).toBe(false);
+  });
+});
+
+describe('company model writes store a sanitized model', () => {
+  const ctx = companyContext(fullFixture(), '2026-06');
+
+  it('the fixture model is already sanitized, so a write changes only what it names', () => {
+    expect(sanitizeCompanyModel(fullFixture().companyModel)).toEqual(fullFixture().companyModel);
+  });
+
+  it('repairs a broken stored model while writing', () => {
+    const blob = structuredClone(fullFixture());
+    (blob as unknown as { companyModel: unknown }).companyModel = {
+      ...blob.companyModel, hours: { sickPct: 'x', internalPct: 500 }, levers: { ratePct: 99 },
+    };
+    upsertCompanyCostLine(blob, { id: 'cc1', create: false, amount: 1 });
+    expect(blob.companyModel).toEqual(sanitizeCompanyModel(blob.companyModel));
+    expect(blob.companyModel?.hours).toEqual({ sickPct: 4, internalPct: 100, holidayDays: 25 });
+    expect(blob.companyModel?.levers.ratePct).toBe(LEVER_RANGES.ratePct.max);
+  });
+
+  it('writes the default model plus the change when none is stored, and reports the whole model', () => {
+    const blob = structuredClone(fullFixture());
+    delete blob.companyModel;
+    const changes = updateCompanySettings(blob, { mode: 'advanced' });
+    expect(blob.companyModel).toEqual({ ...DEFAULT_COMPANY_MODEL, mode: 'advanced' });
+    expect(changes).toEqual([{ field: 'companyModel', before: null, after: blob.companyModel }]);
+  });
+
+  it('applyLevers keeps every result the same', () => {
+    const blob = structuredClone(fullFixture());
+    const before = calcCompany(blob.companyModel!, ctx);
+    updateCompanySettings(blob, { applyLevers: true });
+    const after = calcCompany(blob.companyModel!, ctx);
+    expect(after.ebit).toBeCloseTo(before.ebit, 6);
+    expect(after.you.realCost).toBeCloseTo(before.you.realCost, 6);
+    expect(after.revenue).toBeCloseTo(before.revenue, 6);
+  });
+
+  it('given levers are applied after they are set and clamped', () => {
+    const blob = structuredClone(fullFixture());
+    updateCompanySettings(blob, { levers: { ratePct: 50 }, applyLevers: true });
+    expect(blob.companyModel?.groups.find((g) => g.id === 'cg1')?.hourlyRate).toBeCloseTo(1250 * (1 + LEVER_RANGES.ratePct.max / 100), 6);
+    expect(blob.companyModel?.levers).toEqual(NEUTRAL_LEVERS);
   });
 });
