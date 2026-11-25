@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { accountsWarnings, consultingRevenue, parseBrregResponse, sanitizeAccounts, type CompanyAccounts } from './companyAccounts';
-import { sanitizeCompanyModel } from './companyCost';
+import { sanitizeCompanyModel, DEFAULT_COMPANY_MODEL } from './companyCost';
+import { calibrateBlocker } from './companyCalibrate';
+import { buildModelFromAnswers, QUICK_DEFAULTS } from './companySetup';
+
+const withGuess = buildModelFromAnswers(QUICK_DEFAULTS, structuredClone(DEFAULT_COMPANY_MODEL), { uncertain: ['salary'] });
 
 // Made-up company and numbers.
 const ORG = '999900003';
@@ -31,8 +35,17 @@ describe('sanitizeAccounts', () => {
 
   it('repairs the rest: unknown type, bad currency, negative employees, extra keys', () => {
     const out = sanitizeAccounts({ ...acc(), type: 'X', currency: 'kr', employees: -3, hasParent: 'yes', extra: 1 });
-    expect(out).toMatchObject({ type: 'SELSKAP', currency: 'NOK', employees: null, hasParent: false });
+    expect(out).toMatchObject({ type: 'SELSKAP', currency: '', employees: null, hasParent: false });
     expect(out).not.toHaveProperty('extra');
+  });
+
+  it('a garbled currency is empty, warned about and refused by the fit', () => {
+    for (const bad of ['kr', 'USDX', 'nok', 7, undefined]) {
+      const out = sanitizeAccounts({ ...acc(), currency: bad })!;
+      expect(out.currency).toBe('');
+      expect(accountsWarnings(out)).toContain('currency');
+      expect(calibrateBlocker(withGuess, out)).toBe('currency');
+    }
   });
 
   it('is kept on the company model by its sanitizer, and dropped when not usable', () => {

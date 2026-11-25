@@ -1091,13 +1091,16 @@ app.get('/api/brreg/:orgnr', brregLimiter, async (req, res) => {
     if (row && now - row.attemptAt < BRREG_COOLDOWN_MS) {
       stale = true;
     } else {
+      // The attempt is stored before the fetch, so a second lookup of the same
+      // number while this one runs is in its cooldown and may get
+      // { available: false }. Accepted: one user, one card.
       brregAttempt.run(orgnr, now);
       try {
         const result = await fetchBrreg(orgnr);
         brregStore.run(JSON.stringify(result), Date.now(), orgnr);
       } catch (err) {
         // err.reason is a fixed word (timeout, status 503, …), never the number.
-        console.warn(`[brreg] lookup failed (${err?.reason ?? 'error'}), serving cache when there is one`);
+        console.warn('[brreg] lookup failed (%s), serving cache when there is one', String(err?.reason ?? 'error'));
         stale = true;
       }
       brregPrune.run(now - BRREG_KEEP_MS);

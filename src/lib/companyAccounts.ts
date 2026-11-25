@@ -62,13 +62,13 @@ export function sanitizeAccounts(v: unknown): CompanyAccounts | undefined {
   if (!isValidOrgnr(orgnr) || year === undefined || !Number.isInteger(year) || year < 1900 || year > 2200
     || revenue === undefined || operatingResult === undefined) return undefined;
   const employees = coerceNumber(v.employees);
-  const currency = str(v.currency, 3);
   return {
     orgnr,
     name: str(v.name, 200),
     year,
     type: v.type === 'KONSERN' ? 'KONSERN' : 'SELSKAP',
-    currency: /^[A-Z]{3}$/.test(currency) ? currency : 'NOK',
+    // A garbled currency is '' (not NOK), so the fit refuses it.
+    currency: typeof v.currency === 'string' && /^[A-Z]{3}$/.test(v.currency) ? v.currency : '',
     revenue,
     operatingResult,
     employees: employees !== undefined && employees >= 0 ? Math.round(employees) : null,

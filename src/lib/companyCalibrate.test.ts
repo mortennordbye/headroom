@@ -106,7 +106,20 @@ describe('calibrateToAccounts', () => {
   it('withMeanSalary keeps the spread and never goes below 0', () => {
     expect(withMeanSalary({ ...QUICK_DEFAULTS, salaryLow: 800_000, salaryHigh: 1_000_000 }, 1_200_000))
       .toMatchObject({ salaryLow: 1_100_000, salaryHigh: 1_300_000 });
-    expect(withMeanSalary({ ...QUICK_DEFAULTS, salaryLow: 0, salaryHigh: 1_000_000 }, CALIBRATE_BOUNDS.salary.min))
-      .toMatchObject({ salaryLow: 0, salaryHigh: 1_000_000 });
+  });
+
+  it('withMeanSalary with a wide spread and a low target: low is 0 and the mean is the target', () => {
+    const wide = { ...QUICK_DEFAULTS, salaryLow: 0, salaryHigh: 1_000_000 };
+    const out = withMeanSalary(wide, CALIBRATE_BOUNDS.salary.min);
+    expect(out).toMatchObject({ salaryLow: 0, salaryHigh: 600_000 });
+    expect(quickMeanSalary(out)).toBe(CALIBRATE_BOUNDS.salary.min);
+    // Monotone: a higher target never gives a lower mean.
+    let prev = -1;
+    for (let m = 0; m <= 1_200_000; m += 50_000) {
+      const mean = quickMeanSalary(withMeanSalary(wide, m));
+      expect(mean).toBe(m);
+      expect(mean).toBeGreaterThan(prev);
+      prev = mean;
+    }
   });
 });

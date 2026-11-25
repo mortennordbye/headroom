@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useId, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { calcCompany, NEUTRAL_LEVERS, type CompanyContext, type CompanyModel } from '../lib/companyCost';
 import { accountsWarnings, consultingRevenue, parseBrregResponse, type AccountsWarning, type BrregLookup } from '../lib/companyAccounts';
@@ -40,6 +40,9 @@ export function CompanyAccountsCard({
   const orgnr = input.replace(/\s/g, '');
   const valid = isValidOrgnr(orgnr);
   const showInvalid = orgnr.length >= 9 && !valid;
+  const errorId = useId();
+  // A new lookup that found no accounts hides the saved company's table, so two companies never mix.
+  const showSaved = !!acc && notice?.kind !== 'notFound' && notice?.kind !== 'noAccounts';
 
   const fetchAccounts = async () => {
     if (demoMode || !valid) return;
@@ -117,7 +120,7 @@ export function CompanyAccountsCard({
         </>
       );
       case 'persons': return c.warnPersons;
-      case 'currency': return c.warnCurrency.replace('{currency}', acc.currency);
+      case 'currency': return c.warnCurrency.replace('{currency}', acc.currency || '?');
     }
   };
 
@@ -130,7 +133,7 @@ export function CompanyAccountsCard({
 
   // Millions keep the table narrow on a phone; the accounts' own currency is named (the model is in kr).
   const mill = (v: number, unit = 'kr') => c.accountsMill.replace('{v}', nf(v / 1e6, 1)).replace('{unit}', unit);
-  const accUnit = acc && acc.currency !== 'NOK' ? acc.currency : 'kr';
+  const accUnit = acc && acc.currency !== 'NOK' ? acc.currency || '?' : 'kr';
   const typeLabel = acc?.type === 'KONSERN' ? c.accountsTypeKonsern : c.accountsTypeSelskap;
   const rows = acc ? [
     {
@@ -174,6 +177,7 @@ export function CompanyAccountsCard({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void fetchAccounts(); }}
             aria-invalid={showInvalid}
+            aria-describedby={showInvalid ? errorId : undefined}
             className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
             style={{ background: 'var(--surface-3)', borderColor: showInvalid ? 'var(--negative)' : 'var(--border)', color: 'var(--text-1)' }}
           />
@@ -183,12 +187,12 @@ export function CompanyAccountsCard({
         </Button>
         {acc && <Button variant="secondary" size="sm" onClick={remove}>{c.accountsRemove}</Button>}
       </div>
-      {showInvalid && <p className="mt-2 text-[12px]" style={{ color: 'var(--negative)' }}>{c.accountsOrgnrInvalid}</p>}
+      {showInvalid && <p id={errorId} className="mt-2 text-[12px]" style={{ color: 'var(--negative)' }}>{c.accountsOrgnrInvalid}</p>}
       {demoMode && <p className="mt-2 text-[12px]" style={muted}>{c.accountsDemo}</p>}
       <p className="mt-3 text-[12px]" style={muted}>{c.accountsPrivacy}</p>
       {noticeText && <p role="status" className="mt-3 text-[12px] font-semibold" style={{ color: 'var(--warning)' }}>{noticeText}</p>}
 
-      {acc && (
+      {acc && showSaved && (
         <div className="mt-5 pt-4 border-t" style={{ borderColor: 'var(--rule)' }}>
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
             <SectionLabel>{c.accountsCompare}</SectionLabel>
@@ -198,7 +202,7 @@ export function CompanyAccountsCard({
           <table className="w-full text-[12px] md:text-[13px] tabular-nums" data-testid="accounts-table">
             <thead>
               <tr style={muted} className="text-[11px] uppercase tracking-[0.08em]">
-                <th className="text-left font-semibold pb-2" />
+                <th className="text-left font-semibold pb-2"><span className="sr-only">{c.accountsCompareRow}</span></th>
                 <th className="text-right font-semibold pb-2 pl-2">{c.accountsColModel.replace('{year}', String(ctx.year))}</th>
                 <th className="text-right font-semibold pb-2 pl-2">{c.accountsColAccounts.replace('{year}', String(acc.year)).replace('{type}', typeLabel)}</th>
               </tr>
@@ -226,7 +230,9 @@ export function CompanyAccountsCard({
           <p className="mt-2 text-[12px]" style={muted}>{blocker ? failText[blocker] : c.accountsCalibrateHint}</p>
           {fit && (
             <p role="status" data-testid="accounts-fit" className="mt-2 text-[12px]" style={{ color: fit.ok ? 'var(--text-1)' : 'var(--negative)' }}>
-              {fit.ok ? c.accountsCalibrated.replace('{moves}', fit.moves.map(moveText).join(', ')) : failText[fit.reason]}
+              {fit.ok
+                ? (fit.moves.length > 1 ? c.accountsCalibrated : c.accountsCalibratedOne).replace('{moves}', fit.moves.map(moveText).join(', '))
+                : failText[fit.reason]}
             </p>
           )}
         </div>

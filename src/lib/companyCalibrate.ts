@@ -70,11 +70,15 @@ function bisect(f: (x: number) => number, lo: number, hi: number, iterations = 6
   return (a + b) / 2;
 }
 
-/** The answers with the consultants' mean salary set to `mean`; the low–high spread is kept. */
+/**
+ * The answers with the consultants' mean salary set to `mean`. The low–high
+ * spread is kept, but its half is never more than the mean, so low is never
+ * below 0 and the mean is always `mean` (the fit stays monotone).
+ */
 export function withMeanSalary(a: QuickAnswers, mean: number): QuickAnswers {
-  const half = Math.max(0, a.salaryHigh - a.salaryLow) / 2;
-  const low = Math.max(0, mean - half);
-  return { ...a, salaryLow: low, salaryHigh: low + 2 * half };
+  const m = Math.max(0, mean);
+  const half = Math.min(Math.max(0, a.salaryHigh - a.salaryLow) / 2, m);
+  return { ...a, salaryLow: m - half, salaryHigh: m + half };
 }
 
 /**

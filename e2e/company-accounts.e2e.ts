@@ -27,7 +27,11 @@ test('accounts: fetch, compare, warnings, and "Tilpass modellen" moves the guess
 
   const asked: string[] = [];
   await page.route('**/api/brreg/*', (route) => {
-    asked.push(new URL(route.request().url()).pathname);
+    const p = new URL(route.request().url()).pathname;
+    asked.push(p);
+    if (p.endsWith('999900011')) {
+      return route.fulfill({ json: { available: true, orgnr: '999900011', noAccounts: true, stale: false, fetchedAt: '2026-11-01T10:00:00.000Z', entity: { name: 'Eksempel ENK', formCode: 'ENK', naceCode: '', employees: null, hasParent: false, inGroup: false } } });
+    }
     return route.fulfill({ json: brregFixture });
   });
 
@@ -69,6 +73,12 @@ test('accounts: fetch, compare, warnings, and "Tilpass modellen" moves the guess
   // The resale link opens that question in the quick setup.
   await warnings.getByRole('button', { name: 'Svar på spørsmålet om videresalg' }).click();
   await expect(page.locator('#quick-resale')).toBeInViewport();
+
+  // A new lookup that finds no accounts hides the saved company's table, so the two never mix.
+  await input.fill('999900011');
+  await fetchButton.click();
+  await expect(page.getByText(/^Eksempel ENK har ikke levert årsregnskap\./)).toBeVisible();
+  await expect(table).toHaveCount(0);
 });
 
 test('demo mode: the fetch button is disabled and nothing reaches /api/brreg', async ({ page }) => {
