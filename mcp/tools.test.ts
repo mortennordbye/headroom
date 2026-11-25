@@ -27,6 +27,8 @@ import {
   NEUTRAL_LEVERS,
   type CompanyContext,
 } from '../src/lib/companyCost';
+import { buildModelFromAnswers, QUICK_DEFAULTS } from '../src/lib/companySetup';
+import { companyRanges } from '../src/lib/companyRanges';
 
 const MONTH = '2026-06';
 
@@ -818,6 +820,22 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       expect(sim.simulated).toMatchObject({ realCost: r.you.realCost, ebit: r.ebit, revenue: r.revenue, overheadPerBillableHour: r.overheadPerBillableHour });
       expect(sim.current.ebit).toBe(calcCompany(blob.companyModel!, ctx).ebit);
       expect(sim.delta.ebit).toBeCloseTo(sim.simulated.ebit - sim.current.ebit, 6);
+    });
+
+    it('get_company_model and simulate_company give the ranges of the quick setup\'s guesses', () => {
+      expect(derive.companyModelSummary(blob, MONTH).ranges).toBeNull();
+      const withQuick = {
+        ...blob,
+        companyModel: buildModelFromAnswers(QUICK_DEFAULTS, sanitizeCompanyModel(blob.companyModel), { uncertain: ['salary'], dontKnow: ['office'] }),
+      };
+      const s = derive.companyModelSummary(withQuick, MONTH);
+      expect(s.ranges).toEqual(companyRanges(withQuick.companyModel, derive.companyContext(withQuick, MONTH)));
+      expect(s.ranges!.guesses).toBe(2);
+      expect(s.ranges!.drivers.map((d) => d.key).sort()).toEqual(['office', 'salary']);
+      expect(s.ranges!.fairGross.low!).toBeLessThan(s.ranges!.fairGross.high!);
+      const sim = derive.simulateCompany(withQuick, {}, MONTH);
+      expect(sim.ranges.current).toEqual(s.ranges);
+      expect(sim.ranges.simulated).toEqual(s.ranges);
     });
 
     it('simulate_company: no changes give a zero delta, and a bad id errors', () => {

@@ -41,6 +41,7 @@ import {
   upsertCompanyCostLine,
   deleteCompanyCostLine,
   updateCompanySettings,
+  setupCompanyQuick,
   companyChanges,
 } from './mutations';
 import { companyContext } from './derive';
@@ -514,6 +515,28 @@ const cases: {
     assertChange: (b) => expect(b.companyModel?.selfGroupId).toBe('cg2'),
   },
   {
+    name: 'setup_company_quick (first setup builds the model from the answers)',
+    touched: ['companyModel'],
+    mutate: (b) => setupCompanyQuick(b, { answers: { totalFte: 20, nonBilling: 2, onBench: 1 }, uncertain: ['salary'] }),
+    assertChange: (b, changes) => {
+      const m = b.companyModel!;
+      expect(m.groups.find((g) => g.id === 'kons')?.count).toBe(17);
+      expect(m.quick).toMatchObject({ uncertain: ['salary'], dontKnow: [], edited: false });
+      expect(m.levers).toEqual(NEUTRAL_LEVERS);
+      expect(sanitizeCompanyModel(m)).toEqual(m);
+      expect(changes).toContainEqual(expect.objectContaining({ field: 'companyModel.quick', before: null }));
+    },
+  },
+  {
+    name: 'setup_company_quick (dontKnow uses the industry value)',
+    touched: ['companyModel'],
+    mutate: (b) => setupCompanyQuick(b, { answers: { realizationPct: 80 }, dontKnow: ['realizationPct'] }),
+    assertChange: (b) => {
+      expect(b.companyModel?.quick?.answers.realizationPct).toBe(QUICK_DEFAULTS.realizationPct);
+      expect(b.companyModel?.quick?.dontKnow).toEqual(['realizationPct']);
+    },
+  },
+  {
     name: 'update_company_settings (applyLevers writes them into the groups)',
     touched: ['companyModel'],
     mutate: (b) => updateCompanySettings(b, { applyLevers: true }),
@@ -617,6 +640,12 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
       return upsertCompanyGroup(b, { id: 'hr', create: false, kind: 'delivery', billablePct: 50 });
     }, /billablePct and hourlyRate/],
     ['update_company_settings (no fields)', () => updateCompanySettings(fresh(), {}), /no company settings/],
+    ['setup_company_quick (after a hand edit, without confirmReplace)', () => {
+      const b = fresh();
+      setupCompanyQuick(b, {});
+      upsertCompanyGroup(b, { id: 'kons', create: false, count: 3 });
+      return setupCompanyQuick(b, { answers: { totalFte: 10 } });
+    }, /changed by hand.*confirmReplace: true/],
     ['update_company_settings (support group as yours)', () => updateCompanySettings(fresh(), { selfGroupId: 'cg3' }), /no delivery group/],
     ['update_company_settings (unknown group as yours)', () => updateCompanySettings(fresh(), { selfGroupId: 'nope' }), /no delivery group/],
   ] as const)('%s throws', (_name, call, msg) => {
@@ -830,6 +859,33 @@ describe('company model writes store a sanitized model', () => {
       const blob = withQuick();
       updateCompanySettings(blob, { hours: { sickPct: 5 } });
       expect(blob.companyModel?.quick?.edited).toBe(false);
+    });
+
+    it('setup_company_quick replaces hand edits only with confirmReplace, and keeps omitted answers and flags', () => {
+      const blob = withQuick();
+      setupCompanyQuick(blob, { uncertain: ['rateAverage'], dontKnow: ['office'], confirmReplace: false });
+      upsertCompanyGroup(blob, { id: 'kons', create: false, count: 30 });
+      expect(blob.companyModel?.quick?.edited).toBe(true);
+      const snap = structuredClone(blob);
+      expect(() => setupCompanyQuick(blob, { answers: { onBench: 4 }, confirmReplace: false })).toThrow(/confirmReplace/);
+      expect(blob).toEqual(snap);
+      const changes = setupCompanyQuick(blob, { answers: { onBench: 4, desks: 40 }, confirmReplace: true });
+      const q = blob.companyModel!.quick!;
+      expect(q.edited).toBe(false);
+      expect(q.answers).toMatchObject({ onBench: 4, desks: 40, totalFte: QUICK_DEFAULTS.totalFte });
+      expect(q.uncertain).toEqual(['rateAverage']);
+      // A typed office answer is no longer "vet ikke".
+      expect(q.dontKnow).toEqual([]);
+      expect(blob.companyModel!.groups.find((g) => g.id === 'kons')?.count).toBe(QUICK_DEFAULTS.totalFte - QUICK_DEFAULTS.nonBilling - 4);
+      expect(changes).toContainEqual({ field: 'companyModel.quick.edited', before: true, after: false });
+    });
+
+    it('setup_company_quick takes your rate from the billing settings on a first setup', () => {
+      const blob = structuredClone(fullFixture());
+      blob.billingConfig = { ...blob.billingConfig!, billedHourly: 1725 };
+      setupCompanyQuick(blob, {});
+      expect(blob.companyModel?.quick?.answers.rateYou).toBe(1725);
+      expect(blob.companyModel?.self?.hourlyRate).toBe(1725);
     });
 
     it('companyChanges lists quick and self changes', () => {

@@ -21,6 +21,7 @@ import { FitText } from './ui/FitText';
 import { HourWaterfallChart, UtilizationCurveChart } from './CompanyModelCharts';
 import { CompanyMeCard, CompanyExplainers } from './CompanyMeCard';
 import { CompanyQuickSetup } from './CompanyQuickSetup';
+import { CompanyChatPill } from './CompanyChatPill';
 
 const LEVERS: Array<{ key: keyof CompanyLevers; unit: string }> = [
   { key: 'utilizationPp', unit: 'pp' },
@@ -103,6 +104,7 @@ export function CompanyModelPanel({
 
   return (
     <div className="space-y-6 md:space-y-7">
+      <CompanyChatPill model={model} />
       <CompanyMeCard model={model} setModel={setModel} ctx={ctx} result={r} />
       <CompanyExplainers />
       <CompanyQuickSetup model={model} setModel={setModel} />

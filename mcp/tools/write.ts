@@ -54,7 +54,9 @@ import {
   upsertCompanyCostLine,
   deleteCompanyCostLine,
   updateCompanySettings,
+  setupCompanyQuick,
 } from '../mutations';
+import { QUICK_GUESS_KEYS, type QuickGuessKey } from '../../src/lib/companySetup';
 import type { DebtType, SalaryChangeType, BonusType } from '../../src/context/FinanceContext';
 import { LEVER_RANGES, BONUS_POOL_MAX_PCT, TARGET_MARGIN_RANGE, type CompanyGroupKind, type CostLinePer } from '../../src/lib/companyCost';
 
@@ -632,6 +634,48 @@ export function registerWriteTools(server: McpServer) {
       annotations: { title: 'Update company model settings', ...readWrite, destructiveHint: true, idempotentHint: false },
     },
     (fields) => run((blob) => updateCompanySettings(blob, fields)),
+  );
+
+  const guessKey = z.enum(QUICK_GUESS_KEYS as unknown as [QuickGuessKey, ...QuickGuessKey[]]);
+  server.registerTool(
+    'setup_company_quick',
+    {
+      title: 'Quick setup of the company model',
+      description:
+        'The employer-cost page\'s quick setup ("Hurtigoppsett"): build the company model\'s role groups (consultants, bench, leadership/HR/marketing), '
+        + 'cost lines and your own billable share and rate from a few plain answers, as the page\'s "Bruk svarene" button does. '
+        + 'Every answer is optional: a missing one keeps the stored answer (on a first setup: an industry default, and your rate from the billing settings). '
+        + 'uncertain and dontKnow mark answers that are a guess; get_company_model and simulate_company then give ranges and the "what matters most" list. '
+        + 'A dontKnow answer uses the industry value even when you pass a number for it. Hours, the target margin and the mode are kept; the levers go to 0. '
+        + 'When quick.edited is true (get_company_model), groups or cost lines were changed by hand and this replaces them: ask the user first, then pass confirmReplace: true. '
+        + 'One undoable write that touches only companyModel.',
+      inputSchema: {
+        answers: z.object({
+          totalFte: z.number().min(0).max(100_000).optional().describe('FTE (årsverk) in the company, everyone included.'),
+          nonBilling: z.number().min(0).max(100_000).optional().describe('FTE that never bill: leadership, HR, marketing.'),
+          onBench: z.number().min(0).max(100_000).optional().describe('Consultants without a client now (the bench).'),
+          salaryLow: kr.max(100_000_000).optional().describe('Consultants\' gross salary, low end, kr per year. The model uses the midpoint of low and high.'),
+          salaryHigh: kr.max(100_000_000).optional().describe('Consultants\' gross salary, high end, kr per year (not below salaryLow).'),
+          rateAverage: kr.max(100_000).optional().describe('Average list rate in the company, kr per hour.'),
+          rateYou: kr.max(100_000).optional().describe('Your own list rate, kr per hour.'),
+          ownBillablePct: pct.optional().describe('Your billable share of available hours, %.'),
+          typicalBillablePct: pct.optional().describe('A typical consultant\'s billable share of available hours, %.'),
+          realizationPct: pct.optional().describe('Share of the list price clients really pay, %.'),
+          bonusPct: z.number().min(0).max(BONUS_POOL_MAX_PCT).optional().describe(`Bonus pool, % of the result before bonus (0-${BONUS_POOL_MAX_PCT}).`),
+          officeMode: z.enum(['desks', 'rent']).optional().describe('"desks": office cost = desks x an industry price per desk; "rent": the yearly rent.'),
+          desks: z.number().min(0).max(100_000).optional().describe('Number of desks (officeMode "desks"). Missing: one per FTE.'),
+          annualRent: kr.max(1_000_000_000).optional().describe('Office rent, kr per year (officeMode "rent").'),
+          tripsPerYear: z.number().min(0).max(52).optional().describe('Company trips per year.'),
+        }).optional(),
+        uncertain: z.array(guessKey).max(QUICK_GUESS_KEYS.length).optional()
+          .describe('Answers that are a guess ("usikker"). salary ±10 %, rateAverage ±5 %, ownBillablePct and typicalBillablePct ±5 pp, realizationPct ±3 pp, office ±20 %. Omitted: the stored list.'),
+        dontKnow: z.array(guessKey).max(QUICK_GUESS_KEYS.length).optional()
+          .describe('Answers the user does not know ("vet ikke"): the industry value, with twice the "uncertain" swing. Omitted: the stored list, without keys answered in this call.'),
+        confirmReplace: z.boolean().optional().describe('true: replace groups and cost lines that were changed by hand (quick.edited). Only after the user said yes.'),
+      },
+      annotations: { title: 'Quick setup of the company model', ...readWrite, destructiveHint: true, idempotentHint: true },
+    },
+    (args) => run((blob) => setupCompanyQuick(blob, args)),
   );
 
   server.registerTool(

@@ -481,6 +481,26 @@ describe('company model tools through the MCP protocol', () => {
     expect(await getBlob()).toEqual(before);
   });
 
+  it('setup_company_quick touches only companyModel, returns ranges, refuses after a hand edit, and undo reverts it', async () => {
+    const before = await getBlob();
+    const out = await call<{ rev: number }>('setup_company_quick', { answers: { totalFte: 30, nonBilling: 3, onBench: 1 }, uncertain: ['salary', 'rateAverage'] });
+    const stored = await getBlob();
+    expect({ ...stored, companyModel: before.companyModel }).toEqual(before);
+    expect(stored.companyModel?.quick?.uncertain).toEqual(['salary', 'rateAverage']);
+    const s = await call<{ ranges: { guesses: number; drivers: { key: string }[] } }>('get_company_model');
+    expect(s.ranges.guesses).toBe(2);
+    expect(s.ranges.drivers).toHaveLength(2);
+
+    const edit = await call<{ rev: number }>('upsert_company_group', { id: 'kons', count: 10 });
+    const r = (await mcp.callTool({ name: 'setup_company_quick', arguments: { answers: { totalFte: 40 } } })) as { isError?: boolean; content: { text: string }[] };
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/confirmReplace/);
+    await call('undo_change', { rev: edit.rev });
+
+    await call('undo_change', { rev: out.rev });
+    expect(await getBlob()).toEqual(before);
+  });
+
   it('simulate_company saves nothing', async () => {
     const before = await getBlob();
     const r0 = await currentRev();
