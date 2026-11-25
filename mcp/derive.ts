@@ -1337,7 +1337,8 @@ export interface CompanySimulation {
 /**
  * The company model with lever values and group / cost-line patches applied,
  * through the same builders and sanitizer the write tools use. Saves nothing.
- * A patch without id adds a row, with id and remove=true removes it, and with
+ * A patch without id adds a row (id `sim-group-N` / `sim-cost-N`, N its place
+ * in the list), with id and remove=true (and nothing else) removes it, and with
  * id and fields changes it.
  */
 export function simulateCompany(blob: ExportPayload, sim: CompanySimulation, monthKey = osloMonthKey()) {
@@ -1345,17 +1346,30 @@ export function simulateCompany(blob: ExportPayload, sim: CompanySimulation, mon
   const current = sanitizeCompanyModel(blob.companyModel);
   // A scratch blob: the builders touch only companyModel.
   const scratch = { companyModel: structuredClone(current) } as ExportPayload;
+  const noFieldsOnRemove = (fields: object, what: string) => {
+    if (Object.values(fields).some((v) => v !== undefined)) {
+      throw new Error(`a ${what} patch with remove=true takes only the id`);
+    }
+  };
+  // A change or remove targets a stored row only, never a row added in this call.
+  const stored = (rows: { id: string }[], id: string, what: string) => {
+    if (!rows.some((r) => r.id === id)) throw new Error(`no company ${what} with id "${id}"`);
+  };
   (sim.groups ?? []).forEach(({ id, remove, ...fields }, i) => {
+    if (id) stored(current.groups, id, 'group');
     if (remove) {
       if (!id) throw new Error('remove needs the id of the group');
+      noFieldsOnRemove(fields, 'group');
       deleteCompanyGroup(scratch, { id });
     } else {
       upsertCompanyGroup(scratch, { id: id ?? `sim-group-${i + 1}`, create: !id, ...fields });
     }
   });
   (sim.costs ?? []).forEach(({ id, remove, ...fields }, i) => {
+    if (id) stored(current.costs, id, 'cost line');
     if (remove) {
       if (!id) throw new Error('remove needs the id of the cost line');
+      noFieldsOnRemove(fields, 'cost line');
       deleteCompanyCostLine(scratch, { id });
     } else {
       upsertCompanyCostLine(scratch, { id: id ?? `sim-cost-${i + 1}`, create: !id, ...fields });

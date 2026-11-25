@@ -817,6 +817,12 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       expect(sim.simulated).toEqual(sim.current);
       expect(() => derive.simulateCompany(blob, { groups: [{ id: 'nope', count: 1 }] }, MONTH)).toThrow(/no company group/);
       expect(() => derive.simulateCompany(blob, { costs: [{ remove: true }] }, MONTH)).toThrow(/needs the id/);
+      expect(() => derive.simulateCompany(blob, { groups: [{ id: 'cg1', remove: true, count: 2 }] }, MONTH)).toThrow(/takes only the id/);
+      expect(() => derive.simulateCompany(blob, { costs: [{ id: 'cc1', remove: true, amount: 1 }] }, MONTH)).toThrow(/takes only the id/);
+      // An added row cannot be targeted in the same call: its id does not exist yet.
+      expect(() => derive.simulateCompany(blob, {
+        costs: [{ label: 'Travel', amount: 1 }, { id: 'sim-cost-1', amount: 2 }],
+      }, MONTH)).toThrow(/no company cost line/);
     });
   });
 

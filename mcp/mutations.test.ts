@@ -442,13 +442,37 @@ const cases: {
     name: 'upsert_company_cost_line (update)',
     touched: ['companyModel'],
     mutate: (b) => upsertCompanyCostLine(b, { id: 'cc2', create: false, amount: 30000, per: 'head' }),
-    assertChange: (b) => expect(b.companyModel?.costs.find((c) => c.id === 'cc2')).toEqual({ id: 'cc2', label: 'IT', amount: 30000, per: 'head' }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.costs.find((c) => c.id === 'cc2')).toEqual({ id: 'cc2', label: 'IT', amount: 30000, per: 'head' });
+      // per is unchanged, so only the amount is reported.
+      expect(changes).toEqual([{ field: 'companyModel.costs[cc2].amount', before: 25000, after: 30000 }]);
+    },
   },
   {
     name: 'delete_company_cost_line',
     touched: ['companyModel'],
     mutate: (b) => deleteCompanyCostLine(b, { id: 'cc1' }),
-    assertChange: (b) => expect(b.companyModel?.costs.map((c) => c.id)).toEqual(['cc2', 'cc3']),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.costs.map((c) => c.id)).toEqual(['cc2', 'cc3']);
+      expect(changes).toEqual([{
+        field: 'companyModel.costs[cc1]', before: { id: 'cc1', label: 'Office', amount: 1500000, per: 'company' }, after: null,
+      }]);
+    },
+  },
+  {
+    name: 'upsert_company_group (support made delivery keeps its billable share and rate)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyGroup(b, { id: 'cg3', create: false, kind: 'delivery' }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.groups.find((g) => g.id === 'cg3')).toMatchObject({ kind: 'delivery', billablePct: 10, hourlyRate: 1600 });
+      expect(changes).toEqual([{ field: 'companyModel.groups[cg3].kind', before: 'support', after: 'delivery' }]);
+    },
+  },
+  {
+    name: 'upsert_company_cost_line (pctOfSalary at 100)',
+    touched: ['companyModel'],
+    mutate: (b) => upsertCompanyCostLine(b, { id: 'cc3', create: false, amount: 100 }),
+    assertChange: (b) => expect(b.companyModel?.costs.find((c) => c.id === 'cc3')?.amount).toBe(100),
   },
   {
     name: 'update_company_settings (only given fields change)',
@@ -570,6 +594,14 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
     ['upsert_company_cost_line (unknown id)', () => upsertCompanyCostLine(fresh(), { id: 'nope', create: false, amount: 1 }), /no company cost line/],
     ['upsert_company_cost_line (create without amount)', () => upsertCompanyCostLine(fresh(), { id: 'x', create: true, label: 'A' }), /required/],
     ['delete_company_cost_line', () => deleteCompanyCostLine(fresh(), { id: 'nope' }), /no company cost line/],
+    ['upsert_company_cost_line (create pctOfSalary over 100)', () => upsertCompanyCostLine(fresh(), { id: 'x', create: true, label: 'A', amount: 101, per: 'pctOfSalary' }), /100 or less/],
+    ['upsert_company_cost_line (update amount of a pctOfSalary line over 100)', () => upsertCompanyCostLine(fresh(), { id: 'cc3', create: false, amount: 150 }), /100 or less/],
+    ['upsert_company_cost_line (update per to pctOfSalary on a kr line)', () => upsertCompanyCostLine(fresh(), { id: 'cc2', create: false, per: 'pctOfSalary' }), /100 or less/],
+    ['upsert_company_group (support made delivery without a rate)', () => {
+      const b = fresh();
+      upsertCompanyGroup(b, { id: 'hr', create: true, name: 'HR', kind: 'support', count: 1, avgGross: 1 });
+      return upsertCompanyGroup(b, { id: 'hr', create: false, kind: 'delivery', billablePct: 50 });
+    }, /billablePct and hourlyRate/],
     ['update_company_settings (no fields)', () => updateCompanySettings(fresh(), {}), /no company settings/],
     ['update_company_settings (support group as yours)', () => updateCompanySettings(fresh(), { selfGroupId: 'cg3' }), /no delivery group/],
     ['update_company_settings (unknown group as yours)', () => updateCompanySettings(fresh(), { selfGroupId: 'nope' }), /no delivery group/],
@@ -698,12 +730,12 @@ describe('company model writes store a sanitized model', () => {
     expect(blob.companyModel?.levers.ratePct).toBe(LEVER_RANGES.ratePct.max);
   });
 
-  it('writes the default model plus the change when none is stored, as the app shows it', () => {
+  it('writes the default model plus the change when none is stored, and reports the whole model', () => {
     const blob = structuredClone(fullFixture());
     delete blob.companyModel;
     const changes = updateCompanySettings(blob, { mode: 'advanced' });
     expect(blob.companyModel).toEqual({ ...DEFAULT_COMPANY_MODEL, mode: 'advanced' });
-    expect(changes).toEqual([{ field: 'companyModel.mode', before: 'simple', after: 'advanced' }]);
+    expect(changes).toEqual([{ field: 'companyModel', before: null, after: blob.companyModel }]);
   });
 
   it('applyLevers keeps every result the same', () => {

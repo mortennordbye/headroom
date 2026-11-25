@@ -468,6 +468,19 @@ describe('company model tools through the MCP protocol', () => {
     expect(await getBlob()).toEqual(before);
   });
 
+  it('a first write with no stored model reports the whole model, and undo removes it again', async () => {
+    await client.applyMutation((b) => {
+      delete b.companyModel;
+      return b;
+    });
+    const before = await getBlob();
+    const out = await call<{ rev: number; changed: { field: string; before: unknown }[] }>('update_company_settings', { mode: 'advanced' });
+    expect(out.changed).toEqual([expect.objectContaining({ field: 'companyModel', before: null })]);
+    expect((await getBlob()).companyModel?.mode).toBe('advanced');
+    await call('undo_change', { rev: out.rev });
+    expect(await getBlob()).toEqual(before);
+  });
+
   it('simulate_company saves nothing', async () => {
     const before = await getBlob();
     const r0 = await currentRev();

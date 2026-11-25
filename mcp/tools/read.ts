@@ -313,7 +313,7 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Employer cost & billing',
       description:
-        'What the user costs their employer (salary, holiday pay, employer tax, pension, overhead), break-even and target hourly rates, the billed rate\'s margin, and the fair salary at the target margin. Follows the solve-for mode saved on the page.',
+        'What the user costs their employer (salary, holiday pay, employer tax, pension, overhead), break-even and target hourly rates, the billed rate\'s margin, and the fair salary at the target margin. Follows the solve-for mode saved on the page. It always gives the Enkel (simple) calculation; when companyModel.mode is "advanced" the page uses the real cost and the model\'s billable hours instead, so use get_company_model for those numbers.',
       inputSchema: {},
       annotations: { title: 'Employer cost & billing', ...readOnly },
     },
@@ -351,17 +351,17 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Simulate the company model',
       description:
-        'Try changes to the company model without saving anything. levers replace the given stored lever values (clamped to their range). groups and costs are patches: without id adds a row (same required fields as upsert_company_group / upsert_company_cost_line), with id and remove=true removes it, with id and fields changes those fields. Returns current, simulated and delta (simulated minus current) for the main numbers, and the simulated model. Save with the company write tools.',
+        'Try changes to the company model without saving anything. levers replace the given stored lever values (clamped to their range). groups and costs are patches: without id adds a row (same required fields as upsert_company_group / upsert_company_cost_line; an add must not pass an id), with id and remove=true (and no other fields) removes it, with id and fields changes those fields. Added rows get the ids sim-group-N / sim-cost-N (N = the patch\'s place in its list, from 1); they cannot be changed or removed in the same call. Returns current, simulated and delta (simulated minus current) for the main numbers, and the simulated model. Save with the company write tools.',
       inputSchema: {
         levers: companyLeversSchema.optional(),
         groups: z.array(z.object({
-          id: z.string().min(1).optional().describe('Omit to add a group.'),
-          remove: z.boolean().optional().describe('true removes the group with this id.'),
+          id: z.string().min(1).optional().describe('An existing group id to change or remove. Omit to add a group.'),
+          remove: z.boolean().optional().describe('true removes the group with this id; pass no other fields.'),
           ...companyGroupFields,
         })).max(100).optional(),
         costs: z.array(z.object({
-          id: z.string().min(1).optional().describe('Omit to add a cost line.'),
-          remove: z.boolean().optional().describe('true removes the cost line with this id.'),
+          id: z.string().min(1).optional().describe('An existing cost line id to change or remove. Omit to add a cost line.'),
+          remove: z.boolean().optional().describe('true removes the cost line with this id; pass no other fields.'),
           ...companyCostLineFields,
         })).max(100).optional(),
       },

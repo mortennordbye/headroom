@@ -87,7 +87,7 @@ export const companyGroupFields = {
 /** Fields of a company cost line; shared with simulate_company. */
 export const companyCostLineFields = {
   label: z.string().min(1).max(200).optional(),
-  amount: kr.optional().describe('kr per year (per="company"), kr per head per year (per="head"), or % of total salary (per="pctOfSalary").'),
+  amount: kr.optional().describe('kr per year (per="company"), kr per head per year (per="head"), or % of total salary (per="pctOfSalary", 100 or less).'),
   per: z.enum(COST_LINE_PERS as unknown as [CostLinePer, ...CostLinePer[]]).optional().describe('Default "company" on create.'),
 };
 

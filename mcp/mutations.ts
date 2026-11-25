@@ -722,8 +722,17 @@ function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[
 function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyModel): FieldChange[] {
   const before = sanitizeCompanyModel(blob.companyModel);
   const after = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
+  // No stored model: the whole example model is stored now, so say so.
+  const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
   blob.companyModel = after;
-  return companyChanges(before, after);
+  return changes;
+}
+
+/** A % of salary cost line above 100 % is a typo for an amount in kr. */
+function checkCostLine(line: { per: CostLinePer; amount: number }) {
+  if (line.per === 'pctOfSalary' && line.amount > 100) {
+    throw new Error('amount is a % of salary when per is "pctOfSalary", so it must be 100 or less');
+  }
 }
 
 /**
@@ -737,7 +746,15 @@ export function upsertCompanyGroup(
 ): FieldChange[] {
   const { id, create, ...fields } = args;
   return writeCompany(blob, (m) => {
-    if (!create) return { ...m, groups: patchById(m.groups, id, fields, 'companyModel.groups', 'company group').list };
+    if (!create) {
+      const prev = m.groups.find((g) => g.id === id);
+      // A group that becomes delivery needs a billable share and a rate, as on create.
+      if (prev && prev.kind !== 'delivery' && fields.kind === 'delivery'
+        && !((fields.billablePct ?? prev.billablePct) > 0 && (fields.hourlyRate ?? prev.hourlyRate) > 0)) {
+        throw new Error('billablePct and hourlyRate are required for a delivery group');
+      }
+      return { ...m, groups: patchById(m.groups, id, fields, 'companyModel.groups', 'company group').list };
+    }
     if (m.groups.some((g) => g.id === id)) throw new Error(`a company group with id "${id}" already exists`);
     const { name, kind, count, avgGross, billablePct, hourlyRate, realizationPct } = fields;
     if (!name || !kind || count === undefined || avgGross === undefined) {
@@ -768,11 +785,17 @@ export function upsertCompanyCostLine(
 ): FieldChange[] {
   const { id, create, ...fields } = args;
   return writeCompany(blob, (m) => {
-    if (!create) return { ...m, costs: patchById(m.costs, id, fields, 'companyModel.costs', 'company cost line').list };
+    if (!create) {
+      const { list } = patchById(m.costs, id, fields, 'companyModel.costs', 'company cost line');
+      checkCostLine(list.find((c) => c.id === id)!);
+      return { ...m, costs: list };
+    }
     if (m.costs.some((c) => c.id === id)) throw new Error(`a company cost line with id "${id}" already exists`);
     const { label, amount, per } = fields;
     if (!label || amount === undefined) throw new Error('label and amount are required to create a company cost line');
-    return { ...m, costs: [...m.costs, { id, label, amount, per: per ?? 'company' }] };
+    const line: CompanyCostLine = { id, label, amount, per: per ?? 'company' };
+    checkCostLine(line);
+    return { ...m, costs: [...m.costs, line] };
   });
 }
 
