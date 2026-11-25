@@ -21,6 +21,7 @@ import {
   calcCompany,
   breakEvenUtilization,
   sanitizeCompanyModel,
+  youEconomics,
   DEFAULT_COMPANY_MODEL,
   LEVER_RANGES,
   NEUTRAL_LEVERS,
@@ -770,6 +771,13 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       const base = calcCompany(blob.companyModel!, ctx, NEUTRAL_LEVERS);
       expect(s.vsBaseline.delta.ebit).toBeCloseTo(r.ebit - base.ebit, 6);
       expect(s.vsBaseline.delta.ebit).not.toBe(0); // the fixture's levers are off 0
+      const y = youEconomics(blob.companyModel!, ctx, r);
+      expect(s.forYou).toEqual({
+        revenue: y.revenue, keep: y.keep, keepPct: y.keepPct, fairGross: y.fairGross, ceilingGross: y.ceilingGross,
+        salarySharePct: y.salarySharePct, companySalarySharePct: y.companySalarySharePct, raise: y.raise,
+        targetMarginPct: y.targetMarginPct, targetIsCompanyPreBonus: true, targetClampedToZero: false, companyPreBonusMarginPct: y.companyPreBonusMarginPct,
+      });
+      expect(s.forYou.targetMarginPct).toBeCloseTo(r.preBonus / r.revenue * 100, 9);
     });
 
     it('get_company_model: no stored model gives the default model, as the app shows it', () => {

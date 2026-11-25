@@ -64,6 +64,8 @@ export interface CompanyModel {
   costs: CompanyCostLine[];
   bonus: { poolPct: number; includesHolidayPay: boolean };
   levers: CompanyLevers;
+  /** Target margin on you for "Rimelig lønn", %. Null or missing: the company margin before bonus. */
+  targetMarginPct?: number | null;
 }
 
 /** Inputs from outside the model (salary page, cost and billing settings). */
@@ -94,6 +96,9 @@ export const LEVER_RANGES: Record<keyof CompanyLevers, { min: number; max: numbe
 /** Upper limit of the bonus pool, % of the result before bonus. */
 export const BONUS_POOL_MAX_PCT = 50;
 
+/** Range of a stored target margin on you, %. */
+export const TARGET_MARGIN_RANGE = { min: 0, max: 60 } as const;
+
 // Made-up example company (role groups only), as in the approved plan.
 export const DEFAULT_COMPANY_MODEL: CompanyModel = {
   mode: 'simple',
@@ -118,6 +123,7 @@ export const DEFAULT_COMPANY_MODEL: CompanyModel = {
   ],
   bonus: { poolPct: 15, includesHolidayPay: true },
   levers: { ...NEUTRAL_LEVERS },
+  targetMarginPct: null,
 };
 
 // ── Results ────────────────────────────────────────────────────────────────
@@ -285,6 +291,130 @@ export function calcCompany(model: CompanyModel, ctx: CompanyContext, levers: Co
       grossMarginPerFte: marginGroup ? marginGroup.revenuePerFte - marginGroup.costPerFte : 0,
       deliverySharePct: div(deliveryFte, heads) * 100,
     },
+  };
+}
+
+// ── What the company earns on you ──────────────────────────────────────────
+
+/** Largest gross the salary solvers search; above it there is "no solution". */
+const SOLVE_GROSS_MAX = 50_000_000;
+/** The raise that "what a raise costs" prices. */
+export const RAISE_STEP = 100_000;
+
+/** A support group that is the bench (consultants without a client), by its name. Used for colour only. */
+export const isBenchGroup = (g: { id: string; name: string }) => /^(benk|bench)$/i.test(g.id) || /\b(benk|bench)/i.test(g.name);
+/** A cost line that is the office, by its id or name. */
+export const isOfficeLine = (l: { id: string; label: string }) =>
+  /^(office|kontor)$/i.test(l.id) || /^(kontor|office|husleie)\b/i.test(l.label) || /^rent\b/i.test(l.label);
+
+export interface YouBreakdownPart {
+  key: string;
+  kind: 'salary' | 'onCosts' | 'bench' | 'support' | 'office' | 'other' | 'kept';
+  label: string;          // a group's name for support parts, else empty (the UI names it)
+  value: number;          // kr per year; may be below 0 (a group that bills more than it costs, or a loss)
+}
+
+export interface YouEconomics {
+  gross: number;
+  revenue: number;        // your billable hours × your rate × realization
+  ownCost: number;
+  share: number;          // your share of the overhead pool
+  keep: number;           // revenue − own cost − share
+  keepPct: number;        // keep / revenue
+  companyPreBonusMarginPct: number;
+  targetMarginPct: number;
+  targetIsCompany: boolean;
+  /** The company margin before bonus is 0 or below, so the default target is 0 (fair salary = ceiling). */
+  targetClamped: boolean;
+  fairGross: number | null;     // gross where keep % = target
+  ceilingGross: number | null;  // gross where keep = 0
+  salarySharePct: number;       // your gross / your revenue
+  companySalarySharePct: number; // delivery salaries / delivery revenue
+  raise: { amount: number; cost: number; bonusDrop: number };
+  /** One year for you, in kr: the parts after "invoiced" sum to `revenue` exactly. */
+  breakdown: YouBreakdownPart[];
+}
+
+/**
+ * The gross in [0, SOLVE_GROSS_MAX] where f(gross) = 0, for f falling in gross.
+ * Null when f has the same sign at both ends (no solution in the bounds).
+ */
+function solveGross(f: (g: number) => number): number | null {
+  let lo = 0;
+  let hi = SOLVE_GROSS_MAX;
+  const flo = f(lo);
+  const fhi = f(hi);
+  if (!Number.isFinite(flo) || !Number.isFinite(fhi) || flo < 0 || fhi > 0) return null;
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    if (f(mid) > 0) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * What the company keeps on you, the fair salary and the salary ceiling.
+ * `gross` is the salary to evaluate (default: yours; the page's "what if"
+ * slider passes another). Fair salary and ceiling do not depend on it.
+ *
+ * Keep = your revenue − (own cost + your share of the pool). Your salary is
+ * not in the groups, so revenue and share do not change with it. Fair salary
+ * is the gross where keep / revenue = the target margin (default: the company
+ * margin before bonus, so an average consultant's fair salary is the group's
+ * average salary). Ceiling is the gross where keep = 0.
+ */
+export function youEconomics(model: CompanyModel, ctx: CompanyContext, r: CompanyResult, gross: number = r.you.gross): YouEconomics {
+  const g0 = Math.max(0, fin(gross));
+  const revenue = r.you.billableHours * r.you.listRate * r.you.realizationPct / 100;
+  const share = r.you.share;
+  const ownCost = personCost(g0, ctx);
+  const keep = revenue - ownCost - share;
+
+  const companyPreBonusMarginPct = div(r.preBonus, r.revenue) * 100;
+  const stored = model.targetMarginPct;
+  const targetIsCompany = stored == null || !Number.isFinite(stored);
+  // A target below 0 would put the fair salary above the ceiling, so the default stops at 0.
+  const targetClamped = targetIsCompany && companyPreBonusMarginPct <= 0;
+  const targetMarginPct = targetIsCompany
+    ? Math.max(0, companyPreBonusMarginPct)
+    : clamp(stored, TARGET_MARGIN_RANGE.min, TARGET_MARGIN_RANGE.max);
+
+  const at = (target: number) => solveGross((g) => revenue * (1 - target / 100) - share - personCost(g, ctx));
+  const fairGross = revenue > 0 ? at(targetMarginPct) : null;
+  const ceilingGross = revenue > 0 ? at(0) : null;
+
+  const delivery = r.groups.filter((g) => g.kind === 'delivery');
+  const companySalarySharePct = div(sum(delivery, (g) => g.avgGross * g.count), sum(delivery, (g) => g.revenue)) * 100;
+
+  const raiseCost = personCost(g0 + RAISE_STEP, ctx) - ownCost;
+  const holidayPct = model.bonus.includesHolidayPay ? Math.max(0, fin(ctx.costConfig.feriepengesatsPct)) : 0;
+  const bonusDrop = r.preBonus > 0
+    ? Math.min(r.bonus, raiseCost * clamp(model.bonus.poolPct, 0, BONUS_POOL_MAX_PCT) / 100
+      * (1 + holidayPct / 100) * (1 + Math.max(0, fin(ctx.costConfig.payrollTaxPct)) / 100))
+    : 0;
+
+  const perFte = (v: number) => div(v, r.deliveryFte);
+  const parts: YouBreakdownPart[] = [
+    { key: 'salary', kind: 'salary', label: '', value: g0 },
+    { key: 'onCosts', kind: 'onCosts', label: '', value: ownCost - g0 },
+    ...r.groups.filter((g) => g.kind === 'support').map((g): YouBreakdownPart => ({
+      key: `group-${g.id}`, kind: isBenchGroup(g) ? 'bench' : 'support', label: g.name, value: perFte(g.cost - g.revenue),
+    })),
+    { key: 'office', kind: 'office', label: '', value: perFte(sum(r.lines.filter(isOfficeLine), (l) => l.total)) },
+    { key: 'other', kind: 'other', label: '', value: perFte(sum(r.lines.filter((l) => !isOfficeLine(l)), (l) => l.total)) },
+  ];
+  // Kept is the rest, so the parts add up to what you invoice exactly.
+  parts.push({ key: 'kept', kind: 'kept', label: '', value: revenue - sum(parts, (p) => p.value) });
+
+  return {
+    gross: g0, revenue, ownCost, share, keep,
+    keepPct: div(keep, revenue) * 100,
+    companyPreBonusMarginPct, targetMarginPct, targetIsCompany, targetClamped,
+    fairGross, ceilingGross,
+    salarySharePct: div(g0, revenue) * 100,
+    companySalarySharePct,
+    raise: { amount: RAISE_STEP, cost: raiseCost, bonusDrop },
+    breakdown: parts,
   };
 }
 
@@ -490,5 +620,8 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
       salaryPct: num(l.salaryPct, 0, LEVER_RANGES.salaryPct.min, LEVER_RANGES.salaryPct.max),
       realizationPp: num(l.realizationPp, 0, LEVER_RANGES.realizationPp.min, LEVER_RANGES.realizationPp.max),
     },
+    targetMarginPct: v.targetMarginPct == null
+      ? null
+      : (() => { const n = coerceNumber(v.targetMarginPct); return n === undefined ? null : clamp(n, TARGET_MARGIN_RANGE.min, TARGET_MARGIN_RANGE.max); })(),
   };
 }

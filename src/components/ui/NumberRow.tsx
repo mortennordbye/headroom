@@ -12,12 +12,15 @@ export function NumberRow({
   onCommit,
   suffix,
   badge,
+  onBlank,
 }: {
   label: string;
   value: number;
   onCommit: (v: number) => void;
   suffix?: string;
   badge?: ReactNode;
+  /** Called instead of committing 0 when the field is left empty. */
+  onBlank?: () => void;
 }) {
   const [draft, setDraft] = useState(value.toString());
   // Re-sync the editable draft when the committed value changes from outside.
@@ -36,7 +39,11 @@ export function NumberRow({
         type="number"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => { const n = parseLocaleNumber(draft); onCommit(Number.isFinite(n) ? n : 0); }}
+        onBlur={() => {
+          if (onBlank && draft.trim() === '') { setDraft(value.toString()); onBlank(); return; }
+          const n = parseLocaleNumber(draft);
+          onCommit(Number.isFinite(n) ? n : 0);
+        }}
         className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
         style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
       />

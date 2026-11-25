@@ -696,6 +696,7 @@ function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[
   };
   field('mode', before.mode, after.mode);
   field('selfGroupId', before.selfGroupId, after.selfGroupId);
+  field('targetMarginPct', before.targetMarginPct ?? null, after.targetMarginPct ?? null);
   for (const part of ['hours', 'bonus', 'levers'] as const) {
     const b = before[part] as unknown as Record<string, unknown>;
     const a = after[part] as unknown as Record<string, unknown>;
@@ -809,6 +810,8 @@ export interface CompanySettingsFields {
   hours?: Partial<CompanyModel['hours']>;
   bonus?: Partial<CompanyModel['bonus']>;
   levers?: Partial<CompanyLevers>;
+  /** Target margin on you for the fair salary, % (0-60); null = the company margin before bonus. */
+  targetMarginPct?: number | null;
   /** "Lagre som utgangspunkt": write the levers (after `levers` above) into the groups and set them to 0. */
   applyLevers?: boolean;
 }
@@ -819,9 +822,9 @@ const definedOnly = <T extends object>(patch: Partial<T> | undefined): Partial<T
 
 /** Change the model's settings. Only given fields change; levers are clamped to their slider range. */
 export function updateCompanySettings(blob: ExportPayload, args: CompanySettingsFields): FieldChange[] {
-  const { mode, selfGroupId, hours, bonus, levers, applyLevers: apply } = args;
+  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, applyLevers: apply } = args;
   if (mode === undefined && selfGroupId === undefined && hours === undefined && bonus === undefined
-    && levers === undefined && !apply) {
+    && levers === undefined && targetMarginPct === undefined && !apply) {
     throw new Error('no company settings provided');
   }
   return writeCompany(blob, (m) => {
@@ -833,6 +836,7 @@ export function updateCompanySettings(blob: ExportPayload, args: CompanySettings
       ...m,
       ...(mode !== undefined ? { mode } : {}),
       ...(selfGroupId !== undefined ? { selfGroupId } : {}),
+      ...(targetMarginPct !== undefined ? { targetMarginPct } : {}),
       hours: { ...m.hours, ...definedOnly(hours) },
       bonus: { ...m.bonus, ...definedOnly(bonus) },
       levers: { ...m.levers, ...definedOnly(levers) },

@@ -151,6 +151,7 @@ export function fullFixture(): ExportPayload {
       ],
       bonus: { poolPct: 15, includesHolidayPay: true },
       levers: { utilizationPp: 2, ratePct: 3, salaryPct: 0, realizationPp: 0 },
+      targetMarginPct: null,
     },
 
     // --- profile ---

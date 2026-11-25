@@ -56,7 +56,7 @@ import {
   updateCompanySettings,
 } from '../mutations';
 import type { DebtType, SalaryChangeType, BonusType } from '../../src/context/FinanceContext';
-import { LEVER_RANGES, BONUS_POOL_MAX_PCT, type CompanyGroupKind, type CostLinePer } from '../../src/lib/companyCost';
+import { LEVER_RANGES, BONUS_POOL_MAX_PCT, TARGET_MARGIN_RANGE, type CompanyGroupKind, type CostLinePer } from '../../src/lib/companyCost';
 
 const readWrite = { readOnlyHint: false, openWorldHint: false } as const;
 const categoryEnum = z.enum(CATEGORY_KEYS as unknown as [CategoryKey, ...CategoryKey[]]);
@@ -606,7 +606,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update company model settings',
       description:
-        'Change the company model settings. Only provided fields change. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
+        'Change the company model settings. Only provided fields change. targetMarginPct sets the target margin for the fair salary; null goes back to the company margin before bonus. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
       inputSchema: {
         mode: z.enum(['simple', 'advanced']).optional(),
         selfGroupId: z.string().min(1).optional().describe('Your group: the id of a delivery group (from get_company_model model.groups).'),
@@ -620,6 +620,8 @@ export function registerWriteTools(server: McpServer) {
           includesHolidayPay: z.boolean().optional().describe('The bonus also earns holiday pay.'),
         }).optional(),
         levers: companyLeversSchema.optional(),
+        targetMarginPct: z.number().min(TARGET_MARGIN_RANGE.min).max(TARGET_MARGIN_RANGE.max).nullable().optional()
+          .describe(`Target margin on you for the fair salary ("Rimelig lønn"), % (${TARGET_MARGIN_RANGE.min}-${TARGET_MARGIN_RANGE.max}). null = the company margin before bonus (the default).`),
         applyLevers: z.boolean().optional().describe('true: write the levers into the groups and set them to 0.'),
       },
       annotations: { title: 'Update company model settings', ...readWrite, destructiveHint: true, idempotentHint: false },

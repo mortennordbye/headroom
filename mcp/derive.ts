@@ -96,6 +96,7 @@ import {
   calcCompany,
   breakEvenUtilization,
   sanitizeCompanyModel,
+  youEconomics,
   NEUTRAL_LEVERS,
   type CompanyContext,
   type CompanyLevers,
@@ -1312,6 +1313,7 @@ export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey
   const result = calcCompany(model, ctx);
   const now = companyNumbers(model, ctx, model.levers);
   const baseline = companyNumbers(model, ctx, NEUTRAL_LEVERS);
+  const y = youEconomics(model, ctx, result);
   return {
     monthKey,
     mode: model.mode,
@@ -1320,9 +1322,27 @@ export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey
     result,
     breakEvenUtilization: breakEvenUtilization(model, ctx),
     summary: now,
+    // What the company earns on you (the page's top card), with the current levers.
+    forYou: {
+      revenue: y.revenue,
+      keep: y.keep,
+      keepPct: y.keepPct,
+      fairGross: y.fairGross,
+      ceilingGross: y.ceilingGross,
+      salarySharePct: y.salarySharePct,
+      companySalarySharePct: y.companySalarySharePct,
+      raise: y.raise,
+      targetMarginPct: y.targetMarginPct,
+      targetIsCompanyPreBonus: y.targetIsCompany,
+      targetClampedToZero: y.targetClamped,
+      companyPreBonusMarginPct: y.companyPreBonusMarginPct,
+    },
     // The levers at 0: the groups as saved. Delta is now minus baseline.
     vsBaseline: { baseline, delta: companyDelta(baseline, now) },
-    notes: 'tax is an estimate: max(0, EBIT) x corporate tax %. share = overhead pool / delivery FTE; realCost = ownCost + share.',
+    notes: 'tax is an estimate: max(0, EBIT) x corporate tax %. share = overhead pool / delivery FTE; realCost = ownCost + share. '
+      + 'forYou: keep = your revenue (billable hours x rate x realization) - realCost; fairGross = the gross where keepPct = targetMarginPct '
+      + '(default: the company margin before bonus); ceilingGross = the gross where keep = 0; null = no solution. salarySharePct = gross / your revenue; '
+      + 'companySalarySharePct = delivery salaries / delivery revenue. raise = employer cost of +100 000 kr gross and the bonus pool drop.',
   };
 }
 
