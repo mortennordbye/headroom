@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.22.0](https://github.com/mortennordbye/headroom/compare/v3.21.0...v3.22.0) (2026-11-25)
+
+
+### Features
+
+* add ranges and chat setup for the company model ([#417](https://github.com/mortennordbye/headroom/issues/417)) ([2bc595c](https://github.com/mortennordbye/headroom/commit/2bc595c1a0761c87fe73e3ee83d7fdc06907d0b3))
+
 ## [3.21.0](https://github.com/mortennordbye/headroom/compare/v3.20.0...v3.21.0) (2026-11-25)
 
 
