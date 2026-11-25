@@ -18,6 +18,7 @@
 
 import type { CompanyModel, CompanyGroup, CompanyCostLine } from './companyCost';
 import { coerceNumber } from './sanitizePayload';
+import { withoutFit } from './companyAccounts';
 
 export type OfficeMode = 'desks' | 'rent';
 
@@ -139,7 +140,8 @@ export function quickOfficeCost(a: QuickAnswers): number {
  * The company model from the answers. Groups, cost lines, the bonus pool and
  * your own billable share and rate come from the answers; hours, the bonus
  * holiday-pay setting, the mode and the target margin are kept from `base`.
- * Levers go to 0, because they would move the new groups.
+ * Levers go to 0, because they would move the new groups. A fit to the
+ * accounts (accounts.fittedAt) is dropped, because the answers it fitted are gone.
  */
 export function buildModelFromAnswers(
   answers: QuickAnswers,
@@ -176,12 +178,25 @@ export function buildModelFromAnswers(
     levers: { utilizationPp: 0, ratePct: 0, salaryPct: 0, realizationPp: 0 },
     self: { billablePct: a.ownBillablePct, hourlyRate: a.rateYou },
     quick: { answers: a, uncertain: known(opts.uncertain), dontKnow: known(opts.dontKnow), edited: false },
+    ...(base.accounts ? { accounts: withoutFit(base.accounts) } : {}),
   };
 }
 
-/** Mark the quick setup as hand-edited (no change when there is no quick setup). */
+/**
+ * Drop a fit to the accounts (fittedAt, fitMoves), for a change the fit did not
+ * see, such as hours or the bonus holiday-pay setting. Leaves quick.edited alone.
+ */
+export function clearAccountsFit(m: CompanyModel): CompanyModel {
+  return m.accounts?.fittedAt ? { ...m, accounts: withoutFit(m.accounts) } : m;
+}
+
+/**
+ * Mark the quick setup as hand-edited and drop a fit to the accounts, which no
+ * longer describes the groups (no change when there is no quick setup).
+ */
 export function markQuickEdited(m: CompanyModel): CompanyModel {
-  return m.quick && !m.quick.edited ? { ...m, quick: { ...m.quick, edited: true } } : m;
+  if (!m.quick || (m.quick.edited && !m.accounts?.fittedAt)) return m;
+  return clearAccountsFit({ ...m, quick: { ...m.quick, edited: true } });
 }
 
 // ── Sanitizer ──────────────────────────────────────────────────────────────

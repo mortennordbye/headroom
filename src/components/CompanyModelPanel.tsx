@@ -7,7 +7,7 @@ import {
   type CompanyModel, type CompanyContext, type CompanyResult, type CompanyGroup, type CompanyCostLine,
   type CompanyLevers, type CostLinePer,
 } from '../lib/companyCost';
-import { markQuickEdited } from '../lib/companySetup';
+import { clearAccountsFit, markQuickEdited } from '../lib/companySetup';
 import { weekdayHolidays, corporateTaxPct } from '../lib/norwegianCalendar';
 import { parseLocaleNumber } from '../lib/validators';
 import { Card } from './ui/Card';
@@ -61,6 +61,8 @@ export function CompanyModelPanel({
   const waterfall = hourWaterfall(r);
 
   const update = (patch: Partial<CompanyModel>) => setModel((m) => ({ ...m, ...patch }));
+  // An hours edit changes the model's numbers, so a fit to the accounts no longer holds (not a hand edit of groups).
+  const updateHours = (patch: Partial<CompanyModel['hours']>) => setModel((m) => clearAccountsFit({ ...m, hours: { ...m.hours, ...patch } }));
   const setLever = (key: keyof CompanyLevers, v: number) => setModel((m) => ({ ...m, levers: { ...m.levers, [key]: v } }));
   const leversMoved = LEVERS.some((l) => model.levers[l.key] !== 0);
 
@@ -239,17 +241,17 @@ export function CompanyModelPanel({
               <Row label={c.rowWeekdays.replace('{year}', String(ctx.year)).replace('{hpd}', nf(ctx.hoursPerDay, 1))} value={`${nf(h.paid, 1)} ${t.common.hourUnit}`} />
               <Row
                 label={c.rowFree.replace('{holidays}', String(weekdayHolidays(ctx.year)))}
-                sub={<InlineNumber value={model.hours.holidayDays} onCommit={(v) => update({ hours: { ...model.hours, holidayDays: Math.min(366, Math.max(0, v)) } })} suffix={c.rowHolidayDays} ariaLabel={c.rowHolidayDays} />}
+                sub={<InlineNumber value={model.hours.holidayDays} onCommit={(v) => updateHours({ holidayDays: Math.min(366, Math.max(0, v)) })} suffix={c.rowHolidayDays} ariaLabel={c.rowHolidayDays} />}
                 value={`−${nf(free, 1)} ${t.common.hourUnit}`}
               />
               <Row
                 label={c.rowSick}
-                sub={<InlineNumber value={model.hours.sickPct} onCommit={(v) => update({ hours: { ...model.hours, sickPct: Math.min(100, Math.max(0, v)) } })} suffix="%" ariaLabel={c.segSick} />}
+                sub={<InlineNumber value={model.hours.sickPct} onCommit={(v) => updateHours({ sickPct: Math.min(100, Math.max(0, v)) })} suffix="%" ariaLabel={c.segSick} />}
                 value={`−${nf(h.sick)} ${t.common.hourUnit}`}
               />
               <Row
                 label={c.rowInternal}
-                sub={<InlineNumber value={model.hours.internalPct} onCommit={(v) => update({ hours: { ...model.hours, internalPct: Math.min(100, Math.max(0, v)) } })} suffix="%" ariaLabel={c.segInternal} />}
+                sub={<InlineNumber value={model.hours.internalPct} onCommit={(v) => updateHours({ internalPct: Math.min(100, Math.max(0, v)) })} suffix="%" ariaLabel={c.segInternal} />}
                 value={`−${nf(h.internal)} ${t.common.hourUnit}`}
               />
               <Row label={c.rowAvailable} value={`${nf(h.available)} ${t.common.hourUnit}`} muted />

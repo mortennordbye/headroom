@@ -103,6 +103,7 @@ import {
   type CompanyModel,
 } from '../src/lib/companyCost';
 import { companyRanges, rangesUnavailable } from '../src/lib/companyRanges';
+import { accountsStatus } from '../src/lib/companyCalibrate';
 import { marketWage } from '../src/lib/marketWage';
 import {
   upsertCompanyGroup,
@@ -1330,10 +1331,15 @@ export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey
   const now = companyNumbers(model, ctx, model.levers);
   const baseline = companyNumbers(model, ctx, NEUTRAL_LEVERS);
   const y = youEconomics(model, ctx, result);
+  const status = accountsStatus(model, ctx);
   return {
     monthKey,
     mode: model.mode,
     model,
+    // What the numbers rest on: 'accounts' when the model was fitted to the stored accounts and still matches them.
+    basis: status.basis,
+    // The model (levers at 0) against the stored accounts: unknown without accounts, in another currency, or with no revenue.
+    accountsMatch: status.match,
     // The quick setup's answers and flags ("Hurtigoppsett"), or null when it was never used.
     quick: model.quick ?? null,
     inputs: { ownGross: ctx.ownGross, salaryFromOverride: blob.employerSalaryOverride != null, hoursPerDay: ctx.hoursPerDay, year: ctx.year },

@@ -694,14 +694,16 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Fit the company model to the public accounts',
       description:
-        'The accounts card\'s "Tilpass modellen" on the employer-cost page: move the quick setup\'s guesses so the model gives the revenue and '
-        + 'operating result in the company\'s public annual accounts (Brønnøysund). Only answers marked uncertain or dontKnow move, and only two: '
+        'The accounts card\'s "Gjør modellen lik regnskapet" on the employer-cost page: mark salary and typicalBillablePct as uncertain '
+        + '(a dontKnow stays dontKnow), then move these two guesses so the model gives the revenue and '
+        + 'operating result in the company\'s public annual accounts (Brønnøysund). Only two answers move: '
         + 'typicalBillablePct (fitted to revenue less the resold-subcontractor share quick.answers.resaleSharePct) and the consultants\' mean salary '
         + '(salaryLow and salaryHigh move together, fitted to the operating result). A fitted dontKnow answer becomes uncertain. '
         + 'The result is an estimate from the accounts ("anslått fra regnskapet"), not a proof: two unknowns fitted to two numbers always match. '
         + 'Without orgnr it uses the accounts stored on the model (get_company_model model.accounts). With orgnr it fetches the newest accounts '
         + 'through the app (cached 24 h) and stores them with the fit. The org number names the user\'s employer: pass it only when the user gave it. '
-        + 'Refuses, saving nothing, when nothing is marked as a guess, there is no quick setup, the model was edited by hand, the accounts are not in NOK, '
+        + 'It stores model.accounts.fittedAt and fitMoves; a later change of the answers or groups drops them, and get_company_model then says basis: guesses. '
+        + 'Refuses, saving nothing, when there is no quick setup, the model was edited by hand, the accounts are not in NOK, '
         + 'or there is no solution. Check model.accounts in get_company_model for the year, type (KONSERN = group accounts) and employees (persons, not FTE). '
         + 'One undoable write that touches only companyModel.',
       inputSchema: {

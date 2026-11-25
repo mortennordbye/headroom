@@ -64,6 +64,7 @@ import {
 } from '../src/lib/companyCost';
 import {
   markQuickEdited,
+  clearAccountsFit,
   buildModelFromAnswers,
   sanitizeQuickAnswers,
   QUICK_DEFAULTS,
@@ -72,7 +73,7 @@ import {
 } from '../src/lib/companySetup';
 import type { StyrkCode } from '../src/lib/marketWage';
 import { sanitizeAccounts, type CompanyAccounts } from '../src/lib/companyAccounts';
-import { calibrateToAccounts, type CalibrateFailure } from '../src/lib/companyCalibrate';
+import { fitModelToAccounts, type CalibrateFailure } from '../src/lib/companyCalibrate';
 import { translations } from '../src/i18n/translations';
 
 // The app's own category list, so every category the UI offers is writable here.
@@ -742,7 +743,11 @@ export function companyChanges(before: CompanyModel, after: CompanyModel): Field
   const ba = before.accounts;
   const aa = after.accounts;
   if (!ba || !aa) field('accounts', ba ?? null, aa ?? null);
-  else for (const k of Object.keys(aa) as (keyof typeof aa)[]) field(`accounts.${k}`, ba[k], aa[k]);
+  else {
+    // The union of keys, so a fit marker (fittedAt, fitMoves) that is set or dropped shows in the diff.
+    const keys = new Set([...Object.keys(ba), ...Object.keys(aa)]) as Set<keyof typeof aa>;
+    for (const k of keys) field(`accounts.${k}`, ba[k] ?? null, aa[k] ?? null);
+  }
   return out;
 }
 
@@ -757,7 +762,10 @@ function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyMod
   // A change to the groups, the cost lines, your group, your own share or the bonus pool is a hand edit: the quick setup
   // then asks before it builds the model again. A write that changes none of them leaves the flag alone.
   const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId, m.self ?? null, m.bonus.poolPct]);
-  const after = shape(edited) !== shape(before) ? markQuickEdited(edited) : edited;
+  // Hours and the bonus holiday-pay setting are not hand edits, but they move the numbers the fit matched: drop the fit.
+  const numbers = (m: CompanyModel) => JSON.stringify([m.hours, m.bonus.includesHolidayPay]);
+  const after = shape(edited) !== shape(before) ? markQuickEdited(edited)
+    : numbers(edited) !== numbers(before) ? clearAccountsFit(edited) : edited;
   // No stored model: the whole example model is stored now, so say so.
   const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
   blob.companyModel = after;
@@ -944,8 +952,8 @@ const CALIBRATE_REFUSALS: Record<CalibrateFailure | 'noAccounts', string> = {
   handEdited: 'the groups or cost lines were changed by hand after the quick setup, so its answers no longer describe the model; '
     + 'run setup_company_quick again (confirmReplace: true) first',
   currency: 'the accounts are not in NOK, so they cannot be compared with the model',
-  nothingToMove: 'nothing is marked as a guess: mark salary and/or typicalBillablePct as uncertain or dontKnow with setup_company_quick, '
-    + 'or the model keeps the answers as they are',
+  // Not reached: the fit marks salary and typicalBillablePct as guesses itself.
+  nothingToMove: 'nothing is marked as a guess',
   noSolution: 'no solution within reasonable values (typical billable share 20-100 %, mean salary 300 000-3 000 000 kr); '
     + 'check the resale share (resaleSharePct), whether these are group (KONSERN) or holding accounts, and the number of non-billing staff. '
     + 'Nothing was saved',
@@ -959,18 +967,20 @@ export interface CalibrateCompanyArgs {
 }
 
 /**
- * "Tilpass modellen" from chat: store the given accounts (when given) and move
- * the quick setup's guesses (typical billable share, mean salary) so the model
- * meets them (calibrateToAccounts). Refuses, saving nothing, when there are no
- * accounts, nothing is a guess, or there is no solution. Touches only `companyModel`.
+ * "Gjør modellen lik regnskapet" from chat: store the given accounts (when
+ * given), mark salary and the typical billable share as guesses, move them so
+ * the model meets the accounts, and mark the accounts as fitted
+ * (fitModelToAccounts). Refuses, saving nothing, when there are no accounts or
+ * quick setup, the model was edited by hand, the accounts are not in NOK, or
+ * there is no solution. Touches only `companyModel`.
  */
 export function calibrateCompanyFromAccounts(blob: ExportPayload, args: CalibrateCompanyArgs): FieldChange[] {
   const before = sanitizeCompanyModel(blob.companyModel);
   const accounts = args.accounts ? sanitizeAccounts(args.accounts) : before.accounts;
   if (!accounts) throw new Error(CALIBRATE_REFUSALS.noAccounts);
-  const out = calibrateToAccounts({ ...before, accounts }, args.ctx, accounts);
+  const out = fitModelToAccounts({ ...before, accounts }, args.ctx, accounts);
   if (!out.ok) throw new Error(CALIBRATE_REFUSALS[out.reason]);
-  const after = sanitizeCompanyModel({ ...out.model, accounts });
+  const after = sanitizeCompanyModel(out.model);
   const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
   blob.companyModel = after;
   return changes;

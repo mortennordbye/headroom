@@ -10,6 +10,7 @@
 
 import { coerceNumber } from './sanitizePayload';
 import { isValidOrgnr } from './validators';
+import type { CalibrateMove } from './companyCalibrate';
 
 export type AccountsType = 'SELSKAP' | 'KONSERN';
 
@@ -38,6 +39,15 @@ export interface CompanyAccounts {
   inGroup: boolean;
   /** ISO time the app fetched it. */
   fetchedAt: string;
+  /**
+   * ISO time of the last "Gjør modellen lik regnskapet" (fitModelToAccounts in
+   * companyCalibrate.ts). Missing: the model was not fitted to these accounts,
+   * or the answers or groups changed after the fit (markQuickEdited and
+   * buildModelFromAnswers drop it).
+   */
+  fittedAt?: string;
+  /** What that fit moved; present together with fittedAt. */
+  fitMoves?: CalibrateMove[];
 }
 
 /** What one lookup gave, for the card. */
@@ -52,6 +62,27 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const finite = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 const str = (v: unknown, max: number): string => (typeof v === 'string' ? v.slice(0, max) : '');
 
+const FIT_KEYS = new Set(['typicalBillablePct', 'salary']);
+
+/** The stored fit's moves repaired: known keys, finite numbers, at most one per key. */
+function sanitizeFitMoves(v: unknown): CalibrateMove[] {
+  if (!Array.isArray(v)) return [];
+  const out: CalibrateMove[] = [];
+  for (const m of v) {
+    if (!isObj(m) || !FIT_KEYS.has(m.key as string) || out.some((x) => x.key === m.key)) continue;
+    const from = finite(m.from);
+    const to = finite(m.to);
+    if (from !== undefined && to !== undefined) out.push({ key: m.key as CalibrateMove['key'], from, to });
+  }
+  return out;
+}
+
+/** The accounts without the fit marker (fittedAt, fitMoves). */
+export function withoutFit(a: CompanyAccounts): CompanyAccounts {
+  const { fittedAt: _at, fitMoves: _moves, ...rest } = a;
+  return rest;
+}
+
 /** The stored accounts repaired, or undefined when they are not usable. */
 export function sanitizeAccounts(v: unknown): CompanyAccounts | undefined {
   if (!isObj(v)) return undefined;
@@ -62,6 +93,7 @@ export function sanitizeAccounts(v: unknown): CompanyAccounts | undefined {
   if (!isValidOrgnr(orgnr) || year === undefined || !Number.isInteger(year) || year < 1900 || year > 2200
     || revenue === undefined || operatingResult === undefined) return undefined;
   const employees = coerceNumber(v.employees);
+  const fittedAt = typeof v.fittedAt === 'string' && !Number.isNaN(Date.parse(v.fittedAt)) ? v.fittedAt : undefined;
   return {
     orgnr,
     name: str(v.name, 200),
@@ -77,6 +109,7 @@ export function sanitizeAccounts(v: unknown): CompanyAccounts | undefined {
     hasParent: v.hasParent === true,
     inGroup: v.inGroup === true,
     fetchedAt: typeof v.fetchedAt === 'string' && !Number.isNaN(Date.parse(v.fetchedAt)) ? v.fetchedAt : new Date(0).toISOString(),
+    ...(fittedAt ? { fittedAt, fitMoves: sanitizeFitMoves(v.fitMoves) } : {}),
   };
 }
 
@@ -136,4 +169,53 @@ export function accountsWarnings(a: CompanyAccounts): AccountsWarning[] {
 export function consultingRevenue(a: Pick<CompanyAccounts, 'revenue'>, resaleSharePct: number): number {
   const pct = Number.isFinite(resaleSharePct) ? Math.min(100, Math.max(0, resaleSharePct)) : 0;
   return a.revenue * (1 - pct / 100);
+}
+
+/** One compared figure: the model's value, the accounts' value, and model − accounts. */
+export interface ComparedFigure {
+  model: number;
+  accounts: number;
+  diff: number;
+}
+
+/**
+ * The model against the accounts, for the card's table and the match check.
+ * Revenue is the accounts' revenue less resold subcontractors (consultingRevenue);
+ * costs are revenue − operating result on both sides.
+ */
+export function compareWithAccounts(
+  model: { revenue: number; ebit: number },
+  accounts: Pick<CompanyAccounts, 'revenue' | 'operatingResult'>,
+  resaleSharePct = 0,
+): { revenue: ComparedFigure; operatingResult: ComparedFigure; costs: ComparedFigure } {
+  const fig = (m: number, a: number): ComparedFigure => ({ model: m, accounts: a, diff: m - a });
+  const revenue = consultingRevenue(accounts, resaleSharePct);
+  return {
+    revenue: fig(model.revenue, revenue),
+    operatingResult: fig(model.ebit, accounts.operatingResult),
+    costs: fig(model.revenue - model.ebit, revenue - accounts.operatingResult),
+  };
+}
+
+/** Largest gap, as a share of the accounts' revenue, that still counts as a match. */
+export const ACCOUNTS_MATCH_TOLERANCE = 0.1;
+
+export type AccountsMatch = 'match' | 'mismatch' | 'unknown';
+
+/**
+ * Whether the model agrees with the accounts. Mismatch when the operating
+ * result or the revenue differs by more than 10 % of the accounts' revenue
+ * (after resale). Unknown when there are no accounts, they are not in NOK,
+ * or they have no revenue.
+ */
+export function accountsMatch(
+  model: { revenue: number; ebit: number },
+  accounts: Pick<CompanyAccounts, 'revenue' | 'operatingResult' | 'currency'> | null | undefined,
+  resaleSharePct = 0,
+): AccountsMatch {
+  if (!accounts || accounts.currency !== 'NOK') return 'unknown';
+  const f = compareWithAccounts(model, accounts, resaleSharePct);
+  if (!(f.revenue.accounts > 0) || !Number.isFinite(f.revenue.diff) || !Number.isFinite(f.operatingResult.diff)) return 'unknown';
+  const tolerance = f.revenue.accounts * ACCOUNTS_MATCH_TOLERANCE;
+  return Math.abs(f.operatingResult.diff) > tolerance || Math.abs(f.revenue.diff) > tolerance ? 'mismatch' : 'match';
 }
