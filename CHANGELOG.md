@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.21.0](https://github.com/mortennordbye/headroom/compare/v3.20.0...v3.21.0) (2026-11-25)
+
+
+### Features
+
+* add quick setup for the company model ([#416](https://github.com/mortennordbye/headroom/issues/416)) ([9d2063a](https://github.com/mortennordbye/headroom/commit/9d2063a68634e3229d3d84ad033257615efcad46))
+* show what the company earns on you in Avansert ([#414](https://github.com/mortennordbye/headroom/issues/414)) ([57ceb8f](https://github.com/mortennordbye/headroom/commit/57ceb8f49153d2cde6bcf8fa9b6941dfc30359f0))
+
 ## [3.20.0](https://github.com/mortennordbye/headroom/compare/v3.19.3...v3.20.0) (2026-11-25)
 
 
