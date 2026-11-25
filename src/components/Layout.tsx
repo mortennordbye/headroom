@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { NavLink, NavigationType, Outlet, useLocation, useNavigationType, useSearchParams } from 'react-router';
+import { NavLink, NavigationType, Outlet, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router';
 import {
   ChevronLeft,
   ChevronRight,
@@ -41,7 +41,8 @@ const Layout: React.FC = () => {
   const hist = useBalanceHistory();
   const dateLocale = lang === 'nb' ? nb : enUS;
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const monthSyncedRef = useRef(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
@@ -121,7 +122,8 @@ const Layout: React.FC = () => {
     if (searchParams.get('m') === viewKey) return;
     const next = new URLSearchParams(searchParams);
     next.set('m', viewKey);
-    setSearchParams(next, { replace: true });
+    // Keep the hash, so a link to an anchor (e.g. /settings#restore-points) still finds it.
+    void navigate({ search: `?${next}`, hash: location.hash }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewKey, location.pathname]);
   // Balance pages are read-only for any non-current month, and snap the picked

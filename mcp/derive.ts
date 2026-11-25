@@ -102,6 +102,7 @@ import {
   type CompanyLevers,
   type CompanyModel,
 } from '../src/lib/companyCost';
+import { companyRanges, rangesUnavailable } from '../src/lib/companyRanges';
 import {
   upsertCompanyGroup,
   deleteCompanyGroup,
@@ -1306,6 +1307,20 @@ function companyDelta(from: CompanyNumbers, to: CompanyNumbers) {
   })) as Record<keyof CompanyNumbers, number | null>;
 }
 
+/** Why ranges is null, in words for the reader; null when there are ranges. */
+function rangesWhy(model: CompanyModel): string | null {
+  const why = rangesUnavailable(model);
+  if (why === 'noQuickSetup') return 'no quick setup: use setup_company_quick';
+  if (why === 'handEdited') return 'groups, cost lines, your own share or the bonus pool were changed by hand after the quick setup, '
+    + 'so its guesses no longer describe the model; run setup_company_quick again (confirmReplace: true) to get ranges back';
+  return null;
+}
+
+const RANGES_NOTE = 'ranges (null when rangesUnavailable says why): low / mid / high of keep, keepPct, fairGross, ceilingGross and companyPreBonusMarginPct. '
+  + 'Each uncertain or dontKnow answer goes to its low and high value one at a time (dontKnow twice as wide), the swings are combined by '
+  + 'root-sum-square, down and up apart; no guesses = zero width. drivers is "what matters most": the guesses sorted by how much they move '
+  + 'fairGross (down <= 0, up >= 0, kr); rankedBy says "keep" when there is no fair salary and the list is sorted by keep instead.';
+
 /** The stored company model and its full result. Mirrors CompanyModelPanel. */
 export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey()) {
   const model = sanitizeCompanyModel(blob.companyModel);
@@ -1339,12 +1354,16 @@ export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey
       targetClampedToZero: y.targetClamped,
       companyPreBonusMarginPct: y.companyPreBonusMarginPct,
     },
+    // Ranges from the quick setup's guesses, and the guesses ranked by how much they move the fair salary.
+    ranges: companyRanges(model, ctx),
+    rangesUnavailable: rangesWhy(model),
     // The levers at 0: the groups as saved. Delta is now minus baseline.
     vsBaseline: { baseline, delta: companyDelta(baseline, now) },
     notes: 'tax is an estimate: max(0, EBIT) x corporate tax %. share = overhead pool / delivery FTE; realCost = ownCost + share. '
       + 'forYou: keep = your revenue (billable hours x rate x realization) - realCost; fairGross = the gross where keepPct = targetMarginPct '
       + '(default: the company margin before bonus); ceilingGross = the gross where keep = 0; null = no solution. salarySharePct = gross / your revenue; '
-      + 'companySalarySharePct = delivery salaries / delivery revenue. raise = employer cost of +100 000 kr gross and the bonus pool drop.',
+      + 'companySalarySharePct = delivery salaries / delivery revenue. raise = employer cost of +100 000 kr gross and the bonus pool drop. '
+      + RANGES_NOTE,
   };
 }
 
@@ -1407,6 +1426,13 @@ export function simulateCompany(blob: ExportPayload, sim: CompanySimulation, mon
     current: before,
     simulated: after,
     delta: companyDelta(before, after),
+    ranges: {
+      current: companyRanges(current, ctx),
+      simulated: companyRanges(simulated, ctx),
+      currentUnavailable: rangesWhy(current),
+      simulatedUnavailable: rangesWhy(simulated),
+    },
+    notes: RANGES_NOTE,
     simulatedModel: simulated,
   };
 }

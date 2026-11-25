@@ -51,6 +51,7 @@ import { addDeletedBankTombstones } from '../src/lib/bankDedup';
 import { recordDepartedPaydowns } from '../src/lib/automation';
 import {
   sanitizeCompanyModel,
+  quickReplacesHandEdits,
   ensureDeliverySelf,
   applyLevers,
   type CompanyModel,
@@ -60,7 +61,15 @@ import {
   type CostLinePer,
   type CompanyLevers,
 } from '../src/lib/companyCost';
-import { markQuickEdited } from '../src/lib/companySetup';
+import {
+  markQuickEdited,
+  buildModelFromAnswers,
+  sanitizeQuickAnswers,
+  QUICK_DEFAULTS,
+  type QuickAnswers,
+  type QuickGuessKey,
+} from '../src/lib/companySetup';
+import { translations } from '../src/i18n/translations';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -735,9 +744,9 @@ export function companyChanges(before: CompanyModel, after: CompanyModel): Field
 function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyModel): FieldChange[] {
   const before = sanitizeCompanyModel(blob.companyModel);
   const edited = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
-  // A change to the groups, the cost lines or your group is a hand edit: the quick setup
+  // A change to the groups, the cost lines, your group, your own share or the bonus pool is a hand edit: the quick setup
   // then asks before it builds the model again. A write that changes none of them leaves the flag alone.
-  const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId]);
+  const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId, m.self ?? null, m.bonus.poolPct]);
   const after = shape(edited) !== shape(before) ? markQuickEdited(edited) : edited;
   // No stored model: the whole example model is stored now, so say so.
   const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
@@ -862,4 +871,55 @@ export function updateCompanySettings(blob: ExportPayload, args: CompanySettings
     });
     return apply ? applyLevers(next) : next;
   });
+}
+
+export interface CompanyQuickSetupArgs {
+  /** The quick setup's answers; a missing answer keeps the stored one, else the default. */
+  answers?: Partial<QuickAnswers>;
+  /** Answers that are a guess ("usikker"); they get a range. Omitted: the stored list. */
+  uncertain?: QuickGuessKey[];
+  /** Answers that are not known ("vet ikke"); the industry value is used, with a wider range. Omitted: the stored list, without keys answered here. */
+  dontKnow?: QuickGuessKey[];
+  /** Needed when the groups or cost lines were changed by hand after the last setup. */
+  confirmReplace?: boolean;
+}
+
+/**
+ * "Hurtigoppsett" from chat: build the groups, cost lines and your own share from
+ * the answers, as the page's "Bruk svarene" does. A missing answer keeps the
+ * stored one (or the industry default on a first setup). A "vet ikke" answer uses the
+ * industry value (an unknown office: one desk per FTE). After a hand edit it
+ * refuses unless confirmReplace is true, because the rebuild replaces those edits.
+ * Touches only `companyModel`.
+ */
+export function setupCompanyQuick(blob: ExportPayload, args: CompanyQuickSetupArgs): FieldChange[] {
+  const before = sanitizeCompanyModel(blob.companyModel);
+  if (quickReplacesHandEdits(before) && args.confirmReplace !== true) {
+    throw new Error('the company groups, cost lines, your own share or the bonus pool were changed by hand (or set up without the quick setup); '
+      + 'the setup replaces those edits. Ask the user, then call again with confirmReplace: true');
+  }
+  // An omitted list keeps the stored flags. A typed answer is no longer "vet ikke", as in the form.
+  const given = new Set(Object.entries(args.answers ?? {}).filter(([, v]) => v !== undefined).map(([k]) => k));
+  const answerKeys: Record<QuickGuessKey, (keyof QuickAnswers)[]> = {
+    salary: ['salaryLow', 'salaryHigh'], rateAverage: ['rateAverage'], ownBillablePct: ['ownBillablePct'],
+    typicalBillablePct: ['typicalBillablePct'], realizationPct: ['realizationPct'], office: ['officeMode', 'desks', 'annualRent'],
+  };
+  const dontKnow = [...new Set(args.dontKnow ?? (before.quick?.dontKnow ?? []).filter((k) => !answerKeys[k].some((f) => given.has(f))))];
+  const uncertain = [...new Set(args.uncertain ?? before.quick?.uncertain ?? [])].filter((k) => !dontKnow.includes(k));
+  // A first setup takes your rate from the calculator when it is set, as the form does.
+  const answers: QuickAnswers = before.quick
+    ? { ...before.quick.answers }
+    : { ...QUICK_DEFAULTS, rateYou: blob.billingConfig?.billedHourly ?? QUICK_DEFAULTS.rateYou };
+  for (const [k, v] of Object.entries(args.answers ?? {})) if (v !== undefined) (answers as unknown as Record<string, unknown>)[k] = v;
+  // "vet ikke" resets the answer to the industry value, as the form does.
+  for (const k of dontKnow) {
+    if (k === 'salary') Object.assign(answers, { salaryLow: QUICK_DEFAULTS.salaryLow, salaryHigh: QUICK_DEFAULTS.salaryHigh });
+    else if (k === 'office') { answers.officeMode = QUICK_DEFAULTS.officeMode; delete answers.desks; }
+    else answers[k] = QUICK_DEFAULTS[k];
+  }
+  const labels = blob.lang === 'en' ? translations.en.companyModel.quickLabels : translations.nb.companyModel.quickLabels;
+  const after = sanitizeCompanyModel(buildModelFromAnswers(sanitizeQuickAnswers(answers), before, { uncertain, dontKnow, labels }));
+  const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
+  blob.companyModel = after;
+  return changes;
 }

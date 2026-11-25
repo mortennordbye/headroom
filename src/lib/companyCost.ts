@@ -379,8 +379,17 @@ function solveGross(f: (g: number) => number): number | null {
  * is the gross where keep / revenue = the target margin (default: the company
  * margin before bonus, so an average consultant's fair salary is the group's
  * average salary). Ceiling is the gross where keep = 0.
+ *
+ * `solved` passes fair salary and ceiling from an earlier call on the same
+ * model and context, so a "what if" salary does not solve them again.
  */
-export function youEconomics(model: CompanyModel, ctx: CompanyContext, r: CompanyResult, gross: number = r.you.gross): YouEconomics {
+export function youEconomics(
+  model: CompanyModel,
+  ctx: CompanyContext,
+  r: CompanyResult,
+  gross: number = r.you.gross,
+  solved?: Pick<YouEconomics, 'fairGross' | 'ceilingGross'>,
+): YouEconomics {
   const g0 = Math.max(0, fin(gross));
   const revenue = r.you.billableHours * r.you.listRate * r.you.realizationPct / 100;
   const share = r.you.share;
@@ -397,8 +406,8 @@ export function youEconomics(model: CompanyModel, ctx: CompanyContext, r: Compan
     : clamp(stored, TARGET_MARGIN_RANGE.min, TARGET_MARGIN_RANGE.max);
 
   const at = (target: number) => solveGross((g) => revenue * (1 - target / 100) - share - personCost(g, ctx));
-  const fairGross = revenue > 0 ? at(targetMarginPct) : null;
-  const ceilingGross = revenue > 0 ? at(0) : null;
+  const fairGross = solved ? solved.fairGross : revenue > 0 ? at(targetMarginPct) : null;
+  const ceilingGross = solved ? solved.ceilingGross : revenue > 0 ? at(0) : null;
 
   const delivery = r.groups.filter((g) => g.kind === 'delivery');
   const companySalarySharePct = div(sum(delivery, (g) => g.avgGross * g.count), sum(delivery, (g) => g.revenue)) * 100;
@@ -532,6 +541,16 @@ export function applyLevers(model: CompanyModel): CompanyModel {
     levers: { ...NEUTRAL_LEVERS },
     ...(self ? { self } : {}),
   };
+}
+
+/**
+ * Whether building the model from the quick setup's answers would replace hand
+ * edits: the setup's `edited` flag, or (before any quick setup) groups or cost
+ * lines that differ from the example model.
+ */
+export function quickReplacesHandEdits(model: CompanyModel): boolean {
+  if (model.quick) return model.quick.edited;
+  return JSON.stringify([model.groups, model.costs]) !== JSON.stringify([DEFAULT_COMPANY_MODEL.groups, DEFAULT_COMPANY_MODEL.costs]);
 }
 
 /**

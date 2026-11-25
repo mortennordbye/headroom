@@ -1,10 +1,11 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import {
   youEconomics, TARGET_MARGIN_RANGE,
   type CompanyModel, type CompanyContext, type CompanyResult, type YouBreakdownPart,
 } from '../lib/companyCost';
+import { companyRanges, SMALL_SWING_KR, type Range } from '../lib/companyRanges';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { NumberRow } from './ui/NumberRow';
@@ -47,7 +48,8 @@ function tickStep(span: number): number {
  * The top card of Avansert: what the company keeps on you, the fair salary, the
  * one-year kroner bar and the salary axis with a "what if" slider. All numbers
  * come from youEconomics in src/lib/companyCost.ts. The slider is local state
- * only: it never writes the model or the salary page.
+ * only: it never writes the model or the salary page. Ranges and "Hva betyr
+ * mest" come from the saved quick setup's guesses (companyRanges.ts).
  */
 export function CompanyMeCard({
   model, setModel, ctx, result,
@@ -69,13 +71,29 @@ export function CompanyMeCard({
   const now = result.you.gross;
   const [whatIf, setWhatIf] = useState<number | null>(null);
   const gross = whatIf ?? now;
-  const y = youEconomics(model, ctx, result, gross);
+  // Fair salary, ceiling and the ranges do not depend on the "what if" salary: solve them once per model.
+  const atNow = useMemo(() => youEconomics(model, ctx, result), [model, ctx, result]);
+  const y = whatIf == null ? atNow : youEconomics(model, ctx, result, whatIf, atNow);
   const fair = y.fairGross;
   const ceiling = y.ceilingGross;
   // One rounding rule for every shown fair salary and ceiling; the exact values only place the markers.
   const round10k = (v: number) => Math.round(v / 10_000) * 10_000;
   const fairShown = fair != null ? round10k(fair) : null;
   const ceilingShown = ceiling != null ? round10k(ceiling) : null;
+
+  // ── Ranges from the saved guesses (not the form's unsaved draft) ──
+  const ranges = useMemo(() => companyRanges(model, ctx), [model, ctx]);
+  const handEdited = model.quick?.edited === true;
+  const hasWidth = (r: Range | undefined): r is Range & { low: number; high: number } =>
+    !!r && r.low != null && r.high != null && r.high - r.low >= 1;
+  const span = (r: Range | undefined) => (hasWidth(r) ? c.rangeSpan.replace('{low}', k(r.low)).replace('{high}', k(r.high)) : null);
+  // Keep's swings do not depend on your salary, so the range moves with the "what if" keep.
+  const keepShift = ranges?.keep.mid != null ? y.keep - ranges.keep.mid : 0;
+  const keepSpan = span(ranges && ranges.keep.low != null && ranges.keep.high != null
+    ? { mid: y.keep, low: ranges.keep.low + keepShift, high: ranges.keep.high + keepShift }
+    : undefined);
+  const fairRange = ranges?.fairGross;
+  const fairSpan = span(fairRange);
 
   // ── Kroner bar: office and other cost lines share one segment ──
   const office = y.breakdown.filter((p) => p.kind === 'office' || p.kind === 'other');
@@ -106,7 +124,8 @@ export function CompanyMeCard({
   })();
 
   // ── Salary axis: its range comes from now, fair and ceiling (not the slider) ──
-  const anchors = [now, fair, ceiling].filter((v): v is number => v != null && v > 0);
+  const band = hasWidth(fairRange) ? fairRange : null;
+  const anchors = [now, fair, ceiling, band?.low, band?.high].filter((v): v is number => v != null && v > 0);
   const span0 = anchors.length ? Math.max(...anchors) - Math.min(...anchors) : 0;
   const pad = Math.max(100_000, span0 * 0.25);
   const step = tickStep(anchors.length ? span0 + 2 * pad : 1_000_000);
@@ -138,14 +157,14 @@ export function CompanyMeCard({
 
   return (
     <Card padding="lg">
-      {/* Two headline numbers. Ranges come in a later PR; the sub lines leave room for them. */}
+      {/* Two headline numbers, with their ranges when the setup has guesses. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="min-w-0">
           <SectionLabel>{c.meKeep}</SectionLabel>
           <div className="mt-2 font-mono font-semibold leading-[1.1] text-[30px] md:text-[40px] tabular-nums" style={{ color: y.keep < 0 ? 'var(--negative)' : 'var(--brass)' }}>
             {kr(y.keep)}
           </div>
-          <div className="mt-1.5 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>{c.meKeepSub.replace('{pct}', nf(y.keepPct))}</div>
+          <div className="mt-1.5 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>{c.meKeepSub.replace('{pct}', nf(y.keepPct))}{keepSpan && <> · <span className="whitespace-nowrap">{keepSpan}</span></>}</div>
         </div>
         <div className="min-w-0">
           <SectionLabel>{c.meFair}</SectionLabel>
@@ -155,7 +174,7 @@ export function CompanyMeCard({
                 {c.meFairValue.replace('{v}', kr(fairShown!))}
               </div>
               <div className="mt-1.5 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>
-                {c.meFairSub.replace('{now}', kr(now)).replace('{diff}', `${fairDiff < 0 ? '−' : '+'}${k(Math.abs(fairDiff))}`)}
+                {fairSpan && <><span className="whitespace-nowrap">{fairSpan}</span> · </>}{c.meFairSub.replace('{now}', kr(now)).replace('{diff}', `${fairDiff < 0 ? '−' : '+'}${k(Math.abs(fairDiff))}`)}
               </div>
             </>
           ) : (
@@ -238,9 +257,16 @@ export function CompanyMeCard({
       <div
         className="relative h-[120px] mx-1"
         role="img"
-        aria-label={c.axisAria.replace('{now}', kr(now)).replace('{fair}', fairShown != null ? kr(fairShown) : '–').replace('{ceiling}', ceilingShown != null ? kr(ceilingShown) : '–')}
+        aria-label={c.axisAria.replace('{now}', kr(now)).replace('{fair}', fairShown != null ? kr(fairShown) : '–').replace('{ceiling}', ceilingShown != null ? kr(ceilingShown) : '–') + (fairSpan ? ` · ${fairSpan}` : '')}
       >
         <div className="absolute left-0 right-0 top-[57px] h-[6px] rounded-full" style={{ background: 'var(--rule)' }} />
+        {band && (
+          <div
+            data-testid="fair-band"
+            className="absolute top-[54px] h-[12px] rounded-[4px]"
+            style={{ left: `${x(band.low)}%`, width: `${x(band.high) - x(band.low)}%`, background: 'var(--forest)', opacity: 0.8 }}
+          />
+        )}
         {ticks.map((v, i) => (
           <div key={v} className="absolute top-[58px]" style={{ left: `${x(v)}%` }}>
             <div className="w-px h-[6px] -translate-x-1/2" style={{ background: 'var(--text-3)' }} />
@@ -283,7 +309,7 @@ export function CompanyMeCard({
         )}
       </div>
 
-      {/* Target margin; the other two columns (occupation, what matters most) come in later PRs. */}
+      {/* Target margin and what matters most; the middle column (occupation) comes in a later PR. */}
       <div className="mt-5 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-6" style={{ borderColor: 'var(--rule)' }}>
         <div>
           <NumberRow
@@ -311,6 +337,33 @@ export function CompanyMeCard({
           <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.targetHint}</p>
           {y.targetClamped && <p className="mt-2 text-[12px]" style={{ color: 'var(--warning)' }}>{c.targetClampedNote}</p>}
         </div>
+        {(ranges || handEdited) && (
+          <div className="md:col-start-3 min-w-0">
+            <SectionLabel>{c.driversTitle}</SectionLabel>
+            {!ranges ? (
+              <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.rangesHandEdited}</p>
+            ) : ranges.drivers.length > 0 ? (
+              <ul className="mt-2 space-y-1.5 text-[13px]" data-testid="drivers">
+                {ranges.drivers.map((d) => (
+                  <li key={d.key} className="flex items-baseline justify-between gap-3">
+                    <span style={{ color: 'var(--text-2)' }}>{c.guessLabels[d.key]}</span>
+                    <b className="font-mono font-medium whitespace-nowrap" style={{ color: 'var(--text-1)' }}>
+                      {d.width < SMALL_SWING_KR ? c.driversSmall : `${d.down < 0 ? '−' : ''}${k(Math.abs(d.down))} / +${k(d.up)}`}
+                    </b>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.driversNone}</p>
+            )}
+            {ranges && ranges.drivers.length > 0 && (
+              <>
+                <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{ranges.rankedBy === 'keep' ? c.driversHintKeep : c.driversHint}</p>
+                <p className="mt-1 text-[11.5px]" style={{ color: 'var(--text-3)' }}>{c.rangeMethod}</p>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </Card>
   );

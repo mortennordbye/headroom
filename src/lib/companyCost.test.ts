@@ -371,6 +371,13 @@ describe('utilizationCurve', () => {
 });
 
 describe('youEconomics: what the company earns on you', () => {
+  it('fair salary and ceiling passed in as solved give the same result for another salary', () => {
+    const m = model();
+    const r = calcCompany(m, ctx);
+    const now = youEconomics(m, ctx, r);
+    expect(youEconomics(m, ctx, r, 1_050_000, now)).toEqual(youEconomics(m, ctx, r, 1_050_000));
+  });
+
   // One delivery group; the support groups (leadership, bench) bill nothing.
   const avgModel = (patch: Partial<CompanyModel> = {}): CompanyModel => model({
     groups: [
