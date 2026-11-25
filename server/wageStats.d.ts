@@ -8,3 +8,16 @@ export interface WageStatPoint {
 export function fetchWageStats(topCount?: number): Promise<WageStatPoint[]>;
 export function parseWage11418JsonStat2(data: unknown): WageStatPoint[];
 export function buildV2Url(topCount: number): string;
+
+export interface OccupationWagePoint {
+  year: number;
+  median: number; // gross annual NOK (agreed monthly wage × 12)
+  p25: number | null;
+  p75: number | null;
+}
+
+export const OCCUPATIONS: Record<string, string>;
+export const OCCUPATION_MEASURE: string;
+export function fetchOccupationWage(code: string, topCount?: number): Promise<OccupationWagePoint[]>;
+export function parseOccupationJsonStat2(data: unknown): OccupationWagePoint[];
+export function buildOccupationV2Url(code: string, topCount: number): string;

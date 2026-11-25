@@ -787,6 +787,13 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       expect(derive.companyModelSummary(rest as ExportPayload, MONTH).model).toEqual(DEFAULT_COMPANY_MODEL);
     });
 
+    it('get_company_model market: the SSB median moved to the model year, or null', () => {
+      const raw = { code: '2512', available: true, label: 'Programvareutviklere', year: 2025, median: 912_720, p25: 751_920, p75: 1_089_240, measure: 'AvtaltManedslonn', source: 'ssb-cache' };
+      expect(derive.companyMarket('2512', raw, 2026)).toEqual({ code: '2512', year: 2025, median: 912_720, projected: 949_229 });
+      expect(derive.companyMarket('2512', null, 2026)).toBeNull();
+      expect(derive.companyMarket('2512', { code: '2512', available: false }, 2026)).toBeNull();
+    });
+
     it('simulate_company: matches calcCompany on the same model and saves nothing', () => {
       const input = structuredClone(blob);
       const sim = derive.simulateCompany(input, {

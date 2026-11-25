@@ -32,8 +32,24 @@ export async function putBlob(request: APIRequestContext, blob: Blob) {
  * Points every test at the throwaway server, and fails a test on any console
  * error or uncaught exception from the app's own origin.
  */
-export const test = base.extend<{ consoleErrors: string[] }>({
+export const test = base.extend<{ consoleErrors: string[]; ssbOccupationStub: void }>({
   baseURL: async ({ baseURL }, provide) => provide(process.env.E2E_BASE_URL ?? baseURL),
+  // The me card asks the app for SSB market pay, and the app asks SSB. Stub the
+  // app route for every test so no spec depends on SSB being reachable. A spec
+  // that registers its own page.route for it wins (the newest route matches first).
+  ssbOccupationStub: [
+    async ({ page }, provide) => {
+      await page.route('**/api/wage-stats/occupation?*', (route) => {
+        const code = new URL(route.request().url()).searchParams.get('code') ?? '2512';
+        return route.fulfill({ json: {
+          code, available: true, label: 'Programvareutviklere', year: 2025,
+          median: 912_720, p25: 751_920, p75: 1_089_240, measure: 'AvtaltManedslonn', source: 'ssb-live', stale: false,
+        } });
+      });
+      await provide();
+    },
+    { auto: true },
+  ],
   consoleErrors: [
     async ({ page, baseURL }, provide) => {
       const errors: string[] = [];
