@@ -41,15 +41,18 @@ import {
   upsertCompanyCostLine,
   deleteCompanyCostLine,
   updateCompanySettings,
+  companyChanges,
 } from './mutations';
 import { companyContext } from './derive';
 import {
   calcCompany,
+  youEconomics,
   sanitizeCompanyModel,
   DEFAULT_COMPANY_MODEL,
   LEVER_RANGES,
   NEUTRAL_LEVERS,
 } from '../src/lib/companyCost';
+import { buildModelFromAnswers, QUICK_DEFAULTS } from '../src/lib/companySetup';
 
 // Run a builder on a fresh clone; return the before-snapshot, the mutated blob, and the diff.
 function applyOn(mutate: (blob: ExportPayload) => FieldChange[]) {
@@ -749,14 +752,34 @@ describe('company model writes store a sanitized model', () => {
     expect(changes).toEqual([{ field: 'companyModel', before: null, after: blob.companyModel }]);
   });
 
-  it('applyLevers keeps every result the same', () => {
+  it('applyLevers keeps every result the same, also with your own share and rate', () => {
     const blob = structuredClone(fullFixture());
-    const before = calcCompany(blob.companyModel!, ctx);
+    blob.companyModel = { ...blob.companyModel!, self: { billablePct: 90, hourlyRate: 1400 } };
+    const before = calcCompany(blob.companyModel, ctx);
+    const yBefore = youEconomics(blob.companyModel, ctx, before);
     updateCompanySettings(blob, { applyLevers: true });
-    const after = calcCompany(blob.companyModel!, ctx);
+    const after = calcCompany(blob.companyModel, ctx);
+    const yAfter = youEconomics(blob.companyModel, ctx, after);
     expect(after.ebit).toBeCloseTo(before.ebit, 6);
     expect(after.you.realCost).toBeCloseTo(before.you.realCost, 6);
     expect(after.revenue).toBeCloseTo(before.revenue, 6);
+    expect(after.you.billableHours).toBeCloseTo(before.you.billableHours, 6);
+    expect(after.you.listRate).toBeCloseTo(before.you.listRate, 6);
+    expect(yAfter.keep).toBeCloseTo(yBefore.keep, 4);
+  });
+
+  it('self: given fields change, null clears, bounds hold, and the change list says so', () => {
+    const blob = structuredClone(fullFixture());
+    const set = updateCompanySettings(blob, { self: { billablePct: 92 } });
+    expect(blob.companyModel?.self).toEqual({ billablePct: 92 });
+    expect(set).toEqual([{ field: 'companyModel.self.billablePct', before: null, after: 92 }]);
+    updateCompanySettings(blob, { self: { hourlyRate: 1600 } });
+    expect(blob.companyModel?.self).toEqual({ billablePct: 92, hourlyRate: 1600 });
+    updateCompanySettings(blob, { self: { billablePct: 140 } });
+    expect(blob.companyModel?.self?.billablePct).toBe(100);
+    const cleared = updateCompanySettings(blob, { self: null });
+    expect(blob.companyModel).not.toHaveProperty('self');
+    expect(cleared).toContainEqual({ field: 'companyModel.self.hourlyRate', before: 1600, after: null });
   });
 
   it('given levers are applied after they are set and clamped', () => {
@@ -764,5 +787,65 @@ describe('company model writes store a sanitized model', () => {
     updateCompanySettings(blob, { levers: { ratePct: 50 }, applyLevers: true });
     expect(blob.companyModel?.groups.find((g) => g.id === 'cg1')?.hourlyRate).toBeCloseTo(1250 * (1 + LEVER_RANGES.ratePct.max / 100), 6);
     expect(blob.companyModel?.levers).toEqual(NEUTRAL_LEVERS);
+  });
+
+  describe('quick setup', () => {
+    const withQuick = () => {
+      const blob = structuredClone(fullFixture());
+      blob.companyModel = buildModelFromAnswers(QUICK_DEFAULTS, blob.companyModel!);
+      return blob;
+    };
+
+    it.each([
+      ['upsert_company_group', (b: ExportPayload) => upsertCompanyGroup(b, { id: 'kons', create: false, count: 30 })],
+      ['delete_company_group', (b: ExportPayload) => deleteCompanyGroup(b, { id: 'benk' })],
+      ['upsert_company_cost_line', (b: ExportPayload) => upsertCompanyCostLine(b, { id: 'office', create: false, amount: 1 })],
+      ['delete_company_cost_line', (b: ExportPayload) => deleteCompanyCostLine(b, { id: 'it' })],
+      ['update_company_settings applyLevers', (b: ExportPayload) => updateCompanySettings(b, { levers: { ratePct: 5 }, applyLevers: true })],
+    ])('%s marks the quick setup as hand-edited, and the change list says so', (_name, write) => {
+      const blob = withQuick();
+      const changes = write(blob);
+      expect(blob.companyModel?.quick?.edited).toBe(true);
+      expect(changes).toContainEqual({ field: 'companyModel.quick.edited', before: false, after: true });
+    });
+
+    it('a selfGroupId change marks the quick setup as hand-edited', () => {
+      const blob = withQuick();
+      upsertCompanyGroup(blob, { id: 'tl', create: true, name: 'Team leads', kind: 'delivery', count: 0, avgGross: 1, billablePct: 50, hourlyRate: 1 });
+      blob.companyModel = { ...blob.companyModel!, quick: { ...blob.companyModel!.quick!, edited: false } };
+      updateCompanySettings(blob, { selfGroupId: 'tl' });
+      expect(blob.companyModel?.quick?.edited).toBe(true);
+    });
+
+    it('an upsert that changes nothing, or applyLevers with the levers at 0, keeps edited false', () => {
+      const blob = withQuick();
+      const count = blob.companyModel!.groups[0].count;
+      upsertCompanyGroup(blob, { id: 'kons', create: false, count });
+      upsertCompanyCostLine(blob, { id: 'it', create: false, amount: blob.companyModel!.costs.find((c) => c.id === 'it')!.amount });
+      updateCompanySettings(blob, { applyLevers: true });
+      expect(blob.companyModel?.quick?.edited).toBe(false);
+    });
+
+    it('a settings change that does not touch groups or costs keeps edited false', () => {
+      const blob = withQuick();
+      updateCompanySettings(blob, { hours: { sickPct: 5 } });
+      expect(blob.companyModel?.quick?.edited).toBe(false);
+    });
+
+    it('companyChanges lists quick and self changes', () => {
+      const plain = sanitizeCompanyModel(fullFixture().companyModel);
+      const built = buildModelFromAnswers(QUICK_DEFAULTS, plain, { uncertain: ['salary'] });
+      // No quick setup before: one change with the whole setup.
+      expect(companyChanges(plain, built)).toContainEqual({ field: 'companyModel.quick', before: null, after: built.quick });
+      expect(companyChanges(plain, built)).toContainEqual({ field: 'companyModel.self.billablePct', before: null, after: QUICK_DEFAULTS.ownBillablePct });
+      const next = buildModelFromAnswers({ ...QUICK_DEFAULTS, totalFte: 60 }, built, { dontKnow: ['office'] });
+      const changes = companyChanges(built, next);
+      expect(changes).toContainEqual({ field: 'companyModel.quick.answers.totalFte', before: 50, after: 60 });
+      expect(changes).toContainEqual({ field: 'companyModel.quick.uncertain', before: ['salary'], after: [] });
+      expect(changes).toContainEqual({ field: 'companyModel.quick.dontKnow', before: [], after: ['office'] });
+      // A write on a model without a quick setup says nothing about it.
+      const blob = structuredClone(fullFixture());
+      expect(upsertCompanyGroup(blob, { id: 'cg2', create: false, count: 4 }).some((c) => c.field.startsWith('companyModel.quick'))).toBe(false);
+    });
   });
 });

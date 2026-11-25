@@ -26,6 +26,7 @@
 import { calcEmployerCost, type EmployerCostConfig, type BillingRateConfig } from './employerCost';
 import { weekdaysInYear, weekdayHolidays, corporateTaxPct } from './norwegianCalendar';
 import { coerceNumber } from './sanitizePayload';
+import { sanitizeQuick, type CompanyQuick } from './companySetup';
 
 export type CompanyGroupKind = 'delivery' | 'support';
 
@@ -66,6 +67,15 @@ export interface CompanyModel {
   levers: CompanyLevers;
   /** Target margin on you for "Rimelig lønn", %. Null or missing: the company margin before bonus. */
   targetMarginPct?: number | null;
+  /** You, where you differ from your group: billable share (of available hours) and list rate. */
+  self?: CompanySelf;
+  /** The quick setup's answers ("Hurtigoppsett"); the groups and cost lines built from them hold the maths. */
+  quick?: CompanyQuick;
+}
+
+export interface CompanySelf {
+  billablePct?: number;
+  hourlyRate?: number;
 }
 
 /** Inputs from outside the model (salary page, cost and billing settings). */
@@ -262,12 +272,19 @@ export function calcCompany(model: CompanyModel, ctx: CompanyContext, levers: Co
   const tax = Math.max(0, ebit) * corporateTaxPct(ctx.year) / 100;
 
   const self = groups.find((g) => g.id === model.selfGroupId);
+  // You: your group, with your own billable share and rate where set, and the same levers.
+  const selfRaw = model.groups.find((g) => g.id === model.selfGroupId);
+  const you = selfRaw ? leveredGroup({
+    ...selfRaw,
+    billablePct: model.self?.billablePct ?? selfRaw.billablePct,
+    hourlyRate: model.self?.hourlyRate ?? selfRaw.hourlyRate,
+  }, levers) : undefined;
   // Your salary always comes from the salary page; the salary lever moves the groups only.
   const gross = Math.max(0, fin(ctx.ownGross));
   const ownCost = personCost(gross, ctx);
   const share = div(pool, deliveryFte);
   const override = ctx.selfBillableHoursOverride;
-  const youHours = override != null && override > 0 ? override : (self?.billableHours ?? 0);
+  const youHours = override != null && override > 0 ? override : (you ? A * you.billablePct / 100 : 0);
   const realCost = ownCost + share;
 
   const deliveryHours = sum(delivery, (g) => g.billableHours * g.count);
@@ -283,8 +300,8 @@ export function calcCompany(model: CompanyModel, ctx: CompanyContext, levers: Co
       gross, ownCost, share, realCost,
       billableHours: youHours,
       breakEvenRate: div(realCost, youHours),
-      listRate: self?.hourlyRate ?? 0,
-      realizationPct: self?.realizationPct ?? 0,
+      listRate: you?.hourlyRate ?? 0,
+      realizationPct: you?.realizationPct ?? 0,
     },
     kpis: {
       revenuePerFte: div(revenue, heads),
@@ -502,10 +519,18 @@ export function utilizationCurve(model: CompanyModel, ctx: CompanyContext, from 
  * The levers only ever move the groups, so the results do not change.
  */
 export function applyLevers(model: CompanyModel): CompanyModel {
+  const l = model.levers;
+  const s = model.self;
+  // Your own share and rate move with the levers as your group does (calcCompany), so they are written too.
+  const self: CompanySelf | undefined = s && {
+    ...(s.billablePct != null ? { billablePct: clamp(fin(s.billablePct) + fin(l.utilizationPp), 0, 100) } : {}),
+    ...(s.hourlyRate != null ? { hourlyRate: Math.max(0, fin(s.hourlyRate) * (1 + fin(l.ratePct) / 100)) } : {}),
+  };
   return {
     ...model,
-    groups: model.groups.map((g) => leveredGroup(g, model.levers)),
+    groups: model.groups.map((g) => leveredGroup(g, l)),
     levers: { ...NEUTRAL_LEVERS },
+    ...(self ? { self } : {}),
   };
 }
 
@@ -604,6 +629,14 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
 
   const b = isObj(v.bonus) ? v.bonus : {};
   const l = isObj(v.levers) ? v.levers : {};
+  const s = isObj(v.self) ? v.self : {};
+  const selfBillable = coerceNumber(s.billablePct);
+  const selfRate = coerceNumber(s.hourlyRate);
+  const self: CompanySelf = {
+    ...(selfBillable !== undefined ? { billablePct: clamp(selfBillable, 0, 100) } : {}),
+    ...(selfRate !== undefined ? { hourlyRate: Math.max(0, selfRate) } : {}),
+  };
+  const quick = sanitizeQuick(v.quick);
   return {
     mode: v.mode === 'advanced' ? 'advanced' : 'simple',
     groups,
@@ -623,5 +656,7 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
     targetMarginPct: v.targetMarginPct == null
       ? null
       : (() => { const n = coerceNumber(v.targetMarginPct); return n === undefined ? null : clamp(n, TARGET_MARGIN_RANGE.min, TARGET_MARGIN_RANGE.max); })(),
+    ...(Object.keys(self).length ? { self } : {}),
+    ...(quick ? { quick } : {}),
   };
 }

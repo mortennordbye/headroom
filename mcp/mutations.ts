@@ -60,6 +60,7 @@ import {
   type CostLinePer,
   type CompanyLevers,
 } from '../src/lib/companyCost';
+import { markQuickEdited } from '../src/lib/companySetup';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -689,7 +690,7 @@ export type CompanyGroupFields = Partial<Omit<CompanyGroup, 'id'>>;
 export type CompanyCostLineFields = Partial<Omit<CompanyCostLine, 'id'>>;
 
 /** Every value that differs between two sanitized models, rows matched by id. */
-function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[] {
+export function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[] {
   const out: FieldChange[] = [];
   const field = (path: string, b: unknown, a: unknown) => {
     if (JSON.stringify(b) !== JSON.stringify(a)) out.push(diff(`companyModel.${path}`, b, a));
@@ -712,6 +713,17 @@ function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[
   };
   rows('groups', before.groups, after.groups);
   rows('costs', before.costs, after.costs);
+  field('self.billablePct', before.self?.billablePct ?? null, after.self?.billablePct ?? null);
+  field('self.hourlyRate', before.self?.hourlyRate ?? null, after.self?.hourlyRate ?? null);
+  const bq = before.quick;
+  const aq = after.quick;
+  if (!bq || !aq) field('quick', bq ?? null, aq ?? null);
+  else {
+    for (const k of Object.keys(aq.answers) as (keyof typeof aq.answers)[]) field(`quick.answers.${k}`, bq.answers[k], aq.answers[k]);
+    field('quick.uncertain', bq.uncertain, aq.uncertain);
+    field('quick.dontKnow', bq.dontKnow, aq.dontKnow);
+    field('quick.edited', bq.edited, aq.edited);
+  }
   return out;
 }
 
@@ -722,7 +734,11 @@ function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[
  */
 function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyModel): FieldChange[] {
   const before = sanitizeCompanyModel(blob.companyModel);
-  const after = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
+  const edited = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
+  // A change to the groups, the cost lines or your group is a hand edit: the quick setup
+  // then asks before it builds the model again. A write that changes none of them leaves the flag alone.
+  const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId]);
+  const after = shape(edited) !== shape(before) ? markQuickEdited(edited) : edited;
   // No stored model: the whole example model is stored now, so say so.
   const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
   blob.companyModel = after;
@@ -812,6 +828,8 @@ export interface CompanySettingsFields {
   levers?: Partial<CompanyLevers>;
   /** Target margin on you for the fair salary, % (0-60); null = the company margin before bonus. */
   targetMarginPct?: number | null;
+  /** Your own billable share and list rate where they differ from your group; null = use the group's. */
+  self?: { billablePct?: number; hourlyRate?: number } | null;
   /** "Lagre som utgangspunkt": write the levers (after `levers` above) into the groups and set them to 0. */
   applyLevers?: boolean;
 }
@@ -822,9 +840,9 @@ const definedOnly = <T extends object>(patch: Partial<T> | undefined): Partial<T
 
 /** Change the model's settings. Only given fields change; levers are clamped to their slider range. */
 export function updateCompanySettings(blob: ExportPayload, args: CompanySettingsFields): FieldChange[] {
-  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, applyLevers: apply } = args;
+  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, self, applyLevers: apply } = args;
   if (mode === undefined && selfGroupId === undefined && hours === undefined && bonus === undefined
-    && levers === undefined && targetMarginPct === undefined && !apply) {
+    && levers === undefined && targetMarginPct === undefined && self === undefined && !apply) {
     throw new Error('no company settings provided');
   }
   return writeCompany(blob, (m) => {
@@ -840,6 +858,7 @@ export function updateCompanySettings(blob: ExportPayload, args: CompanySettings
       hours: { ...m.hours, ...definedOnly(hours) },
       bonus: { ...m.bonus, ...definedOnly(bonus) },
       levers: { ...m.levers, ...definedOnly(levers) },
+      self: self === null ? undefined : { ...m.self, ...definedOnly(self ?? {}) },
     });
     return apply ? applyLevers(next) : next;
   });

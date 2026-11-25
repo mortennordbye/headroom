@@ -7,6 +7,7 @@ import {
   type CompanyModel, type CompanyContext, type CompanyResult, type CompanyGroup, type CompanyCostLine,
   type CompanyLevers, type CostLinePer,
 } from '../lib/companyCost';
+import { markQuickEdited } from '../lib/companySetup';
 import { weekdayHolidays, corporateTaxPct } from '../lib/norwegianCalendar';
 import { parseLocaleNumber } from '../lib/validators';
 import { Card } from './ui/Card';
@@ -19,6 +20,7 @@ import { SegmentedControl } from './ui/SegmentedControl';
 import { FitText } from './ui/FitText';
 import { HourWaterfallChart, UtilizationCurveChart } from './CompanyModelCharts';
 import { CompanyMeCard, CompanyExplainers } from './CompanyMeCard';
+import { CompanyQuickSetup } from './CompanyQuickSetup';
 
 const LEVERS: Array<{ key: keyof CompanyLevers; unit: string }> = [
   { key: 'utilizationPp', unit: 'pp' },
@@ -103,6 +105,7 @@ export function CompanyModelPanel({
     <div className="space-y-6 md:space-y-7">
       <CompanyMeCard model={model} setModel={setModel} ctx={ctx} result={r} />
       <CompanyExplainers />
+      <CompanyQuickSetup model={model} setModel={setModel} />
 
       {/* Everything else, folded: tiles, waterfall, levers, curve, people, hours, costs, result. */}
       <details className="group/details">
@@ -158,7 +161,7 @@ export function CompanyModelPanel({
             <Button size="sm" variant="secondary" leadingIcon={<RotateCcw />} disabled={!leversMoved} onClick={() => update({ levers: { ...NEUTRAL_LEVERS } })}>
               {c.resetLevers}
             </Button>
-            <Button size="sm" variant="primary" disabled={!leversMoved} onClick={() => setModel((m) => applyLevers(m))}>
+            <Button size="sm" variant="primary" disabled={!leversMoved} onClick={() => setModel((m) => markQuickEdited(applyLevers(m)))}>
               {c.saveBaseline}
             </Button>
           </div>
@@ -243,7 +246,16 @@ export function CompanyModelPanel({
                 value={`−${nf(h.internal)} ${t.common.hourUnit}`}
               />
               <Row label={c.rowAvailable} value={`${nf(h.available)} ${t.common.hourUnit}`} muted />
-              <Row label={c.rowShare} sub={self ? `${self.billablePct.toLocaleString(locale, { maximumFractionDigits: 1 })} %` : '–'} value="" />
+              <Row label={c.rowShare} sub={self && h.available > 0 ? `${(y.billableHours / h.available * 100).toLocaleString(locale, { maximumFractionDigits: 1 })} %` : '–'} value="" />
+              {model.self && self && (
+                <Row
+                  label={c.selfOwn}
+                  sub={c.selfOwnSub
+                    .replace('{pct}', (model.self.billablePct ?? self.billablePct).toLocaleString(locale, { maximumFractionDigits: 1 }))
+                    .replace('{rate}', nf(model.self.hourlyRate ?? self.hourlyRate))}
+                  value={<Button size="sm" variant="secondary" onClick={() => setModel((m) => { const { self: _self, ...rest } = m; return rest; })}>{c.selfClear}</Button>}
+                />
+              )}
               <Row label={c.rowBillable} value={`${nf(y.billableHours)} ${t.common.hourUnit}`} emphasis />
             </div>
           </Section>
@@ -296,12 +308,13 @@ function PeopleEditor({ model, setModel }: { model: CompanyModel; setModel: Disp
   const [editing, setEditing] = useState<string | null>(null);
 
   // Your group must stay a delivery group, also after a kind change or a removal.
+  // Every edit here is a hand edit, so the quick setup asks before it rebuilds.
   const patch = (id: string, p: Partial<CompanyGroup>) =>
-    setModel((m) => ensureDeliverySelf({ ...m, groups: m.groups.map((g) => (g.id === id ? { ...g, ...p } : g)) }));
-  const remove = (id: string) => setModel((m) => ensureDeliverySelf({ ...m, groups: m.groups.filter((g) => g.id !== id) }));
+    setModel((m) => markQuickEdited(ensureDeliverySelf({ ...m, groups: m.groups.map((g) => (g.id === id ? { ...g, ...p } : g)) })));
+  const remove = (id: string) => setModel((m) => markQuickEdited(ensureDeliverySelf({ ...m, groups: m.groups.filter((g) => g.id !== id) })));
   const add = () => {
     const id = crypto.randomUUID();
-    setModel((m) => ({
+    setModel((m) => markQuickEdited({
       ...m,
       groups: [...m.groups, { id, name: c.newGroup, kind: 'delivery', count: 1, avgGross: 700_000, billablePct: 80, hourlyRate: 1200, realizationPct: 95 }],
       selfGroupId: m.selfGroupId ?? id,
@@ -342,7 +355,7 @@ function PeopleEditor({ model, setModel }: { model: CompanyModel; setModel: Disp
                   />
                   {g.kind === 'delivery' && (
                     <label className="inline-flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
-                      <input type="radio" name="company-self-group" checked={isSelf} onChange={() => setModel((m) => ({ ...m, selfGroupId: g.id }))} style={{ accentColor: 'var(--accent)' }} />
+                      <input type="radio" name="company-self-group" checked={isSelf} onChange={() => setModel((m) => markQuickEdited({ ...m, selfGroupId: g.id }))} style={{ accentColor: 'var(--accent)' }} />
                       {c.isYourGroup}
                     </label>
                   )}
@@ -383,11 +396,11 @@ function CostEditor({
   const [editing, setEditing] = useState<string | null>(null);
 
   const patch = (id: string, p: Partial<CompanyCostLine>) =>
-    setModel((m) => ({ ...m, costs: m.costs.map((l) => (l.id === id ? { ...l, ...p } : l)) }));
-  const remove = (id: string) => setModel((m) => ({ ...m, costs: m.costs.filter((l) => l.id !== id) }));
+    setModel((m) => markQuickEdited({ ...m, costs: m.costs.map((l) => (l.id === id ? { ...l, ...p } : l)) }));
+  const remove = (id: string) => setModel((m) => markQuickEdited({ ...m, costs: m.costs.filter((l) => l.id !== id) }));
   const add = () => {
     const id = crypto.randomUUID();
-    setModel((m) => ({ ...m, costs: [...m.costs, { id, label: c.newCost, amount: 0, per: 'company' }] }));
+    setModel((m) => markQuickEdited({ ...m, costs: [...m.costs, { id, label: c.newCost, amount: 0, per: 'company' }] }));
     setEditing(id);
   };
 

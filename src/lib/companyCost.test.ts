@@ -531,3 +531,49 @@ describe('youEconomics: what the company earns on you', () => {
     expect(sanitizeCompanyModel({ targetMarginPct: 'x' }).targetMarginPct).toBeNull();
   });
 });
+
+describe('your own billable share and rate (model.self)', () => {
+  it('you can bill more and at another rate than your group; the group does not change', () => {
+    const plain = model();
+    const own = model({ self: { billablePct: 95, hourlyRate: 1500 } });
+    const a = calcCompany(plain, ctx);
+    const b = calcCompany(own, ctx);
+    expect(b.you.billableHours).toBeCloseTo(b.hours.available * 0.95, 6);
+    expect(b.you.listRate).toBe(1500);
+    expect(b.ebit).toBeCloseTo(a.ebit, 6);
+    expect(youEconomics(own, ctx, b).revenue).toBeCloseTo(b.hours.available * 0.95 * 1500 * 0.93, 6);
+  });
+
+  it('the levers move your own share and rate as they move your group', () => {
+    const own = model({ self: { billablePct: 90, hourlyRate: 1500 }, levers: { ...NEUTRAL_LEVERS, utilizationPp: 5, ratePct: 10 } });
+    const r = calcCompany(own, ctx);
+    expect(r.you.billableHours).toBeCloseTo(r.hours.available * 0.95, 6);
+    expect(r.you.listRate).toBeCloseTo(1650, 6);
+  });
+
+  it('"Lagre som utgangspunkt" writes the levers into your own share and rate too, so your numbers stay the same', () => {
+    const m = model({ self: { billablePct: 97, hourlyRate: 1500 }, levers: { utilizationPp: 6, ratePct: 8, salaryPct: 0, realizationPp: -3 } });
+    const before = calcCompany(m, ctx);
+    const saved = applyLevers(m);
+    expect(saved.self).toEqual({ billablePct: 100, hourlyRate: 1620 });
+    const after = calcCompany(saved, ctx);
+    const yb = youEconomics(m, ctx, before);
+    const ya = youEconomics(saved, ctx, after);
+    expect(after.you.billableHours).toBeCloseTo(before.you.billableHours, 6);
+    expect(after.you.listRate).toBeCloseTo(before.you.listRate, 6);
+    expect(ya.keep).toBeCloseTo(yb.keep, 4);
+    expect(ya.fairGross!).toBeCloseTo(yb.fairGross!, 2);
+    expect(applyLevers(model({ self: { hourlyRate: 1000 }, levers: { ...NEUTRAL_LEVERS, ratePct: 10 } })).self).toEqual({ hourlyRate: 1100 });
+  });
+
+  it('a set billable-hours override still wins', () => {
+    const r = calcCompany(model({ self: { billablePct: 50 } }), { ...ctx, selfBillableHoursOverride: 1200 });
+    expect(r.you.billableHours).toBe(1200);
+  });
+
+  it('the sanitizer keeps known self fields, clamps them and drops an empty self', () => {
+    expect(sanitizeCompanyModel({ ...model(), self: { billablePct: '120', hourlyRate: -3 } }).self).toEqual({ billablePct: 100, hourlyRate: 0 });
+    expect(sanitizeCompanyModel({ ...model(), self: { foo: 1 } })).not.toHaveProperty('self');
+    expect(sanitizeCompanyModel({ ...model(), self: { billablePct: 'x' } })).not.toHaveProperty('self');
+  });
+});

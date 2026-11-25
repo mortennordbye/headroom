@@ -606,7 +606,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update company model settings',
       description:
-        'Change the company model settings. Only provided fields change. targetMarginPct sets the target margin for the fair salary; null goes back to the company margin before bonus. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
+        'Change the company model settings. Only provided fields change. targetMarginPct sets the target margin for the fair salary; null goes back to the company margin before bonus. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. self sets your own billable share and rate (null clears it). A change to selfGroupId, or applyLevers, counts as a hand edit of the groups (quick.edited). applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
       inputSchema: {
         mode: z.enum(['simple', 'advanced']).optional(),
         selfGroupId: z.string().min(1).optional().describe('Your group: the id of a delivery group (from get_company_model model.groups).'),
@@ -622,6 +622,11 @@ export function registerWriteTools(server: McpServer) {
         levers: companyLeversSchema.optional(),
         targetMarginPct: z.number().min(TARGET_MARGIN_RANGE.min).max(TARGET_MARGIN_RANGE.max).nullable().optional()
           .describe(`Target margin on you for the fair salary ("Rimelig lønn"), % (${TARGET_MARGIN_RANGE.min}-${TARGET_MARGIN_RANGE.max}). null = the company margin before bonus (the default).`),
+        self: z.object({
+          billablePct: pct.optional().describe('Your own billable share, % of available hours.'),
+          hourlyRate: z.number().min(0).max(100_000).optional().describe('Your own list rate, kr/hour.'),
+        }).nullable().optional()
+          .describe('Your own billable share and rate where they differ from your group. Only given fields change; null clears both, so you use your group\'s values.'),
         applyLevers: z.boolean().optional().describe('true: write the levers into the groups and set them to 0.'),
       },
       annotations: { title: 'Update company model settings', ...readWrite, destructiveHint: true, idempotentHint: false },
