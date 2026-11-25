@@ -126,8 +126,8 @@ export async function getInflation(): Promise<InflationPoint[]> {
 /**
  * SSB wage for one STYRK-08 occupation from the app's cache (annual kr): what
  * the employer-cost page has loaded. Reads the cache only (`cached=1`), so a
- * tool call never reaches SSB. Best-effort: nothing cached, an unreachable or a
- * failing endpoint gives null, and get_company_model reports no market pay.
+ * tool call never reaches SSB. Best-effort: an unreachable or failing endpoint
+ * gives null, and nothing cached comes back as { available: false }; either way, and get_company_model reports no market pay.
  */
 export async function getOccupationWage(code: string): Promise<unknown> {
   try {

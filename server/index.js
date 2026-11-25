@@ -994,8 +994,9 @@ app.get('/api/wage-stats', async (req, res) => {
 // table 11418 via server/wageStats.js: the "Marked" marker on Avansert. Only
 // codes from the OCCUPATIONS allowlist reach SSB. Same TTL, per-code cooldown
 // and serve-stale shape as kvmpris; no static fallback, so an empty cache with
-// a failed fetch is a 502 and the card hides the marker. `cached=1` (the MCP
-// server) reads the cache only and never calls SSB: 404 when nothing is cached.
+// a failed fetch is 200 { available: false } (no console error in the browser)
+// and the card hides the marker. `cached=1` (the MCP server) reads the cache
+// only and never calls SSB; nothing cached is also { available: false }.
 const occupationWageLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, keyGenerator: DEMO_MODE ? demoIpKey : globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
 const finitePositive = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
 
@@ -1031,12 +1032,11 @@ app.get('/api/wage-stats/occupation', occupationWageLimiter, async (req, res) =>
 
   const latest = occupationWageGet.all(code).filter((r) => Number.isInteger(r.year) && finitePositive(r.median)).pop();
   if (!latest) {
-    return cacheOnly
-      ? res.status(404).json({ error: 'not cached' })
-      : res.status(502).json({ error: 'SSB wage data not available' });
+    return res.json({ code, available: false });
   }
   res.json({
     code,
+    available: true,
     label: OCCUPATIONS[code],
     year: latest.year,
     median: latest.median,

@@ -144,6 +144,8 @@ export function CompanyMeCard({
   const current = showMarket && fetched?.code === styrk ? fetched : null;
   const market = current ? marketWage(current.raw, ctx.year) : null;
   const marketFailed = !!current && (current.failed || market == null);
+  // A model year before the SSB year is not projected back: the value is labelled with the SSB year.
+  const projected = market != null && ctx.year > market.year;
   const mkt = market?.projected.median ?? null;
   const mktBand = market && market.projected.p25 != null && market.projected.p75 != null
     ? { low: market.projected.p25, high: market.projected.p75 }
@@ -382,9 +384,9 @@ export function CompanyMeCard({
         </div>
         {showMarket && (
           <div className="min-w-0">
-            <label htmlFor="company-styrk"><SectionLabel>{c.marketTitle}</SectionLabel></label>
+            <SectionLabel id="company-styrk-label">{c.marketTitle}</SectionLabel>
             <select
-              id="company-styrk"
+              aria-labelledby="company-styrk-label"
               value={styrk}
               onChange={(e) => { const v = e.target.value; if (isStyrkCode(v)) setModel((m) => ({ ...m, market: { styrk: v } })); }}
               className="mt-2 w-full cursor-pointer rounded-[6px] border px-2 py-1.5 text-[13px] outline-none focus:border-[var(--forest)]"
@@ -395,8 +397,10 @@ export function CompanyMeCard({
             {market ? (
               <div data-testid="market-info">
                 <p className="mt-2 text-[13px]" style={{ color: 'var(--text-2)' }}>
-                  {c.marketMedian.replace('{v}', kr(mktShown!)).replace('{modelYear}', String(ctx.year)).replace('{year}', String(market.year))
-                    .replace('{raw}', kr(market.median)).replace('{growth}', nf(MARKET_WAGE_GROWTH_PCT))}
+                  {projected
+                    ? c.marketMedian.replace('{v}', kr(mktShown!)).replace('{modelYear}', String(ctx.year)).replace('{year}', String(market.year))
+                      .replace('{raw}', kr(market.median)).replace('{growth}', nf(MARKET_WAGE_GROWTH_PCT))
+                    : c.marketMedianNoProjection.replace('{v}', kr(mktShown!)).replace('{year}', String(market.year))}
                 </p>
                 {mktBand && (
                   <p className="mt-1 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>
@@ -404,7 +408,7 @@ export function CompanyMeCard({
                   </p>
                 )}
                 <p className="mt-2 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-                  {c.marketSource.replace('{code}', styrk).replace('{year}', String(market.year)).replace('{modelYear}', String(ctx.year))}
+                  {(projected ? c.marketSource : c.marketSourceNoProjection).replace('{code}', styrk).replace('{year}', String(market.year)).replace('{modelYear}', String(ctx.year))}
                 </p>
               </div>
             ) : marketFailed ? (

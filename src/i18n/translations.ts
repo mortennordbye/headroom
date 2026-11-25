@@ -2349,7 +2349,9 @@ export const translations = {
       marketTitle: 'Ditt yrke (STYRK-08)',
       marketMedian: 'Median {v} i {modelYear} (SSB {year}: {raw}, +{growth} % i året)',
       marketBand: 'Midterste halvdel: {low}–{high}',
-      marketSource: 'SSB tabell 11418, {code}: avtalt månedslønn uten bonus og tillegg, november {year}, ×12, fremskrevet til {modelYear}. Median for alle aldre, ikke «din» markedslønn.',
+      marketSource: 'SSB tabell 11418, {code}: avtalt månedslønn (grunnlønn og faste tillegg, uten bonus, uregelmessige tillegg og overtid), privat sektor, heltid, november {year}, ×12, fremskrevet til {modelYear}. Median for alle aldre, ikke «din» markedslønn.',
+      marketSourceNoProjection: 'SSB tabell 11418, {code}: avtalt månedslønn (grunnlønn og faste tillegg, uten bonus, uregelmessige tillegg og overtid), privat sektor, heltid, november {year}, ×12. Median for alle aldre, ikke «din» markedslønn.',
+      marketMedianNoProjection: 'Median {v} i {year} (SSB)',
       marketError: 'Fant ikke tall fra SSB nå, så markedslønna vises ikke.',
       styrk: {
         '25': 'IKT-rådgivere (alle)',
@@ -4816,7 +4818,9 @@ export const translations = {
       marketTitle: 'Your occupation (STYRK-08)',
       marketMedian: 'Median {v} in {modelYear} (SSB {year}: {raw}, +{growth} % a year)',
       marketBand: 'Middle half: {low}–{high}',
-      marketSource: 'SSB table 11418, {code}: agreed monthly pay without bonus and extras, November {year}, ×12, projected to {modelYear}. Median for all ages, not "your" market pay.',
+      marketSource: 'SSB table 11418, {code}: agreed monthly pay (base pay and fixed allowances, without bonus, irregular allowances and overtime), private sector, full time, November {year}, ×12, projected to {modelYear}. Median for all ages, not "your" market pay.',
+      marketSourceNoProjection: 'SSB table 11418, {code}: agreed monthly pay (base pay and fixed allowances, without bonus, irregular allowances and overtime), private sector, full time, November {year}, ×12. Median for all ages, not "your" market pay.',
+      marketMedianNoProjection: 'Median {v} in {year} (SSB)',
       marketError: 'Could not get figures from SSB now, so market pay is not shown.',
       styrk: {
         '25': 'ICT professionals (all)',

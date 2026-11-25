@@ -23,6 +23,7 @@ export const MARKET_WAGE_GROWTH_PCT = 4;
 /** The server's answer for one code (annual kr). */
 export interface OccupationWage {
   code: string;
+  available: true;
   label: string;
   year: number;
   median: number;
@@ -55,6 +56,7 @@ export interface MarketWage {
 export function marketWage(data: unknown, modelYear: number): MarketWage | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Partial<OccupationWage>;
+  if (d.available !== true) return null;
   if (!finitePositive(d.median) || !Number.isInteger(d.year) || !Number.isFinite(modelYear)) return null;
   const year = d.year as number;
   const p = (v: unknown) => (finitePositive(v) ? projectWage(v, year, modelYear) : null);

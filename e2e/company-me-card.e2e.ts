@@ -74,9 +74,9 @@ test('a hand-edited model shows no ranges, only a note', async ({ page, request 
 });
 
 // The SSB market pay for the chosen STYRK code: a "Marked" marker and a p25–p75
-// band on the salary axis. SSB is stubbed at the app route; a failure hides the
+// band on the salary axis. SSB is stubbed at the app route; "not available" hides the
 // marker and shows a note, and the card still renders.
-test('market pay: marker and band from SSB, the picker switches code, an error shows a note', async ({ page, request, consoleErrors }) => {
+test('market pay: marker and band from SSB, the picker switches code, an error shows a note', async ({ page, request }) => {
   const blob = seedBlob();
   blob.companyModel = { ...(blob.companyModel as Record<string, unknown> | undefined), mode: 'advanced' };
   await putBlob(request, blob);
@@ -85,14 +85,14 @@ test('market pay: marker and band from SSB, the picker switches code, an error s
   await page.route('**/api/wage-stats/occupation?*', async (route) => {
     const code = new URL(route.request().url()).searchParams.get('code')!;
     asked.push(code);
-    if (code === '2522') return route.fulfill({ status: 502, json: { error: 'SSB wage data not available' } });
-    return route.fulfill({ json: { code, label: 'x', year: 2025, median: 912_720, p25: 751_920, p75: 1_089_240, measure: 'AvtaltManedslonn', source: 'ssb-live', stale: false } });
+    if (code === '2522') return route.fulfill({ json: { code, available: false } });
+    return route.fulfill({ json: { code, available: true, label: 'x', year: 2025, median: 912_720, p25: 751_920, p75: 1_089_240, measure: 'AvtaltManedslonn', source: 'ssb-live', stale: false } });
   });
 
   await page.goto('/employer-cost');
   await expect(page.getByTestId('marker-market')).toContainText(/^Marked \d/);
   await expect(page.getByTestId('market-band')).toBeVisible();
-  await expect(page.getByText(/^SSB tabell 11418, 2512: avtalt månedslønn uten bonus og tillegg, november 2025, ×12, fremskrevet til \d{4}\./)).toBeVisible();
+  await expect(page.getByText(/^SSB tabell 11418, 2512: avtalt månedslønn \(grunnlønn og faste tillegg, uten bonus, uregelmessige tillegg og overtid\), privat sektor, heltid, november 2025, ×12, fremskrevet til \d{4}\./)).toBeVisible();
   expect(asked).toEqual(['2512']);
 
   const picker = page.getByLabel('Ditt yrke (STYRK-08)');
@@ -105,8 +105,18 @@ test('market pay: marker and band from SSB, the picker switches code, an error s
   await expect(page.getByTestId('marker-market')).toHaveCount(0);
   await expect(page.getByTestId('market-band')).toHaveCount(0);
   await expect(page.getByRole('slider', { name: 'Hva om lønna di var' })).toBeVisible();
-  // The browser logs the stubbed 502 itself; that one is expected, anything else still fails the test.
-  const expected = consoleErrors.filter((e) => e.includes('/api/wage-stats/occupation?code=2522'));
-  expect(expected).toHaveLength(1);
-  consoleErrors.splice(consoleErrors.indexOf(expected[0]), 1);
+});
+
+// SSB data newer than the model year is not projected back: it is labelled with the SSB year.
+test('market pay newer than the model year keeps the SSB year', async ({ page, request }) => {
+  const blob = seedBlob();
+  blob.companyModel = { ...(blob.companyModel as Record<string, unknown> | undefined), mode: 'advanced' };
+  await putBlob(request, blob);
+  await page.route('**/api/wage-stats/occupation?*', (route) => route.fulfill({
+    json: { code: '2512', available: true, label: 'x', year: 2099, median: 912_720, measure: 'AvtaltManedslonn', source: 'ssb-live', stale: false },
+  }));
+  await page.goto('/employer-cost');
+  await expect(page.getByText(/^Median 910\s000\skr i 2099 \(SSB\)$/)).toBeVisible();
+  await expect(page.getByText(/^SSB tabell 11418, 2512: .*november 2099, ×12\. Median for alle aldre/)).toBeVisible();
+  await expect(page.getByText(/fremskrevet/)).toHaveCount(0);
 });

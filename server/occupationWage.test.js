@@ -69,7 +69,7 @@ describe('GET /api/wage-stats/occupation', () => {
     const first = await get('?code=2512');
     expect(first.status).toBe(200);
     expect(first.body).toEqual({
-      code: '2512', label: 'Programvareutviklere', year: 2025,
+      code: '2512', available: true, label: 'Programvareutviklere', year: 2025,
       median: 912_720, p25: 751_920, p75: 1_089_240,
       measure: 'AvtaltManedslonn', source: 'ssb-live', stale: false,
     });
@@ -88,13 +88,13 @@ describe('GET /api/wage-stats/occupation', () => {
     expect(res.body).not.toHaveProperty('p75');
   });
 
-  it('gives 502 when SSB fails and nothing is cached, and waits before the next attempt', async () => {
+  it('gives 200 { available: false } when SSB fails and nothing is cached, and waits before the next attempt', async () => {
     await boot();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('down', { status: 503 }));
-    expect((await get('?code=2513')).status).toBe(502);
+    expect(await get('?code=2513')).toEqual({ status: 200, body: { code: '2513', available: false } });
     const calls = fetchSpy.mock.calls.length; // v2, then the v1 fallback
-    expect((await get('?code=2513')).status).toBe(502);
+    expect(await get('?code=2513')).toEqual({ status: 200, body: { code: '2513', available: false } });
     expect(fetchSpy).toHaveBeenCalledTimes(calls);
   });
 
@@ -114,10 +114,10 @@ describe('GET /api/wage-stats/occupation', () => {
     expect(res.body).toMatchObject({ year: 2024, median: 876_000, source: 'ssb-cache', stale: true });
   });
 
-  it('reads the cache only with cached=1: 404 before the page loaded it, the value after', async () => {
+  it('reads the cache only with cached=1: not available before the page loaded it, the value after', async () => {
     await boot();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ok(ssbBody('2025', [76_060, 62_660, 90_770])));
-    expect((await get('?code=2521&cached=1')).status).toBe(404);
+    expect(await get('?code=2521&cached=1')).toEqual({ status: 200, body: { code: '2521', available: false } });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect((await get('?code=2521')).status).toBe(200);
     const res = await get('?code=2521&cached=1');

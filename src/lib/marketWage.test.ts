@@ -15,7 +15,7 @@ describe('projectWage', () => {
 });
 
 describe('marketWage', () => {
-  const ok = { code: '2512', label: 'Programvareutviklere', year: 2025, median: 912_720, p25: 751_920, p75: 1_089_240, measure: 'AvtaltManedslonn', source: 'ssb-live' };
+  const ok = { code: '2512', available: true, label: 'Programvareutviklere', year: 2025, median: 912_720, p25: 751_920, p75: 1_089_240, measure: 'AvtaltManedslonn', source: 'ssb-live' };
 
   it('projects median and quartiles to the model year', () => {
     expect(marketWage(ok, 2026)).toEqual({
@@ -32,7 +32,8 @@ describe('marketWage', () => {
 
   it('gives null for a response it cannot use', () => {
     expect(marketWage(null, 2026)).toBeNull();
-    expect(marketWage({ error: 'SSB wage data not available' }, 2026)).toBeNull();
+    expect(marketWage({ code: '2512', available: false }, 2026)).toBeNull();
+    expect(marketWage({ ...ok, available: undefined }, 2026)).toBeNull();
     expect(marketWage({ ...ok, median: Number.NaN }, 2026)).toBeNull();
     expect(marketWage({ ...ok, median: '912720' }, 2026)).toBeNull();
     expect(marketWage({ ...ok, year: 2025.5 }, 2026)).toBeNull();
