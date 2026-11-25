@@ -51,6 +51,7 @@ import { addDeletedBankTombstones } from '../src/lib/bankDedup';
 import { recordDepartedPaydowns } from '../src/lib/automation';
 import {
   sanitizeCompanyModel,
+  quickReplacesHandEdits,
   ensureDeliverySelf,
   applyLevers,
   type CompanyModel,
@@ -743,9 +744,9 @@ export function companyChanges(before: CompanyModel, after: CompanyModel): Field
 function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyModel): FieldChange[] {
   const before = sanitizeCompanyModel(blob.companyModel);
   const edited = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
-  // A change to the groups, the cost lines or your group is a hand edit: the quick setup
+  // A change to the groups, the cost lines, your group, your own share or the bonus pool is a hand edit: the quick setup
   // then asks before it builds the model again. A write that changes none of them leaves the flag alone.
-  const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId]);
+  const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId, m.self ?? null, m.bonus.poolPct]);
   const after = shape(edited) !== shape(before) ? markQuickEdited(edited) : edited;
   // No stored model: the whole example model is stored now, so say so.
   const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
@@ -893,8 +894,8 @@ export interface CompanyQuickSetupArgs {
  */
 export function setupCompanyQuick(blob: ExportPayload, args: CompanyQuickSetupArgs): FieldChange[] {
   const before = sanitizeCompanyModel(blob.companyModel);
-  if (before.quick?.edited && args.confirmReplace !== true) {
-    throw new Error('the company groups or cost lines were changed by hand after the last quick setup; '
+  if (quickReplacesHandEdits(before) && args.confirmReplace !== true) {
+    throw new Error('the company groups, cost lines, your own share or the bonus pool were changed by hand (or set up without the quick setup); '
       + 'the setup replaces those edits. Ask the user, then call again with confirmReplace: true');
   }
   // An omitted list keeps the stored flags. A typed answer is no longer "vet ikke", as in the form.

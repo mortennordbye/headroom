@@ -2356,6 +2356,8 @@ export const translations = {
       driversHint: 'Hvor mye rimelig lønn flytter seg når ett anslag går fra lavt til høyt.',
       driversNone: 'Ingen anslag. Merk et svar som «usikker» eller «vet ikke» i hurtigoppsettet for å se et spenn.',
       driversSmall: 'påvirker lite',
+      driversHintKeep: 'Hvor mye det selskapet beholder på deg flytter seg når ett anslag går fra lavt til høyt. Det finnes ingen rimelig lønn å måle.',
+      rangesHandEdited: 'Spennet gjelder svarene i hurtigoppsettet, ikke endringene du har gjort for hånd. Bruk svarene på nytt for å få spenn igjen.',
       rangeMethod: 'Spennet: ett anslag om gangen til lav og høy verdi, lagt sammen med kvadratsum. «Usikker» er ±10 % lønn, ±5 % timepris, ±5 pp fakturerbar andel, ±3 pp realisering og ±20 % kontor. «Vet ikke» er dobbelt så bredt.',
       guessLabels: {
         salary: 'Snittlønn',
@@ -4802,6 +4804,8 @@ export const translations = {
       driversHint: 'How much the fair salary moves when one estimate goes from low to high.',
       driversNone: 'No estimates. Mark an answer as "unsure" or "don\'t know" in the quick setup to see a range.',
       driversSmall: 'little effect',
+      driversHintKeep: 'How much what the company keeps on you moves when one estimate goes from low to high. There is no fair salary to measure.',
+      rangesHandEdited: 'The range is for the answers in the quick setup, not for your hand edits. Use the answers again to get a range back.',
       rangeMethod: 'The range: one estimate at a time at its low and high value, added by root-sum-square. "Unsure" is ±10 % salary, ±5 % rate, ±5 pp billable share, ±3 pp realization and ±20 % office. "Don\'t know" is twice as wide.',
       guessLabels: {
         salary: 'Average salary',

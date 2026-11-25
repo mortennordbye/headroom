@@ -71,7 +71,9 @@ export function CompanyMeCard({
   const now = result.you.gross;
   const [whatIf, setWhatIf] = useState<number | null>(null);
   const gross = whatIf ?? now;
-  const y = youEconomics(model, ctx, result, gross);
+  // Fair salary, ceiling and the ranges do not depend on the "what if" salary: solve them once per model.
+  const atNow = useMemo(() => youEconomics(model, ctx, result), [model, ctx, result]);
+  const y = whatIf == null ? atNow : youEconomics(model, ctx, result, whatIf, atNow);
   const fair = y.fairGross;
   const ceiling = y.ceilingGross;
   // One rounding rule for every shown fair salary and ceiling; the exact values only place the markers.
@@ -80,11 +82,16 @@ export function CompanyMeCard({
   const ceilingShown = ceiling != null ? round10k(ceiling) : null;
 
   // ── Ranges from the saved guesses (not the form's unsaved draft) ──
-  const ranges = useMemo(() => companyRanges(model, ctx, gross), [model, ctx, gross]);
+  const ranges = useMemo(() => companyRanges(model, ctx), [model, ctx]);
+  const handEdited = model.quick?.edited === true;
   const hasWidth = (r: Range | undefined): r is Range & { low: number; high: number } =>
     !!r && r.low != null && r.high != null && r.high - r.low >= 1;
   const span = (r: Range | undefined) => (hasWidth(r) ? c.rangeSpan.replace('{low}', k(r.low)).replace('{high}', k(r.high)) : null);
-  const keepSpan = span(ranges?.keep);
+  // Keep's swings do not depend on your salary, so the range moves with the "what if" keep.
+  const keepShift = ranges?.keep.mid != null ? y.keep - ranges.keep.mid : 0;
+  const keepSpan = span(ranges && ranges.keep.low != null && ranges.keep.high != null
+    ? { mid: y.keep, low: ranges.keep.low + keepShift, high: ranges.keep.high + keepShift }
+    : undefined);
   const fairRange = ranges?.fairGross;
   const fairSpan = span(fairRange);
 
@@ -330,10 +337,12 @@ export function CompanyMeCard({
           <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.targetHint}</p>
           {y.targetClamped && <p className="mt-2 text-[12px]" style={{ color: 'var(--warning)' }}>{c.targetClampedNote}</p>}
         </div>
-        {ranges && (
+        {(ranges || handEdited) && (
           <div className="md:col-start-3 min-w-0">
             <SectionLabel>{c.driversTitle}</SectionLabel>
-            {ranges.drivers.length > 0 ? (
+            {!ranges ? (
+              <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.rangesHandEdited}</p>
+            ) : ranges.drivers.length > 0 ? (
               <ul className="mt-2 space-y-1.5 text-[13px]" data-testid="drivers">
                 {ranges.drivers.map((d) => (
                   <li key={d.key} className="flex items-baseline justify-between gap-3">
@@ -347,9 +356,9 @@ export function CompanyMeCard({
             ) : (
               <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.driversNone}</p>
             )}
-            {ranges.drivers.length > 0 && (
+            {ranges && ranges.drivers.length > 0 && (
               <>
-                <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.driversHint}</p>
+                <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{ranges.rankedBy === 'keep' ? c.driversHintKeep : c.driversHint}</p>
                 <p className="mt-1 text-[11.5px]" style={{ color: 'var(--text-3)' }}>{c.rangeMethod}</p>
               </>
             )}

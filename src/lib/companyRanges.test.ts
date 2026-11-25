@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { companyRanges, shiftAnswer, GUESS_SWINGS, DONT_KNOW_FACTOR, type CompanyRanges, type Range } from './companyRanges';
-import { buildModelFromAnswers, sanitizeQuick, QUICK_DEFAULTS, QUICK_GUESS_KEYS, type QuickGuessKey } from './companySetup';
+import { companyRanges, rangesUnavailable, shiftAnswer, GUESS_SWINGS, DONT_KNOW_FACTOR, type CompanyRanges, type Range } from './companyRanges';
+import { buildModelFromAnswers, markQuickEdited, sanitizeQuick, QUICK_DEFAULTS, QUICK_GUESS_KEYS, type QuickGuessKey } from './companySetup';
 import { calcCompany, youEconomics, sanitizeCompanyModel, DEFAULT_COMPANY_MODEL, type CompanyContext, type CompanyModel } from './companyCost';
 import { DEFAULT_EMPLOYER_COST_CONFIG } from './employerCost';
 
@@ -31,6 +31,24 @@ function fairEnds(key: QuickGuessKey, factor = 1) {
 describe('companyRanges', () => {
   it('is null without a quick setup', () => {
     expect(companyRanges(structuredClone(DEFAULT_COMPANY_MODEL), ctx)).toBeNull();
+  });
+
+  it('is null after a hand edit, and says why', () => {
+    const edited = markQuickEdited(model(['salary']));
+    expect(companyRanges(edited, ctx)).toBeNull();
+    expect(rangesUnavailable(edited)).toBe('handEdited');
+    expect(rangesUnavailable(structuredClone(DEFAULT_COMPANY_MODEL))).toBe('noQuickSetup');
+    expect(rangesUnavailable(model(['salary']))).toBeNull();
+  });
+
+  it('ranks by keep when there is no fair salary', () => {
+    const m = buildModelFromAnswers({ ...QUICK_DEFAULTS, ownBillablePct: 0 }, structuredClone(DEFAULT_COMPANY_MODEL), { uncertain: ['salary', 'office'] });
+    const r = ranges(m);
+    expect(r.fairGross.mid).toBeNull();
+    expect(r.rankedBy).toBe('keep');
+    expect(r.drivers[0].width).toBeCloseTo(Math.max(...r.drivers.map((d) => d.width)), 6);
+    expect(r.drivers.some((d) => d.width > 0)).toBe(true);
+    expect(ranges(model(['salary'])).rankedBy).toBe('fairGross');
   });
 
   it('no guesses: low = mid = high, and no drivers', () => {

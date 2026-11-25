@@ -836,6 +836,21 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       const sim = derive.simulateCompany(withQuick, {}, MONTH);
       expect(sim.ranges.current).toEqual(s.ranges);
       expect(sim.ranges.simulated).toEqual(s.ranges);
+      expect(s.rangesUnavailable).toBeNull();
+      expect(derive.companyModelSummary(blob, MONTH).rangesUnavailable).toMatch(/no quick setup/);
+    });
+
+    it('get_company_model and simulate_company give no ranges after a hand edit, and say why', () => {
+      const built = buildModelFromAnswers(QUICK_DEFAULTS, sanitizeCompanyModel(blob.companyModel), { uncertain: ['salary'] });
+      const edited = { ...blob, companyModel: { ...built, quick: { ...built.quick!, edited: true } } };
+      const s = derive.companyModelSummary(edited, MONTH);
+      expect(s.ranges).toBeNull();
+      expect(s.rangesUnavailable).toMatch(/changed by hand/);
+      // A simulated group change marks the simulated model as hand-edited too.
+      const sim = derive.simulateCompany({ ...blob, companyModel: built }, { groups: [{ id: 'kons', count: 10 }] }, MONTH);
+      expect(sim.ranges.current).not.toBeNull();
+      expect(sim.ranges.simulated).toBeNull();
+      expect(sim.ranges.simulatedUnavailable).toMatch(/changed by hand/);
     });
 
     it('simulate_company: no changes give a zero delta, and a bad id errors', () => {

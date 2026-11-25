@@ -10,9 +10,9 @@
  *
  * "Hva betyr mest" sorts the guesses by how much they move the fair salary.
  *
- * Mid values come from the stored model (as the page shows them). The swings
- * come from the model built again from the answers, so a hand edit after the
- * setup keeps its numbers in the middle and the swings stay an estimate.
+ * There are no ranges after a hand edit of the model (quick.edited): the
+ * guesses then no longer describe the model. Mid values come from the stored
+ * model, as the page shows them.
  */
 
 import { calcCompany, youEconomics, type CompanyContext, type CompanyModel } from './companyCost';
@@ -65,8 +65,16 @@ export interface CompanyRanges {
   fairGross: Range;
   ceilingGross: Range;
   companyPreBonusMarginPct: Range;
-  /** The guesses, the one that moves the fair salary most first. */
+  /** The guesses, the one that moves `rankedBy` most first. */
   drivers: RangeDriver[];
+  /** The fair salary; keep when there is no fair salary. */
+  rankedBy: 'fairGross' | 'keep';
+}
+
+/** Why there are no ranges: no quick setup, or hand edits after it. Null when there are. */
+export function rangesUnavailable(model: CompanyModel): 'noQuickSetup' | 'handEdited' | null {
+  if (!model.quick) return 'noQuickSetup';
+  return model.quick.edited ? 'handEdited' : null;
 }
 
 type OutputKey = 'keep' | 'keepPct' | 'fairGross' | 'ceilingGross' | 'companyPreBonusMarginPct';
@@ -102,19 +110,21 @@ function outputs(model: CompanyModel, ctx: CompanyContext, gross: number | undef
 }
 
 /**
- * The ranges of the headline numbers, or null when the model has no quick setup.
+ * The ranges of the headline numbers, or null when rangesUnavailable says why.
  * `gross` is the salary to evaluate "keep" at (default: yours). A fair salary or
  * ceiling with no solution at one end counts as 0 there (the salary floor).
  */
 export function companyRanges(model: CompanyModel, ctx: CompanyContext, gross?: number): CompanyRanges | null {
   const q = model.quick;
-  if (!q) return null;
+  if (!q || rangesUnavailable(model)) return null;
   const flagged = QUICK_GUESS_KEYS.filter((k) => q.uncertain.includes(k) || q.dontKnow.includes(k));
   const mid = outputs(model, ctx, gross);
-  // The swings are measured on the model built from the answers, with the stored levers.
+  // The swings are measured on the model built from the answers, with the stored levers
+  // (the same model as the stored one when there are no hand edits).
   const build = (a: QuickAnswers) => ({ ...buildModelFromAnswers(a, model, { uncertain: q.uncertain, dontKnow: q.dontKnow }), levers: model.levers });
   const base = flagged.length ? outputs(build(q.answers), ctx, gross) : mid;
 
+  const rankedBy = mid.fairGross != null ? 'fairGross' : 'keep';
   const sq = Object.fromEntries(OUTPUTS.map((o) => [o, { down: 0, up: 0 }])) as Record<OutputKey, { down: number; up: number }>;
   const drivers: RangeDriver[] = [];
   for (const key of flagged) {
@@ -135,7 +145,7 @@ export function companyRanges(model: CompanyModel, ctx: CompanyContext, gross?: 
       sq[o].up += up * up;
     }
     // Ranked by the fair salary; by keep when there is no fair salary.
-    const rank = mid.fairGross != null ? swing.fairGross : swing.keep;
+    const rank = rankedBy === 'fairGross' ? swing.fairGross : swing.keep;
     drivers.push({ key, dontKnow, down: rank.down, up: rank.up, width: rank.up - rank.down });
   }
   drivers.sort((x, y) => y.width - x.width);
@@ -155,5 +165,6 @@ export function companyRanges(model: CompanyModel, ctx: CompanyContext, gross?: 
     ceilingGross: range('ceilingGross'),
     companyPreBonusMarginPct: range('companyPreBonusMarginPct'),
     drivers,
+    rankedBy,
   };
 }

@@ -255,7 +255,7 @@ export function CompanyModelPanel({
                   sub={c.selfOwnSub
                     .replace('{pct}', (model.self.billablePct ?? self.billablePct).toLocaleString(locale, { maximumFractionDigits: 1 }))
                     .replace('{rate}', nf(model.self.hourlyRate ?? self.hourlyRate))}
-                  value={<Button size="sm" variant="secondary" onClick={() => setModel((m) => { const { self: _self, ...rest } = m; return rest; })}>{c.selfClear}</Button>}
+                  value={<Button size="sm" variant="secondary" onClick={() => setModel((m) => { const { self: _self, ...rest } = m; return markQuickEdited(rest); })}>{c.selfClear}</Button>}
                 />
               )}
               <Row label={c.rowBillable} value={`${nf(y.billableHours)} ${t.common.hourUnit}`} emphasis />
@@ -269,7 +269,11 @@ export function CompanyModelPanel({
             <Row
               label={c.bonusPool}
               sub={c.bonusPoolSub}
-              value={<InlineNumber value={model.bonus.poolPct} onCommit={(v) => update({ bonus: { ...model.bonus, poolPct: Math.min(BONUS_POOL_MAX_PCT, Math.max(0, v)) } })} suffix="%" ariaLabel={c.bonusPool} />}
+              value={<InlineNumber value={model.bonus.poolPct} onCommit={(v) => setModel((m) => {
+                const poolPct = Math.min(BONUS_POOL_MAX_PCT, Math.max(0, v));
+                // A changed pool is a hand edit: the quick setup's bonus answer no longer holds.
+                return poolPct === m.bonus.poolPct ? m : markQuickEdited({ ...m, bonus: { ...m.bonus, poolPct } });
+              })} suffix="%" ariaLabel={c.bonusPool} />}
             />
             <Row label={c.sumYear} sub={c.sumYearSub} value={kr(r.linesTotal)} emphasis />
           </Section>

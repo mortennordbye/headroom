@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { nb, enUS } from 'date-fns/locale';
 import { History, RotateCcw, Undo2 } from 'lucide-react';
@@ -10,7 +10,11 @@ import { Button } from './ui/Button';
 
 type RevisionSource = 'ui' | 'mcp' | 'import' | 'bank-sync' | 'restore' | 'undo';
 
-interface Revision {
+/** The card's id, so other pages can link to `/settings#restore-points`. */
+export const RESTORE_POINTS_ANCHOR = 'restore-points';
+
+/** One revision from GET /api/history. */
+export interface Revision {
   rev: number;
   ts: string;
   bytes: number;
@@ -69,6 +73,12 @@ export function RestorePointsCard() {
     };
   }, [reloadKey]);
 
+  // Linked to with #restore-points: scroll here once the list has loaded (the page opens at the top).
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (status !== 'loading' && window.location.hash === `#${RESTORE_POINTS_ANCHOR}`) ref.current?.scrollIntoView({ block: 'start' });
+  }, [status]);
+
   const locale = lang === 'nb' ? nb : enUS;
   const fmtTime = (ts: string) => format(new Date(ts), 'd MMM yyyy HH:mm', { locale });
 
@@ -93,7 +103,7 @@ export function RestorePointsCard() {
   };
 
   return (
-    <Card padding="lg" className="md:col-span-12" data-tour="settings-restore-points">
+    <Card ref={ref} id={RESTORE_POINTS_ANCHOR} padding="lg" className="md:col-span-12" data-tour="settings-restore-points">
       <SectionLabel icon={<RotateCcw />}>{rp.title}</SectionLabel>
       <p className="mt-1 text-[13px]" style={{ color: 'var(--text-3)' }}>
         {rp.desc}

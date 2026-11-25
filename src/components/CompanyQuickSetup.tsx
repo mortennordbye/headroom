@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { DEFAULT_COMPANY_MODEL, isBenchGroup, type CompanyModel } from '../lib/companyCost';
+import { isBenchGroup, quickReplacesHandEdits, type CompanyModel } from '../lib/companyCost';
 import {
   buildModelFromAnswers, quickMeanSalary, QUICK_DEFAULTS,
   type OfficeMode, type QuickAnswers, type QuickGuessKey,
@@ -93,9 +93,7 @@ export function CompanyQuickSetup({ model, setModel }: { model: CompanyModel; se
   });
 
   // Hand edits: flagged on the quick setup, or (before any quick setup) groups and costs that differ from the example.
-  const handEdited = saved
-    ? saved.edited
-    : JSON.stringify([model.groups, model.costs]) !== JSON.stringify([DEFAULT_COMPANY_MODEL.groups, DEFAULT_COMPANY_MODEL.costs]);
+  const handEdited = quickReplacesHandEdits(model);
   const apply = () => {
     setModel((m) => buildModelFromAnswers(draft.answers, m, {
       uncertain: draft.uncertain,

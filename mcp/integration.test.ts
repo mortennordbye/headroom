@@ -483,7 +483,7 @@ describe('company model tools through the MCP protocol', () => {
 
   it('setup_company_quick touches only companyModel, returns ranges, refuses after a hand edit, and undo reverts it', async () => {
     const before = await getBlob();
-    const out = await call<{ rev: number }>('setup_company_quick', { answers: { totalFte: 30, nonBilling: 3, onBench: 1 }, uncertain: ['salary', 'rateAverage'] });
+    const out = await call<{ rev: number }>('setup_company_quick', { answers: { totalFte: 30, nonBilling: 3, onBench: 1 }, uncertain: ['salary', 'rateAverage'], confirmReplace: true });
     const stored = await getBlob();
     expect({ ...stored, companyModel: before.companyModel }).toEqual(before);
     expect(stored.companyModel?.quick?.uncertain).toEqual(['salary', 'rateAverage']);

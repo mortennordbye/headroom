@@ -52,6 +52,23 @@ test('saved guesses show ranges, and an MCP write shows the chat pill', async ({
   await expect(page.getByText(/^spenn .+–.+ · nå /)).toBeVisible();
   await expect(page.getByTestId('drivers').getByRole('listitem')).toHaveCount(3);
   await expect(page.getByTestId('fair-band')).toBeVisible();
-  await expect(page.getByRole('status').filter({ hasText: 'Endret fra chat' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Se eller angre i historikken' })).toHaveAttribute('href', '/settings');
+  await expect(page.getByText(/^Endret fra chat · /)).toBeVisible();
+  const link = page.getByRole('link', { name: 'Se eller angre i historikken' });
+  await expect(link).toHaveAttribute('href', '/settings#restore-points');
+  await link.click();
+  await expect(page.locator('#restore-points')).toBeInViewport();
+});
+
+// After a hand edit the guesses no longer describe the model: no range, a note instead.
+test('a hand-edited model shows no ranges, only a note', async ({ page, request }) => {
+  const { blob } = await getBlob(request);
+  const m = blob.companyModel as { quick: { edited: boolean } };
+  m.quick.edited = true;
+  await putBlob(request, blob);
+
+  await page.goto('/employer-cost');
+  await expect(page.getByText(/Spennet gjelder svarene i hurtigoppsettet/)).toBeVisible();
+  await expect(page.getByTestId('fair-band')).toHaveCount(0);
+  await expect(page.getByTestId('drivers')).toHaveCount(0);
+  await expect(page.getByText(/^spenn /)).toHaveCount(0);
 });
