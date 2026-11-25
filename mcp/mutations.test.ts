@@ -41,6 +41,7 @@ import {
   upsertCompanyCostLine,
   deleteCompanyCostLine,
   updateCompanySettings,
+  companyChanges,
 } from './mutations';
 import { companyContext } from './derive';
 import {
@@ -50,6 +51,7 @@ import {
   LEVER_RANGES,
   NEUTRAL_LEVERS,
 } from '../src/lib/companyCost';
+import { buildModelFromAnswers, QUICK_DEFAULTS } from '../src/lib/companySetup';
 
 // Run a builder on a fresh clone; return the before-snapshot, the mutated blob, and the diff.
 function applyOn(mutate: (blob: ExportPayload) => FieldChange[]) {
@@ -764,5 +766,48 @@ describe('company model writes store a sanitized model', () => {
     updateCompanySettings(blob, { levers: { ratePct: 50 }, applyLevers: true });
     expect(blob.companyModel?.groups.find((g) => g.id === 'cg1')?.hourlyRate).toBeCloseTo(1250 * (1 + LEVER_RANGES.ratePct.max / 100), 6);
     expect(blob.companyModel?.levers).toEqual(NEUTRAL_LEVERS);
+  });
+
+  describe('quick setup', () => {
+    const withQuick = () => {
+      const blob = structuredClone(fullFixture());
+      blob.companyModel = buildModelFromAnswers(QUICK_DEFAULTS, blob.companyModel!);
+      return blob;
+    };
+
+    it.each([
+      ['upsert_company_group', (b: ExportPayload) => upsertCompanyGroup(b, { id: 'kons', create: false, count: 30 })],
+      ['delete_company_group', (b: ExportPayload) => deleteCompanyGroup(b, { id: 'benk' })],
+      ['upsert_company_cost_line', (b: ExportPayload) => upsertCompanyCostLine(b, { id: 'office', create: false, amount: 1 })],
+      ['delete_company_cost_line', (b: ExportPayload) => deleteCompanyCostLine(b, { id: 'it' })],
+      ['update_company_settings applyLevers', (b: ExportPayload) => updateCompanySettings(b, { levers: { ratePct: 5 }, applyLevers: true })],
+    ])('%s marks the quick setup as hand-edited, and the change list says so', (_name, write) => {
+      const blob = withQuick();
+      const changes = write(blob);
+      expect(blob.companyModel?.quick?.edited).toBe(true);
+      expect(changes).toContainEqual({ field: 'companyModel.quick.edited', before: false, after: true });
+    });
+
+    it('a settings change that does not touch groups or costs keeps edited false', () => {
+      const blob = withQuick();
+      updateCompanySettings(blob, { hours: { sickPct: 5 } });
+      expect(blob.companyModel?.quick?.edited).toBe(false);
+    });
+
+    it('companyChanges lists quick and self changes', () => {
+      const plain = sanitizeCompanyModel(fullFixture().companyModel);
+      const built = buildModelFromAnswers(QUICK_DEFAULTS, plain, { uncertain: ['salary'] });
+      // No quick setup before: one change with the whole setup.
+      expect(companyChanges(plain, built)).toContainEqual({ field: 'companyModel.quick', before: null, after: built.quick });
+      expect(companyChanges(plain, built)).toContainEqual({ field: 'companyModel.self.billablePct', before: null, after: QUICK_DEFAULTS.ownBillablePct });
+      const next = buildModelFromAnswers({ ...QUICK_DEFAULTS, totalFte: 60 }, built, { dontKnow: ['office'] });
+      const changes = companyChanges(built, next);
+      expect(changes).toContainEqual({ field: 'companyModel.quick.answers.totalFte', before: 50, after: 60 });
+      expect(changes).toContainEqual({ field: 'companyModel.quick.uncertain', before: ['salary'], after: [] });
+      expect(changes).toContainEqual({ field: 'companyModel.quick.dontKnow', before: [], after: ['office'] });
+      // A write on a model without a quick setup says nothing about it.
+      const blob = structuredClone(fullFixture());
+      expect(upsertCompanyGroup(blob, { id: 'cg2', create: false, count: 4 }).some((c) => c.field.startsWith('companyModel.quick'))).toBe(false);
+    });
   });
 });

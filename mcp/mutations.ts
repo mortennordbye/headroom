@@ -60,6 +60,7 @@ import {
   type CostLinePer,
   type CompanyLevers,
 } from '../src/lib/companyCost';
+import { markQuickEdited } from '../src/lib/companySetup';
 
 // The app's own category list, so every category the UI offers is writable here.
 export { CATEGORY_KEYS, type CategoryKey } from '../src/lib/categories';
@@ -689,7 +690,7 @@ export type CompanyGroupFields = Partial<Omit<CompanyGroup, 'id'>>;
 export type CompanyCostLineFields = Partial<Omit<CompanyCostLine, 'id'>>;
 
 /** Every value that differs between two sanitized models, rows matched by id. */
-function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[] {
+export function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[] {
   const out: FieldChange[] = [];
   const field = (path: string, b: unknown, a: unknown) => {
     if (JSON.stringify(b) !== JSON.stringify(a)) out.push(diff(`companyModel.${path}`, b, a));
@@ -712,6 +713,17 @@ function companyChanges(before: CompanyModel, after: CompanyModel): FieldChange[
   };
   rows('groups', before.groups, after.groups);
   rows('costs', before.costs, after.costs);
+  field('self.billablePct', before.self?.billablePct ?? null, after.self?.billablePct ?? null);
+  field('self.hourlyRate', before.self?.hourlyRate ?? null, after.self?.hourlyRate ?? null);
+  const bq = before.quick;
+  const aq = after.quick;
+  if (!bq || !aq) field('quick', bq ?? null, aq ?? null);
+  else {
+    for (const k of Object.keys(aq.answers) as (keyof typeof aq.answers)[]) field(`quick.answers.${k}`, bq.answers[k], aq.answers[k]);
+    field('quick.uncertain', bq.uncertain, aq.uncertain);
+    field('quick.dontKnow', bq.dontKnow, aq.dontKnow);
+    field('quick.edited', bq.edited, aq.edited);
+  }
   return out;
 }
 
@@ -746,7 +758,8 @@ export function upsertCompanyGroup(
   args: { id: string; create: boolean } & CompanyGroupFields,
 ): FieldChange[] {
   const { id, create, ...fields } = args;
-  return writeCompany(blob, (m) => {
+  return writeCompany(blob, (m0) => {
+    const m = markQuickEdited(m0);
     if (!create) {
       const prev = m.groups.find((g) => g.id === id);
       // A group that becomes delivery needs a billable share and a rate, as on create.
@@ -776,7 +789,7 @@ export function upsertCompanyGroup(
 
 /** Remove a role group. When it was your group, your group moves to the first delivery group. */
 export function deleteCompanyGroup(blob: ExportPayload, args: { id: string }): FieldChange[] {
-  return writeCompany(blob, (m) => ({ ...m, groups: removeById(m.groups, args.id, 'companyModel.groups', 'company group').list }));
+  return writeCompany(blob, (m) => markQuickEdited({ ...m, groups: removeById(m.groups, args.id, 'companyModel.groups', 'company group').list }));
 }
 
 /** Create (create=true, caller supplies a fresh id) or update a cost line. On create, label and amount are required. */
@@ -785,7 +798,8 @@ export function upsertCompanyCostLine(
   args: { id: string; create: boolean } & CompanyCostLineFields,
 ): FieldChange[] {
   const { id, create, ...fields } = args;
-  return writeCompany(blob, (m) => {
+  return writeCompany(blob, (m0) => {
+    const m = markQuickEdited(m0);
     if (!create) {
       const { list } = patchById(m.costs, id, fields, 'companyModel.costs', 'company cost line');
       checkCostLine(list.find((c) => c.id === id)!);
@@ -801,7 +815,7 @@ export function upsertCompanyCostLine(
 }
 
 export function deleteCompanyCostLine(blob: ExportPayload, args: { id: string }): FieldChange[] {
-  return writeCompany(blob, (m) => ({ ...m, costs: removeById(m.costs, args.id, 'companyModel.costs', 'company cost line').list }));
+  return writeCompany(blob, (m) => markQuickEdited({ ...m, costs: removeById(m.costs, args.id, 'companyModel.costs', 'company cost line').list }));
 }
 
 export interface CompanySettingsFields {
@@ -841,6 +855,7 @@ export function updateCompanySettings(blob: ExportPayload, args: CompanySettings
       bonus: { ...m.bonus, ...definedOnly(bonus) },
       levers: { ...m.levers, ...definedOnly(levers) },
     });
-    return apply ? applyLevers(next) : next;
+    // Writing the levers into the groups is a change to the groups, as a hand edit.
+    return apply ? markQuickEdited(applyLevers(next)) : next;
   });
 }

@@ -1318,6 +1318,8 @@ export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey
     monthKey,
     mode: model.mode,
     model,
+    // The quick setup's answers and flags ("Hurtigoppsett"), or null when it was never used.
+    quick: model.quick ?? null,
     inputs: { ownGross: ctx.ownGross, salaryFromOverride: blob.employerSalaryOverride != null, hoursPerDay: ctx.hoursPerDay, year: ctx.year },
     result,
     breakEvenUtilization: breakEvenUtilization(model, ctx),
