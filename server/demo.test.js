@@ -63,6 +63,13 @@ describe('makeDemoGate', () => {
     expectRefused(run('DELETE', '/api/bank/connection/abc'));
   });
 
+  it('refuses the Brreg lookup, reads included', () => {
+    // A visitor-typed org number would reach Brønnøysund and the shared cache.
+    expectRefused(run('GET', '/api/brreg/923609016'));
+    expectRefused(run('GET', '/API/Brreg/923609016'));
+    expectRefused(run('GET', '/api/brreg'));
+  });
+
   it('is not fooled by path casing (Express matches routes case-insensitively)', () => {
     expectRefused(run('POST', '/API/DATA'));
     expectRefused(run('GET', '/API/Bank/Aspsps'));

@@ -21,6 +21,7 @@ import { FitText } from './ui/FitText';
 import { HourWaterfallChart, UtilizationCurveChart } from './CompanyModelCharts';
 import { CompanyMeCard, CompanyExplainers } from './CompanyMeCard';
 import { CompanyQuickSetup } from './CompanyQuickSetup';
+import { CompanyAccountsCard } from './CompanyAccountsCard';
 import { CompanyChatPill } from './CompanyChatPill';
 
 const LEVERS: Array<{ key: keyof CompanyLevers; unit: string }> = [
@@ -43,8 +44,10 @@ export function CompanyModelPanel({
   ctx: CompanyContext;
   result: CompanyResult;
 }) {
-  const { t, lang, formatCurrencyShort } = useFinance();
+  const { t, lang, region, formatCurrencyShort } = useFinance();
   const c = t.companyModel;
+  // "Svar på spørsmålet om videresalg" on the accounts card opens that question in the quick setup.
+  const [askResale, setAskResale] = useState(0);
   const locale = lang === 'nb' ? 'nb-NO' : 'en-US';
   const nf = (v: number, d = 0) => v.toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
   const kr = formatCurrencyShort;
@@ -107,7 +110,9 @@ export function CompanyModelPanel({
       <CompanyChatPill model={model} />
       <CompanyMeCard model={model} setModel={setModel} ctx={ctx} result={r} />
       <CompanyExplainers />
-      <CompanyQuickSetup model={model} setModel={setModel} />
+      {/* Brønnøysund is Norwegian, so the accounts card is for region Norway only, as the market pay. */}
+      {region === 'no' && <CompanyAccountsCard model={model} setModel={setModel} ctx={ctx} onAskResale={() => setAskResale((n) => n + 1)} />}
+      <CompanyQuickSetup model={model} setModel={setModel} askResale={askResale} />
 
       {/* Everything else, folded: tiles, waterfall, levers, curve, people, hours, costs, result. */}
       <details className="group/details">

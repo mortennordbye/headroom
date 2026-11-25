@@ -7,7 +7,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ExportPayload } from '../../src/context/FinanceContext';
-import { applyMutation, RevConflictError, restoreRevision, undoRevision } from '../client';
+import { applyMutation, RevConflictError, restoreRevision, undoRevision, getBrreg } from '../client';
+import { companyContext } from '../derive';
 import { jsonResult, errorResult, type FieldChange } from '../util';
 import {
   CATEGORY_KEYS,
@@ -55,8 +56,11 @@ import {
   deleteCompanyCostLine,
   updateCompanySettings,
   setupCompanyQuick,
+  calibrateCompanyFromAccounts,
 } from '../mutations';
-import { QUICK_GUESS_KEYS, type QuickGuessKey } from '../../src/lib/companySetup';
+import type { CompanyAccounts } from '../../src/lib/companyAccounts';
+import { isValidOrgnr } from '../../src/lib/validators';
+import { QUICK_GUESS_KEYS, QUICK_RESALE_MAX_PCT, type QuickGuessKey } from '../../src/lib/companySetup';
 import { STYRK_CODES } from '../../src/lib/marketWage';
 import type { DebtType, SalaryChangeType, BonusType } from '../../src/context/FinanceContext';
 import { LEVER_RANGES, BONUS_POOL_MAX_PCT, TARGET_MARGIN_RANGE, type CompanyGroupKind, type CostLinePer } from '../../src/lib/companyCost';
@@ -671,6 +675,8 @@ export function registerWriteTools(server: McpServer) {
           desks: z.number().min(0).max(100_000).optional().describe('Number of desks (officeMode "desks"). Missing: one per FTE.'),
           annualRent: kr.max(1_000_000_000).optional().describe('Office rent, kr per year (officeMode "rent").'),
           tripsPerYear: z.number().min(0).max(52).optional().describe('Company trips per year.'),
+          resaleSharePct: z.number().min(0).max(QUICK_RESALE_MAX_PCT).optional()
+            .describe(`Share of revenue that is resold subcontractors (videresalg), % (0-${QUICK_RESALE_MAX_PCT}). Only lowers the accounts' revenue in calibrate_company_from_accounts; the model is unchanged.`),
         }).optional(),
         uncertain: z.array(guessKey).max(QUICK_GUESS_KEYS.length).optional()
           .describe('Answers that are a guess ("usikker"). salary ±10 %, rateAverage ±5 %, ownBillablePct and typicalBillablePct ±5 pp, realizationPct ±3 pp, office ±20 %. Omitted: the stored list.'),
@@ -681,6 +687,47 @@ export function registerWriteTools(server: McpServer) {
       annotations: { title: 'Quick setup of the company model', ...readWrite, destructiveHint: true, idempotentHint: true },
     },
     (args) => run((blob) => setupCompanyQuick(blob, args)),
+  );
+
+  server.registerTool(
+    'calibrate_company_from_accounts',
+    {
+      title: 'Fit the company model to the public accounts',
+      description:
+        'The accounts card\'s "Tilpass modellen" on the employer-cost page: move the quick setup\'s guesses so the model gives the revenue and '
+        + 'operating result in the company\'s public annual accounts (Brønnøysund). Only answers marked uncertain or dontKnow move, and only two: '
+        + 'typicalBillablePct (fitted to revenue less the resold-subcontractor share quick.answers.resaleSharePct) and the consultants\' mean salary '
+        + '(salaryLow and salaryHigh move together, fitted to the operating result). A fitted dontKnow answer becomes uncertain. '
+        + 'The result is an estimate from the accounts ("anslått fra regnskapet"), not a proof: two unknowns fitted to two numbers always match. '
+        + 'Without orgnr it uses the accounts stored on the model (get_company_model model.accounts). With orgnr it fetches the newest accounts '
+        + 'through the app (cached 24 h) and stores them with the fit. The org number names the user\'s employer: pass it only when the user gave it. '
+        + 'Refuses, saving nothing, when nothing is marked as a guess, there is no quick setup, the model was edited by hand, the accounts are not in NOK, '
+        + 'or there is no solution. Check model.accounts in get_company_model for the year, type (KONSERN = group accounts) and employees (persons, not FTE). '
+        + 'One undoable write that touches only companyModel.',
+      inputSchema: {
+        orgnr: z.string().regex(/^\d{9}$/).optional().describe('9-digit organisation number to fetch the accounts for. Omitted: the stored accounts.'),
+      },
+      annotations: { title: 'Fit the company model to the public accounts', ...readWrite, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ orgnr }) => {
+      let accounts: CompanyAccounts | undefined;
+      if (orgnr !== undefined) {
+        if (!isValidOrgnr(orgnr)) return errorResult('orgnr is not a valid organisation number (9 digits with the mod-11 check digit)');
+        try {
+          const lookup = await getBrreg(orgnr);
+          if (lookup.kind === 'notFound') return errorResult('Brønnøysund does not know this organisation number');
+          if (lookup.kind === 'invalid') return errorResult('orgnr is not a valid organisation number');
+          if (lookup.kind === 'noAccounts') {
+            return errorResult('no filed annual accounts for this organisation number: sole proprietorships (ENK) file none, and a new company has not filed yet');
+          }
+          if (lookup.kind === 'unavailable') return errorResult('Brønnøysund could not be reached and nothing is cached; try again later');
+          accounts = lookup.accounts;
+        } catch (e) {
+          return errorResult(String((e as Error).message));
+        }
+      }
+      return run((blob) => calibrateCompanyFromAccounts(blob, { ctx: companyContext(blob), accounts }));
+    },
   );
 
   server.registerTool(

@@ -38,7 +38,16 @@ export interface QuickAnswers {
   desks?: number;
   annualRent: number;        // kr per year
   tripsPerYear: number;
+  /**
+   * Share of revenue that is resold subcontractors (videresalg), %. Missing: 0.
+   * Not part of the model; it only lowers the accounts' revenue before the
+   * comparison and the fit (companyAccounts.ts, companyCalibrate.ts).
+   */
+  resaleSharePct?: number;
 }
+
+/** Highest resale share the setup takes, %. */
+export const QUICK_RESALE_MAX_PCT = 90;
 
 /** The answers that can be a guess ("usikker") or unknown ("vet ikke"). */
 export const QUICK_GUESS_KEYS = ['salary', 'rateAverage', 'ownBillablePct', 'typicalBillablePct', 'realizationPct', 'office'] as const;
@@ -207,6 +216,8 @@ export function sanitizeQuickAnswers(v: unknown): QuickAnswers {
     tripsPerYear: num(a.tripsPerYear, d.tripsPerYear, 0, 52),
     // Kept only when it was given, so a missing desk count follows the FTE answer.
     ...(coerceNumber(a.desks) !== undefined ? { desks: num(a.desks, 0, 0, 100_000) } : {}),
+    // Kept only when it was given, so older saves keep their shape.
+    ...(coerceNumber(a.resaleSharePct) !== undefined ? { resaleSharePct: num(a.resaleSharePct, 0, 0, QUICK_RESALE_MAX_PCT) } : {}),
   };
 }
 

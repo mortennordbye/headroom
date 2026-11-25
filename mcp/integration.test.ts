@@ -15,6 +15,9 @@ import type { ExportPayload } from '../src/context/FinanceContext';
 import { fullFixture, topLevelKeys } from './fixture';
 import { setCategoryBudget, deleteTransaction } from './mutations';
 import { freePort } from './freePort';
+import { companyContext } from './derive';
+import { calcCompany, NEUTRAL_LEVERS } from '../src/lib/companyCost';
+import { buildModelFromAnswers } from '../src/lib/companySetup';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
@@ -498,6 +501,51 @@ describe('company model tools through the MCP protocol', () => {
     await call('undo_change', { rev: edit.rev });
 
     await call('undo_change', { rev: out.rev });
+    expect(await getBlob()).toEqual(before);
+  });
+
+  it('calibrate_company_from_accounts fits the stored accounts in one undoable write, and refuses with nothing to move', async () => {
+    const before = await getBlob();
+    await call('setup_company_quick', { uncertain: ['salary', 'typicalBillablePct'], confirmReplace: true });
+    // Made-up accounts: the setup's own numbers at a lower billable share and a higher salary.
+    const blob = await getBlob();
+    const truth = buildModelFromAnswers({ ...blob.companyModel!.quick!.answers, typicalBillablePct: 78, salaryLow: 900_000, salaryHigh: 1_200_000 }, blob.companyModel!);
+    const r = calcCompany(truth, companyContext(blob), NEUTRAL_LEVERS);
+    blob.companyModel = {
+      ...blob.companyModel!,
+      accounts: {
+        orgnr: '999900003', name: 'Eksempel Konsulent AS', year: 2025, type: 'SELSKAP', currency: 'NOK',
+        revenue: Math.round(r.revenue), operatingResult: Math.round(r.ebit), employees: 40, formCode: 'AS', naceCode: '62.020',
+        hasParent: false, inGroup: false, fetchedAt: '2026-11-01T10:00:00.000Z',
+      },
+    };
+    const put = await fetch(`${BASE}/api/data`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-data-rev': String(await currentRev()) },
+      body: JSON.stringify(blob),
+    });
+    expect(put.ok).toBe(true);
+    const withAccounts = await getBlob();
+
+    const out = await call<{ rev: number }>('calibrate_company_from_accounts', {});
+    const stored = await getBlob();
+    expect({ ...stored, companyModel: withAccounts.companyModel }).toEqual(withAccounts);
+    expect(stored.companyModel!.quick!.answers.typicalBillablePct).toBeCloseTo(78, 0);
+    expect(stored.companyModel!.accounts).toEqual(withAccounts.companyModel!.accounts);
+    await call('undo_change', { rev: out.rev });
+    expect(await getBlob()).toEqual(withAccounts);
+
+    // A bad org number is refused before any lookup.
+    const bad = (await mcp.callTool({ name: 'calibrate_company_from_accounts', arguments: { orgnr: '999900004' } })) as { isError?: boolean; content: { text: string }[] };
+    expect(bad.isError).toBe(true);
+    expect(bad.content[0].text).toMatch(/not a valid organisation number/);
+
+    await call('setup_company_quick', { uncertain: [], dontKnow: [] });
+    const none = (await mcp.callTool({ name: 'calibrate_company_from_accounts', arguments: {} })) as { isError?: boolean; content: { text: string }[] };
+    expect(none.isError).toBe(true);
+    expect(none.content[0].text).toMatch(/nothing is marked as a guess/);
+
+    await reseed();
     expect(await getBlob()).toEqual(before);
   });
 

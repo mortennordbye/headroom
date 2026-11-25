@@ -11,6 +11,7 @@ import { partitionSavings, mergeStoredSavings } from '../src/lib/savingsMigratio
 import { migrateMortgageBalance } from '../src/lib/mortgageSlices';
 import { osloMonthKey, addMonthsKey } from '../src/lib/date';
 import type { ComparableSale } from '../src/lib/marketValuation';
+import { parseBrregResponse, type BrregLookup } from '../src/lib/companyAccounts';
 
 const BASE_URL = (process.env.HEADROOM_URL || 'http://localhost:8080').replace(/\/$/, '');
 const PASSWORD = process.env.HEADROOM_PASSWORD || '';
@@ -274,12 +275,8 @@ function normalizeSavings(blob: ExportPayload): ExportPayload {
   };
 }
 
-/**
- * JSON request to one of the app's /api/market/* or other read endpoints. Logs
- * in once on 401. Surfaces the server's own error message (and validation
- * details) so the model can correct an import and retry.
- */
-async function requestJson<T>(method: 'GET' | 'POST', path: string, body?: unknown, retryOnAuth = true): Promise<T> {
+/** JSON request to the app with its status, whatever the status is. Logs in once on 401. */
+async function requestWithStatus(method: 'GET' | 'POST', path: string, body?: unknown, retryOnAuth = true): Promise<{ status: number; json: unknown }> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers: authHeaders(body === undefined ? {} : { 'content-type': 'application/json', 'x-headroom-source': 'mcp' }),
@@ -287,12 +284,22 @@ async function requestJson<T>(method: 'GET' | 'POST', path: string, body?: unkno
   });
   if (res.status === 401 && retryOnAuth) {
     await login();
-    return requestJson<T>(method, path, body, false);
+    return requestWithStatus(method, path, body, false);
   }
-  const json = (await res.json().catch(() => ({}))) as { error?: string; details?: string[] };
-  if (!res.ok) {
+  return { status: res.status, json: await res.json().catch(() => ({})) };
+}
+
+/**
+ * JSON request to one of the app's /api/market/* or other read endpoints. Logs
+ * in once on 401. Surfaces the server's own error message (and validation
+ * details) so the model can correct an import and retry.
+ */
+async function requestJson<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  const { status, json: raw } = await requestWithStatus(method, path, body);
+  const json = (raw ?? {}) as { error?: string; details?: string[] };
+  if (status < 200 || status > 299) {
     const details = json.details?.length ? `: ${json.details.join('; ')}` : '';
-    throw new Error(`${json.error ?? `${method} ${path} failed (${res.status})`}${details}`);
+    throw new Error(`${json.error ?? `${method} ${path} failed (${status})`}${details}`);
   }
   return json as T;
 }
@@ -333,4 +340,20 @@ export async function getKvmpris(postnr: string, type?: string): Promise<{
 }> {
   const q = new URLSearchParams({ postnr, ...(type ? { type } : {}) });
   return requestJson('GET', `/api/kvmpris?${q}`);
+}
+
+/**
+ * The company's public accounts through the app's GET /api/brreg/:orgnr (its
+ * validation, cache, rate limit and demo block apply); never Brreg directly.
+ * The status is read as the page reads it (parseBrregResponse). The org number
+ * names the user's employer, so a failure is a fixed message without it.
+ */
+export async function getBrreg(orgnr: string): Promise<BrregLookup> {
+  let res: { status: number; json: unknown };
+  try {
+    res = await requestWithStatus('GET', `/api/brreg/${encodeURIComponent(orgnr)}`);
+  } catch {
+    throw new Error('the app could not be reached for the accounts lookup');
+  }
+  return parseBrregResponse(res.status, res.json, orgnr);
 }
