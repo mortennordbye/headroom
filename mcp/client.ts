@@ -11,6 +11,7 @@ import { partitionSavings, mergeStoredSavings } from '../src/lib/savingsMigratio
 import { migrateMortgageBalance } from '../src/lib/mortgageSlices';
 import { osloMonthKey, addMonthsKey } from '../src/lib/date';
 import type { ComparableSale } from '../src/lib/marketValuation';
+import { parseBrregResponse, type BrregLookup } from '../src/lib/companyAccounts';
 
 const BASE_URL = (process.env.HEADROOM_URL || 'http://localhost:8080').replace(/\/$/, '');
 const PASSWORD = process.env.HEADROOM_PASSWORD || '';
@@ -333,4 +334,19 @@ export async function getKvmpris(postnr: string, type?: string): Promise<{
 }> {
   const q = new URLSearchParams({ postnr, ...(type ? { type } : {}) });
   return requestJson('GET', `/api/kvmpris?${q}`);
+}
+
+/**
+ * The company's public accounts through the app's GET /api/brreg/:orgnr (its
+ * validation, cache, rate limit and demo block apply); never Brreg directly.
+ */
+export async function getBrreg(orgnr: string): Promise<BrregLookup> {
+  try {
+    return parseBrregResponse(200, await requestJson<unknown>('GET', `/api/brreg/${encodeURIComponent(orgnr)}`), orgnr);
+  } catch (e) {
+    const msg = String((e as Error).message);
+    if (msg === 'not found') return { kind: 'notFound' };
+    if (msg === 'invalid organisation number') return { kind: 'invalid' };
+    throw e;
+  }
 }

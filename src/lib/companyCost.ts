@@ -27,6 +27,7 @@ import { calcEmployerCost, type EmployerCostConfig, type BillingRateConfig } fro
 import { weekdaysInYear, weekdayHolidays, corporateTaxPct } from './norwegianCalendar';
 import { coerceNumber } from './sanitizePayload';
 import { sanitizeQuick, type CompanyQuick } from './companySetup';
+import { sanitizeAccounts, type CompanyAccounts } from './companyAccounts';
 import { isStyrkCode, type StyrkCode } from './marketWage';
 
 export type CompanyGroupKind = 'delivery' | 'support';
@@ -74,6 +75,8 @@ export interface CompanyModel {
   quick?: CompanyQuick;
   /** Your occupation for the SSB market pay marker. Missing: DEFAULT_STYRK (2512). */
   market?: { styrk: StyrkCode };
+  /** The company's public accounts from Brønnøysund, fetched on request; the model is compared with them. */
+  accounts?: CompanyAccounts;
 }
 
 export interface CompanySelf {
@@ -659,6 +662,7 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
     ...(selfRate !== undefined ? { hourlyRate: Math.max(0, selfRate) } : {}),
   };
   const quick = sanitizeQuick(v.quick);
+  const accounts = sanitizeAccounts(v.accounts);
   return {
     mode: v.mode === 'advanced' ? 'advanced' : 'simple',
     groups,
@@ -681,5 +685,6 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
     ...(Object.keys(self).length ? { self } : {}),
     ...(quick ? { quick } : {}),
     ...(isObj(v.market) && isStyrkCode(v.market.styrk) ? { market: { styrk: v.market.styrk } } : {}),
+    ...(accounts ? { accounts } : {}),
   };
 }

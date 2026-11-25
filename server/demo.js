@@ -11,6 +11,9 @@
 
 const DEMO_ERROR = 'this is a public read-only demo — changes are not saved';
 
+/** API namespaces a demo refuses for every method. */
+const DEMO_BLOCKED_PREFIXES = ['/api/bank', '/api/brreg'];
+
 /** Is DEMO_MODE switched on in this environment? */
 function isDemoMode(env) {
   return /^(1|true|yes|on)$/i.test(String((env && env.DEMO_MODE) || '').trim());
@@ -18,10 +21,12 @@ function isDemoMode(env) {
 
 /**
  * Build the `/api/*` demo gate middleware. Deny-by-default: every mutation is
- * refused, and the bank namespace is refused outright because its GETs are not
- * safe reads — `/api/bank/aspsps` proxies to Enable Banking on the app's own
- * credentials (someone else's quota and money) and `/api/bank/callback`
- * completes a bank link as a side effect of a GET.
+ * refused, and the namespaces in DEMO_BLOCKED_PREFIXES are refused outright
+ * because their GETs are not safe reads — `/api/bank/aspsps` proxies to Enable
+ * Banking on the app's own credentials (someone else's quota and money),
+ * `/api/bank/callback` completes a bank link as a side effect of a GET, and
+ * `/api/brreg` sends a visitor-typed org number to Brønnøysund and fills the
+ * shared cache.
  *
  * The path is lowercased before every comparison because Express matches routes
  * case-insensitively: without it, `/API/data` would slip past the gate and still
@@ -31,9 +36,9 @@ function makeDemoGate() {
   return (req, res, next) => {
     const path = (req.path || '').toLowerCase();
     if (!path.startsWith('/api/')) return next(); // static assets + SPA shell
-    // Prefix (not `/api/bank/`) so a future bare `/api/bank` route is covered
+    // Prefixes (not `/api/bank/`) so a future bare `/api/bank` route is covered
     // too. Over-blocking is the safe direction here.
-    if (path.startsWith('/api/bank')) {
+    if (DEMO_BLOCKED_PREFIXES.some((p) => path.startsWith(p))) {
       return res.status(403).json({ error: DEMO_ERROR });
     }
     const method = (req.method || '').toUpperCase();
@@ -61,4 +66,4 @@ function parseTrustProxy(value) {
   return v.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
-module.exports = { DEMO_ERROR, isDemoMode, makeDemoGate, parseTrustProxy };
+module.exports = { DEMO_ERROR, DEMO_BLOCKED_PREFIXES, isDemoMode, makeDemoGate, parseTrustProxy };

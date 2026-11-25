@@ -42,8 +42,10 @@ import {
   deleteCompanyCostLine,
   updateCompanySettings,
   setupCompanyQuick,
+  calibrateCompanyFromAccounts,
   companyChanges,
 } from './mutations';
+import type { CompanyAccounts } from '../src/lib/companyAccounts';
 import { companyContext } from './derive';
 import {
   calcCompany,
@@ -54,6 +56,20 @@ import {
   NEUTRAL_LEVERS,
 } from '../src/lib/companyCost';
 import { buildModelFromAnswers, QUICK_DEFAULTS } from '../src/lib/companySetup';
+
+// Made-up public accounts for calibrate_company_from_accounts: the quick setup's
+// own revenue and EBIT at a typical billable share of 80 % and a mean salary of
+// 1 000 000 kr, so the fit has a solution.
+function madeUpAccounts(b: ExportPayload): CompanyAccounts {
+  const ctx = companyContext(b);
+  const truth = buildModelFromAnswers({ ...QUICK_DEFAULTS, typicalBillablePct: 80, salaryLow: 850_000, salaryHigh: 1_150_000 }, sanitizeCompanyModel(b.companyModel));
+  const r = calcCompany(truth, ctx, NEUTRAL_LEVERS);
+  return {
+    orgnr: '999900003', name: 'Eksempel Konsulent AS', year: 2025, type: 'SELSKAP', currency: 'NOK',
+    revenue: Math.round(r.revenue), operatingResult: Math.round(r.ebit), employees: 52, formCode: 'AS', naceCode: '62.020',
+    hasParent: false, inGroup: false, fetchedAt: '2026-11-01T10:00:00.000Z',
+  };
+}
 
 // Run a builder on a fresh clone; return the before-snapshot, the mutated blob, and the diff.
 function applyOn(mutate: (blob: ExportPayload) => FieldChange[]) {
@@ -548,6 +564,24 @@ const cases: {
     },
   },
   {
+    name: 'calibrate_company_from_accounts (stores the accounts and fits the guesses)',
+    touched: ['companyModel'],
+    mutate: (b) => {
+      setupCompanyQuick(b, { uncertain: ['salary'], dontKnow: ['typicalBillablePct'], confirmReplace: true });
+      return calibrateCompanyFromAccounts(b, { ctx: companyContext(b), accounts: madeUpAccounts(b) });
+    },
+    assertChange: (b, changes) => {
+      const m = b.companyModel!;
+      expect(m.accounts).toMatchObject({ orgnr: '999900003', year: 2025, type: 'SELSKAP' });
+      expect(m.quick!.answers.typicalBillablePct).toBeCloseTo(80, 0);
+      expect(Math.abs((m.quick!.answers.salaryLow + m.quick!.answers.salaryHigh) / 2 - 1_000_000)).toBeLessThan(2_000);
+      expect(m.quick!.dontKnow).toEqual([]);
+      expect(sanitizeCompanyModel(m)).toEqual(m);
+      expect(changes).toContainEqual(expect.objectContaining({ field: 'companyModel.accounts', before: null }));
+      expect(changes).toContainEqual(expect.objectContaining({ field: 'companyModel.quick.answers.typicalBillablePct' }));
+    },
+  },
+  {
     name: 'update_company_settings (applyLevers writes them into the groups)',
     touched: ['companyModel'],
     mutate: (b) => updateCompanySettings(b, { applyLevers: true }),
@@ -658,6 +692,28 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
       return setupCompanyQuick(b, { answers: { totalFte: 10 } });
     }, /changed by hand.*confirmReplace: true/],
     ['setup_company_quick (no quick setup, groups differ from the example, without confirmReplace)', () => setupCompanyQuick(fresh(), {}), /changed by hand.*confirmReplace: true/],
+    ['calibrate_company_from_accounts (no accounts stored or given)', () => {
+      const b = fresh();
+      setupCompanyQuick(b, { uncertain: ['salary'], confirmReplace: true });
+      return calibrateCompanyFromAccounts(b, { ctx: companyContext(b) });
+    }, /no accounts are stored/],
+    ['calibrate_company_from_accounts (nothing is a guess)', () => {
+      const b = fresh();
+      setupCompanyQuick(b, { uncertain: ['rateAverage'], confirmReplace: true });
+      return calibrateCompanyFromAccounts(b, { ctx: companyContext(b), accounts: madeUpAccounts(b) });
+    }, /nothing is marked as a guess/],
+    ['calibrate_company_from_accounts (no solution)', () => {
+      const b = fresh();
+      setupCompanyQuick(b, { uncertain: ['salary', 'typicalBillablePct'], confirmReplace: true });
+      const a = madeUpAccounts(b);
+      return calibrateCompanyFromAccounts(b, { ctx: companyContext(b), accounts: { ...a, revenue: a.revenue * 10 } });
+    }, /no solution.*Nothing was saved/],
+    ['calibrate_company_from_accounts (hand edited)', () => {
+      const b = fresh();
+      setupCompanyQuick(b, { uncertain: ['salary'], confirmReplace: true });
+      upsertCompanyGroup(b, { id: 'kons', create: false, count: 3 });
+      return calibrateCompanyFromAccounts(b, { ctx: companyContext(b), accounts: madeUpAccounts(b) });
+    }, /changed by hand/],
     ['update_company_settings (support group as yours)', () => updateCompanySettings(fresh(), { selfGroupId: 'cg3' }), /no delivery group/],
     ['update_company_settings (unknown group as yours)', () => updateCompanySettings(fresh(), { selfGroupId: 'nope' }), /no delivery group/],
   ] as const)('%s throws', (_name, call, msg) => {

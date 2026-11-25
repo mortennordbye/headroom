@@ -38,12 +38,17 @@ const draftKey = (d: Draft) => JSON.stringify([
 ]);
 
 /**
- * "② Hurtigoppsett": nine plain questions that build the company model's groups
+ * "② Hurtigoppsett": ten plain questions that build the company model's groups
  * and cost lines (buildModelFromAnswers in src/lib/companySetup.ts). The form
  * edits a local draft; "Bruk svarene" writes the model. After a hand edit of
  * groups or cost lines it asks first, because the rebuild replaces them.
  */
-export function CompanyQuickSetup({ model, setModel }: { model: CompanyModel; setModel: Dispatch<SetStateAction<CompanyModel>> }) {
+export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
+  model: CompanyModel;
+  setModel: Dispatch<SetStateAction<CompanyModel>>;
+  /** A count that goes up each time the accounts card asks for the resale question. */
+  askResale?: number;
+}) {
   const { t, lang, billingConfig } = useFinance();
   const c = t.companyModel;
   const locale = lang === 'nb' ? 'nb-NO' : 'en-US';
@@ -66,6 +71,15 @@ export function CompanyQuickSetup({ model, setModel }: { model: CompanyModel; se
   const [folded, setFolded] = useState(saved != null);
   const [confirming, setConfirming] = useState(false);
   const dirty = !saved || draftKey(draft) !== savedKey;
+  // Open the form and bring the resale question into view when the accounts card asks for it.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (askResale > 0) setFolded(false); }, [askResale]);
+  useEffect(() => {
+    if (askResale === 0 || folded) return;
+    const el = document.getElementById('quick-resale');
+    el?.scrollIntoView({ block: 'center' });
+    el?.querySelector('input')?.focus({ preventScroll: true });
+  }, [askResale, folded]);
 
   const a = draft.answers;
   // The draft keeps what was typed; buildModelFromAnswers and the sanitizer clamp it.
@@ -126,7 +140,7 @@ export function CompanyQuickSetup({ model, setModel }: { model: CompanyModel; se
     <NumberRow label={label} value={a[key] ?? 0} onCommit={(v) => setAnswer(key, v, guess)} suffix={suffix} />
   );
 
-  const questions: Array<{ q: string; body: ReactNode }> = [
+  const questions: Array<{ q: string; body: ReactNode; id?: string }> = [
     { q: c.q1, body: field(c.quickFte, 'totalFte', c.unitFte) },
     { q: c.q2, body: field(c.quickFte, 'nonBilling', c.unitFte) },
     { q: c.q3, body: field(c.quickPersons, 'onBench', c.unitPersons) },
@@ -205,6 +219,16 @@ export function CompanyQuickSetup({ model, setModel }: { model: CompanyModel; se
         </>
       ),
     },
+    {
+      q: c.q10,
+      id: 'quick-resale',
+      body: (
+        <>
+          <NumberRow label={c.quickResale} value={a.resaleSharePct ?? 0} onCommit={(v) => setAnswer('resaleSharePct', v)} suffix="%" />
+          <Hint>{c.quickResaleHint}</Hint>
+        </>
+      ),
+    },
   ];
 
   return (
@@ -223,7 +247,7 @@ export function CompanyQuickSetup({ model, setModel }: { model: CompanyModel; se
           <p className="mt-4 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.quickIntro}</p>
           <ol className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
             {questions.map((q, i) => (
-              <li key={i} className="rounded-[8px] px-4 py-4 flex gap-3 min-w-0" style={{ background: 'var(--surface-2)' }}>
+              <li key={i} id={q.id} className="rounded-[8px] px-4 py-4 flex gap-3 min-w-0 scroll-mt-24" style={{ background: 'var(--surface-2)' }}>
                 <span
                   aria-hidden
                   className="shrink-0 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-mono"

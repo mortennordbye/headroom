@@ -58,3 +58,19 @@ export function isFiniteNumber(s: string): boolean {
 export function isNonEmpty(s: string): boolean {
   return s.trim().length > 0;
 }
+
+/**
+ * A Norwegian organisation number: 9 digits whose last digit is the mod-11
+ * check digit over the first 8 (weights 3, 2, 7, 6, 5, 4, 3, 2). A remainder
+ * that gives check digit 10 is never issued, so it is invalid.
+ *
+ * TWIN: copied in server/brreg.js (CJS, the /api/brreg route), which can't
+ * import from src/. Change both or neither; a test checks they agree.
+ */
+export function isValidOrgnr(s: string): boolean {
+  if (!/^\d{9}$/.test(s)) return false;
+  const weights = [3, 2, 7, 6, 5, 4, 3, 2];
+  const sum = weights.reduce((acc, w, i) => acc + w * Number(s[i]), 0);
+  const check = (11 - (sum % 11)) % 11;
+  return check !== 10 && check === Number(s[8]);
+}

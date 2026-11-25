@@ -55,6 +55,7 @@ import {
   ensureDeliverySelf,
   applyLevers,
   type CompanyModel,
+  type CompanyContext,
   type CompanyGroup,
   type CompanyGroupKind,
   type CompanyCostLine,
@@ -70,6 +71,8 @@ import {
   type QuickGuessKey,
 } from '../src/lib/companySetup';
 import type { StyrkCode } from '../src/lib/marketWage';
+import { sanitizeAccounts, type CompanyAccounts } from '../src/lib/companyAccounts';
+import { calibrateToAccounts, type CalibrateFailure } from '../src/lib/companyCalibrate';
 import { translations } from '../src/i18n/translations';
 
 // The app's own category list, so every category the UI offers is writable here.
@@ -730,11 +733,16 @@ export function companyChanges(before: CompanyModel, after: CompanyModel): Field
   const aq = after.quick;
   if (!bq || !aq) field('quick', bq ?? null, aq ?? null);
   else {
-    for (const k of Object.keys(aq.answers) as (keyof typeof aq.answers)[]) field(`quick.answers.${k}`, bq.answers[k], aq.answers[k]);
+    const answerKeys = new Set([...Object.keys(bq.answers), ...Object.keys(aq.answers)]) as Set<keyof typeof aq.answers>;
+    for (const k of answerKeys) field(`quick.answers.${k}`, bq.answers[k] ?? null, aq.answers[k] ?? null);
     field('quick.uncertain', bq.uncertain, aq.uncertain);
     field('quick.dontKnow', bq.dontKnow, aq.dontKnow);
     field('quick.edited', bq.edited, aq.edited);
   }
+  const ba = before.accounts;
+  const aa = after.accounts;
+  if (!ba || !aa) field('accounts', ba ?? null, aa ?? null);
+  else for (const k of Object.keys(aa) as (keyof typeof aa)[]) field(`accounts.${k}`, ba[k], aa[k]);
   return out;
 }
 
@@ -924,6 +932,45 @@ export function setupCompanyQuick(blob: ExportPayload, args: CompanyQuickSetupAr
   }
   const labels = blob.lang === 'en' ? translations.en.companyModel.quickLabels : translations.nb.companyModel.quickLabels;
   const after = sanitizeCompanyModel(buildModelFromAnswers(sanitizeQuickAnswers(answers), before, { uncertain, dontKnow, labels }));
+  const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
+  blob.companyModel = after;
+  return changes;
+}
+
+/** Why calibrate_company_from_accounts refused, in words for the reader. */
+const CALIBRATE_REFUSALS: Record<CalibrateFailure | 'noAccounts', string> = {
+  noAccounts: 'no accounts are stored: pass orgnr to fetch them',
+  noQuickSetup: 'there is no quick setup to adjust: run setup_company_quick first',
+  handEdited: 'the groups or cost lines were changed by hand after the quick setup, so its answers no longer describe the model; '
+    + 'run setup_company_quick again (confirmReplace: true) first',
+  currency: 'the accounts are not in NOK, so they cannot be compared with the model',
+  nothingToMove: 'nothing is marked as a guess: mark salary and/or typicalBillablePct as uncertain or dontKnow with setup_company_quick, '
+    + 'or the model keeps the answers as they are',
+  noSolution: 'no solution within reasonable values (typical billable share 20-100 %, mean salary 300 000-3 000 000 kr); '
+    + 'check the resale share (resaleSharePct), whether these are group (KONSERN) or holding accounts, and the number of non-billing staff. '
+    + 'Nothing was saved',
+};
+
+export interface CalibrateCompanyArgs {
+  /** The company model's outside inputs (as the page builds them). */
+  ctx: CompanyContext;
+  /** Newly fetched accounts to store with the fit; omitted: the stored accounts. */
+  accounts?: CompanyAccounts;
+}
+
+/**
+ * "Tilpass modellen" from chat: store the given accounts (when given) and move
+ * the quick setup's guesses (typical billable share, mean salary) so the model
+ * meets them (calibrateToAccounts). Refuses, saving nothing, when there are no
+ * accounts, nothing is a guess, or there is no solution. Touches only `companyModel`.
+ */
+export function calibrateCompanyFromAccounts(blob: ExportPayload, args: CalibrateCompanyArgs): FieldChange[] {
+  const before = sanitizeCompanyModel(blob.companyModel);
+  const accounts = args.accounts ? sanitizeAccounts(args.accounts) : before.accounts;
+  if (!accounts) throw new Error(CALIBRATE_REFUSALS.noAccounts);
+  const out = calibrateToAccounts({ ...before, accounts }, args.ctx, accounts);
+  if (!out.ok) throw new Error(CALIBRATE_REFUSALS[out.reason]);
+  const after = sanitizeCompanyModel({ ...out.model, accounts });
   const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
   blob.companyModel = after;
   return changes;

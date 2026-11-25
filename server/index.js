@@ -8,6 +8,7 @@ const { fetchCpi, withYoy } = require('./ssb');
 const { fetchKvmpris, dwellingToBoligtype } = require('./boligPrices');
 const { fetchWageStats, fetchOccupationWage, OCCUPATIONS, OCCUPATION_MEASURE } = require('./wageStats');
 const { lookupPostnr } = require('./postnummer');
+const { isValidOrgnr, fetchBrreg } = require('./brreg');
 const { createMarketStore, makeMarketGate, parseBatch, parseListing, parseSale, isPastDay } = require('./market');
 const { fetchPolicyRate } = require('./norgesBank');
 const bank = require('./bank');
@@ -152,6 +153,12 @@ db.exec(`
     p75 REAL,
     fetched_at TEXT NOT NULL,
     PRIMARY KEY (code, year)
+  );
+  CREATE TABLE IF NOT EXISTS brreg_cache (
+    orgnr TEXT PRIMARY KEY,
+    body TEXT,
+    fetched_at INTEGER,
+    attempt_at INTEGER NOT NULL
   );
 `);
 // Rolling per-write history of the finance blob (schema in ./history).
@@ -471,6 +478,15 @@ const occupationWageGet = db.prepare(
 const occupationWageUpsert = db.prepare(
   'INSERT OR REPLACE INTO occupation_wage_cache (code, year, median, p25, p75, fetched_at) VALUES (?, ?, ?, ?, ?, ?)'
 );
+
+// Brreg lookups (GET /api/brreg/:orgnr). One row per org number: the parsed
+// answer, when it was fetched, and when Brreg was last tried (the cooldown).
+const brregGet = db.prepare('SELECT body, fetched_at AS fetchedAt, attempt_at AS attemptAt FROM brreg_cache WHERE orgnr = ?');
+const brregAttempt = db.prepare(
+  'INSERT INTO brreg_cache (orgnr, attempt_at) VALUES (?, ?) ON CONFLICT(orgnr) DO UPDATE SET attempt_at = excluded.attempt_at'
+);
+const brregStore = db.prepare('UPDATE brreg_cache SET body = ?, fetched_at = ? WHERE orgnr = ?');
+const brregPrune = db.prepare('DELETE FROM brreg_cache WHERE attempt_at < ?');
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 30 * ONE_DAY_MS;
@@ -1046,6 +1062,55 @@ app.get('/api/wage-stats/occupation', occupationWageLimiter, async (req, res) =>
     source: stale ? 'ssb-cache' : 'ssb-live',
     stale,
   });
+});
+
+// Public annual accounts for one org number, from Brønnøysund via
+// server/brreg.js: the "Start med regnskapet" card on Avansert. The number is
+// validated before anything else; only allowlisted fields come back. A 24 h
+// cache per org number in SQLite, with the last attempt on the same row as the
+// cooldown, so a failing Brreg is asked at most once per 15 min per number; a
+// stale entry is served when Brreg fails. Nothing cached and Brreg down is
+// 200 { available: false }. The org number names the user's employer: it is
+// never logged. Behind the auth gate, refused in demo mode (server/demo.js).
+const BRREG_TTL_MS = ONE_DAY_MS;
+const BRREG_COOLDOWN_MS = 15 * 60 * 1000;
+const BRREG_KEEP_MS = 30 * ONE_DAY_MS;
+const brregLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, keyGenerator: globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
+const parseCached = (body) => { try { return body ? JSON.parse(body) : null; } catch { return null; } };
+
+app.get('/api/brreg/:orgnr', brregLimiter, async (req, res) => {
+  const orgnr = typeof req.params.orgnr === 'string' ? req.params.orgnr : '';
+  if (!isValidOrgnr(orgnr)) return res.status(400).json({ error: 'invalid organisation number' });
+  res.set('Cache-Control', 'no-store');
+
+  const now = Date.now();
+  let row = brregGet.get(orgnr);
+  const fresh = row?.body != null && now - row.fetchedAt < BRREG_TTL_MS;
+  let stale = false;
+  if (!fresh) {
+    if (row && now - row.attemptAt < BRREG_COOLDOWN_MS) {
+      stale = true;
+    } else {
+      brregAttempt.run(orgnr, now);
+      try {
+        const result = await fetchBrreg(orgnr);
+        brregStore.run(JSON.stringify(result), Date.now(), orgnr);
+      } catch (err) {
+        // err.reason is a fixed word (timeout, status 503, …), never the number.
+        console.warn(`[brreg] lookup failed (${err?.reason ?? 'error'}), serving cache when there is one`);
+        stale = true;
+      }
+      brregPrune.run(now - BRREG_KEEP_MS);
+    }
+    row = brregGet.get(orgnr);
+  }
+
+  const result = parseCached(row?.body);
+  if (!result) return res.json({ available: false });
+  if (!result.found) return res.status(404).json({ error: 'not found' });
+  const base = { available: true, orgnr, entity: result.entity, fetchedAt: new Date(row.fetchedAt).toISOString(), stale };
+  if (!result.accounts) return res.json({ ...base, noAccounts: true });
+  res.json({ ...base, accounts: result.accounts });
 });
 
 // ── Housing-market data (opt-in) ─────────────────────────────────
