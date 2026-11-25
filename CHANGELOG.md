@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.19.3](https://github.com/mortennordbye/headroom/compare/v3.19.2...v3.19.3) (2026-11-25)
+
+
+### Bug Fixes
+
+* **deps:** bump node from `c6ad9e9` to `6bd9ab4` ([#407](https://github.com/mortennordbye/headroom/issues/407)) ([13283f7](https://github.com/mortennordbye/headroom/commit/13283f7004f60d3b74cefb99422a7df00f9c7e65))
+* **deps:** bump the npm-minor-patch group with 7 updates ([#405](https://github.com/mortennordbye/headroom/issues/405)) ([d32106c](https://github.com/mortennordbye/headroom/commit/d32106cd5d37692eb2f8013135a5ebd009307563))
+* **deps:** bump the npm-minor-patch group with 8 updates ([#410](https://github.com/mortennordbye/headroom/issues/410)) ([5a6cd85](https://github.com/mortennordbye/headroom/commit/5a6cd85d75d44e29aed6ff424a084775512957c7))
+* **deps:** bump the server-desktop group across 2 directories with 3 updates ([#408](https://github.com/mortennordbye/headroom/issues/408)) ([5f431a2](https://github.com/mortennordbye/headroom/commit/5f431a20c7687facc6610c84e63b7fa0b4ae6e4c))
+
 ## [3.19.2](https://github.com/mortennordbye/headroom/compare/v3.19.1...v3.19.2) (2026-11-11)
 
 
