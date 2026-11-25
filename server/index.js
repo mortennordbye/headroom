@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { fetchCpi, withYoy } = require('./ssb');
 const { fetchKvmpris, dwellingToBoligtype } = require('./boligPrices');
-const { fetchWageStats } = require('./wageStats');
+const { fetchWageStats, fetchOccupationWage, OCCUPATIONS, OCCUPATION_MEASURE } = require('./wageStats');
 const { lookupPostnr } = require('./postnummer');
 const { createMarketStore, makeMarketGate, parseBatch, parseListing, parseSale, isPastDay } = require('./market');
 const { fetchPolicyRate } = require('./norgesBank');
@@ -143,6 +143,15 @@ db.exec(`
     year INTEGER PRIMARY KEY,
     median REAL NOT NULL,
     fetched_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS occupation_wage_cache (
+    code TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    median REAL NOT NULL,
+    p25 REAL,
+    p75 REAL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (code, year)
   );
 `);
 // Rolling per-write history of the finance blob (schema in ./history).
@@ -456,6 +465,13 @@ const wageStatsLatest = db.prepare(
   'SELECT MAX(fetched_at) AS latest FROM wage_stats_cache'
 );
 
+const occupationWageGet = db.prepare(
+  'SELECT year, median, p25, p75, fetched_at AS fetchedAt FROM occupation_wage_cache WHERE code = ? ORDER BY year ASC'
+);
+const occupationWageUpsert = db.prepare(
+  'INSERT OR REPLACE INTO occupation_wage_cache (code, year, median, p25, p75, fetched_at) VALUES (?, ?, ?, ?, ?, ?)'
+);
+
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 30 * ONE_DAY_MS;
 // Upstream-attempt throttle: at most one SSB call per hour, regardless of
@@ -472,6 +488,8 @@ let lastSsbAttemptAt = 0;
 // SSB query. Keyed instead: each combo may attempt once per hour, and a broken
 // or empty one can't hammer SSB. Bounded by kommuner×boligtypes (~1.8k keys).
 const kvmprisAttemptAt = new Map();
+// Per-code throttle for /api/wage-stats/occupation, as for kvmpris.
+const occupationWageAttemptAt = new Map();
 // Independent throttle for the Norges Bank policy-rate endpoint.
 let lastPolicyRateAttemptAt = 0;
 // Independent throttle for the SSB wage-statistics endpoint (single global
@@ -970,6 +988,64 @@ app.get('/api/wage-stats', async (req, res) => {
   }
   const points = rows.map((r) => ({ year: r.year, median: r.median }));
   res.json({ points, source: stale ? 'ssb-cache' : 'ssb-live', stale, count: points.length });
+});
+
+// Wage for one IT occupation (STYRK-08), private sector, full time, from SSB
+// table 11418 via server/wageStats.js: the "Marked" marker on Avansert. Only
+// codes from the OCCUPATIONS allowlist reach SSB. Same TTL, per-code cooldown
+// and serve-stale shape as kvmpris; no static fallback, so an empty cache with
+// a failed fetch is a 502 and the card hides the marker. `cached=1` (the MCP
+// server) reads the cache only and never calls SSB: 404 when nothing is cached.
+const occupationWageLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, keyGenerator: DEMO_MODE ? demoIpKey : globalKey, standardHeaders: 'draft-7', legacyHeaders: false, validate: false });
+const finitePositive = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
+
+app.get('/api/wage-stats/occupation', occupationWageLimiter, async (req, res) => {
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  if (!Object.prototype.hasOwnProperty.call(OCCUPATIONS, code)) {
+    return res.status(400).json({ error: 'unknown occupation code' });
+  }
+
+  const cached = occupationWageGet.all(code);
+  const latestAt = cached.reduce((max, r) => Math.max(max, Date.parse(r.fetchedAt) || 0), 0);
+  const needsRefresh = cached.length === 0 || Date.now() - latestAt > CACHE_TTL_MS;
+  const lastAttempt = occupationWageAttemptAt.get(code) || 0;
+  const cacheOnly = req.query.cached === '1';
+
+  let stale = false;
+  if (needsRefresh && !cacheOnly && Date.now() - lastAttempt > SSB_ATTEMPT_COOLDOWN_MS) {
+    occupationWageAttemptAt.set(code, Date.now());
+    try {
+      const points = await fetchOccupationWage(code);
+      const now = new Date().toISOString();
+      const tx = db.transaction((pts) => {
+        for (const p of pts) occupationWageUpsert.run(code, p.year, p.median, p.p25, p.p75, now);
+      });
+      tx(points);
+    } catch (err) {
+      console.warn(`[occupation-wage] SSB fetch failed for ${code}, serving cache (next attempt in ${Math.round(SSB_ATTEMPT_COOLDOWN_MS / 60000)} min):`, err.message);
+      stale = true;
+    }
+  } else if (needsRefresh) {
+    stale = true;
+  }
+
+  const latest = occupationWageGet.all(code).filter((r) => Number.isInteger(r.year) && finitePositive(r.median)).pop();
+  if (!latest) {
+    return cacheOnly
+      ? res.status(404).json({ error: 'not cached' })
+      : res.status(502).json({ error: 'SSB wage data not available' });
+  }
+  res.json({
+    code,
+    label: OCCUPATIONS[code],
+    year: latest.year,
+    median: latest.median,
+    ...(finitePositive(latest.p25) ? { p25: latest.p25 } : {}),
+    ...(finitePositive(latest.p75) ? { p75: latest.p75 } : {}),
+    measure: OCCUPATION_MEASURE,
+    source: stale ? 'ssb-cache' : 'ssb-live',
+    stale,
+  });
 });
 
 // ── Housing-market data (opt-in) ─────────────────────────────────

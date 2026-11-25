@@ -537,6 +537,15 @@ describe('youEconomics: what the company earns on you', () => {
     expect(sanitizeCompanyModel({ targetMarginPct: -5 }).targetMarginPct).toBe(0);
     expect(sanitizeCompanyModel({ targetMarginPct: 'x' }).targetMarginPct).toBeNull();
   });
+
+  it('the sanitizer keeps market.styrk only for an offered code', () => {
+    expect(sanitizeCompanyModel({}).market).toBeUndefined();
+    expect(sanitizeCompanyModel({ market: { styrk: '2511' } }).market).toEqual({ styrk: '2511' });
+    expect(sanitizeCompanyModel({ market: { styrk: '2523' } }).market).toBeUndefined();
+    expect(sanitizeCompanyModel({ market: { styrk: 2511 } }).market).toBeUndefined();
+    expect(sanitizeCompanyModel({ market: { styrk: '2511', extra: 1 } }).market).toEqual({ styrk: '2511' });
+    expect(sanitizeCompanyModel({ market: 'x' }).market).toBeUndefined();
+  });
 });
 
 describe('your own billable share and rate (model.self)', () => {

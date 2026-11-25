@@ -103,6 +103,7 @@ import {
   type CompanyModel,
 } from '../src/lib/companyCost';
 import { companyRanges, rangesUnavailable } from '../src/lib/companyRanges';
+import { marketWage } from '../src/lib/marketWage';
 import {
   upsertCompanyGroup,
   deleteCompanyGroup,
@@ -1365,6 +1366,16 @@ export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey
       + 'companySalarySharePct = delivery salaries / delivery revenue. raise = employer cost of +100 000 kr gross and the bonus pool drop. '
       + RANGES_NOTE,
   };
+}
+
+/**
+ * get_company_model's market: the SSB median for your occupation and the same
+ * moved to the model year (MARKET_WAGE_GROWTH_PCT a year), or null when the
+ * app had no usable answer.
+ */
+export function companyMarket(code: string, raw: unknown, modelYear: number) {
+  const m = marketWage(raw, modelYear);
+  return m ? { code, year: m.year, median: m.median, projected: m.projected.median } : null;
 }
 
 export type CompanyGroupPatch = { id?: string; remove?: boolean } & CompanyGroupFields;

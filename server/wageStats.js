@@ -132,4 +132,133 @@ async function fetchWageStats(topCount = 12) {
   }
 }
 
-module.exports = { fetchWageStats, parseWage11418JsonStat2, buildV2Url };
+// ── Wage for one IT occupation (STYRK-08), for the market marker on Avansert ──
+//
+// A separate pinned query on the same table 11418, so the national series
+// above stays as it is. Pins (checked against the table metadata):
+//   - MaaleMetode = '01', '051', '061'   Median, Nedre kvartil, Øvre kvartil
+//   - Yrke        = one code from OCCUPATIONS (STYRK-08)
+//   - Sektor      = 'A+B+D+E'            Privat sektor og offentlige eide foretak
+//   - Kjonn       = '0'                  Begge kjønn
+//   - AvtaltVanlig= '5'                  Heltidsansatte
+//   - ContentsCode= 'AvtaltManedslonn'   Avtalt månedslønn (kr): the agreed wage,
+//     without bonus, irregular supplements and overtime. It compares with the
+//     base salary in the company model, where bonus is its own line.
+// SSB's reference month for this table is November.
+
+// The allowlist of Yrke codes, with SSB's labels. 2523 (Nettverksansvarlige) is
+// left out: SSB suppresses it (':') for private sector and full time every year.
+const OCCUPATIONS = {
+  '25': 'IKT-rådgivere',
+  '2511': 'Systemanalytikere/-arkitekter',
+  '2512': 'Programvareutviklere',
+  '2513': 'Nett- og multimediautviklere',
+  '2514': 'Applikasjonsprogrammerere',
+  '2519': 'Andre programvare- og applikasjonsutviklere',
+  '2521': 'Databasedesignere og -administratorer',
+  '2522': 'Systemadministratorer',
+  '2529': 'Sikkerhetsanalytikere mv.',
+};
+
+const PINS_OCC = {
+  MaaleMetode: ['01', '051', '061'],
+  Sektor: 'A+B+D+E',
+  Kjonn: '0',
+  AvtaltVanlig: '5',
+  ContentsCode: 'AvtaltManedslonn',
+};
+const OCC_MEASURES = { '01': 'median', '051': 'p25', '061': 'p75' };
+
+function assertOccupation(code) {
+  if (!Object.prototype.hasOwnProperty.call(OCCUPATIONS, code)) throw new Error('unknown occupation code');
+}
+
+/** PxWebApi v2 data URL for one occupation; `+` in the sector code is encoded. */
+function buildOccupationV2Url(code, topCount) {
+  assertOccupation(code);
+  return `${SSB_V2_BASE}?lang=no&outputFormat=json-stat2`
+    + `&valueCodes[MaaleMetode]=${PINS_OCC.MaaleMetode.join(',')}`
+    + `&valueCodes[Yrke]=${code}`
+    + `&valueCodes[Sektor]=${encodeURIComponent(PINS_OCC.Sektor)}`
+    + `&valueCodes[Kjonn]=${PINS_OCC.Kjonn}`
+    + `&valueCodes[AvtaltVanlig]=${PINS_OCC.AvtaltVanlig}`
+    + `&valueCodes[ContentsCode]=${PINS_OCC.ContentsCode}`
+    + `&valueCodes[Tid]=top(${Math.floor(topCount)})`;
+}
+
+/**
+ * Parse a json-stat2 11418 response for one occupation into
+ * { year, median, p25, p75 } points (annual kr: monthly × 12), sorted by year.
+ * MaaleMetode and Tid are the multi-valued dimensions, so the flat value[] is
+ * read through the row-major strides of `id`/`size`. A year without a finite
+ * median is skipped; a missing quartile is null.
+ */
+function parseOccupationJsonStat2(data) {
+  const ids = Array.isArray(data?.id) ? data.id : null;
+  const sizes = Array.isArray(data?.size) ? data.size : null;
+  const tid = data?.dimension?.Tid?.category?.index;
+  const mm = data?.dimension?.MaaleMetode?.category?.index;
+  if (!ids || !sizes || ids.length !== sizes.length || !tid || !mm) {
+    throw new Error('SSB 11418 response missing dimensions');
+  }
+  const stride = (dim) => {
+    const at = ids.indexOf(dim);
+    if (at < 0) throw new Error(`SSB 11418 response missing ${dim}`);
+    return sizes.slice(at + 1).reduce((p, n) => p * n, 1);
+  };
+  const tStride = stride('Tid');
+  const mStride = stride('MaaleMetode');
+  const values = Array.isArray(data.value) ? data.value : [];
+  const annual = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v * 12) : null);
+
+  const points = [];
+  for (const [year, ti] of Object.entries(tid)) {
+    const p = { year: Number(year), median: null, p25: null, p75: null };
+    for (const [m, key] of Object.entries(OCC_MEASURES)) {
+      if (mm[m] === undefined) continue;
+      p[key] = annual(values[mm[m] * mStride + ti * tStride]);
+    }
+    if (Number.isInteger(p.year) && p.median != null) points.push(p);
+  }
+  points.sort((a, b) => a.year - b.year);
+  return points;
+}
+
+/** Fetch the last `topCount` years for one allowlisted occupation code. */
+async function fetchOccupationWage(code, topCount = 3) {
+  assertOccupation(code);
+  try {
+    const data = await fetchJson(buildOccupationV2Url(code, topCount), { headers: { Accept: 'application/json' } });
+    return parseOccupationJsonStat2(data);
+  } catch (v2Err) {
+    const item = (c, values) => ({ code: c, selection: { filter: 'item', values } });
+    const body = {
+      query: [
+        item('MaaleMetode', PINS_OCC.MaaleMetode),
+        item('Yrke', [code]),
+        item('Sektor', [PINS_OCC.Sektor]),
+        item('Kjonn', [PINS_OCC.Kjonn]),
+        item('AvtaltVanlig', [PINS_OCC.AvtaltVanlig]),
+        item('ContentsCode', [PINS_OCC.ContentsCode]),
+        { code: 'Tid', selection: { filter: 'top', values: [String(Math.floor(topCount))] } },
+      ],
+      response: { format: 'json-stat2' },
+    };
+    try {
+      const data = await fetchJson(SSB_V1_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return parseOccupationJsonStat2(data);
+    } catch (v1Err) {
+      throw new Error(`v2: ${v2Err.message}; v1: ${v1Err.message}`, { cause: v1Err });
+    }
+  }
+}
+
+module.exports = {
+  fetchWageStats, parseWage11418JsonStat2, buildV2Url,
+  OCCUPATIONS, OCCUPATION_MEASURE: PINS_OCC.ContentsCode,
+  fetchOccupationWage, parseOccupationJsonStat2, buildOccupationV2Url,
+};

@@ -72,3 +72,41 @@ test('a hand-edited model shows no ranges, only a note', async ({ page, request 
   await expect(page.getByTestId('drivers')).toHaveCount(0);
   await expect(page.getByText(/^spenn /)).toHaveCount(0);
 });
+
+// The SSB market pay for the chosen STYRK code: a "Marked" marker and a p25–p75
+// band on the salary axis. SSB is stubbed at the app route; a failure hides the
+// marker and shows a note, and the card still renders.
+test('market pay: marker and band from SSB, the picker switches code, an error shows a note', async ({ page, request, consoleErrors }) => {
+  const blob = seedBlob();
+  blob.companyModel = { ...(blob.companyModel as Record<string, unknown> | undefined), mode: 'advanced' };
+  await putBlob(request, blob);
+
+  const asked: string[] = [];
+  await page.route('**/api/wage-stats/occupation?*', async (route) => {
+    const code = new URL(route.request().url()).searchParams.get('code')!;
+    asked.push(code);
+    if (code === '2522') return route.fulfill({ status: 502, json: { error: 'SSB wage data not available' } });
+    return route.fulfill({ json: { code, label: 'x', year: 2025, median: 912_720, p25: 751_920, p75: 1_089_240, measure: 'AvtaltManedslonn', source: 'ssb-live', stale: false } });
+  });
+
+  await page.goto('/employer-cost');
+  await expect(page.getByTestId('marker-market')).toContainText(/^Marked \d/);
+  await expect(page.getByTestId('market-band')).toBeVisible();
+  await expect(page.getByText(/^SSB tabell 11418, 2512: avtalt månedslønn uten bonus og tillegg, november 2025, ×12, fremskrevet til \d{4}\./)).toBeVisible();
+  expect(asked).toEqual(['2512']);
+
+  const picker = page.getByLabel('Ditt yrke (STYRK-08)');
+  await picker.selectOption('2511');
+  await expect(page.getByText(/^SSB tabell 11418, 2511:/)).toBeVisible();
+  await expect.poll(async () => ((await getBlob(request)).blob.companyModel as { market?: unknown }).market).toEqual({ styrk: '2511' });
+
+  await picker.selectOption('2522');
+  await expect(page.getByTestId('market-error')).toBeVisible();
+  await expect(page.getByTestId('marker-market')).toHaveCount(0);
+  await expect(page.getByTestId('market-band')).toHaveCount(0);
+  await expect(page.getByRole('slider', { name: 'Hva om lønna di var' })).toBeVisible();
+  // The browser logs the stubbed 502 itself; that one is expected, anything else still fails the test.
+  const expected = consoleErrors.filter((e) => e.includes('/api/wage-stats/occupation?code=2522'));
+  expect(expected).toHaveLength(1);
+  consoleErrors.splice(consoleErrors.indexOf(expected[0]), 1);
+});

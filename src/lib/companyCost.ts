@@ -27,6 +27,7 @@ import { calcEmployerCost, type EmployerCostConfig, type BillingRateConfig } fro
 import { weekdaysInYear, weekdayHolidays, corporateTaxPct } from './norwegianCalendar';
 import { coerceNumber } from './sanitizePayload';
 import { sanitizeQuick, type CompanyQuick } from './companySetup';
+import { isStyrkCode, type StyrkCode } from './marketWage';
 
 export type CompanyGroupKind = 'delivery' | 'support';
 
@@ -71,6 +72,8 @@ export interface CompanyModel {
   self?: CompanySelf;
   /** The quick setup's answers ("Hurtigoppsett"); the groups and cost lines built from them hold the maths. */
   quick?: CompanyQuick;
+  /** Your occupation for the SSB market pay marker. Missing: DEFAULT_STYRK (2512). */
+  market?: { styrk: StyrkCode };
 }
 
 export interface CompanySelf {
@@ -677,5 +680,6 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
       : (() => { const n = coerceNumber(v.targetMarginPct); return n === undefined ? null : clamp(n, TARGET_MARGIN_RANGE.min, TARGET_MARGIN_RANGE.max); })(),
     ...(Object.keys(self).length ? { self } : {}),
     ...(quick ? { quick } : {}),
+    ...(isObj(v.market) && isStyrkCode(v.market.styrk) ? { market: { styrk: v.market.styrk } } : {}),
   };
 }

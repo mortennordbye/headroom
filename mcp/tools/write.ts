@@ -57,6 +57,7 @@ import {
   setupCompanyQuick,
 } from '../mutations';
 import { QUICK_GUESS_KEYS, type QuickGuessKey } from '../../src/lib/companySetup';
+import { STYRK_CODES } from '../../src/lib/marketWage';
 import type { DebtType, SalaryChangeType, BonusType } from '../../src/context/FinanceContext';
 import { LEVER_RANGES, BONUS_POOL_MAX_PCT, TARGET_MARGIN_RANGE, type CompanyGroupKind, type CostLinePer } from '../../src/lib/companyCost';
 
@@ -608,7 +609,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update company model settings',
       description:
-        'Change the company model settings. Only provided fields change. targetMarginPct sets the target margin for the fair salary; null goes back to the company margin before bonus. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. self sets your own billable share and rate (null clears it). A change to selfGroupId, or applyLevers, counts as a hand edit of the groups (quick.edited). applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
+        'Change the company model settings. Only provided fields change. targetMarginPct sets the target margin for the fair salary; null goes back to the company margin before bonus. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. self sets your own billable share and rate (null clears it). market.styrk is your STYRK-08 occupation for the SSB market pay on the page (null goes back to 2512). A change to selfGroupId, or applyLevers, counts as a hand edit of the groups (quick.edited). applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
       inputSchema: {
         mode: z.enum(['simple', 'advanced']).optional(),
         selfGroupId: z.string().min(1).optional().describe('Your group: the id of a delivery group (from get_company_model model.groups).'),
@@ -629,6 +630,10 @@ export function registerWriteTools(server: McpServer) {
           hourlyRate: z.number().min(0).max(100_000).optional().describe('Your own list rate, kr/hour.'),
         }).nullable().optional()
           .describe('Your own billable share and rate where they differ from your group. Only given fields change; null clears both, so you use your group\'s values.'),
+        market: z.object({
+          styrk: z.enum(STYRK_CODES).describe('STYRK-08 code: 25 IKT-rådgivere (all), 2511 system analysts/architects, 2512 software developers, 2513 web and multimedia developers, 2514 application programmers, 2519 other software developers, 2521 database designers/administrators, 2522 system administrators, 2529 security analysts etc.'),
+        }).nullable().optional()
+          .describe('Your occupation for the SSB market pay marker ("Marked"). null = the default, 2512.'),
         applyLevers: z.boolean().optional().describe('true: write the levers into the groups and set them to 0.'),
       },
       annotations: { title: 'Update company model settings', ...readWrite, destructiveHint: true, idempotentHint: false },

@@ -509,6 +509,17 @@ const cases: {
     },
   },
   {
+    name: 'update_company_settings (market.styrk is set, listed and reset to null)',
+    touched: ['companyModel'],
+    mutate: (b) => updateCompanySettings(b, { market: { styrk: '2511' } }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.market).toEqual({ styrk: '2511' });
+      expect(changes).toEqual([{ field: 'companyModel.market.styrk', before: null, after: '2511' }]);
+      expect(updateCompanySettings(b, { market: null })).toEqual([{ field: 'companyModel.market.styrk', before: '2511', after: null }]);
+      expect(b.companyModel?.market).toBeUndefined();
+    },
+  },
+  {
     name: 'update_company_settings (selfGroupId)',
     touched: ['companyModel'],
     mutate: (b) => updateCompanySettings(b, { selfGroupId: 'cg2' }),

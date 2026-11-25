@@ -3,7 +3,8 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getData, listHistory, getHistoryRevision, getInflation } from '../client';
+import { getData, listHistory, getHistoryRevision, getInflation, getOccupationWage } from '../client';
+import { DEFAULT_STYRK } from '../../src/lib/marketWage';
 import { latestInflationPct, DEFAULT_INFLATION_PCT } from '../../src/lib/inflation';
 import { jsonResult, errorResult } from '../util';
 import * as derive from '../derive';
@@ -332,14 +333,20 @@ export function registerReadTools(server: McpServer) {
     {
       title: 'Company model',
       description:
-        'The company model behind the employer-cost page\'s Avansert mode: role groups, cost lines, hours, bonus and levers (with ids for the company write tools), and its results. summary has your own cost, your share of the overhead, your real cost, break-even hourly rate and utilization, overhead per billable hour, revenue, people cost, bonus, EBIT, margin and an estimated tax; result has every line (groups, cost lines, hours, KPIs). vsBaseline is the change against the levers at 0. forYou is the top card on the page: keep and keepPct (what the company keeps on you), fairGross (gross where keepPct = targetMarginPct, default the company margin before bonus) and ceilingGross (keep = 0), null when there is no solution; salarySharePct and companySalarySharePct (lønnsandel); raise (employer cost of +100 000 kr gross and the bonus-pool drop). Your gross comes from the salary page (or its override on the employer-cost page), as in get_employer_cost. model.self is your own billable share and list rate where they differ from your group. quick is the page\'s quick setup (answers, uncertain and dontKnow keys, edited = groups or cost lines were changed by hand after it), or null when it was never used. mode says which mode the page shows.',
+        'The company model behind the employer-cost page\'s Avansert mode: role groups, cost lines, hours, bonus and levers (with ids for the company write tools), and its results. summary has your own cost, your share of the overhead, your real cost, break-even hourly rate and utilization, overhead per billable hour, revenue, people cost, bonus, EBIT, margin and an estimated tax; result has every line (groups, cost lines, hours, KPIs). vsBaseline is the change against the levers at 0. forYou is the top card on the page: keep and keepPct (what the company keeps on you), fairGross (gross where keepPct = targetMarginPct, default the company margin before bonus) and ceilingGross (keep = 0), null when there is no solution; salarySharePct and companySalarySharePct (lønnsandel); raise (employer cost of +100 000 kr gross and the bonus-pool drop). Your gross comes from the salary page (or its override on the employer-cost page), as in get_employer_cost. model.self is your own billable share and list rate where they differ from your group. quick is the page\'s quick setup (answers, uncertain and dontKnow keys, edited = groups or cost lines were changed by hand after it), or null when it was never used. mode says which mode the page shows. model.market.styrk is your STYRK-08 occupation (missing: 2512). market is SSB table 11418 for that code (private sector, full time, agreed monthly wage without bonus, × 12): year is the SSB year, median its median, projected the median moved to the model year at 4 % a year; null when the app has not loaded it yet (open the Avansert page once) or the region is not Norway. It is a median for all ages, not your own market pay.',
       inputSchema: {},
       annotations: { title: 'Company model', ...readOnly },
     },
     async () => {
       try {
         const { blob } = await getData();
-        return jsonResult(derive.companyModelSummary(blob));
+        const summary = derive.companyModelSummary(blob);
+        // SSB market pay is Norwegian statistics, so only for region "no", as on the page.
+        const code = summary.model.market?.styrk ?? DEFAULT_STYRK;
+        const market = (blob.region ?? 'no') === 'no'
+          ? derive.companyMarket(code, await getOccupationWage(code), summary.inputs.year)
+          : null;
+        return jsonResult({ ...summary, market });
       } catch (e) {
         return errorResult(String((e as Error).message));
       }

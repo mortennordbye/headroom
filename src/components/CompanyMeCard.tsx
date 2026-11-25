@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import {
@@ -6,6 +6,7 @@ import {
   type CompanyModel, type CompanyContext, type CompanyResult, type YouBreakdownPart,
 } from '../lib/companyCost';
 import { companyRanges, SMALL_SWING_KR, type Range } from '../lib/companyRanges';
+import { DEFAULT_STYRK, MARKET_WAGE_GROWTH_PCT, STYRK_CODES, isStyrkCode, marketWage } from '../lib/marketWage';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { NumberRow } from './ui/NumberRow';
@@ -37,6 +38,9 @@ interface AxisMarker {
   label: string;
   color: string;
   above: boolean;
+  dashed?: boolean;
+  /** Label top in px, when the default row would overlap another label. */
+  labelTop?: number;
 }
 
 /** Round tick step for a salary axis span: at most 5 intervals. */
@@ -59,7 +63,7 @@ export function CompanyMeCard({
   ctx: CompanyContext;
   result: CompanyResult;
 }) {
-  const { t, lang, formatCurrencyShort } = useFinance();
+  const { t, lang, region, formatCurrencyShort } = useFinance();
   const c = t.companyModel;
   const locale = lang === 'nb' ? 'nb-NO' : 'en-US';
   const nf = (v: number, d = 0) => (Math.abs(v) < 0.5 * 10 ** -d ? 0 : v).toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -123,9 +127,31 @@ export function CompanyMeCard({
     return Math.min(85, Math.max(15, (before + hovered.value / 2) / shownTotal * 100));
   })();
 
-  // ── Salary axis: its range comes from now, fair and ceiling (not the slider) ──
+  // ── Market pay: SSB median for your occupation, moved to the model year ──
+  // Public statistics with no identifier, so it also loads in demo mode. Norway only.
+  const styrk = model.market?.styrk ?? DEFAULT_STYRK;
+  const showMarket = region === 'no';
+  const [fetched, setFetched] = useState<{ code: string; raw: unknown; failed: boolean } | null>(null);
+  useEffect(() => {
+    if (!showMarket) return;
+    const ac = new AbortController();
+    fetch(`/api/wage-stats/occupation?code=${encodeURIComponent(styrk)}`, { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((raw) => setFetched({ code: styrk, raw, failed: raw == null }))
+      .catch(() => { if (!ac.signal.aborted) setFetched({ code: styrk, raw: null, failed: true }); });
+    return () => ac.abort();
+  }, [styrk, showMarket]);
+  const current = showMarket && fetched?.code === styrk ? fetched : null;
+  const market = current ? marketWage(current.raw, ctx.year) : null;
+  const marketFailed = !!current && (current.failed || market == null);
+  const mkt = market?.projected.median ?? null;
+  const mktBand = market && market.projected.p25 != null && market.projected.p75 != null
+    ? { low: market.projected.p25, high: market.projected.p75 }
+    : null;
+
+  // ── Salary axis: its range comes from now, fair, ceiling and market (not the slider) ──
   const band = hasWidth(fairRange) ? fairRange : null;
-  const anchors = [now, fair, ceiling, band?.low, band?.high].filter((v): v is number => v != null && v > 0);
+  const anchors = [now, fair, ceiling, band?.low, band?.high, mkt].filter((v): v is number => v != null && v > 0);
   const span0 = anchors.length ? Math.max(...anchors) - Math.min(...anchors) : 0;
   const pad = Math.max(100_000, span0 * 0.25);
   const step = tickStep(anchors.length ? span0 + 2 * pad : 1_000_000);
@@ -134,10 +160,16 @@ export function CompanyMeCard({
   const x = (v: number) => (hi > lo ? (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo) * 100 : 0);
   const ticks: number[] = [];
   for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
-  // One marker per line; a later PR adds the market salary here.
+  // One marker per line. "Marked" sits above with "Tak"; its label moves up a row when the two would overlap.
+  const mktShown = mkt != null ? round10k(mkt) : null;
+  const marketStacked = mkt != null && ceiling != null && Math.abs(x(mkt) - x(ceiling)) < 22;
   const markers: AxisMarker[] = [
     ...(ceiling != null ? [{ key: 'ceiling', value: ceiling, label: `${c.axisCeiling} ${k(ceilingShown!)}`, color: 'var(--rust)', above: true }] : []),
     ...(fair != null ? [{ key: 'fair', value: fair, label: `${c.axisFair} ${k(fairShown!)}`, color: 'var(--forest-light)', above: false }] : []),
+    ...(mkt != null ? [{
+      key: 'market', value: mkt, label: `${c.axisMarket} ${k(mktShown!)}`, color: 'var(--text-2)', above: true, dashed: true,
+      ...(marketStacked ? { labelTop: -16 } : {}),
+    }] : []),
   ];
   // The "Nå" label sits below the axis like "Rimelig": hide it when they would overlap (wider labels on a phone).
   const nowFairGap = fair != null ? Math.abs(x(now) - x(fair)) : 100;
@@ -244,7 +276,7 @@ export function CompanyMeCard({
 
       {/* Salary axis + what-if slider */}
       <div className="mt-6 flex items-baseline justify-between gap-2 mb-2">
-        <SectionLabel>{c.axisTitle}</SectionLabel>
+        <SectionLabel>{mkt != null ? c.axisTitleMarket : c.axisTitle}</SectionLabel>
         <span className="text-[18px] font-semibold tabular-nums whitespace-nowrap">
           {whatIf == null ? c.axisNow : c.axisWhatIf} {kr(gross)}
           {whatIf != null && whatIf !== now && (
@@ -255,9 +287,10 @@ export function CompanyMeCard({
         </span>
       </div>
       <div
-        className="relative h-[120px] mx-1"
+        className={`relative h-[120px] mx-1 ${marketStacked ? 'mt-6' : ''}`}
         role="img"
-        aria-label={c.axisAria.replace('{now}', kr(now)).replace('{fair}', fairShown != null ? kr(fairShown) : '–').replace('{ceiling}', ceilingShown != null ? kr(ceilingShown) : '–') + (fairSpan ? ` · ${fairSpan}` : '')}
+        aria-label={c.axisAria.replace('{now}', kr(now)).replace('{fair}', fairShown != null ? kr(fairShown) : '–').replace('{ceiling}', ceilingShown != null ? kr(ceilingShown) : '–')
+          + (mktShown != null ? c.axisAriaMarket.replace('{market}', kr(mktShown)) : '') + (fairSpan ? ` · ${fairSpan}` : '')}
       >
         <div className="absolute left-0 right-0 top-[57px] h-[6px] rounded-full" style={{ background: 'var(--rule)' }} />
         {band && (
@@ -265,6 +298,13 @@ export function CompanyMeCard({
             data-testid="fair-band"
             className="absolute top-[54px] h-[12px] rounded-[4px]"
             style={{ left: `${x(band.low)}%`, width: `${x(band.high) - x(band.low)}%`, background: 'var(--forest)', opacity: 0.8 }}
+          />
+        )}
+        {mktBand && (
+          <div
+            data-testid="market-band"
+            className="absolute top-[47px] h-[4px] rounded-full"
+            style={{ left: `${x(mktBand.low)}%`, width: `${x(mktBand.high) - x(mktBand.low)}%`, background: 'var(--text-3)', opacity: 0.6 }}
           />
         )}
         {ticks.map((v, i) => (
@@ -277,9 +317,12 @@ export function CompanyMeCard({
           </div>
         ))}
         {markers.map((m) => (
-          <div key={m.key}>
-            <div className="absolute w-[2px] -translate-x-1/2" style={{ left: `${x(m.value)}%`, top: m.above ? 24 : 60, height: 36, background: m.color }} />
-            <div className="absolute -translate-x-1/2 text-[12px] font-semibold whitespace-nowrap" style={{ left: labelLeft(m.value), top: m.above ? 2 : 100, color: m.color }}>{m.label}</div>
+          <div key={m.key} data-testid={`marker-${m.key}`}>
+            <div
+              className="absolute w-0 -translate-x-1/2"
+              style={{ left: `${x(m.value)}%`, top: m.above ? 24 : 60, height: 36, borderLeft: `${m.dashed ? '1.5px dashed' : '2px solid'} ${m.color}` }}
+            />
+            <div className="absolute -translate-x-1/2 text-[12px] font-semibold whitespace-nowrap" style={{ left: labelLeft(m.value), top: m.labelTop ?? (m.above ? 2 : 100), color: m.color }}>{m.label}</div>
           </div>
         ))}
         <div className="absolute w-4 h-4 rounded-full -translate-x-1/2 border-2" style={{ left: `${x(now)}%`, top: 52, background: 'var(--brass)', borderColor: 'var(--bg-2)' }} />
@@ -309,7 +352,7 @@ export function CompanyMeCard({
         )}
       </div>
 
-      {/* Target margin and what matters most; the middle column (occupation) comes in a later PR. */}
+      {/* Target margin, your occupation (SSB market pay) and what matters most. */}
       <div className="mt-5 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-6" style={{ borderColor: 'var(--rule)' }}>
         <div>
           <NumberRow
@@ -337,6 +380,38 @@ export function CompanyMeCard({
           <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.targetHint}</p>
           {y.targetClamped && <p className="mt-2 text-[12px]" style={{ color: 'var(--warning)' }}>{c.targetClampedNote}</p>}
         </div>
+        {showMarket && (
+          <div className="min-w-0">
+            <label htmlFor="company-styrk"><SectionLabel>{c.marketTitle}</SectionLabel></label>
+            <select
+              id="company-styrk"
+              value={styrk}
+              onChange={(e) => { const v = e.target.value; if (isStyrkCode(v)) setModel((m) => ({ ...m, market: { styrk: v } })); }}
+              className="mt-2 w-full cursor-pointer rounded-[6px] border px-2 py-1.5 text-[13px] outline-none focus:border-[var(--forest)]"
+              style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+            >
+              {STYRK_CODES.map((code) => <option key={code} value={code}>{code} {c.styrk[code]}</option>)}
+            </select>
+            {market ? (
+              <div data-testid="market-info">
+                <p className="mt-2 text-[13px]" style={{ color: 'var(--text-2)' }}>
+                  {c.marketMedian.replace('{v}', kr(mktShown!)).replace('{modelYear}', String(ctx.year)).replace('{year}', String(market.year))
+                    .replace('{raw}', kr(market.median)).replace('{growth}', nf(MARKET_WAGE_GROWTH_PCT))}
+                </p>
+                {mktBand && (
+                  <p className="mt-1 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>
+                    {c.marketBand.replace('{low}', k(round10k(mktBand.low))).replace('{high}', k(round10k(mktBand.high)))}
+                  </p>
+                )}
+                <p className="mt-2 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
+                  {c.marketSource.replace('{code}', styrk).replace('{year}', String(market.year)).replace('{modelYear}', String(ctx.year))}
+                </p>
+              </div>
+            ) : marketFailed ? (
+              <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }} data-testid="market-error">{c.marketError}</p>
+            ) : null}
+          </div>
+        )}
         {(ranges || handEdited) && (
           <div className="md:col-start-3 min-w-0">
             <SectionLabel>{c.driversTitle}</SectionLabel>

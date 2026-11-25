@@ -69,6 +69,7 @@ import {
   type QuickAnswers,
   type QuickGuessKey,
 } from '../src/lib/companySetup';
+import type { StyrkCode } from '../src/lib/marketWage';
 import { translations } from '../src/i18n/translations';
 
 // The app's own category list, so every category the UI offers is writable here.
@@ -724,6 +725,7 @@ export function companyChanges(before: CompanyModel, after: CompanyModel): Field
   rows('costs', before.costs, after.costs);
   field('self.billablePct', before.self?.billablePct ?? null, after.self?.billablePct ?? null);
   field('self.hourlyRate', before.self?.hourlyRate ?? null, after.self?.hourlyRate ?? null);
+  field('market.styrk', before.market?.styrk ?? null, after.market?.styrk ?? null);
   const bq = before.quick;
   const aq = after.quick;
   if (!bq || !aq) field('quick', bq ?? null, aq ?? null);
@@ -839,6 +841,8 @@ export interface CompanySettingsFields {
   targetMarginPct?: number | null;
   /** Your own billable share and list rate where they differ from your group; null = use the group's. */
   self?: { billablePct?: number; hourlyRate?: number } | null;
+  /** Your STYRK-08 occupation for the SSB market pay; null = the default (2512). */
+  market?: { styrk: StyrkCode } | null;
   /** "Lagre som utgangspunkt": write the levers (after `levers` above) into the groups and set them to 0. */
   applyLevers?: boolean;
 }
@@ -849,9 +853,9 @@ const definedOnly = <T extends object>(patch: Partial<T> | undefined): Partial<T
 
 /** Change the model's settings. Only given fields change; levers are clamped to their slider range. */
 export function updateCompanySettings(blob: ExportPayload, args: CompanySettingsFields): FieldChange[] {
-  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, self, applyLevers: apply } = args;
+  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, self, market, applyLevers: apply } = args;
   if (mode === undefined && selfGroupId === undefined && hours === undefined && bonus === undefined
-    && levers === undefined && targetMarginPct === undefined && self === undefined && !apply) {
+    && levers === undefined && targetMarginPct === undefined && self === undefined && market === undefined && !apply) {
     throw new Error('no company settings provided');
   }
   return writeCompany(blob, (m) => {
@@ -868,6 +872,7 @@ export function updateCompanySettings(blob: ExportPayload, args: CompanySettings
       bonus: { ...m.bonus, ...definedOnly(bonus) },
       levers: { ...m.levers, ...definedOnly(levers) },
       self: self === null ? undefined : { ...m.self, ...definedOnly(self ?? {}) },
+      market: market === null ? undefined : market ?? m.market,
     });
     return apply ? applyLevers(next) : next;
   });
