@@ -102,7 +102,7 @@ beyond loopback. On a shared/remote deploy, gate it behind the app's own auth
 | `get_mortgage` | Active mortgage: payment, remaining term (years + months), payoff month and timeline, LTV, paydown vs plan, yearly amortization, and the user's ownership and loan share with co-owners |
 | `get_housing` | Borrowing capacity (with manual overrides), planned purchase, second-home scenarios and portfolio |
 | `get_employer_cost` | Employer cost, break-even/target/billed hourly rate, margin, fair salary |
-| `get_company_model` | The company model behind the employer-cost page's Avansert mode (groups, cost lines, hours, bonus, levers) and its results: your own and real cost, your overhead share, break-even rate and utilization, overhead per billable hour, revenue, people cost, bonus, EBIT, margin, estimated tax, KPIs, and the change against the levers at 0. `forYou` has what the company keeps on you (kr and % of what you invoice), the fair salary at the target margin and the salary ceiling (keep = 0; null = no solution), your and the company's salary share of revenue (lønnsandel), what +100 000 kr gross costs and the bonus-pool drop, and the target margin (default: the company margin before bonus, 0 when that is 0 or below; `targetClampedToZero` says so). `quick` is the page's quick setup (answers, guess flags, `edited` after a hand edit of groups or costs), or null; `model.self` is your own billable share and rate where they differ from your group. `ranges` (null without a quick setup) has low, mid and high of keep, keep %, fair salary, ceiling and the company margin before bonus, from the setup's `uncertain` and `dontKnow` answers, and `drivers` ("what matters most"): the guesses sorted by how much they move the fair salary. `model.accounts` is the company's newest public annual accounts from Brønnøysund once fetched (year, SELSKAP or KONSERN, revenue, operating result, employees as persons) |
+| `get_company_model` | The company model behind the employer-cost page's Avansert mode (groups, cost lines, hours, bonus, levers) and its results: your own and real cost, your overhead share, break-even rate and utilization, overhead per billable hour, revenue, people cost, bonus, EBIT, margin, estimated tax, KPIs, and the change against the levers at 0. `forYou` has what the company keeps on you (kr and % of what you invoice), the fair salary at the target margin and the salary ceiling (keep = 0; null = no solution), your and the company's salary share of revenue (lønnsandel), what +100 000 kr gross costs and the bonus-pool drop, and the target margin (default: the company margin before bonus, 0 when that is 0 or below; `targetClampedToZero` says so). `quick` is the page's quick setup (answers, guess flags, `edited` after a hand edit of groups or costs), or null; `model.self` is your own billable share and rate where they differ from your group. `ranges` (null without a quick setup) has low, mid and high of keep, keep %, fair salary, ceiling and the company margin before bonus, from the setup's `uncertain` and `dontKnow` answers, and `drivers` ("what matters most"): the guesses sorted by how much they move the fair salary. `model.accounts` is the company's newest public annual accounts from Brønnøysund once fetched (year, SELSKAP or KONSERN, revenue, operating result, employees as persons, and `fittedAt`/`fitMoves` after a fit). `accountsMatch` (`match`, `mismatch`, `unknown`) compares the model with them (more than 10 % of revenue apart is a mismatch), and `basis` is `accounts` when the model was fitted and still matches, else `guesses` |
 | `simulate_company` | Saves nothing. Lever values plus group and cost-line patches (add, change or remove by id) on the stored company model; returns current, simulated and delta, and `ranges` for the current and the simulated model |
 | `get_assets_and_debts` | Every balance with its id, equity breakdown, BSU room, wealth-tax estimate, recent snapshots |
 | `query_transactions` | Filter by date, category, text, amount, kind; totals and per-category sums over all matches |
@@ -162,14 +162,18 @@ Notes on a few of them:
   When `quick.edited` is true (groups or costs changed by hand), it refuses unless
   `confirmReplace: true`. One undoable revision; the page then shows "Endret fra
   chat" until the next change to the company model.
-- `calibrate_company_from_accounts` is the accounts card's "Tilpass modellen":
-  it moves only the guesses (answers in `uncertain` or `dontKnow`): the typical
+- `calibrate_company_from_accounts` is the accounts card's "Gjør modellen lik
+  regnskapet": it marks salary and the typical billable share as `uncertain` (a
+  `dontKnow` stays) and moves only these two guesses: the typical
   billable share to meet the accounts' revenue less `resaleSharePct`, then the
   consultants' mean salary to meet the operating result. Without `orgnr` it uses
   the stored accounts; with `orgnr` it fetches them through the app's
   `/api/brreg/:orgnr` (never Brønnøysund directly) and stores them with the fit.
-  It refuses, saving nothing, when nothing is a guess or there is no solution
-  inside the bounds. The result is an estimate, not a proof. One undoable revision.
+  It stores `accounts.fittedAt` and `fitMoves`; a later change of the answers or
+  groups drops them. It refuses, saving nothing, when there is no quick setup,
+  the model was edited by hand, the accounts are not in NOK, or there is no
+  solution inside the bounds. The result is an estimate, not a proof. One
+  undoable revision.
 - Ranges: each guess goes to its low and high value one at a time ("usikker":
   salary ±10 %, average rate ±5 %, billable shares ±5 pp, realization ±3 pp,
   office ±20 %; "vet ikke": twice that), and the swings are combined by

@@ -46,7 +46,7 @@ import {
   companyChanges,
 } from './mutations';
 import type { CompanyAccounts } from '../src/lib/companyAccounts';
-import { companyContext } from './derive';
+import { companyContext, companyModelSummary } from './derive';
 import {
   calcCompany,
   youEconomics,
@@ -579,6 +579,29 @@ const cases: {
       expect(sanitizeCompanyModel(m)).toEqual(m);
       expect(changes).toContainEqual(expect.objectContaining({ field: 'companyModel.accounts', before: null }));
       expect(changes).toContainEqual(expect.objectContaining({ field: 'companyModel.quick.answers.typicalBillablePct' }));
+      expect(m.accounts!.fittedAt).toEqual(expect.any(String));
+      expect(m.accounts!.fitMoves!.map((x) => x.key)).toEqual(['typicalBillablePct', 'salary']);
+      expect(companyModelSummary(b)).toMatchObject({ basis: 'accounts', accountsMatch: 'match' });
+    },
+  },
+  {
+    name: 'calibrate_company_from_accounts (marks salary and the typical share as guesses itself)',
+    touched: ['companyModel'],
+    mutate: (b) => {
+      setupCompanyQuick(b, { uncertain: ['rateAverage'], dontKnow: [], confirmReplace: true });
+      b.companyModel = { ...b.companyModel!, accounts: madeUpAccounts(b) };
+      expect(companyModelSummary(b)).toMatchObject({ basis: 'guesses' });
+      return calibrateCompanyFromAccounts(b, { ctx: companyContext(b) });
+    },
+    assertChange: (b, changes) => {
+      const m = b.companyModel!;
+      expect(m.quick!.uncertain).toEqual(expect.arrayContaining(['rateAverage', 'salary', 'typicalBillablePct']));
+      expect(changes).toContainEqual(expect.objectContaining({ field: 'companyModel.accounts.fittedAt', before: null }));
+      // A later hand edit drops the fit marker, and the diff says so.
+      const later = upsertCompanyGroup(b, { id: 'kons', create: false, count: 3 });
+      expect(b.companyModel!.accounts!.fittedAt).toBeUndefined();
+      expect(later).toContainEqual(expect.objectContaining({ field: 'companyModel.accounts.fittedAt', after: null }));
+      expect(companyModelSummary(b).basis).toBe('guesses');
     },
   },
   {
@@ -697,11 +720,11 @@ describe('write builders reject bad references loudly (no silent no-op)', () => 
       setupCompanyQuick(b, { uncertain: ['salary'], confirmReplace: true });
       return calibrateCompanyFromAccounts(b, { ctx: companyContext(b) });
     }, /no accounts are stored/],
-    ['calibrate_company_from_accounts (nothing is a guess)', () => {
+    ['calibrate_company_from_accounts (accounts not in NOK)', () => {
       const b = fresh();
-      setupCompanyQuick(b, { uncertain: ['rateAverage'], confirmReplace: true });
-      return calibrateCompanyFromAccounts(b, { ctx: companyContext(b), accounts: madeUpAccounts(b) });
-    }, /nothing is marked as a guess/],
+      setupCompanyQuick(b, { uncertain: ['salary'], confirmReplace: true });
+      return calibrateCompanyFromAccounts(b, { ctx: companyContext(b), accounts: { ...madeUpAccounts(b), currency: 'SEK' } });
+    }, /not in NOK/],
     ['calibrate_company_from_accounts (no solution)', () => {
       const b = fresh();
       setupCompanyQuick(b, { uncertain: ['salary', 'typicalBillablePct'], confirmReplace: true });

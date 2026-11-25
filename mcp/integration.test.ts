@@ -504,7 +504,7 @@ describe('company model tools through the MCP protocol', () => {
     expect(await getBlob()).toEqual(before);
   });
 
-  it('calibrate_company_from_accounts fits the stored accounts in one undoable write, and refuses with nothing to move', async () => {
+  it('calibrate_company_from_accounts fits the stored accounts in one undoable write, and refuses after a hand edit', async () => {
     const before = await getBlob();
     await call('setup_company_quick', { uncertain: ['salary', 'typicalBillablePct'], confirmReplace: true });
     // Made-up accounts: the setup's own numbers at a lower billable share and a higher salary.
@@ -531,7 +531,7 @@ describe('company model tools through the MCP protocol', () => {
     const stored = await getBlob();
     expect({ ...stored, companyModel: withAccounts.companyModel }).toEqual(withAccounts);
     expect(stored.companyModel!.quick!.answers.typicalBillablePct).toBeCloseTo(78, 0);
-    expect(stored.companyModel!.accounts).toEqual(withAccounts.companyModel!.accounts);
+    expect(stored.companyModel!.accounts).toEqual({ ...withAccounts.companyModel!.accounts, fittedAt: expect.any(String), fitMoves: expect.any(Array) });
     await call('undo_change', { rev: out.rev });
     expect(await getBlob()).toEqual(withAccounts);
 
@@ -540,10 +540,10 @@ describe('company model tools through the MCP protocol', () => {
     expect(bad.isError).toBe(true);
     expect(bad.content[0].text).toMatch(/not a valid organisation number/);
 
-    await call('setup_company_quick', { uncertain: [], dontKnow: [] });
-    const none = (await mcp.callTool({ name: 'calibrate_company_from_accounts', arguments: {} })) as { isError?: boolean; content: { text: string }[] };
-    expect(none.isError).toBe(true);
-    expect(none.content[0].text).toMatch(/nothing is marked as a guess/);
+    await call('upsert_company_group', { id: 'kons', create: false, count: 3 });
+    const edited = (await mcp.callTool({ name: 'calibrate_company_from_accounts', arguments: {} })) as { isError?: boolean; content: { text: string }[] };
+    expect(edited.isError).toBe(true);
+    expect(edited.content[0].text).toMatch(/changed by hand/);
 
     await reseed();
     expect(await getBlob()).toEqual(before);

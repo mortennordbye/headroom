@@ -7,6 +7,8 @@ import {
 } from '../lib/companyCost';
 import { companyRanges, SMALL_SWING_KR, type Range } from '../lib/companyRanges';
 import { DEFAULT_STYRK, MARKET_WAGE_GROWTH_PCT, STYRK_CODES, isStyrkCode, marketWage } from '../lib/marketWage';
+import { accountsStatus } from '../lib/companyCalibrate';
+import { ACCOUNTS_CARD_ANCHOR, BasisTag } from './CompanyAccountsCard';
 import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { NumberRow } from './ui/NumberRow';
@@ -185,6 +187,10 @@ export function CompanyMeCard({
     setModel((m) => ({ ...m, targetMarginPct: Math.min(TARGET_MARGIN_RANGE.max, Math.max(TARGET_MARGIN_RANGE.min, v)) }));
   };
 
+  // What "keep" rests on: guesses, or a fit to the accounts that still matches them (Norway only, as the accounts card).
+  const basis = useMemo(() => (region === 'no' ? accountsStatus(model, ctx) : null), [region, model, ctx]);
+  const fitted = basis?.basis === 'accounts';
+
   const lineTemplate = y.raise.bonusDrop > 0 ? c.meLine : c.meLineNoBonus;
   // Your real salary against the fair salary; the slider does not move it.
   const fairDiff = fairShown != null ? now - fairShown : 0;
@@ -194,11 +200,35 @@ export function CompanyMeCard({
       {/* Two headline numbers, with their ranges when the setup has guesses. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="min-w-0">
-          <SectionLabel>{c.meKeep}</SectionLabel>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <SectionLabel>{c.meKeep}</SectionLabel>
+            {basis && (
+              <span data-testid="me-basis">
+                <BasisTag fact={fitted}>{fitted ? c.meBasisAccounts.replace('{year}', String(model.accounts?.year ?? '')) : c.meBasisGuess}</BasisTag>
+              </span>
+            )}
+          </div>
           <div className="mt-2 font-mono font-semibold leading-[1.1] text-[30px] md:text-[40px] tabular-nums" style={{ color: y.keep < 0 ? 'var(--negative)' : 'var(--brass)' }}>
             {kr(y.keep)}
           </div>
           <div className="mt-1.5 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>{c.meKeepSub.replace('{pct}', nf(y.keepPct))}{keepSpan && <> · <span className="whitespace-nowrap">{keepSpan}</span></>}</div>
+          {basis && (
+            <div className="mt-1 text-[12px]" style={{ color: 'var(--text-3)' }}>
+              {fitted ? c.meBasisAccountsSub : (
+                <>
+                  {basis.match === 'mismatch' ? c.meBasisMismatch : c.meBasisUnchecked}{' '}
+                  <a
+                    href={`#${ACCOUNTS_CARD_ANCHOR}`}
+                    className="underline underline-offset-2"
+                    style={{ color: 'var(--accent)' }}
+                    onClick={(e) => { e.preventDefault(); document.getElementById(ACCOUNTS_CARD_ANCHOR)?.scrollIntoView({ block: 'start' }); }}
+                  >
+                    {c.meBasisCheck}
+                  </a>
+                </>
+              )}
+            </div>
+          )}
         </div>
         <div className="min-w-0">
           <SectionLabel>{c.meFair}</SectionLabel>

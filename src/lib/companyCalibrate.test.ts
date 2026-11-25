@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { calibrateToAccounts, withMeanSalary, CALIBRATE_BOUNDS } from './companyCalibrate';
+import { accountsStatus, calibrateToAccounts, fitModelToAccounts, withMeanSalary, CALIBRATE_BOUNDS } from './companyCalibrate';
+import type { CompanyAccounts } from './companyAccounts';
 import { buildModelFromAnswers, markQuickEdited, quickMeanSalary, QUICK_DEFAULTS, type QuickAnswers, type QuickGuessKey } from './companySetup';
 import { calcCompany, sanitizeCompanyModel, DEFAULT_COMPANY_MODEL, NEUTRAL_LEVERS, type CompanyContext, type CompanyModel } from './companyCost';
 import { DEFAULT_EMPLOYER_COST_CONFIG } from './employerCost';
@@ -121,5 +122,83 @@ describe('calibrateToAccounts', () => {
       expect(mean).toBeGreaterThan(prev);
       prev = mean;
     }
+  });
+});
+
+describe('fitModelToAccounts', () => {
+  // Made-up public accounts of a made-up company.
+  const accountsOf = (m: CompanyModel, patch: Partial<CompanyAccounts> = {}): CompanyAccounts => ({
+    orgnr: '999900003', name: 'Eksempel Konsulent AS', year: 2025, type: 'SELSKAP', currency: 'NOK',
+    ...numbers(m), employees: 52, formCode: 'AS', naceCode: '62.020', hasParent: false, inGroup: false,
+    fetchedAt: '2026-11-01T10:00:00.000Z', ...patch,
+  });
+  const NOW = '2026-11-25T12:00:00.000Z';
+  const truth = model({ typicalBillablePct: 80, salaryLow: 850_000, salaryHigh: 1_150_000 });
+
+  it('round trip: marks salary and the typical share as guesses, fits them and marks the accounts as fitted', () => {
+    const acc = accountsOf(truth);
+    const start = { ...model({ typicalBillablePct: 90, salaryLow: 700_000, salaryHigh: 1_000_000 }), accounts: acc };
+    expect(accountsStatus(start, ctx)).toEqual({ match: 'mismatch', basis: 'guesses', fittedAt: null });
+    const out = fitModelToAccounts(start, ctx, acc, { now: NOW });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.model.quick!.uncertain).toEqual(expect.arrayContaining(['salary', 'typicalBillablePct']));
+    expect(out.model.quick!.answers.typicalBillablePct).toBeCloseTo(80, 0);
+    expect(Math.abs(quickMeanSalary(out.model.quick!.answers) - 1_000_000)).toBeLessThan(2_000);
+    expect(out.model.accounts).toEqual({ ...acc, fittedAt: NOW, fitMoves: out.moved });
+    expect(out.moved.map((m) => m.key)).toEqual(['typicalBillablePct', 'salary']);
+    expect(accountsStatus(out.model, ctx)).toEqual({ match: 'match', basis: 'accounts', fittedAt: NOW });
+    expect(sanitizeCompanyModel(out.model)).toEqual(out.model);
+  });
+
+  it('keeps a "vet ikke" answer as it is before the fit', () => {
+    const start = model({ typicalBillablePct: 90 }, ['rateAverage'], ['salary']);
+    const out = fitModelToAccounts(start, ctx, accountsOf(truth), { now: NOW });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // calibrateToAccounts makes the fitted answers "usikker"; the other guesses stay.
+    expect(out.model.quick!.uncertain).toEqual(expect.arrayContaining(['rateAverage', 'salary', 'typicalBillablePct']));
+    expect(out.moved.map((m) => m.key)).toEqual(['typicalBillablePct', 'salary']);
+  });
+
+  it('returns a failure and no model when it cannot fit', () => {
+    const start = model();
+    expect(fitModelToAccounts({ ...start, quick: undefined }, ctx, accountsOf(truth))).toEqual({ ok: false, reason: 'noQuickSetup' });
+    expect(fitModelToAccounts(start, ctx, accountsOf(truth, { currency: 'SEK' }))).toEqual({ ok: false, reason: 'currency' });
+    const far = accountsOf(truth);
+    expect(fitModelToAccounts(start, ctx, { ...far, revenue: far.revenue * 10 })).toMatchObject({ ok: false, reason: 'noSolution' });
+  });
+
+  it('refuses after a hand edit unless asked to replace it, then builds from the answers again', () => {
+    const edited = markQuickEdited({ ...model({ typicalBillablePct: 90 }), groups: model().groups.map((g) => ({ ...g, count: g.count + 1 })) });
+    expect(fitModelToAccounts(edited, ctx, accountsOf(truth))).toEqual({ ok: false, reason: 'handEdited' });
+    const out = fitModelToAccounts(edited, ctx, accountsOf(truth), { replaceHandEdits: true, now: NOW });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.model.quick!.edited).toBe(false);
+    expect(out.model.groups.map((g) => g.count)).toEqual(truth.groups.map((g) => g.count));
+    expect(accountsStatus(out.model, ctx).basis).toBe('accounts');
+  });
+
+  it('drops the fit marker when the answers or the groups change after', () => {
+    const out = fitModelToAccounts(model({ typicalBillablePct: 90 }), ctx, accountsOf(truth), { now: NOW });
+    if (!out.ok) throw new Error('fit failed');
+    expect(out.model.accounts?.fittedAt).toBe(NOW);
+    // A hand edit of groups or costs.
+    const handEdit = markQuickEdited({ ...out.model, groups: out.model.groups.map((g) => ({ ...g, count: g.count + 1 })) });
+    expect(handEdit.accounts?.fittedAt).toBeUndefined();
+    expect(handEdit.accounts?.fitMoves).toBeUndefined();
+    expect(handEdit.accounts?.orgnr).toBe('999900003');
+    // New quick answers.
+    const rebuilt = buildModelFromAnswers({ ...out.model.quick!.answers, totalFte: 60 }, out.model);
+    expect(rebuilt.accounts?.fittedAt).toBeUndefined();
+    expect(accountsStatus(rebuilt, ctx).basis).toBe('guesses');
+  });
+
+  it('says guesses when the model was fitted but no longer matches', () => {
+    const out = fitModelToAccounts(model({ typicalBillablePct: 90 }), ctx, accountsOf(truth), { now: NOW });
+    if (!out.ok) throw new Error('fit failed');
+    const moved = { ...out.model, hours: { ...out.model.hours, internalPct: 30 } };
+    expect(accountsStatus(moved, ctx)).toEqual({ match: 'mismatch', basis: 'guesses', fittedAt: NOW });
   });
 });

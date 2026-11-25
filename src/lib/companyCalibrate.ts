@@ -1,5 +1,5 @@
 /**
- * "Tilpass modellen" on the accounts card: move the quick setup's guesses so
+ * "Gjør modellen lik regnskapet" on the accounts card (fitModelToAccounts below): move the quick setup's guesses so
  * the model gives the revenue and operating result in the public accounts.
  *
  * Only answers marked as a guess ("usikker" or "vet ikke") move, and only two:
@@ -17,8 +17,8 @@
  */
 
 import { calcCompany, NEUTRAL_LEVERS, type CompanyContext, type CompanyModel } from './companyCost';
-import { buildModelFromAnswers, quickMeanSalary, type QuickAnswers, type QuickGuessKey } from './companySetup';
-import { consultingRevenue, type CompanyAccounts } from './companyAccounts';
+import { buildModelFromAnswers, quickMeanSalary, type QuickAnswers, type QuickGuessKey, type QuickLabels } from './companySetup';
+import { accountsMatch, consultingRevenue, withoutFit, type AccountsMatch, type CompanyAccounts } from './companyAccounts';
 
 /** The answers the fit may move. */
 export type CalibrateKey = Extract<QuickGuessKey, 'typicalBillablePct' | 'salary'>;
@@ -159,4 +159,52 @@ export function calibrateToAccounts(
     fit: { revenue: r.revenue, ebit: r.ebit },
     matched: { revenue: moveBillable, operatingResult: moveSalary },
   };
+}
+
+/** The answers "Gjør modellen lik regnskapet" marks as a guess before the fit. */
+export const FIT_GUESS_KEYS: readonly CalibrateKey[] = ['salary', 'typicalBillablePct'];
+
+/**
+ * "Gjør modellen lik regnskapet" in one step: mark the mean salary and the
+ * typical billable share as a guess ("usikker"; a "vet ikke" stays), build the
+ * model from the quick answers again when it was edited by hand (only with
+ * replaceHandEdits, else it refuses), fit it (calibrateToAccounts) and mark the
+ * accounts as fitted (fittedAt, fitMoves). On failure there is no model to save.
+ */
+export function fitModelToAccounts(
+  model: CompanyModel,
+  ctx: CompanyContext,
+  accounts: CompanyAccounts,
+  opts: { replaceHandEdits?: boolean; labels?: QuickLabels; now?: string } = {},
+): CalibrateResult {
+  const q = model.quick;
+  if (!q) return { ok: false, reason: 'noQuickSetup' };
+  if (accounts.currency !== 'NOK') return { ok: false, reason: 'currency' };
+  if (q.edited && !opts.replaceHandEdits) return { ok: false, reason: 'handEdited' };
+  const uncertain = [...new Set([...q.uncertain, ...FIT_GUESS_KEYS.filter((k) => !q.dontKnow.includes(k))])];
+  const base: CompanyModel = q.edited
+    ? buildModelFromAnswers(q.answers, model, { uncertain, dontKnow: q.dontKnow, labels: opts.labels })
+    : { ...model, quick: { ...q, uncertain } };
+  const out = calibrateToAccounts(base, ctx, accounts);
+  if (!out.ok) return out;
+  const fitted: CompanyAccounts = { ...withoutFit(accounts), fittedAt: opts.now ?? new Date().toISOString(), fitMoves: out.moved };
+  return { ...out, model: { ...out.model, accounts: fitted } };
+}
+
+export interface AccountsStatus {
+  /** The model (levers at 0) against the stored accounts. */
+  match: AccountsMatch;
+  /** 'accounts' when the model was fitted to the accounts and still matches them; else 'guesses'. */
+  basis: 'guesses' | 'accounts';
+  /** When the fit ran, or null. */
+  fittedAt: string | null;
+}
+
+/** What the model's numbers rest on, for the accounts card, the me card and get_company_model. */
+export function accountsStatus(model: CompanyModel, ctx: CompanyContext): AccountsStatus {
+  const acc = model.accounts;
+  const r = calcCompany(model, ctx, NEUTRAL_LEVERS);
+  const match = accountsMatch(r, acc, model.quick?.answers.resaleSharePct ?? 0);
+  const fittedAt = acc?.fittedAt ?? null;
+  return { match, basis: fittedAt && match === 'match' ? 'accounts' : 'guesses', fittedAt };
 }
