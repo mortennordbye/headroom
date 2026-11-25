@@ -20,6 +20,7 @@ import {
   type BuiltPayload,
 } from './payloadRegistry';
 import { DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG } from './employerCost';
+import { DEFAULT_COMPANY_MODEL } from './companyCost';
 import { getDemoData } from './demoData';
 import type {
   ExportPayload, Assets, LoanData, Pension, HomeownerData, TransitionData,
@@ -190,6 +191,11 @@ function fullPayload(): ExportPayload {
     taxCard: { kind: 'table', table: '8130', year: 2026 },
     employerCostConfig: { ...DEFAULT_EMPLOYER_COST_CONFIG },
     billingConfig: { ...DEFAULT_BILLING_CONFIG },
+    // Non-default on purpose, so a round trip is told apart from a reset.
+    companyModel: {
+      ...DEFAULT_COMPANY_MODEL, mode: 'advanced', selfGroupId: 'tl',
+      levers: { utilizationPp: 3, ratePct: 5, salaryPct: 0, realizationPp: -1 },
+    },
     hiddenNavItems: ['forecast'],
     onboardingCompleted: true,
     assumptionsNudgeDismissed: true,
@@ -222,15 +228,15 @@ function roundTrip(data: Partial<ExportPayload>, resetMissing: boolean, seed: Pa
 }
 
 describe('payloadRegistry — exhaustiveness', () => {
-  it('registers exactly the 65 persisted fields (currentMonth excluded)', () => {
-    expect(KEYS).toHaveLength(65);
+  it('registers exactly the 66 persisted fields (currentMonth excluded)', () => {
+    expect(KEYS).toHaveLength(66);
     expect(KEYS).not.toContain('currentMonth');
   });
 
-  it('partitions every field into reset (41) or preserve (24)', () => {
+  it('partitions every field into reset (42) or preserve (24)', () => {
     const reset = KEYS.filter((k) => registry[k].group === 'reset');
     const preserve = KEYS.filter((k) => registry[k].group === 'preserve');
-    expect(reset).toHaveLength(41);
+    expect(reset).toHaveLength(42);
     expect(preserve).toHaveLength(24);
     // The load/import distinction, locked field-for-field.
     expect(new Set(preserve)).toEqual(new Set([
@@ -318,6 +324,7 @@ describe('payloadRegistry — resetMissing semantics', () => {
     expect(state.fixedExpenses).toBe(defFixed);
     expect(state.debts).toEqual([]);
     expect(state.employerCostConfig).toBe(DEFAULT_EMPLOYER_COST_CONFIG);
+    expect(state.companyModel).toBe(DEFAULT_COMPANY_MODEL);
     // preserve fields → untouched (kept the seed)
     for (const k of KEYS) {
       if (registry[k].group === 'preserve') expect(state[k], k).toBe(`SEED_${k}`);
@@ -431,5 +438,16 @@ describe('payloadRegistry — read combinators', () => {
     expect(mergedWith('pension', defPension)({ pension: { otpBalance: 5 } as Pension }))
       .toEqual({ ...defPension, otpBalance: 5 });
     expect(mergedWith('pension', defPension)({})).toBe(ABSENT);
+  });
+});
+
+describe('payloadRegistry — companyModel', () => {
+  it('repairs a malformed model on read instead of dropping it', () => {
+    const read = registry.companyModel.read;
+    expect(read({})).toBe(ABSENT);
+    expect(read({ companyModel: 'junk' as unknown as ExportPayload['companyModel'] })).toEqual(DEFAULT_COMPANY_MODEL);
+    const fixed = read({ companyModel: { mode: 'advanced', groups: [] } as unknown as ExportPayload['companyModel'] });
+    expect(fixed).not.toBe(ABSENT);
+    expect(fixed).toMatchObject({ mode: 'advanced', groups: [], selfGroupId: null, costs: DEFAULT_COMPANY_MODEL.costs });
   });
 });

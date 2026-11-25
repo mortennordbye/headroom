@@ -94,6 +94,22 @@ in git and the CHANGELOG, not here.
   per-job billing rate with billed-hours snapshots, and a per-job stack in the Total comp chart
   (`compByYear` aggregates globally). **Where**: `src/context/FinanceContext.tsx`,
   `src/pages/SalaryPage.tsx`.
+- **Company model (Avansert employer cost): planned follow-ups.** PR 1 ships fixed pay, levers and
+  the one-year result. Next, each with its own plan picture first: (1) MCP tools
+  `get_company_model`, `simulate_company`, upsert/delete group and cost line,
+  `update_company_settings`, plus `companyModel` in `mcp/fixture.ts` and test rule 10;
+  (2) commission pay per group, with a flag for what the % covers and full 12 % holiday pay;
+  (3) scenario presets on the levers and a key-client loss. **Why deferred**: split into PRs to
+  keep each one reviewable. **Unblock**: PR 1 merged. **Where**: `src/lib/companyCost.ts`,
+  `src/components/CompanyModelPanel.tsx`, `mcp/`.
+- **Company model: items left out of scope.** Monthly cash flow (holiday-pay month, bonus payout,
+  VAT and tax dates, invoiced vs paid, cash buffer, client debt), key person and new-hire ramp-up,
+  subcontractors, owner salary vs dividend, fixed-price project risk. **Why deferred**: they need
+  monthly timing or new group types; the model is one year. **Unblock**: a monthly projection in
+  `companyCost.ts`. **Where**: `src/lib/companyCost.ts`.
+- **Public holidays after 2026.** `norwegianCalendar.ts` has 2026 only; later years fall back to
+  the 2026 count. **Unblock**: add each year's weekday holidays with a source. **Where**:
+  `src/lib/norwegianCalendar.ts`.
 - **2027 withholding tables aren't out yet.** `TREKK_PARAMS` only has 2026. The Trekk tables
   workflow opens a `tier:review` PR once Skatteetaten publishes (usually December). **Unblock**:
   review and merge that PR. **Where**: `.github/workflows/trekk-tables.yml`,

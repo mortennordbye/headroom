@@ -19,6 +19,8 @@ import { currentMonthKey } from '../lib/date';
 import { otpContributionCap } from '../lib/pension';
 import { TAX_YEAR } from '../lib/norwegianTax';
 import { parseLocaleNumber } from '../lib/validators';
+import { calcCompany, calculatorInputs, type CompanyContext } from '../lib/companyCost';
+import { CompanyModelPanel } from '../components/CompanyModelPanel';
 
 const EmployerCostPage: React.FC = () => {
   const {
@@ -28,9 +30,12 @@ const EmployerCostPage: React.FC = () => {
     billingConfig, updateBillingConfig,
     restoreEmployerCostDefaults,
     employerSalaryOverride: salaryOverride, setEmployerSalaryOverride: setSalaryOverride,
+    companyModel, setCompanyModel,
   } = useFinance();
   const ec = t.employerCost;
+  const cm = t.companyModel;
   const isNo = region === 'no';
+  const advanced = companyModel.mode === 'advanced';
 
   // Salary auto-filled from the salary system, with manual override. `today`
   // lives in render scope so the value recomputes if the month rolls over during
@@ -47,12 +52,30 @@ const EmployerCostPage: React.FC = () => {
 
   const { solveFor } = billingConfig;
 
-  const hours = calcBillableHours(billingConfig);
+  // Avansert: the company model. Your salary always comes from the salary page
+  // (or its override here); hours from the calendar; no flat overhead.
+  const companyCtx = useMemo<CompanyContext>(() => ({
+    year: TAX_YEAR,
+    hoursPerDay: billingConfig.hoursPerDay,
+    ownGross: storedGross,
+    otpPct,
+    costConfig: employerCostConfig,
+    holidayPayInSalary: isNo,
+    otpCap: isNo,
+  }), [billingConfig.hoursPerDay, storedGross, otpPct, employerCostConfig, isNo]);
+  const company = useMemo(() => calcCompany(companyModel, companyCtx), [companyModel, companyCtx]);
+
+  // The calculator runs on the simple settings in Enkel (unchanged), and on the
+  // real cost and the model's billable hours in Avansert (see calculatorInputs).
+  const { costConfig: calcCostConfig, billing: calcBilling, shareClamped } =
+    calculatorInputs(advanced, employerCostConfig, billingConfig, company);
+
+  const hours = calcBillableHours(calcBilling);
   const gross = solveFor === 'salary'
-    ? calcFairGross(storedRate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct, isNo, TAX_YEAR, isNo)
+    ? calcFairGross(storedRate, hours, otpPct, calcCostConfig, billingConfig.targetMarginPct, isNo, TAX_YEAR, isNo)
     : storedGross;
-  const cost = calcEmployerCost(gross, otpPct, employerCostConfig, isNo, TAX_YEAR, isNo);
-  const billing = calcBillingRate(cost.totalEmployerCost, billingConfig);
+  const cost = calcEmployerCost(gross, otpPct, calcCostConfig, isNo, TAX_YEAR, isNo);
+  const billing = calcBillingRate(cost.totalEmployerCost, calcBilling);
   const rate = solveFor === 'rate' ? billing.targetHourly : storedRate;
   const result = calcBilledRate(rate, hours, cost.totalEmployerCost);
   const margin = solveFor === 'margin' ? result.marginPct : billingConfig.targetMarginPct;
@@ -60,12 +83,15 @@ const EmployerCostPage: React.FC = () => {
   const markupPct = billing.breakEvenHourly > 0 ? (rate / billing.breakEvenHourly - 1) * 100 : 0;
   // From the margin angle, also say what a fair salary would be at the target margin.
   const fairGross = solveFor === 'margin'
-    ? calcFairGross(rate, hours, otpPct, employerCostConfig, billingConfig.targetMarginPct, isNo, TAX_YEAR, isNo)
+    ? calcFairGross(rate, hours, otpPct, calcCostConfig, billingConfig.targetMarginPct, isNo, TAX_YEAR, isNo)
     : null;
 
   // Freeze the value that was being solved for into stored state, so switching
-  // what to solve for doesn't make the numbers jump (beyond rounding).
+  // what to solve for doesn't make the numbers jump (beyond rounding). Enkel
+  // only: in Avansert the solved value comes from the company model, and
+  // Avansert never writes the simple settings.
   const changeSolveFor = (next: SolveFor) => {
+    if (advanced) { updateBillingConfig('solveFor', next); return; }
     if (solveFor === 'rate') updateBillingConfig('billedHourly', Math.round(rate));
     if (solveFor === 'salary') setSalaryOverride(Math.round(gross));
     if (solveFor === 'margin') updateBillingConfig('targetMarginPct', Math.min(95, Math.max(0, Math.round(margin * 10) / 10)));
@@ -80,23 +106,175 @@ const EmployerCostPage: React.FC = () => {
     ? ec.employerPensionCapped.replace('{pct}', String(otpPct))
     : `${otpPct}%`;
 
+  const calculator = (
+    <>
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+            {/* In Avansert the folded summary above already carries the title. */}
+            {!advanced && (
+              <div className="flex items-center gap-2">
+                <Calculator size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
+                <SectionLabel>{ec.calcTitle}</SectionLabel>
+              </div>
+            )}
+            <div className={`flex items-center gap-2${advanced ? ' ml-auto' : ''}`}>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{ec.solveFor}</span>
+              <SegmentedControl<SolveFor>
+                ariaLabel={ec.solveFor}
+                value={solveFor}
+                onChange={changeSolveFor}
+                items={[
+                  { value: 'rate', label: ec.solveRate },
+                  { value: 'salary', label: ec.solveSalary },
+                  { value: 'margin', label: ec.solveMargin },
+                ]}
+              />
+            </div>
+          </div>
+          <p className="mt-3 text-[12px]" style={{ color: 'var(--text-3)' }}>{ec.calcSubtitle}</p>
+
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5">
+            {solveFor === 'salary' ? (
+              <SolvedField label={ec.grossSalary} value={formatCurrency(gross)} badge={ec.calculated} />
+            ) : (
+              <div>
+                <div className="flex items-baseline justify-between mb-2">
+                  <label htmlFor="calc-gross" className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
+                    {ec.grossSalary}
+                  </label>
+                  <span
+                    className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                    style={{
+                      background: isAuto ? 'var(--accent-bg)' : 'var(--surface-5)',
+                      color: isAuto ? 'var(--accent)' : 'var(--text-3)',
+                    }}
+                  >
+                    {isAuto ? t.salary.incomeAuto : t.salary.incomeOverride}
+                  </span>
+                </div>
+                <input
+                  id="calc-gross"
+                  type="number"
+                  value={storedGross}
+                  onChange={(e) => {
+                    const n = parseLocaleNumber(e.target.value);
+                    setSalaryOverride(Number.isFinite(n) ? n : 0);
+                  }}
+                  className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
+                  style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+                />
+                {!isAuto && (
+                  <button
+                    onClick={() => setSalaryOverride(null)}
+                    className="mt-2 text-[11px] font-semibold"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    {t.salary.incomeResetAuto}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {solveFor === 'rate' ? (
+              <SolvedField label={ec.billedHourly} value={`${formatCurrency(rate)}/t`} badge={ec.calculated} />
+            ) : (
+              <div>
+                <div className="flex items-baseline justify-between mb-2">
+                  <label htmlFor="calc-rate" className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{ec.billedHourly}</label>
+                  <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>kr/{t.common.hourUnit}</span>
+                </div>
+                <input
+                  id="calc-rate"
+                  type="number"
+                  value={billingConfig.billedHourly ?? ''}
+                  placeholder={Math.round(billing.targetHourly).toString()}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    if (raw === '') { updateBillingConfig('billedHourly', null); return; }
+                    const n = parseLocaleNumber(raw);
+                    updateBillingConfig('billedHourly', Number.isFinite(n) && n >= 0 ? n : null);
+                  }}
+                  className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
+                  style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
+                />
+              </div>
+            )}
+
+            {solveFor === 'margin' ? (
+              <SolvedField
+                label={ec.employerMargin}
+                value={`${margin.toFixed(1)}%`}
+                badge={ec.calculated}
+                color={margin < 0 ? 'var(--negative)' : undefined}
+              />
+            ) : (
+              <SliderRow label={ec.employerMargin} value={billingConfig.targetMarginPct} onChange={(v) => updateBillingConfig('targetMarginPct', v)} min={0} max={95} step={1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.targetMarginPct, DEFAULT_BILLING_CONFIG.targetMarginPct)} />} />
+            )}
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+            <StatBlock label={ec.annualRevenue} value={formatCurrency(result.annualRevenue)} />
+            <StatBlock
+              label={ec.employerProfit}
+              value={formatCurrency(result.employerProfit)}
+              sub={`${formatCurrency(result.profitPerHour)} ${ec.perHour}`}
+              color={result.employerProfit < 0 ? 'var(--negative)' : 'var(--warning)'}
+            />
+            <StatBlock label={ec.dailyRate} value={`${formatCurrency(dailyRate)}/${t.employerCostPage.dayAbbr}`} />
+            <StatBlock label={ec.billableHours} value={`${Math.round(hours).toLocaleString(lang === 'nb' ? 'nb-NO' : 'en-US')} t`} />
+            <StatBlock label={ec.breakEven} value={`${formatCurrency(billing.breakEvenHourly)}/t`} />
+            <StatBlock label={ec.markupOnCost} value={`${markupPct >= 0 ? '+' : ''}${markupPct.toFixed(0)}%`} />
+          </div>
+
+          {fairGross != null && (
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 items-end rounded-[8px] px-4 py-4" style={{ background: 'var(--surface-2)' }}>
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>
+                  {ec.fairSalary} · {ec.fairSalarySub.replace('{margin}', String(billingConfig.targetMarginPct))}
+                </div>
+                <div className="text-[20px] font-semibold font-mono tabular-nums mt-1" style={{ color: 'var(--positive)' }}>{formatCurrency(fairGross)}</div>
+                <div className="text-[11px] font-mono mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  {fairGross - gross >= 0 ? '+' : '−'}{formatCurrency(Math.abs(fairGross - gross))} {ec.vsYourSalary}
+                </div>
+              </div>
+              <SliderRow label={ec.fairMargin} value={billingConfig.targetMarginPct} onChange={(v) => updateBillingConfig('targetMarginPct', v)} min={0} max={95} step={1} suffix="%" />
+            </div>
+          )}
+
+          <p className="mt-5 text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.fairSalaryHint}</p>
+          {shareClamped && <p className="mt-2 text-[11px]" style={{ color: 'var(--warning)' }}>{cm.shareClampedHint}</p>}
+    </>
+  );
+
   return (
     <div className="space-y-6 md:space-y-7">
-      {/* Hero header */}
-      <header className="max-w-4xl">
-        <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
-          {ec.heroLabel}
-        </div>
-        <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
-          {t.employerCostPage.heroBefore}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.employerCostPage.heroEmphasis}</em>{t.employerCostPage.heroAfter}
-        </h1>
-        <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
-          {ec.subtitle}
-        </p>
-      </header>
+      {/* Hero header, with the Enkel / Avansert switch on the right */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <header className="max-w-4xl">
+          <div className="text-[12px] uppercase tracking-[0.16em] font-semibold mb-3" style={{ color: 'var(--accent)' }}>
+            {ec.heroLabel}
+          </div>
+          <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-[-0.01em]">
+            {t.employerCostPage.heroBefore}<em className="font-serif italic" style={{ color: 'var(--brass)' }}>{t.employerCostPage.heroEmphasis}</em>{t.employerCostPage.heroAfter}
+          </h1>
+          <p className="mt-3 text-[15px] leading-[1.55] max-w-2xl" style={{ color: 'var(--text-2)' }}>
+            {advanced ? cm.subtitle : ec.subtitle}
+          </p>
+        </header>
+        <SegmentedControl<'simple' | 'advanced'>
+          ariaLabel={cm.mode}
+          value={companyModel.mode}
+          onChange={(mode) => setCompanyModel((m) => ({ ...m, mode }))}
+          items={[
+            { value: 'simple', label: cm.modeSimple },
+            { value: 'advanced', label: cm.modeAdvanced },
+          ]}
+        />
+      </div>
+
+      {advanced && <CompanyModelPanel model={companyModel} setModel={setCompanyModel} ctx={companyCtx} result={company} />}
 
       {/* Summary tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      {!advanced && <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <SummaryTile label={ec.grossSalary} value={formatCurrency(cost.gross)} />
         <SummaryTile label={ec.totalCost} value={formatCurrency(cost.totalEmployerCost)} color="var(--violet)" />
         <SummaryTile
@@ -111,143 +289,25 @@ const EmployerCostPage: React.FC = () => {
           sub={`${formatCurrency(dailyRate)}/${t.employerCostPage.dayAbbr}`}
           color="var(--positive)"
         />
-      </div>
+      </div>}
 
-      {/* Calculator: salary ↔ rate ↔ margin */}
-      <Card padding="lg">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-2">
-            <Calculator size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
-            <SectionLabel>{ec.calcTitle}</SectionLabel>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{ec.solveFor}</span>
-            <SegmentedControl<SolveFor>
-              ariaLabel={ec.solveFor}
-              value={solveFor}
-              onChange={changeSolveFor}
-              items={[
-                { value: 'rate', label: ec.solveRate },
-                { value: 'salary', label: ec.solveSalary },
-                { value: 'margin', label: ec.solveMargin },
-              ]}
-            />
-          </div>
-        </div>
-        <p className="mt-3 text-[12px]" style={{ color: 'var(--text-3)' }}>{ec.calcSubtitle}</p>
+      {/* Calculator: salary ↔ rate ↔ margin. Folded and last in Avansert. */}
+      {advanced ? (
+        <Card padding="lg">
+          <details>
+            <summary className="flex flex-wrap items-center gap-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+              <Calculator size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
+              <SectionLabel>{cm.calcFolded}</SectionLabel>
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{cm.usesRealCost}</span>
+            </summary>
+            <div className="mt-5">{calculator}</div>
+          </details>
+        </Card>
+      ) : (
+        <Card padding="lg">{calculator}</Card>
+      )}
 
-        <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5">
-          {solveFor === 'salary' ? (
-            <SolvedField label={ec.grossSalary} value={formatCurrency(gross)} badge={ec.calculated} />
-          ) : (
-            <div>
-              <div className="flex items-baseline justify-between mb-2">
-                <label htmlFor="calc-gross" className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
-                  {ec.grossSalary}
-                </label>
-                <span
-                  className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-                  style={{
-                    background: isAuto ? 'var(--accent-bg)' : 'var(--surface-5)',
-                    color: isAuto ? 'var(--accent)' : 'var(--text-3)',
-                  }}
-                >
-                  {isAuto ? t.salary.incomeAuto : t.salary.incomeOverride}
-                </span>
-              </div>
-              <input
-                id="calc-gross"
-                type="number"
-                value={storedGross}
-                onChange={(e) => {
-                  const n = parseLocaleNumber(e.target.value);
-                  setSalaryOverride(Number.isFinite(n) ? n : 0);
-                }}
-                className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
-                style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
-              />
-              {!isAuto && (
-                <button
-                  onClick={() => setSalaryOverride(null)}
-                  className="mt-2 text-[11px] font-semibold"
-                  style={{ color: 'var(--accent)' }}
-                >
-                  {t.salary.incomeResetAuto}
-                </button>
-              )}
-            </div>
-          )}
-
-          {solveFor === 'rate' ? (
-            <SolvedField label={ec.billedHourly} value={`${formatCurrency(rate)}/t`} badge={ec.calculated} />
-          ) : (
-            <div>
-              <div className="flex items-baseline justify-between mb-2">
-                <label htmlFor="calc-rate" className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>{ec.billedHourly}</label>
-                <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>kr/{t.common.hourUnit}</span>
-              </div>
-              <input
-                id="calc-rate"
-                type="number"
-                value={billingConfig.billedHourly ?? ''}
-                placeholder={Math.round(billing.targetHourly).toString()}
-                onChange={(e) => {
-                  const raw = e.target.value.trim();
-                  if (raw === '') { updateBillingConfig('billedHourly', null); return; }
-                  const n = parseLocaleNumber(raw);
-                  updateBillingConfig('billedHourly', Number.isFinite(n) && n >= 0 ? n : null);
-                }}
-                className="w-full h-10 px-3 rounded-[8px] text-[14px] font-mono outline-none border"
-                style={{ background: 'var(--surface-3)', borderColor: 'var(--border)', color: 'var(--text-1)' }}
-              />
-            </div>
-          )}
-
-          {solveFor === 'margin' ? (
-            <SolvedField
-              label={ec.employerMargin}
-              value={`${margin.toFixed(1)}%`}
-              badge={ec.calculated}
-              color={margin < 0 ? 'var(--negative)' : undefined}
-            />
-          ) : (
-            <SliderRow label={ec.employerMargin} value={billingConfig.targetMarginPct} onChange={(v) => updateBillingConfig('targetMarginPct', v)} min={0} max={95} step={1} suffix="%" badge={<ProvenanceBadge kind={provenanceOf(billingConfig.targetMarginPct, DEFAULT_BILLING_CONFIG.targetMarginPct)} />} />
-          )}
-        </div>
-
-        <div className="mt-6 grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-          <StatBlock label={ec.annualRevenue} value={formatCurrency(result.annualRevenue)} />
-          <StatBlock
-            label={ec.employerProfit}
-            value={formatCurrency(result.employerProfit)}
-            sub={`${formatCurrency(result.profitPerHour)} ${ec.perHour}`}
-            color={result.employerProfit < 0 ? 'var(--negative)' : 'var(--warning)'}
-          />
-          <StatBlock label={ec.dailyRate} value={`${formatCurrency(dailyRate)}/${t.employerCostPage.dayAbbr}`} />
-          <StatBlock label={ec.billableHours} value={`${Math.round(hours).toLocaleString(lang === 'nb' ? 'nb-NO' : 'en-US')} t`} />
-          <StatBlock label={ec.breakEven} value={`${formatCurrency(billing.breakEvenHourly)}/t`} />
-          <StatBlock label={ec.markupOnCost} value={`${markupPct >= 0 ? '+' : ''}${markupPct.toFixed(0)}%`} />
-        </div>
-
-        {fairGross != null && (
-          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 items-end rounded-[8px] px-4 py-4" style={{ background: 'var(--surface-2)' }}>
-            <div>
-              <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: 'var(--text-3)' }}>
-                {ec.fairSalary} · {ec.fairSalarySub.replace('{margin}', String(billingConfig.targetMarginPct))}
-              </div>
-              <div className="text-[20px] font-semibold font-mono tabular-nums mt-1" style={{ color: 'var(--positive)' }}>{formatCurrency(fairGross)}</div>
-              <div className="text-[11px] font-mono mt-0.5" style={{ color: 'var(--text-3)' }}>
-                {fairGross - gross >= 0 ? '+' : '−'}{formatCurrency(Math.abs(fairGross - gross))} {ec.vsYourSalary}
-              </div>
-            </div>
-            <SliderRow label={ec.fairMargin} value={billingConfig.targetMarginPct} onChange={(v) => updateBillingConfig('targetMarginPct', v)} min={0} max={95} step={1} suffix="%" />
-          </div>
-        )}
-
-        <p className="mt-5 text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.fairSalaryHint}</p>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+      {!advanced && <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {/* Assumptions */}
         <Card padding="lg">
           <div className="flex items-center justify-between gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
@@ -322,7 +382,7 @@ const EmployerCostPage: React.FC = () => {
           </div>
           <p className="mt-5 text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.caveat}</p>
         </Card>
-      </div>
+      </div>}
     </div>
   );
 };
