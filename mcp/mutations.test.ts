@@ -585,6 +585,29 @@ const cases: {
     },
   },
   {
+    name: 'update_company_settings (hours or bonus holiday pay drop the accounts fit, not a hand edit)',
+    touched: ['companyModel'],
+    mutate: (b) => {
+      setupCompanyQuick(b, { uncertain: ['salary'], confirmReplace: true });
+      calibrateCompanyFromAccounts(b, { ctx: companyContext(b), accounts: madeUpAccounts(b) });
+      expect(b.companyModel!.accounts!.fittedAt).toEqual(expect.any(String));
+      return updateCompanySettings(b, { hours: { holidayDays: 30 } });
+    },
+    assertChange: (b, changes) => {
+      const m = b.companyModel!;
+      expect(m.accounts!.fittedAt).toBeUndefined();
+      expect(m.quick!.edited).toBe(false);
+      expect(changes).toContainEqual(expect.objectContaining({ field: 'companyModel.accounts.fittedAt', after: null }));
+      expect(companyModelSummary(b).basis).toBe('guesses');
+      // The bonus holiday-pay setting does the same.
+      calibrateCompanyFromAccounts(b, { ctx: companyContext(b) });
+      expect(b.companyModel!.accounts!.fittedAt).toEqual(expect.any(String));
+      updateCompanySettings(b, { bonus: { includesHolidayPay: !b.companyModel!.bonus.includesHolidayPay } });
+      expect(b.companyModel!.accounts!.fittedAt).toBeUndefined();
+      expect(b.companyModel!.quick!.edited).toBe(false);
+    },
+  },
+  {
     name: 'calibrate_company_from_accounts (marks salary and the typical share as guesses itself)',
     touched: ['companyModel'],
     mutate: (b) => {

@@ -183,12 +183,20 @@ export function buildModelFromAnswers(
 }
 
 /**
+ * Drop a fit to the accounts (fittedAt, fitMoves), for a change the fit did not
+ * see, such as hours or the bonus holiday-pay setting. Leaves quick.edited alone.
+ */
+export function clearAccountsFit(m: CompanyModel): CompanyModel {
+  return m.accounts?.fittedAt ? { ...m, accounts: withoutFit(m.accounts) } : m;
+}
+
+/**
  * Mark the quick setup as hand-edited and drop a fit to the accounts, which no
  * longer describes the groups (no change when there is no quick setup).
  */
 export function markQuickEdited(m: CompanyModel): CompanyModel {
   if (!m.quick || (m.quick.edited && !m.accounts?.fittedAt)) return m;
-  return { ...m, quick: { ...m.quick, edited: true }, ...(m.accounts ? { accounts: withoutFit(m.accounts) } : {}) };
+  return clearAccountsFit({ ...m, quick: { ...m.quick, edited: true } });
 }
 
 // ── Sanitizer ──────────────────────────────────────────────────────────────

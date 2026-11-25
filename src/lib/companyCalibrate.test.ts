@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { accountsStatus, calibrateToAccounts, fitModelToAccounts, withMeanSalary, CALIBRATE_BOUNDS } from './companyCalibrate';
 import type { CompanyAccounts } from './companyAccounts';
-import { buildModelFromAnswers, markQuickEdited, quickMeanSalary, QUICK_DEFAULTS, type QuickAnswers, type QuickGuessKey } from './companySetup';
+import { buildModelFromAnswers, clearAccountsFit, markQuickEdited, quickMeanSalary, QUICK_DEFAULTS, type QuickAnswers, type QuickGuessKey } from './companySetup';
 import { calcCompany, sanitizeCompanyModel, DEFAULT_COMPANY_MODEL, NEUTRAL_LEVERS, type CompanyContext, type CompanyModel } from './companyCost';
 import { DEFAULT_EMPLOYER_COST_CONFIG } from './employerCost';
 
@@ -200,5 +200,17 @@ describe('fitModelToAccounts', () => {
     if (!out.ok) throw new Error('fit failed');
     const moved = { ...out.model, hours: { ...out.model.hours, internalPct: 30 } };
     expect(accountsStatus(moved, ctx)).toEqual({ match: 'mismatch', basis: 'guesses', fittedAt: NOW });
+  });
+
+  it('an hours edit clears the fit (clearAccountsFit) without marking a hand edit', () => {
+    const out = fitModelToAccounts(model({ typicalBillablePct: 90 }), ctx, accountsOf(truth), { now: NOW });
+    if (!out.ok) throw new Error('fit failed');
+    const hoursEdit = clearAccountsFit({ ...out.model, hours: { ...out.model.hours, holidayDays: 30 } });
+    expect(hoursEdit.accounts?.fittedAt).toBeUndefined();
+    expect(hoursEdit.accounts?.fitMoves).toBeUndefined();
+    expect(hoursEdit.quick?.edited).toBe(false);
+    expect(accountsStatus(hoursEdit, ctx)).toMatchObject({ basis: 'guesses', fittedAt: null });
+    // No fit: the same object back.
+    expect(clearAccountsFit(hoursEdit)).toBe(hoursEdit);
   });
 });

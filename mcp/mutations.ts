@@ -64,6 +64,7 @@ import {
 } from '../src/lib/companyCost';
 import {
   markQuickEdited,
+  clearAccountsFit,
   buildModelFromAnswers,
   sanitizeQuickAnswers,
   QUICK_DEFAULTS,
@@ -761,7 +762,10 @@ function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyMod
   // A change to the groups, the cost lines, your group, your own share or the bonus pool is a hand edit: the quick setup
   // then asks before it builds the model again. A write that changes none of them leaves the flag alone.
   const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId, m.self ?? null, m.bonus.poolPct]);
-  const after = shape(edited) !== shape(before) ? markQuickEdited(edited) : edited;
+  // Hours and the bonus holiday-pay setting are not hand edits, but they move the numbers the fit matched: drop the fit.
+  const numbers = (m: CompanyModel) => JSON.stringify([m.hours, m.bonus.includesHolidayPay]);
+  const after = shape(edited) !== shape(before) ? markQuickEdited(edited)
+    : numbers(edited) !== numbers(before) ? clearAccountsFit(edited) : edited;
   // No stored model: the whole example model is stored now, so say so.
   const changes = blob.companyModel === undefined ? [diff('companyModel', null, after)] : companyChanges(before, after);
   blob.companyModel = after;

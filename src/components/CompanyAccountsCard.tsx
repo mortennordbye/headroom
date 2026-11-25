@@ -61,7 +61,9 @@ export function CompanyAccountsCard({
   const [input, setInput] = useState(acc?.orgnr ?? '');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [fitError, setFitError] = useState<CalibrateFailure | null>(null);
+  // A fit error belongs to the model it ran on: any later change to the model (a hand edit, a rebuild) hides it.
+  const [fitFailure, setFitError] = useState<{ reason: CalibrateFailure; on: CompanyModel } | null>(null);
+  const fitError = fitFailure?.on === model ? fitFailure.reason : null;
   const [confirming, setConfirming] = useState(false);
   const orgnr = input.replace(/\s/g, '');
   const valid = isValidOrgnr(orgnr);
@@ -121,7 +123,7 @@ export function CompanyAccountsCard({
       setModel(out.model);
       setFitError(null);
     } else {
-      setFitError(out.reason);
+      setFitError({ reason: out.reason, on: model });
     }
   };
 
@@ -322,7 +324,7 @@ export function CompanyAccountsCard({
               return (
                 <tbody key={row.key}>
                   {/* A phone puts the label on its own line, so the three numbers fit beside each other. */}
-                  <tr className="sm:hidden border-t" style={{ borderColor: 'var(--rule)' }} aria-hidden>
+                  <tr className="sm:hidden border-t" style={{ borderColor: 'var(--rule)' }}>
                     <td colSpan={3} className="pt-2" style={{ color: 'var(--text-2)' }}>{label}</td>
                   </tr>
                   <tr className="sm:border-t" style={{ borderColor: 'var(--rule)' }}>
