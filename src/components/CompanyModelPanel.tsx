@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetSt
 import { BarChart3, Pencil, Plus, RotateCcw, Settings2, Trash2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import {
-  calcCompany, hourWaterfall, breakEvenUtilization, utilizationCurve, applyLevers, NEUTRAL_LEVERS,
+  calcCompany, hourWaterfall, breakEvenUtilization, utilizationCurve, applyLevers, ensureDeliverySelf,
+  NEUTRAL_LEVERS, LEVER_RANGES, BONUS_POOL_MAX_PCT,
   type CompanyModel, type CompanyContext, type CompanyResult, type CompanyGroup, type CompanyCostLine,
   type CompanyLevers, type CostLinePer,
 } from '../lib/companyCost';
@@ -18,11 +19,11 @@ import { SegmentedControl } from './ui/SegmentedControl';
 import { FitText } from './ui/FitText';
 import { HourWaterfallChart, UtilizationCurveChart } from './CompanyModelCharts';
 
-const LEVERS: Array<{ key: keyof CompanyLevers; min: number; max: number; unit: string }> = [
-  { key: 'utilizationPp', min: -25, max: 12, unit: 'pp' },
-  { key: 'ratePct', min: -15, max: 15, unit: '%' },
-  { key: 'salaryPct', min: -10, max: 15, unit: '%' },
-  { key: 'realizationPp', min: -15, max: 7, unit: 'pp' },
+const LEVERS: Array<{ key: keyof CompanyLevers; unit: string }> = [
+  { key: 'utilizationPp', unit: 'pp' },
+  { key: 'ratePct', unit: '%' },
+  { key: 'salaryPct', unit: '%' },
+  { key: 'realizationPp', unit: 'pp' },
 ];
 
 /**
@@ -78,7 +79,10 @@ export function CompanyModelPanel({
   const hourSegs = [
     { key: 'billed', label: c.segBilled, value: y.billableHours, color: 'var(--forest-light)', hint: c.segBilledHint },
     { key: 'bench', label: c.segBench, value: bench, color: 'var(--rust)', hint: c.segBenchHint },
-    { key: 'free', label: c.segFree, value: free, color: 'var(--teal)', hint: c.segFree },
+    {
+      key: 'free', label: c.segFree, value: free, color: 'var(--teal)',
+      hint: c.segFreeHint.replace('{days}', nf(model.hours.holidayDays, 1).replace(/[,.]0$/, '')).replace('{holidays}', String(weekdayHolidays(ctx.year))),
+    },
     { key: 'sick', label: c.segSick, value: h.sick, color: 'var(--slate)', hint: `${nf(model.hours.sickPct, 1)} %` },
     { key: 'internal', label: c.segInternal, value: h.internal, color: 'var(--slate)', hint: `${nf(model.hours.internalPct, 1)} %` },
   ];
@@ -112,6 +116,7 @@ export function CompanyModelPanel({
           color="var(--teal)"
         />
       </div>
+      <p className="-mt-3 md:-mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>{c.simpleSettingsHint}</p>
 
       {/* Waterfall */}
       <Card padding="lg">
@@ -153,8 +158,8 @@ export function CompanyModelPanel({
                   label={leverLabel[l.key]}
                   value={model.levers[l.key]}
                   onChange={(v) => setLever(l.key, v)}
-                  min={l.min}
-                  max={l.max}
+                  min={LEVER_RANGES[l.key].min}
+                  max={LEVER_RANGES[l.key].max}
                   step={1}
                   suffix={l.unit}
                 />
@@ -235,7 +240,7 @@ export function CompanyModelPanel({
             <Row
               label={c.bonusPool}
               sub={c.bonusPoolSub}
-              value={<InlineNumber value={model.bonus.poolPct} onCommit={(v) => update({ bonus: { ...model.bonus, poolPct: Math.min(100, Math.max(0, v)) } })} suffix="%" ariaLabel={c.bonusPool} />}
+              value={<InlineNumber value={model.bonus.poolPct} onCommit={(v) => update({ bonus: { ...model.bonus, poolPct: Math.min(BONUS_POOL_MAX_PCT, Math.max(0, v)) } })} suffix="%" ariaLabel={c.bonusPool} />}
             />
             <Row label={c.sumYear} sub={c.sumYearSub} value={kr(r.linesTotal)} emphasis />
           </Section>
@@ -273,13 +278,10 @@ function PeopleEditor({ model, setModel }: { model: CompanyModel; setModel: Disp
   const nf = (v: number) => Math.round(v).toLocaleString(locale);
   const [editing, setEditing] = useState<string | null>(null);
 
+  // Your group must stay a delivery group, also after a kind change or a removal.
   const patch = (id: string, p: Partial<CompanyGroup>) =>
-    setModel((m) => ({ ...m, groups: m.groups.map((g) => (g.id === id ? { ...g, ...p } : g)) }));
-  const remove = (id: string) => setModel((m) => {
-    const groups = m.groups.filter((g) => g.id !== id);
-    const selfGroupId = m.selfGroupId === id ? (groups.find((g) => g.kind === 'delivery')?.id ?? null) : m.selfGroupId;
-    return { ...m, groups, selfGroupId };
-  });
+    setModel((m) => ensureDeliverySelf({ ...m, groups: m.groups.map((g) => (g.id === id ? { ...g, ...p } : g)) }));
+  const remove = (id: string) => setModel((m) => ensureDeliverySelf({ ...m, groups: m.groups.filter((g) => g.id !== id) }));
   const add = () => {
     const id = crypto.randomUUID();
     setModel((m) => ({
@@ -321,10 +323,12 @@ function PeopleEditor({ model, setModel }: { model: CompanyModel; setModel: Disp
                     onChange={(kind) => patch(g.id, { kind })}
                     items={[{ value: 'delivery', label: c.delivery }, { value: 'support', label: c.support }]}
                   />
-                  <label className="inline-flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
-                    <input type="radio" name="company-self-group" checked={isSelf} onChange={() => setModel((m) => ({ ...m, selfGroupId: g.id }))} style={{ accentColor: 'var(--accent)' }} />
-                    {c.isYourGroup}
-                  </label>
+                  {g.kind === 'delivery' && (
+                    <label className="inline-flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
+                      <input type="radio" name="company-self-group" checked={isSelf} onChange={() => setModel((m) => ({ ...m, selfGroupId: g.id }))} style={{ accentColor: 'var(--accent)' }} />
+                      {c.isYourGroup}
+                    </label>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                   <NumberRow label={c.fieldCount} value={g.count} onCommit={(v) => patch(g.id, { count: Math.max(0, v) })} />

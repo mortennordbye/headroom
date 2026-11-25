@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatSignedPct, formatAxisInt, formatBytes } from './format';
+import { formatSignedPct, formatAxisInt, formatBytes, niceTicks } from './format';
 
 describe('formatSignedPct', () => {
   it('prefixes + for zero and positive values, nothing extra for negative', () => {
@@ -64,5 +64,18 @@ describe('formatBytes', () => {
   it('renders an em dash for non-finite or negative input', () => {
     expect(formatBytes(NaN)).toBe('—');
     expect(formatBytes(-5)).toBe('—');
+  });
+});
+
+describe('niceTicks', () => {
+  it('gives round ticks that include 0 and cover the range', () => {
+    expect(niceTicks(0, 1300)).toEqual([0, 500, 1000, 1500]);
+    expect(niceTicks(-26_900_000, 17_400_000)).toEqual([-30e6, -20e6, -10e6, 0, 10e6, 20e6]);
+    expect(niceTicks(-50, -10)).toEqual([-50, -40, -30, -20, -10, 0]);
+  });
+
+  it('stays finite for an empty or broken range', () => {
+    expect(niceTicks(0, 0)).toEqual([0]);
+    expect(niceTicks(Number.NaN, Number.POSITIVE_INFINITY)).toEqual([0]);
   });
 });

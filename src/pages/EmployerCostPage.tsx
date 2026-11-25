@@ -19,7 +19,7 @@ import { currentMonthKey } from '../lib/date';
 import { otpContributionCap } from '../lib/pension';
 import { TAX_YEAR } from '../lib/norwegianTax';
 import { parseLocaleNumber } from '../lib/validators';
-import { calcCompany, type CompanyContext } from '../lib/companyCost';
+import { calcCompany, calculatorInputs, type CompanyContext } from '../lib/companyCost';
 import { CompanyModelPanel } from '../components/CompanyModelPanel';
 
 const EmployerCostPage: React.FC = () => {
@@ -65,15 +65,10 @@ const EmployerCostPage: React.FC = () => {
   }), [billingConfig.hoursPerDay, storedGross, otpPct, employerCostConfig, isNo]);
   const company = useMemo(() => calcCompany(companyModel, companyCtx), [companyModel, companyCtx]);
 
-  // The calculator uses the simple settings in Enkel. In Avansert it is fed the
-  // real cost (your share of the overhead in place of the flat overhead) and your
-  // billable hours from the company model. Neither mode writes to the other.
-  const calcCostConfig = advanced
-    ? { ...employerCostConfig, overheadAnnual: Math.max(0, company.you.share), overheadPct: 0 }
-    : employerCostConfig;
-  const calcBilling = advanced
-    ? { ...billingConfig, workHoursPerYear: 0, billableHoursOverride: company.you.billableHours > 0 ? company.you.billableHours : null }
-    : billingConfig;
+  // The calculator runs on the simple settings in Enkel (unchanged), and on the
+  // real cost and the model's billable hours in Avansert (see calculatorInputs).
+  const { costConfig: calcCostConfig, billing: calcBilling, shareClamped } =
+    calculatorInputs(advanced, employerCostConfig, billingConfig, company);
 
   const hours = calcBillableHours(calcBilling);
   const gross = solveFor === 'salary'
@@ -92,8 +87,11 @@ const EmployerCostPage: React.FC = () => {
     : null;
 
   // Freeze the value that was being solved for into stored state, so switching
-  // what to solve for doesn't make the numbers jump (beyond rounding).
+  // what to solve for doesn't make the numbers jump (beyond rounding). Enkel
+  // only: in Avansert the solved value comes from the company model, and
+  // Avansert never writes the simple settings.
   const changeSolveFor = (next: SolveFor) => {
+    if (advanced) { updateBillingConfig('solveFor', next); return; }
     if (solveFor === 'rate') updateBillingConfig('billedHourly', Math.round(rate));
     if (solveFor === 'salary') setSalaryOverride(Math.round(gross));
     if (solveFor === 'margin') updateBillingConfig('targetMarginPct', Math.min(95, Math.max(0, Math.round(margin * 10) / 10)));
@@ -243,6 +241,7 @@ const EmployerCostPage: React.FC = () => {
           )}
 
           <p className="mt-5 text-[11px]" style={{ color: 'var(--text-3)' }}>{ec.fairSalaryHint}</p>
+          {shareClamped && <p className="mt-2 text-[11px]" style={{ color: 'var(--warning)' }}>{cm.shareClampedHint}</p>}
     </>
   );
 

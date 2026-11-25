@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calcCompany, companyHours, hourWaterfall, breakEvenUtilization, utilizationCurve, applyLevers,
-  sanitizeCompanyModel, DEFAULT_COMPANY_MODEL, NEUTRAL_LEVERS,
+  sanitizeCompanyModel, ensureDeliverySelf, calculatorInputs, DEFAULT_COMPANY_MODEL, NEUTRAL_LEVERS,
   type CompanyModel, type CompanyContext, type CompanyResult,
 } from './companyCost';
 import {
@@ -185,6 +185,29 @@ describe('test rules', () => {
     expect(Math.round(billing.targetHourly)).toBe(944);
   });
 
+  it('Enkel: the calculator runs on the simple settings unchanged (same objects)', () => {
+    const company = calcCompany(model(), ctx);
+    const inputs = calculatorInputs(false, DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG, company);
+    expect(inputs.costConfig).toBe(DEFAULT_EMPLOYER_COST_CONFIG);
+    expect(inputs.billing).toBe(DEFAULT_BILLING_CONFIG);
+    expect(inputs.shareClamped).toBe(false);
+  });
+
+  it('Avansert: the calculator gets your share as overhead and the model’s billable hours', () => {
+    const company = calcCompany(model(), ctx);
+    const inputs = calculatorInputs(true, DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG, company);
+    expect(inputs.costConfig).toEqual({ ...DEFAULT_EMPLOYER_COST_CONFIG, overheadAnnual: company.you.share, overheadPct: 0 });
+    expect(calcBillableHours(inputs.billing)).toBeCloseTo(company.you.billableHours, 9);
+    const cost = calcEmployerCost(768_000, 5, inputs.costConfig, true, 2026, true).totalEmployerCost;
+    expect(calcBillingRate(cost, inputs.billing).breakEvenHourly).toBeCloseTo(company.you.breakEvenRate, 6);
+    // A share below 0 is applied as 0 and flagged; 0 hours stay 0 hours.
+    const negative = { ...company, you: { ...company.you, share: -1000, billableHours: 0 } };
+    const n = calculatorInputs(true, DEFAULT_EMPLOYER_COST_CONFIG, DEFAULT_BILLING_CONFIG, negative);
+    expect(n.costConfig.overheadAnnual).toBe(0);
+    expect(n.shareClamped).toBe(true);
+    expect(calcBillableHours(n.billing)).toBe(0);
+  });
+
   // Rule 8
   it('repairs a broken saved blob to a valid model', () => {
     expect(sanitizeCompanyModel(null)).toEqual(DEFAULT_COMPANY_MODEL);
@@ -200,7 +223,7 @@ describe('test rules', () => {
       hours: { sickPct: Infinity, internalPct: -1 },
       costs: [{ label: 'L', amount: -10, per: 'nope' }, null],
       bonus: { poolPct: 500 },
-      levers: { utilizationPp: 1e9, ratePct: 'x' },
+      levers: { utilizationPp: 1e9, ratePct: 'x', salaryPct: -40 },
     });
     expect(m.mode).toBe('simple');
     expect(m.groups).toHaveLength(2);
@@ -209,9 +232,34 @@ describe('test rules', () => {
     expect(m.selfGroupId).toBe('a');
     expect(m.hours).toEqual({ sickPct: 4, internalPct: 0, holidayDays: 25 });
     expect(m.costs).toEqual([{ id: 'cost-1', label: 'L', amount: 0, per: 'company' }]);
-    expect(m.bonus).toEqual({ poolPct: 100, includesHolidayPay: true });
-    expect(m.levers).toEqual({ utilizationPp: 100, ratePct: 0, salaryPct: 0, realizationPp: 0 });
+    expect(m.bonus).toEqual({ poolPct: 50, includesHolidayPay: true });
+    // Clamped to the slider ranges.
+    expect(m.levers).toEqual({ utilizationPp: 12, ratePct: 0, salaryPct: -10, realizationPp: 0 });
     expect(allFinite(calcCompany(m, ctx))).toBe(true);
+  });
+
+  it('coerces numeric strings, as the rest of the payload sanitizer does', () => {
+    const m = sanitizeCompanyModel({
+      groups: [{ id: 'a', name: 'A', kind: 'delivery', count: '38', avgGross: '820 000', billablePct: '84,5', hourlyRate: 1300, realizationPct: 93 }],
+      bonus: { poolPct: '15' },
+    });
+    expect(m.groups[0]).toMatchObject({ count: 38, avgGross: 820_000, billablePct: 84.5 });
+    expect(m.bonus.poolPct).toBe(15);
+  });
+
+  it('your group is always a delivery group (sanitizer and ensureDeliverySelf)', () => {
+    const groups = [
+      { id: 's', name: 'S', kind: 'support', count: 1, avgGross: 1, billablePct: 0, hourlyRate: 0, realizationPct: 100 },
+      { id: 'd', name: 'D', kind: 'delivery', count: 1, avgGross: 1, billablePct: 80, hourlyRate: 1, realizationPct: 100 },
+    ];
+    expect(sanitizeCompanyModel({ groups, selfGroupId: 's' }).selfGroupId).toBe('d');
+    expect(sanitizeCompanyModel({ groups: [groups[0]], selfGroupId: 's' }).selfGroupId).toBeNull();
+    // A group that turns into support hands "you" to the first delivery group.
+    const m = model();
+    const turned = { ...m, groups: m.groups.map((g) => (g.id === 'kons' ? { ...g, kind: 'support' as const } : g)) };
+    expect(ensureDeliverySelf(turned).selfGroupId).toBe('tl');
+    expect(ensureDeliverySelf(m)).toBe(m);
+    expect(ensureDeliverySelf({ ...m, groups: [] }).selfGroupId).toBeNull();
   });
 
   it('keeps a valid model as it is', () => {
@@ -221,10 +269,24 @@ describe('test rules', () => {
   });
 
   // Rule 9
-  it('levers at 0 give the stored model', () => {
-    const stored = calcCompany(model(), ctx);
-    const neutral = calcCompany(model(), ctx, NEUTRAL_LEVERS);
-    expect(neutral).toEqual(stored);
+  it('levers at 0 give the stored model: with stored levers, the result equals a hand calculation on the groups', () => {
+    const levers = { utilizationPp: 4, ratePct: 6, salaryPct: 3, realizationPp: -2 };
+    const r = calcCompany(model({ levers }), ctx);
+    const A = companyHours(model(), 2026, 7.5).available;
+    const cfg0 = { ...DEFAULT_EMPLOYER_COST_CONFIG, overheadAnnual: 0, overheadPct: 0 };
+    let revenue = 0;
+    let people = 0;
+    for (const g of DEFAULT_COMPANY_MODEL.groups) {
+      const billable = g.kind === 'delivery' ? g.billablePct + 4 : g.billablePct;
+      revenue += A * billable / 100 * g.hourlyRate * 1.06 * (g.realizationPct - 2) / 100 * g.count;
+      people += calcEmployerCost(g.avgGross * 1.03, 5, cfg0, true, 2026, true).totalEmployerCost * g.count;
+    }
+    expect(r.revenue).toBeCloseTo(revenue, 4);
+    expect(r.peopleCost).toBeCloseTo(people, 4);
+    // Your own salary is the salary page's, not moved by the salary lever.
+    expect(r.you.gross).toBe(768_000);
+    // And at levers 0 the stored groups are used as they are.
+    expect(calcCompany(model(), ctx, NEUTRAL_LEVERS)).toEqual(calcCompany(model(), ctx));
   });
 
   it('"Lagre som utgangspunkt" then levers at 0 gives the same results as before the save', () => {
@@ -239,10 +301,10 @@ describe('test rules', () => {
     }
     expect(after.you.share).toBeCloseTo(before.you.share, 4);
     expect(after.you.billableHours).toBeCloseTo(before.you.billableHours, 6);
-    // Your own salary comes from the salary page, so with the salary lever at 0
-    // the own numbers match too.
-    const noSalary = model({ levers: { ...levers, salaryPct: 0 } });
-    expect(calcCompany(applyLevers(noSalary), ctx).you.breakEvenRate).toBeCloseTo(calcCompany(noSalary, ctx).you.breakEvenRate, 6);
+    // With the salary lever at +3 %, your own numbers do not move either.
+    expect(after.you.ownCost).toBeCloseTo(before.you.ownCost, 6);
+    expect(after.you.realCost).toBeCloseTo(before.you.realCost, 4);
+    expect(after.you.breakEvenRate).toBeCloseTo(before.you.breakEvenRate, 6);
   });
 });
 
@@ -255,9 +317,10 @@ describe('levers', () => {
     expect(calcCompany(model(), ctx, { ...NEUTRAL_LEVERS, realizationPp: 5 }).ebit).toBeGreaterThan(base);
   });
 
-  it('the salary lever raises your own salary too', () => {
+  it('the salary lever moves the groups, not your own salary', () => {
     const r = calcCompany(model(), ctx, { ...NEUTRAL_LEVERS, salaryPct: 10 });
-    expect(r.you.gross).toBeCloseTo(768_000 * 1.1, 6);
+    expect(r.you.gross).toBe(768_000);
+    expect(r.groups[0].avgGross).toBeCloseTo(820_000 * 1.1, 6);
   });
 
   it('the utilization lever moves delivery groups only and clamps at 0 and 100', () => {
@@ -278,14 +341,31 @@ describe('hourWaterfall', () => {
 });
 
 describe('utilizationCurve', () => {
-  it('covers 40–100 %, rises with utilization and matches the baseline when levers are 0', () => {
+  it('covers 50–95 %, rises with utilization and matches the baseline when levers are 0', () => {
     const pts = utilizationCurve(model(), ctx);
-    expect(pts).toHaveLength(61);
-    expect(pts[0].utilizationPct).toBe(40);
-    expect(pts[60].utilizationPct).toBe(100);
+    expect(pts).toHaveLength(46);
+    expect(pts[0].utilizationPct).toBeCloseTo(50, 9);
+    expect(pts[45].utilizationPct).toBeCloseTo(95, 9);
     for (let i = 1; i < pts.length; i++) expect(pts[i].ebit).toBeGreaterThanOrEqual(pts[i - 1].ebit);
     expect(pts.every((p) => p.ebit === p.baselineEbit)).toBe(true);
     const moved = utilizationCurve(model({ levers: { ...NEUTRAL_LEVERS, ratePct: 10 } }), ctx);
-    expect(moved[40].ebit).toBeGreaterThan(moved[40].baselineEbit);
+    expect(moved[30].ebit).toBeGreaterThan(moved[30].baselineEbit);
+  });
+
+  it('uses the real mean utilization as x, so the break-even point lies on the curve', () => {
+    // Team leads clamp at 0 % on the low end, so x is not the target there.
+    const m = model({ groups: DEFAULT_COMPANY_MODEL.groups.map((g) => (g.id === 'tl' ? { ...g, billablePct: 5 } : g)) });
+    const base = calcCompany(m, ctx, NEUTRAL_LEVERS).meanUtilizationPct;
+    const pts = utilizationCurve(m, ctx);
+    const first = calcCompany(m, ctx, { ...NEUTRAL_LEVERS, utilizationPp: 50 - base });
+    expect(pts[0].utilizationPct).toBeCloseTo(first.meanUtilizationPct, 9);
+    expect(pts[0].utilizationPct).not.toBeCloseTo(50, 1);
+    // EBIT changes sign around the break-even x.
+    const be = breakEvenUtilization(model(), ctx)!;
+    const curve = utilizationCurve(model(), ctx);
+    const below = curve.filter((p) => p.utilizationPct < be.utilizationPct - 1e-6);
+    const above = curve.filter((p) => p.utilizationPct > be.utilizationPct + 1e-6);
+    expect(below.every((p) => p.ebit < 0)).toBe(true);
+    expect(above.every((p) => p.ebit > 0)).toBe(true);
   });
 });

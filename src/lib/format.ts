@@ -31,3 +31,21 @@ export function formatAxisInt(val: number): string {
   if (Math.abs(val) >= 1_000) return `${Math.round(val / 1_000)}k`;
   return val.toString();
 }
+
+/**
+ * Round axis ticks (1, 2 or 5 × 10^n apart) that span [lo, hi] and include 0,
+ * at most `maxTicks` intervals. For hand-set Recharts `ticks` and `domain`.
+ */
+export function niceTicks(lo: number, hi: number, maxTicks = 6): number[] {
+  const min = Math.min(0, Number.isFinite(lo) ? lo : 0);
+  const max = Math.max(0, Number.isFinite(hi) ? hi : 0);
+  const span = max - min;
+  if (span <= 0) return [0];
+  const mag = 10 ** Math.floor(Math.log10(span / maxTicks));
+  const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => span / s <= maxTicks) ?? 10 * mag;
+  const ticks: number[] = [];
+  for (let v = Math.floor(min / step) * step; v <= Math.ceil(max / step) * step + step / 2; v += step) {
+    ticks.push(Math.round(v / step) * step);
+  }
+  return ticks;
+}

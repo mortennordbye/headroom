@@ -23,8 +23,9 @@
  * pool give finite numbers, never NaN or Infinity.
  */
 
-import { calcEmployerCost, type EmployerCostConfig } from './employerCost';
+import { calcEmployerCost, type EmployerCostConfig, type BillingRateConfig } from './employerCost';
 import { weekdaysInYear, weekdayHolidays, corporateTaxPct } from './norwegianCalendar';
+import { coerceNumber } from './sanitizePayload';
 
 export type CompanyGroupKind = 'delivery' | 'support';
 
@@ -51,14 +52,14 @@ export interface CompanyCostLine {
 export interface CompanyLevers {
   utilizationPp: number;  // delivery groups' billable share, percentage points
   ratePct: number;        // all hourly rates, %
-  salaryPct: number;      // all salaries, your own included, %
+  salaryPct: number;      // the groups' salaries, % (yours comes from the salary page)
   realizationPp: number;  // all realization, percentage points
 }
 
 export interface CompanyModel {
   mode: 'simple' | 'advanced';
   groups: CompanyGroup[];
-  selfGroupId: string | null; // your group; its count includes you
+  selfGroupId: string | null; // your group (a delivery group); its count includes you
   hours: { sickPct: number; internalPct: number; holidayDays: number };
   costs: CompanyCostLine[];
   bonus: { poolPct: number; includesHolidayPay: boolean };
@@ -82,6 +83,17 @@ export interface CompanyContext {
 
 export const NEUTRAL_LEVERS: CompanyLevers = { utilizationPp: 0, ratePct: 0, salaryPct: 0, realizationPp: 0 };
 
+/** Slider range of each lever; the sanitizer clamps stored levers to it. */
+export const LEVER_RANGES: Record<keyof CompanyLevers, { min: number; max: number }> = {
+  utilizationPp: { min: -25, max: 12 },
+  ratePct: { min: -15, max: 15 },
+  salaryPct: { min: -10, max: 15 },
+  realizationPp: { min: -15, max: 7 },
+};
+
+/** Upper limit of the bonus pool, % of the result before bonus. */
+export const BONUS_POOL_MAX_PCT = 50;
+
 // Made-up example company (role groups only), as in the approved plan.
 export const DEFAULT_COMPANY_MODEL: CompanyModel = {
   mode: 'simple',
@@ -92,6 +104,8 @@ export const DEFAULT_COMPANY_MODEL: CompanyModel = {
     { id: 'stab', name: 'Stab (HR, marked)', kind: 'support', count: 2, avgGross: 700_000, billablePct: 0, hourlyRate: 0, realizationPct: 93 },
   ],
   selfGroupId: 'kons',
+  // 25 holiday days = 5 weeks of weekdays, the avtalefestet ferie that matches
+  // the 12 % feriepenger default (FERIEPENGER_DEFAULT_PCT).
   hours: { sickPct: 4, internalPct: 4.5, holidayDays: 25 },
   costs: [
     { id: 'office', label: 'Kontor (leie, strøm, renhold)', amount: 3_200_000, per: 'company' },
@@ -236,13 +250,14 @@ export function calcCompany(model: CompanyModel, ctx: CompanyContext, levers: Co
   const pool = supportNet + linesTotal;
   const preBonus = revenue - peopleCost - linesTotal;
   const holidayPct = model.bonus.includesHolidayPay ? Math.max(0, fin(ctx.costConfig.feriepengesatsPct)) : 0;
-  const bonus = Math.max(0, preBonus) * clamp(model.bonus.poolPct, 0, 100) / 100
+  const bonus = Math.max(0, preBonus) * clamp(model.bonus.poolPct, 0, BONUS_POOL_MAX_PCT) / 100
     * (1 + holidayPct / 100) * (1 + Math.max(0, fin(ctx.costConfig.payrollTaxPct)) / 100);
   const ebit = preBonus - bonus;
   const tax = Math.max(0, ebit) * corporateTaxPct(ctx.year) / 100;
 
   const self = groups.find((g) => g.id === model.selfGroupId);
-  const gross = Math.max(0, fin(ctx.ownGross) * (1 + fin(levers.salaryPct) / 100));
+  // Your salary always comes from the salary page; the salary lever moves the groups only.
+  const gross = Math.max(0, fin(ctx.ownGross));
   const ownCost = personCost(gross, ctx);
   const share = div(pool, deliveryFte);
   const override = ctx.selfBillableHoursOverride;
@@ -330,15 +345,22 @@ export interface CurvePoint {
   baselineEbit: number;  // with the levers at 0 (the groups as saved)
 }
 
-/** EBIT against the delivery groups' mean billable share, each whole % in [from, to]. */
-export function utilizationCurve(model: CompanyModel, ctx: CompanyContext, from = 40, to = 100): CurvePoint[] {
+/**
+ * EBIT against the delivery groups' mean billable share, one point per whole %
+ * target in [from, to]. Each point's x is the real mean that calcCompany gives
+ * at that shift (groups clamp at 0 and 100 %), so the points, the "now" dot and
+ * the break-even line use one measure. The utilization lever does not change
+ * other levers' effect on the mean, so "now" and the baseline share each x.
+ */
+export function utilizationCurve(model: CompanyModel, ctx: CompanyContext, from = 50, to = 95): CurvePoint[] {
   const base = calcCompany(model, ctx, NEUTRAL_LEVERS).meanUtilizationPct;
   const points: CurvePoint[] = [];
   for (let u = from; u <= to; u++) {
     const shift = u - base;
+    const now = calcCompany(model, ctx, { ...model.levers, utilizationPp: shift });
     points.push({
-      utilizationPct: u,
-      ebit: calcCompany(model, ctx, { ...model.levers, utilizationPp: shift }).ebit,
+      utilizationPct: now.meanUtilizationPct,
+      ebit: now.ebit,
       baselineEbit: calcCompany(model, ctx, { ...NEUTRAL_LEVERS, utilizationPp: shift }).ebit,
     });
   }
@@ -347,8 +369,7 @@ export function utilizationCurve(model: CompanyModel, ctx: CompanyContext, from 
 
 /**
  * "Lagre som utgangspunkt": write the levers into the groups and set them to 0.
- * Your own salary is not stored in the model (it comes from the salary page), so
- * the salary lever is written into the groups only.
+ * The levers only ever move the groups, so the results do not change.
  */
 export function applyLevers(model: CompanyModel): CompanyModel {
   return {
@@ -358,10 +379,44 @@ export function applyLevers(model: CompanyModel): CompanyModel {
   };
 }
 
+/**
+ * Your group must be a delivery group: keep `selfGroupId` when it names one,
+ * else move it to the first delivery group, or null when there is none.
+ */
+export function ensureDeliverySelf(model: CompanyModel): CompanyModel {
+  const ok = model.groups.some((g) => g.id === model.selfGroupId && g.kind === 'delivery');
+  if (ok) return model;
+  return { ...model, selfGroupId: model.groups.find((g) => g.kind === 'delivery')?.id ?? null };
+}
+
+/**
+ * What the salary/rate/margin calculator runs on. Enkel: the simple settings,
+ * unchanged (the same objects). Avansert: your share of the overhead in place of
+ * the flat overhead, and your billable hours from the model. A share below 0
+ * cannot be a cost here (calcEmployerCost clamps overhead at 0), so it is
+ * applied as 0 and `shareClamped` says so.
+ */
+export function calculatorInputs(
+  advanced: boolean,
+  costConfig: EmployerCostConfig,
+  billingConfig: BillingRateConfig,
+  company: CompanyResult,
+): { costConfig: EmployerCostConfig; billing: BillingRateConfig; shareClamped: boolean } {
+  if (!advanced) return { costConfig, billing: billingConfig, shareClamped: false };
+  const H = company.you.billableHours;
+  return {
+    costConfig: { ...costConfig, overheadAnnual: Math.max(0, company.you.share), overheadPct: 0 },
+    billing: { ...billingConfig, workHoursPerYear: 0, billableHoursOverride: H > 0 ? H : null },
+    shareClamped: company.you.share < 0,
+  };
+}
+
 // ── Sanitizer ──────────────────────────────────────────────────────────────
 
-const num = (v: unknown, fallback: number, lo = -Infinity, hi = Infinity): number =>
-  typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
+const num = (v: unknown, fallback: number, lo = -Infinity, hi = Infinity): number => {
+  const n = coerceNumber(v);
+  return n === undefined ? fallback : Math.min(hi, Math.max(lo, n));
+};
 const str = (v: unknown, fallback: string): string => (typeof v === 'string' ? v : fallback);
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -396,7 +451,7 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
     }))
     : structuredClone(d.groups);
 
-  const selfGroupId = typeof v.selfGroupId === 'string' && groups.some((g) => g.id === v.selfGroupId)
+  const selfGroupId = typeof v.selfGroupId === 'string' && groups.some((g) => g.id === v.selfGroupId && g.kind === 'delivery')
     ? v.selfGroupId
     : (groups.find((g) => g.kind === 'delivery')?.id ?? null);
 
@@ -426,14 +481,14 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
     hours,
     costs,
     bonus: {
-      poolPct: num(b.poolPct, d.bonus.poolPct, 0, 100),
+      poolPct: num(b.poolPct, d.bonus.poolPct, 0, BONUS_POOL_MAX_PCT),
       includesHolidayPay: typeof b.includesHolidayPay === 'boolean' ? b.includesHolidayPay : d.bonus.includesHolidayPay,
     },
     levers: {
-      utilizationPp: num(l.utilizationPp, 0, -100, 100),
-      ratePct: num(l.ratePct, 0, -100, 100),
-      salaryPct: num(l.salaryPct, 0, -100, 100),
-      realizationPp: num(l.realizationPp, 0, -100, 100),
+      utilizationPp: num(l.utilizationPp, 0, LEVER_RANGES.utilizationPp.min, LEVER_RANGES.utilizationPp.max),
+      ratePct: num(l.ratePct, 0, LEVER_RANGES.ratePct.min, LEVER_RANGES.ratePct.max),
+      salaryPct: num(l.salaryPct, 0, LEVER_RANGES.salaryPct.min, LEVER_RANGES.salaryPct.max),
+      realizationPp: num(l.realizationPp, 0, LEVER_RANGES.realizationPp.min, LEVER_RANGES.realizationPp.max),
     },
   };
 }
