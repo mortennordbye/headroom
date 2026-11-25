@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calcCompany, companyHours, hourWaterfall, breakEvenUtilization, utilizationCurve, applyLevers,
-  sanitizeCompanyModel, ensureDeliverySelf, calculatorInputs, youEconomics, DEFAULT_COMPANY_MODEL, NEUTRAL_LEVERS,
+  sanitizeCompanyModel, ensureDeliverySelf, calculatorInputs, youEconomics, isOfficeLine, isBenchGroup, DEFAULT_COMPANY_MODEL, NEUTRAL_LEVERS,
   type CompanyModel, type CompanyContext, type CompanyResult,
 } from './companyCost';
 import {
@@ -389,7 +389,19 @@ describe('youEconomics: what the company earns on you', () => {
     expect(y.targetIsCompany).toBe(true);
     expect(y.keepPct).toBeCloseTo(y.companyPreBonusMarginPct, 6);
     expect(y.fairGross).not.toBeNull();
-    expect(Math.abs(y.fairGross! - 820_000)).toBeLessThan(1_000);
+    expect(Math.abs(y.fairGross! - 820_000)).toBeLessThan(1);
+  });
+
+  it('the fair salary and the pool do not depend on your own gross', () => {
+    const avg = calcCompany(avgModel(), avgCtx);
+    for (const ownGross of [600_000, 1_100_000]) {
+      const c2 = { ...avgCtx, ownGross };
+      const r = calcCompany(avgModel(), c2);
+      expect(r.pool).toBe(avg.pool);
+      const y = youEconomics(avgModel(), c2, r);
+      expect(y.gross).toBe(ownGross);
+      expect(Math.abs(y.fairGross! - 820_000)).toBeLessThan(1);
+    }
   });
 
   it('keep is revenue minus own cost and your share; keep % at fair salary is the target', () => {
@@ -445,6 +457,47 @@ describe('youEconomics: what the company earns on you', () => {
   it('no bonus drop when the company makes no profit before bonus', () => {
     const m = model({ groups: model().groups.map((g) => ({ ...g, hourlyRate: 100 })) });
     expect(run(m, ctx).raise.bonusDrop).toBe(0);
+  });
+
+  it('the bonus drop is capped at the bonus when the result before bonus is small', () => {
+    const r0 = calcCompany(model(), ctx);
+    // An extra company cost that leaves 1 000 kr before bonus.
+    const m = model({ costs: [...model().costs, { id: 'x', label: 'Extra', amount: r0.preBonus - 1000, per: 'company' }] });
+    const r = calcCompany(m, ctx);
+    expect(r.preBonus).toBeCloseTo(1000, 3);
+    const y = youEconomics(m, ctx, r);
+    expect(y.raise.cost * 0.15 * 1.12 * 1.141).toBeGreaterThan(r.bonus);
+    expect(y.raise.bonusDrop).toBeCloseTo(r.bonus, 9);
+    expect(y.raise.bonusDrop).toBeGreaterThan(0);
+  });
+
+  it('a company margin before bonus at or below 0 gives a default target of 0, so fair salary = ceiling', () => {
+    const m = model({ groups: model().groups.map((g) => (g.kind === 'delivery' ? { ...g, hourlyRate: 900 } : g)) });
+    const r = calcCompany(m, ctx);
+    expect(r.preBonus).toBeLessThan(0);
+    const y = youEconomics(m, ctx, r);
+    expect(y.targetClamped).toBe(true);
+    expect(y.targetMarginPct).toBe(0);
+    expect(y.fairGross).not.toBeNull();
+    expect(y.fairGross).toBeCloseTo(y.ceilingGross!, 3);
+    // A positive margin is not clamped, and the fair salary stays below the ceiling.
+    const ok = run(model(), ctx);
+    expect(ok.targetClamped).toBe(false);
+    expect(ok.fairGross!).toBeLessThan(ok.ceilingGross!);
+  });
+
+  it('office lines match by id or a leading word only', () => {
+    const line = (id: string, label: string) => isOfficeLine({ id, label });
+    expect(line('office', 'Anything')).toBe(true);
+    expect(line('x', 'Kontor (leie, strøm)')).toBe(true);
+    expect(line('x', 'Husleie')).toBe(true);
+    expect(line('x', 'Rent and power')).toBe(true);
+    expect(line('x', 'Rentekostnader')).toBe(false);
+    expect(line('x', 'current costs')).toBe(false);
+    expect(line('x', 'IT og kontorrekvisita')).toBe(false);
+    expect(isBenchGroup({ id: 'benk', name: 'Uten oppdrag' })).toBe(true);
+    expect(isBenchGroup({ id: 'b2', name: 'Bench' })).toBe(true);
+    expect(isBenchGroup({ id: 'led', name: 'Ledelse' })).toBe(false);
   });
 
   it('stays finite for empty groups, 0 hours and no self group', () => {

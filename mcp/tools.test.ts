@@ -775,7 +775,7 @@ describe('derive: salary, pension, forecast, housing, transactions', () => {
       expect(s.forYou).toEqual({
         revenue: y.revenue, keep: y.keep, keepPct: y.keepPct, fairGross: y.fairGross, ceilingGross: y.ceilingGross,
         salarySharePct: y.salarySharePct, companySalarySharePct: y.companySalarySharePct, raise: y.raise,
-        targetMarginPct: y.targetMarginPct, targetIsCompanyPreBonus: true, companyPreBonusMarginPct: y.companyPreBonusMarginPct,
+        targetMarginPct: y.targetMarginPct, targetIsCompanyPreBonus: true, targetClampedToZero: false, companyPreBonusMarginPct: y.companyPreBonusMarginPct,
       });
       expect(s.forYou.targetMarginPct).toBeCloseTo(r.preBonus / r.revenue * 100, 9);
     });

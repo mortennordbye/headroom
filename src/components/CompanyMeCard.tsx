@@ -72,6 +72,10 @@ export function CompanyMeCard({
   const y = youEconomics(model, ctx, result, gross);
   const fair = y.fairGross;
   const ceiling = y.ceilingGross;
+  // One rounding rule for every shown fair salary and ceiling; the exact values only place the markers.
+  const round10k = (v: number) => Math.round(v / 10_000) * 10_000;
+  const fairShown = fair != null ? round10k(fair) : null;
+  const ceilingShown = ceiling != null ? round10k(ceiling) : null;
 
   // ── Kroner bar: office and other cost lines share one segment ──
   const office = y.breakdown.filter((p) => p.kind === 'office' || p.kind === 'other');
@@ -113,8 +117,8 @@ export function CompanyMeCard({
   for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
   // One marker per line; a later PR adds the market salary here.
   const markers: AxisMarker[] = [
-    ...(ceiling != null ? [{ key: 'ceiling', value: ceiling, label: `${c.axisCeiling} ${k(ceiling)}`, color: 'var(--rust)', above: true }] : []),
-    ...(fair != null ? [{ key: 'fair', value: fair, label: `${c.axisFair} ${k(fair)}`, color: 'var(--forest-light)', above: false }] : []),
+    ...(ceiling != null ? [{ key: 'ceiling', value: ceiling, label: `${c.axisCeiling} ${k(ceilingShown!)}`, color: 'var(--rust)', above: true }] : []),
+    ...(fair != null ? [{ key: 'fair', value: fair, label: `${c.axisFair} ${k(fairShown!)}`, color: 'var(--forest-light)', above: false }] : []),
   ];
   // The "Nå" label sits below the axis like "Rimelig": hide it when they would overlap (wider labels on a phone).
   const nowFairGap = fair != null ? Math.abs(x(now) - x(fair)) : 100;
@@ -129,7 +133,8 @@ export function CompanyMeCard({
   };
 
   const lineTemplate = y.raise.bonusDrop > 0 ? c.meLine : c.meLineNoBonus;
-  const fairDiff = fair != null ? gross - fair : 0;
+  // Your real salary against the fair salary; the slider does not move it.
+  const fairDiff = fairShown != null ? now - fairShown : 0;
 
   return (
     <Card padding="lg">
@@ -147,10 +152,10 @@ export function CompanyMeCard({
           {fair != null ? (
             <>
               <div className="mt-2 font-mono font-semibold leading-[1.1] text-[30px] md:text-[40px] tabular-nums" style={{ color: 'var(--positive)' }}>
-                {c.meFairValue.replace('{v}', kr(Math.round(fair / 10_000) * 10_000))}
+                {c.meFairValue.replace('{v}', kr(fairShown!))}
               </div>
               <div className="mt-1.5 text-[12px] font-mono" style={{ color: 'var(--text-3)' }}>
-                {c.meFairSub.replace('{now}', kr(gross)).replace('{diff}', `${fairDiff < 0 ? '−' : '+'}${k(Math.abs(fairDiff))}`)}
+                {c.meFairSub.replace('{now}', kr(now)).replace('{diff}', `${fairDiff < 0 ? '−' : '+'}${k(Math.abs(fairDiff))}`)}
               </div>
             </>
           ) : (
@@ -168,6 +173,7 @@ export function CompanyMeCard({
           cost: b(mill(y.ownCost + y.share)),
           share: b(`${nf(y.salarySharePct)} %`),
           companyShare: `${nf(y.companySalarySharePct)} %`,
+          raise: kr(y.raise.amount),
           raiseCost: b(kr(Math.round(y.raise.cost / 1000) * 1000)),
           dropPct: `${nf(y.raise.cost > 0 ? y.raise.bonusDrop / y.raise.cost * 100 : 0)} %`,
           drop: kr(Math.round(y.raise.bonusDrop / 100) * 100),
@@ -221,7 +227,7 @@ export function CompanyMeCard({
       <div className="mt-6 flex items-baseline justify-between gap-2 mb-2">
         <SectionLabel>{c.axisTitle}</SectionLabel>
         <span className="text-[18px] font-semibold tabular-nums whitespace-nowrap">
-          {whatIf == null ? c.axisNow : c.axisWhatIf} {nf(gross)}<span className="text-[12px] ml-1 font-normal" style={{ color: 'var(--text-3)' }}>kr</span>
+          {whatIf == null ? c.axisNow : c.axisWhatIf} {kr(gross)}
           {whatIf != null && whatIf !== now && (
             <span className="ml-2 text-[12px] font-mono" style={{ color: whatIf > now ? 'var(--positive)' : 'var(--negative)' }}>
               {whatIf > now ? '+' : '−'}{nf(Math.abs(whatIf - now))}
@@ -232,14 +238,16 @@ export function CompanyMeCard({
       <div
         className="relative h-[120px] mx-1"
         role="img"
-        aria-label={c.axisAria.replace('{now}', kr(now)).replace('{fair}', fair != null ? kr(fair) : '–').replace('{ceiling}', ceiling != null ? kr(ceiling) : '–')}
+        aria-label={c.axisAria.replace('{now}', kr(now)).replace('{fair}', fairShown != null ? kr(fairShown) : '–').replace('{ceiling}', ceilingShown != null ? kr(ceilingShown) : '–')}
       >
         <div className="absolute left-0 right-0 top-[57px] h-[6px] rounded-full" style={{ background: 'var(--rule)' }} />
         {ticks.map((v, i) => (
           <div key={v} className="absolute top-[58px]" style={{ left: `${x(v)}%` }}>
             <div className="w-px h-[6px] -translate-x-1/2" style={{ background: 'var(--text-3)' }} />
             {/* Every other label on a phone, so they do not overlap. */}
-            <div className={`absolute top-[10px] -translate-x-1/2 text-[11px] font-mono whitespace-nowrap ${i % 2 ? 'hidden sm:block' : ''}`} style={{ color: 'var(--text-3)' }}>{c.millions.replace('{v}', nf(v / 1e6, 1))}</div>
+            <div
+              className={`absolute top-[10px] -translate-x-1/2 text-[11px] font-mono whitespace-nowrap ${i % 2 ? 'hidden sm:block' : ''} ${
+                i === 0 ? 'max-sm:translate-x-0' : i === ticks.length - 1 ? 'max-sm:-translate-x-full' : ''}`} style={{ color: 'var(--text-3)' }}>{c.millions.replace('{v}', nf(v / 1e6, 1))}</div>
           </div>
         ))}
         {markers.map((m) => (
@@ -264,10 +272,16 @@ export function CompanyMeCard({
         value={Math.min(hi, Math.max(lo, gross))}
         onChange={(e) => setWhatIf(Number(e.target.value))}
         aria-label={c.sliderAria}
+        aria-valuetext={kr(gross)}
         className="w-full mt-2"
         style={{ accentColor: 'var(--forest-light)' }}
       />
-      <p className="mt-1 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.sliderHint}</p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{c.sliderHint}</p>
+        {whatIf != null && whatIf !== now && (
+          <Button size="sm" variant="secondary" leadingIcon={<RotateCcw />} onClick={() => setWhatIf(null)}>{c.backToNow}</Button>
+        )}
+      </div>
 
       {/* Target margin; the other two columns (occupation, what matters most) come in later PRs. */}
       <div className="mt-5 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-6" style={{ borderColor: 'var(--rule)' }}>
@@ -276,6 +290,7 @@ export function CompanyMeCard({
             label={c.targetTitle}
             value={shownTarget}
             onCommit={commitTarget}
+            onBlank={() => setModel((m) => ({ ...m, targetMarginPct: null }))}
             suffix="%"
             badge={(
               <span
@@ -294,6 +309,7 @@ export function CompanyMeCard({
             </Button>
           )}
           <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.targetHint}</p>
+          {y.targetClamped && <p className="mt-2 text-[12px]" style={{ color: 'var(--warning)' }}>{c.targetClampedNote}</p>}
         </div>
       </div>
     </Card>

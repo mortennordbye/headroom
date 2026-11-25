@@ -1334,6 +1334,7 @@ export function companyModelSummary(blob: ExportPayload, monthKey = osloMonthKey
       raise: y.raise,
       targetMarginPct: y.targetMarginPct,
       targetIsCompanyPreBonus: y.targetIsCompany,
+      targetClampedToZero: y.targetClamped,
       companyPreBonusMarginPct: y.companyPreBonusMarginPct,
     },
     // The levers at 0: the groups as saved. Delta is now minus baseline.

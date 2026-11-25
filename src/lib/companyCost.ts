@@ -302,9 +302,10 @@ const SOLVE_GROSS_MAX = 50_000_000;
 export const RAISE_STEP = 100_000;
 
 /** A support group that is the bench (consultants without a client), by its name. Used for colour only. */
-export const isBenchGroup = (g: { name: string }) => /\b(benk|bench)/i.test(g.name);
+export const isBenchGroup = (g: { id: string; name: string }) => /^(benk|bench)$/i.test(g.id) || /\b(benk|bench)/i.test(g.name);
 /** A cost line that is the office, by its id or name. */
-export const isOfficeLine = (l: { id: string; label: string }) => l.id === 'office' || /kontor|office|husleie|rent/i.test(l.label);
+export const isOfficeLine = (l: { id: string; label: string }) =>
+  /^(office|kontor)$/i.test(l.id) || /^(kontor|office|husleie)\b/i.test(l.label) || /^rent\b/i.test(l.label);
 
 export interface YouBreakdownPart {
   key: string;
@@ -323,6 +324,8 @@ export interface YouEconomics {
   companyPreBonusMarginPct: number;
   targetMarginPct: number;
   targetIsCompany: boolean;
+  /** The company margin before bonus is 0 or below, so the default target is 0 (fair salary = ceiling). */
+  targetClamped: boolean;
   fairGross: number | null;     // gross where keep % = target
   ceilingGross: number | null;  // gross where keep = 0
   salarySharePct: number;       // your gross / your revenue
@@ -370,7 +373,11 @@ export function youEconomics(model: CompanyModel, ctx: CompanyContext, r: Compan
   const companyPreBonusMarginPct = div(r.preBonus, r.revenue) * 100;
   const stored = model.targetMarginPct;
   const targetIsCompany = stored == null || !Number.isFinite(stored);
-  const targetMarginPct = targetIsCompany ? companyPreBonusMarginPct : clamp(stored, TARGET_MARGIN_RANGE.min, TARGET_MARGIN_RANGE.max);
+  // A target below 0 would put the fair salary above the ceiling, so the default stops at 0.
+  const targetClamped = targetIsCompany && companyPreBonusMarginPct <= 0;
+  const targetMarginPct = targetIsCompany
+    ? Math.max(0, companyPreBonusMarginPct)
+    : clamp(stored, TARGET_MARGIN_RANGE.min, TARGET_MARGIN_RANGE.max);
 
   const at = (target: number) => solveGross((g) => revenue * (1 - target / 100) - share - personCost(g, ctx));
   const fairGross = revenue > 0 ? at(targetMarginPct) : null;
@@ -402,7 +409,7 @@ export function youEconomics(model: CompanyModel, ctx: CompanyContext, r: Compan
   return {
     gross: g0, revenue, ownCost, share, keep,
     keepPct: div(keep, revenue) * 100,
-    companyPreBonusMarginPct, targetMarginPct, targetIsCompany,
+    companyPreBonusMarginPct, targetMarginPct, targetIsCompany, targetClamped,
     fairGross, ceilingGross,
     salarySharePct: div(g0, revenue) * 100,
     companySalarySharePct,
