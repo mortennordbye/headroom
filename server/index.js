@@ -1023,7 +1023,7 @@ app.get('/api/wage-stats/occupation', occupationWageLimiter, async (req, res) =>
       });
       tx(points);
     } catch (err) {
-      console.warn(`[occupation-wage] SSB fetch failed for ${code}, serving cache (next attempt in ${Math.round(SSB_ATTEMPT_COOLDOWN_MS / 60000)} min):`, err.message);
+      console.warn('[occupation-wage] SSB fetch failed for %s, serving cache (next attempt in %d min):', code, Math.round(SSB_ATTEMPT_COOLDOWN_MS / 60000), err.message);
       stale = true;
     }
   } else if (needsRefresh) {
