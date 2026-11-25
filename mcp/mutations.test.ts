@@ -758,8 +758,8 @@ describe('company model writes store a sanitized model', () => {
     const before = calcCompany(blob.companyModel, ctx);
     const yBefore = youEconomics(blob.companyModel, ctx, before);
     updateCompanySettings(blob, { applyLevers: true });
-    const after = calcCompany(blob.companyModel!, ctx);
-    const yAfter = youEconomics(blob.companyModel!, ctx, after);
+    const after = calcCompany(blob.companyModel, ctx);
+    const yAfter = youEconomics(blob.companyModel, ctx, after);
     expect(after.ebit).toBeCloseTo(before.ebit, 6);
     expect(after.you.realCost).toBeCloseTo(before.you.realCost, 6);
     expect(after.revenue).toBeCloseTo(before.revenue, 6);
