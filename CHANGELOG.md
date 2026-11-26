@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.24.1](https://github.com/mortennordbye/headroom/compare/v3.24.0...v3.24.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* keep parental leave in a first quick setup from chat ([#425](https://github.com/mortennordbye/headroom/issues/425)) ([e94b58a](https://github.com/mortennordbye/headroom/commit/e94b58afed4907767c6a8e20776d25eef443c59c))
+
 ## [3.24.0](https://github.com/mortennordbye/headroom/compare/v3.23.0...v3.24.0) (2026-11-26)
 
 
