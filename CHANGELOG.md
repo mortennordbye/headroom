@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.24.0](https://github.com/mortennordbye/headroom/compare/v3.23.0...v3.24.0) (2026-11-26)
+
+
+### Features
+
+* add parental leave and a clearer layout to the company model ([#424](https://github.com/mortennordbye/headroom/issues/424)) ([d7c93d4](https://github.com/mortennordbye/headroom/commit/d7c93d44ed4c2c973119d6c3eb6c0993bcacfd9c))
+* make real vs guessed numbers clear in the accounts check ([#422](https://github.com/mortennordbye/headroom/issues/422)) ([c7dca36](https://github.com/mortennordbye/headroom/commit/c7dca3662d8ad56cc4487e4e42ca5096e1138bed))
+
 ## [3.23.0](https://github.com/mortennordbye/headroom/compare/v3.22.0...v3.23.0) (2026-11-25)
 
 
