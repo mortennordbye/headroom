@@ -13,6 +13,7 @@ import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { NumberRow } from './ui/NumberRow';
 import { Button } from './ui/Button';
+import { useBlockNav } from './companyBlockNav';
 
 /** Fill `{key}` slots in a translated string with React nodes. */
 function fill(template: string, values: Record<string, ReactNode>): ReactNode[] {
@@ -29,6 +30,7 @@ const BAR_COLOR: Record<YouBreakdownPart['kind'], string> = {
   onCosts: 'var(--teal)',
   bench: 'var(--rust)',
   support: 'var(--slate)',
+  leave: 'var(--brass-dim)',
   office: 'var(--text-3)',
   other: 'var(--text-3)',
   kept: 'var(--forest-light)',
@@ -57,6 +59,9 @@ function tickStep(span: number): number {
  * only: it never writes the model or the salary page. Ranges and "Hva betyr
  * mest" come from the saved quick setup's guesses (companyRanges.ts).
  */
+/** The result card's id, for the index's first link. */
+export const COMPANY_TOP_ANCHOR = 'company-top';
+
 export function CompanyMeCard({
   model, setModel, ctx, result,
 }: {
@@ -66,6 +71,7 @@ export function CompanyMeCard({
   result: CompanyResult;
 }) {
   const { t, lang, region, formatCurrencyShort } = useFinance();
+  const nav = useBlockNav();
   const c = t.companyModel;
   const locale = lang === 'nb' ? 'nb-NO' : 'en-US';
   const nf = (v: number, d = 0) => (Math.abs(v) < 0.5 * 10 ** -d ? 0 : v).toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -107,7 +113,7 @@ export function CompanyMeCard({
   const segs = [
     ...y.breakdown.filter((p) => p.kind !== 'office' && p.kind !== 'other' && p.kind !== 'kept').map((p) => ({
       key: p.key,
-      label: p.kind === 'salary' ? c.barSalary : p.kind === 'onCosts' ? c.barOnCosts : p.label || '–',
+      label: p.kind === 'salary' ? c.barSalary : p.kind === 'onCosts' ? c.barOnCosts : p.kind === 'leave' ? c.barLeave : p.label || '–',
       value: p.value,
       color: BAR_COLOR[p.kind],
       extra: '',
@@ -196,7 +202,8 @@ export function CompanyMeCard({
   const fairDiff = fairShown != null ? now - fairShown : 0;
 
   return (
-    <Card padding="lg">
+    <Card padding="lg" id={COMPANY_TOP_ANCHOR} className="scroll-mt-28">
+      <SectionLabel className="mb-5">{c.indexTop}</SectionLabel>
       {/* Two headline numbers, with their ranges when the setup has guesses. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="min-w-0">
@@ -218,10 +225,10 @@ export function CompanyMeCard({
                 <>
                   {basis.match === 'mismatch' ? c.meBasisMismatch : c.meBasisUnchecked}{' '}
                   <a
-                    href={`#${ACCOUNTS_CARD_ANCHOR}`}
+                    href={`#company-block-${ACCOUNTS_CARD_ANCHOR}`}
                     className="underline underline-offset-2"
                     style={{ color: 'var(--accent)' }}
-                    onClick={(e) => { e.preventDefault(); document.getElementById(ACCOUNTS_CARD_ANCHOR)?.scrollIntoView({ block: 'start' }); }}
+                    onClick={(e) => { e.preventDefault(); nav?.reveal(ACCOUNTS_CARD_ANCHOR); }}
                   >
                     {c.meBasisCheck}
                   </a>
@@ -478,12 +485,12 @@ export function CompanyMeCard({
   );
 }
 
-/** The two folded explainers under the card. */
+/** The two explainers, for the "Les mer" block at the bottom of the page. */
 export function CompanyExplainers() {
   const { t } = useFinance();
   const c = t.companyModel;
   return (
-    <>
+    <div className="space-y-6">
       <Explainer title={c.explainMoneyTitle}>
         <p>{rich(c.explainMoneyBody)}</p>
       </Explainer>
@@ -492,21 +499,15 @@ export function CompanyExplainers() {
           {[c.argBench, c.argRisk, c.argRecruit, c.argBonus, c.argMarket].map((a) => <li key={a}>{rich(a)}</li>)}
         </ul>
       </Explainer>
-    </>
+    </div>
   );
 }
 
 function Explainer({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Card padding="lg">
-      <details className="group">
-        <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
-          <SectionLabel>
-            {title} <span aria-hidden className="inline-block transition-transform group-open:rotate-90">▸</span>
-          </SectionLabel>
-        </summary>
-        <div className="mt-4 text-[14px] leading-[1.6] max-w-3xl" style={{ color: 'var(--text-2)' }}>{children}</div>
-      </details>
-    </Card>
+    <div>
+      <SectionLabel>{title}</SectionLabel>
+      <div className="mt-3 text-[14px] leading-[1.6] max-w-3xl" style={{ color: 'var(--text-2)' }}>{children}</div>
+    </div>
   );
 }

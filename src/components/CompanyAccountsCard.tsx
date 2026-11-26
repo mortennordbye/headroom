@@ -9,8 +9,8 @@ import {
 } from '../lib/companyAccounts';
 import { accountsStatus, fitModelToAccounts, type CalibrateFailure, type CalibrateMove } from '../lib/companyCalibrate';
 import { isValidOrgnr } from '../lib/validators';
-import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
+import { BlockChip, FoldBlock } from './CompanyBlocks';
 import { Button } from './ui/Button';
 import ConfirmModal from './ConfirmModal';
 import { RESTORE_POINTS_ANCHOR } from './RestorePointsCard';
@@ -224,19 +224,20 @@ export function CompanyAccountsCard({
   );
 
   return (
-    <Card padding="lg" id={ACCOUNTS_CARD_ANCHOR} className="scroll-mt-24">
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-center gap-2">
-          <SectionLabel>① {c.accountsTitle}</SectionLabel>
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>{c.accountsOptional}</span>
-        </div>
-        <span className="text-[12px] font-mono" style={{ color: 'var(--brass)' }}>
-          {acc ? c.accountsRun.replace('{year}', String(acc.year)) : c.accountsNotFetched}
-        </span>
-      </div>
+    <FoldBlock
+      id={ACCOUNTS_CARD_ANCHOR}
+      n={1}
+      title={c.accountsTitle}
+      chip={showSaved && status.match === 'mismatch' ? <BlockChip tone="negative">{c.chipMismatch}</BlockChip>
+        : showSaved && status.match === 'match' ? <BlockChip tone="positive">{c.chipMatch}</BlockChip>
+          : <BlockChip>{c.accountsOptional}</BlockChip>}
+      summary={cmp && acc && showSaved
+        ? c.accountsSum.replace('{model}', mill(cmp.operatingResult.model, '')).replace('{accounts}', mill(cmp.operatingResult.accounts, 'kr'))
+        : acc ? c.accountsRun.replace('{year}', String(acc.year)) : c.accountsNotFetched}
+    >
 
       {showMismatch && cmp && acc && (
-        <div role="status" data-testid="accounts-mismatch" className="mt-4 flex gap-3 items-start rounded-[8px] border px-4 py-3.5" style={{ borderColor: 'var(--negative)', background: 'var(--negative-bg)' }}>
+        <div role="status" data-testid="accounts-mismatch" className="mb-4 flex gap-3 items-start rounded-[8px] border px-4 py-3.5" style={{ borderColor: 'var(--negative)', background: 'var(--negative-bg)' }}>
           <AlertTriangle size={18} aria-hidden className="shrink-0 mt-0.5" style={{ color: 'var(--negative)' }} />
           <div className="min-w-0">
             <p className="text-[14px] font-semibold" style={{ color: 'var(--text-1)' }}>{c.accountsMismatchTitle}</p>
@@ -252,7 +253,7 @@ export function CompanyAccountsCard({
         </div>
       )}
       {showFitted && acc && (
-        <div role="status" data-testid="accounts-fitted" className="mt-4 flex gap-3 items-start rounded-[8px] border px-4 py-3.5" style={{ borderColor: 'var(--positive)', background: 'var(--positive-bg)' }}>
+        <div role="status" data-testid="accounts-fitted" className="mb-4 flex gap-3 items-start rounded-[8px] border px-4 py-3.5" style={{ borderColor: 'var(--positive)', background: 'var(--positive-bg)' }}>
           <Check size={18} aria-hidden className="shrink-0 mt-0.5" style={{ color: 'var(--positive)' }} />
           <div className="min-w-0">
             <p className="text-[14px] font-semibold" style={{ color: 'var(--text-1)' }}>{c.accountsFittedTitle.replace('{year}', String(acc.year))}</p>
@@ -265,7 +266,7 @@ export function CompanyAccountsCard({
         </div>
       )}
 
-      <p className="mt-4 text-[12px]" style={muted}>{c.accountsIntro}</p>
+      <p className="text-[12px]" style={muted}>{c.accountsIntro}</p>
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="flex-1 min-w-[12rem] max-w-[20rem]">
           <span className="block mb-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={muted}>{c.accountsOrgnr}</span>
@@ -366,6 +367,6 @@ export function CompanyAccountsCard({
           onCancel={() => setConfirming(false)}
         />
       )}
-    </Card>
+    </FoldBlock>
   );
 }

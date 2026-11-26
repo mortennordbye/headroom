@@ -88,6 +88,12 @@ in git and the CHANGELOG, not here.
   `src/pages/PensionPage.tsx`.
 - **Not audited yet**: bank import and categorisation.
 
+- **Parental leave cost leaves out holiday pay.** The company model counts leave with full pay as
+  person cost minus NAV's refund (up to 6G). It does not count the holiday pay the employer owes for
+  the first 12 (or 15) weeks of leave, so the leave cost is a little low. The page says "ca.".
+  **Why deferred**: kept simple in the first version. **Unblock**: decide how many weeks a leave FTE
+  stands for, then add holiday pay on that part. **Where**: `calcCompany` in `src/lib/companyCost.ts`.
+
 ## Income and salary
 
 - **Consultant features.** Commission entries (`CommissionEntry` aggregated in `compByYear`), a

@@ -613,7 +613,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update company model settings',
       description:
-        'Change the company model settings. Only provided fields change. targetMarginPct sets the target margin for the fair salary; null goes back to the company margin before bonus. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. self sets your own billable share and rate (null clears it). market.styrk is your STYRK-08 occupation for the SSB market pay on the page (null goes back to 2512). A change to selfGroupId, or applyLevers, counts as a hand edit of the groups (quick.edited). applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
+        'Change the company model settings. Only provided fields change. leave sets parental leave: count = FTE on leave over the year (they bill nothing and count as heads), fullPay = the company pays full salary and NAV refunds up to 6G (false: NAV pays the person, salary cost 0); null removes it. A leave change counts as a hand edit (quick.edited). targetMarginPct sets the target margin for the fair salary; null goes back to the company margin before bonus. mode "advanced" makes the employer-cost page use the company model (Avansert), "simple" the flat overhead (Enkel). Levers are stored as the page sliders and are clamped to their range. self sets your own billable share and rate (null clears it). market.styrk is your STYRK-08 occupation for the SSB market pay on the page (null goes back to 2512). A change to selfGroupId, or applyLevers, counts as a hand edit of the groups (quick.edited). applyLevers=true is "Lagre som utgangspunkt": it writes the levers (after any given here) into the groups and sets them to 0, so the results stay the same. Try changes first with simulate_company.',
       inputSchema: {
         mode: z.enum(['simple', 'advanced']).optional(),
         selfGroupId: z.string().min(1).optional().describe('Your group: the id of a delivery group (from get_company_model model.groups).'),
@@ -638,6 +638,10 @@ export function registerWriteTools(server: McpServer) {
           styrk: z.enum(STYRK_CODES).describe('STYRK-08 code: 25 IKT-rådgivere (all), 2511 system analysts/architects, 2512 software developers, 2513 web and multimedia developers, 2514 application programmers, 2519 other software developers, 2521 database designers/administrators, 2522 system administrators, 2529 security analysts etc.'),
         }).nullable().optional()
           .describe('Your occupation for the SSB market pay marker ("Marked"). null = the default, 2512.'),
+        leave: z.object({
+          count: z.number().min(0).max(100_000).optional().describe('FTE on parental leave over the year. 1 person for 49 weeks is about 1 FTE.'),
+          fullPay: z.boolean().optional().describe('true (default): the company pays full salary and gets NAV\'s refund up to 6G. false: NAV pays the person.'),
+        }).nullable().optional().describe('Parental leave (foreldrepermisjon). Only given fields change; null removes it.'),
         applyLevers: z.boolean().optional().describe('true: write the levers into the groups and set them to 0.'),
       },
       annotations: { title: 'Update company model settings', ...readWrite, destructiveHint: true, idempotentHint: false },
@@ -662,7 +666,9 @@ export function registerWriteTools(server: McpServer) {
         answers: z.object({
           totalFte: z.number().min(0).max(100_000).optional().describe('FTE (årsverk) in the company, everyone included.'),
           nonBilling: z.number().min(0).max(100_000).optional().describe('FTE that never bill: leadership, HR, marketing.'),
-          onBench: z.number().min(0).max(100_000).optional().describe('Consultants without a client now (the bench).'),
+          onBench: z.number().min(0).max(100_000).optional().describe('Consultants without a client (the bench), average over the year.'),
+          onLeave: z.number().min(0).max(100_000).optional().describe('FTE on parental leave over the year. They come out of the consultants and bill nothing.'),
+          leaveFullPay: z.boolean().optional().describe('The company pays full salary on leave and gets NAV\'s refund up to 6G (default true).'),
           salaryLow: kr.max(100_000_000).optional().describe('Consultants\' gross salary, low end, kr per year. The model uses the midpoint of low and high.'),
           salaryHigh: kr.max(100_000_000).optional().describe('Consultants\' gross salary, high end, kr per year (not below salaryLow).'),
           rateAverage: kr.max(100_000).optional().describe('Average list rate in the company, kr per hour.'),

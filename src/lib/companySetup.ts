@@ -9,7 +9,8 @@
  *   mean salary, the typical billable share and the average rate;
  * - bench: a support group at 0 % billable and the consultants' salary, so its
  *   cost goes into the shared pool;
- * - leadership, HR, marketing: a support group at 0 % billable.
+ * - leadership, HR, marketing: a support group at 0 % billable;
+ * - parental leave: `leave` on the model (not a group), FTE that bill nothing.
  * The mean salary is the midpoint of the low–high answer.
  *
  * This module imports only types from companyCost.ts, so the sanitizer there
@@ -26,6 +27,10 @@ export interface QuickAnswers {
   totalFte: number;          // årsverk in the company
   nonBilling: number;        // leadership, HR, marketing (FTE)
   onBench: number;           // consultants without a client now
+  /** FTE on parental leave over the year. Missing: 0. */
+  onLeave?: number;
+  /** The company pays full salary on leave (and gets NAV's refund). Missing: true. */
+  leaveFullPay?: boolean;
   salaryLow: number;         // consultants' salary, low end
   salaryHigh: number;        // consultants' salary, high end
   rateAverage: number;       // average list rate, kr/h
@@ -126,9 +131,9 @@ export function quickMeanSalary(a: QuickAnswers): number {
   return (Math.max(0, fin(a.salaryLow)) + Math.max(0, fin(a.salaryHigh))) / 2;
 }
 
-/** FTE in an assignment: total − non-billing − bench, never below 0. */
+/** FTE in an assignment: total − non-billing − bench − parental leave, never below 0. */
 export function quickDeliveryFte(a: QuickAnswers): number {
-  return Math.max(0, fin(a.totalFte) - Math.max(0, fin(a.nonBilling)) - Math.max(0, fin(a.onBench)));
+  return Math.max(0, fin(a.totalFte) - Math.max(0, fin(a.nonBilling)) - Math.max(0, fin(a.onBench)) - Math.max(0, fin(a.onLeave ?? 0)));
 }
 
 /** The office cost per year: desks (default one per FTE) × the desk price, or the yearly rent. */
@@ -177,6 +182,7 @@ export function buildModelFromAnswers(
     bonus: { ...base.bonus, poolPct: a.bonusPct },
     levers: { utilizationPp: 0, ratePct: 0, salaryPct: 0, realizationPp: 0 },
     self: { billablePct: a.ownBillablePct, hourlyRate: a.rateYou },
+    leave: { count: a.onLeave ?? 0, fullPay: a.leaveFullPay ?? true },
     quick: { answers: a, uncertain: known(opts.uncertain), dontKnow: known(opts.dontKnow), edited: false },
     ...(base.accounts ? { accounts: withoutFit(base.accounts) } : {}),
   };
@@ -214,10 +220,11 @@ export function sanitizeQuickAnswers(v: unknown): QuickAnswers {
   const totalFte = num(a.totalFte, d.totalFte, 0, 100_000);
   const nonBilling = num(a.nonBilling, d.nonBilling, 0, totalFte);
   const salaryLow = num(a.salaryLow, d.salaryLow, 0, 100_000_000);
+  const onBench = num(a.onBench, d.onBench, 0, Math.max(0, totalFte - nonBilling));
   return {
     totalFte,
     nonBilling,
-    onBench: num(a.onBench, d.onBench, 0, Math.max(0, totalFte - nonBilling)),
+    onBench,
     salaryLow,
     salaryHigh: num(a.salaryHigh, Math.max(salaryLow, d.salaryHigh), salaryLow, 100_000_000),
     rateAverage: num(a.rateAverage, d.rateAverage, 0, 100_000),
@@ -231,6 +238,9 @@ export function sanitizeQuickAnswers(v: unknown): QuickAnswers {
     tripsPerYear: num(a.tripsPerYear, d.tripsPerYear, 0, 52),
     // Kept only when it was given, so a missing desk count follows the FTE answer.
     ...(coerceNumber(a.desks) !== undefined ? { desks: num(a.desks, 0, 0, 100_000) } : {}),
+    // Kept only when given, so older saves keep their shape.
+    ...(coerceNumber(a.onLeave) !== undefined ? { onLeave: num(a.onLeave, 0, 0, Math.max(0, totalFte - nonBilling - onBench)) } : {}),
+    ...(typeof a.leaveFullPay === 'boolean' ? { leaveFullPay: a.leaveFullPay } : {}),
     // Kept only when it was given, so older saves keep their shape.
     ...(coerceNumber(a.resaleSharePct) !== undefined ? { resaleSharePct: num(a.resaleSharePct, 0, 0, QUICK_RESALE_MAX_PCT) } : {}),
   };

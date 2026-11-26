@@ -525,6 +525,19 @@ const cases: {
     },
   },
   {
+    name: 'update_company_settings (leave is set, listed, patched and removed with null)',
+    touched: ['companyModel'],
+    mutate: (b) => updateCompanySettings(b, { leave: { count: 2 } }),
+    assertChange: (b, changes) => {
+      expect(b.companyModel?.leave).toEqual({ count: 2, fullPay: true });
+      expect(changes).toContainEqual({ field: 'companyModel.leave', before: null, after: { count: 2, fullPay: true } });
+      updateCompanySettings(b, { leave: { fullPay: false } });
+      expect(b.companyModel?.leave).toEqual({ count: 2, fullPay: false });
+      updateCompanySettings(b, { leave: null });
+      expect(b.companyModel?.leave).toBeUndefined();
+    },
+  },
+  {
     name: 'update_company_settings (market.styrk is set, listed and reset to null)',
     touched: ['companyModel'],
     mutate: (b) => updateCompanySettings(b, { market: { styrk: '2511' } }),
