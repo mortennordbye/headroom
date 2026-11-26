@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect, getBlob, putBlob, seedBlob } from './fixtures';
 
 // The "Start med regnskapet" card on Avansert, with /api/brreg stubbed at the
@@ -37,6 +38,7 @@ test('accounts: fetch, compare estimates with real figures, warnings, and "Gjør
 
   await page.goto('/employer-cost');
   await expect(page.getByText('ikke hentet')).toBeVisible();
+  await openAccounts(page);
 
   const input = page.getByRole('textbox', { name: 'Organisasjonsnummer' });
   const fetchButton = page.getByRole('button', { name: 'Hent regnskap' });
@@ -122,6 +124,7 @@ test('after a hand edit, "Gjør modellen lik regnskapet" asks first, then builds
   };
   await putBlob(request, blob);
   await page.goto('/employer-cost');
+  await openAccounts(page);
 
   const button = page.getByTestId('accounts-mismatch').getByRole('button', { name: 'Gjør modellen lik regnskapet' });
   await button.click();
@@ -146,6 +149,7 @@ test('demo mode: the fetch button is disabled and nothing reaches /api/brreg', a
 
   await page.goto('/employer-cost');
   await page.getByRole('radio', { name: 'Avansert' }).or(page.getByRole('button', { name: 'Avansert' })).first().click();
+  await openAccounts(page);
   const input = page.getByRole('textbox', { name: 'Organisasjonsnummer' });
   await input.fill(ORG);
   await expect(page.getByRole('button', { name: 'Hent regnskap' })).toBeDisabled();
@@ -153,3 +157,8 @@ test('demo mode: the fetch button is disabled and nothing reaches /api/brreg', a
   await input.press('Enter');
   expect(asked).toEqual([]);
 });
+
+/** Block 1 ("Start med regnskapet") is folded when the page opens. */
+async function openAccounts(page: Page) {
+  await page.locator('summary', { hasText: 'Start med regnskapet' }).click();
+}

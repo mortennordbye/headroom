@@ -16,6 +16,12 @@
  * It is shared per delivery FTE (your share) and also shown per billable hour.
  * The pool is not clamped; it can be below 0.
  *
+ * Parental leave: FTE on leave bill nothing and count as heads. With full pay
+ * the company pays the full person cost at your group's salary, and NAV refunds
+ * the salary up to 6G, so the cost per FTE is person cost − min(salary, 6G).
+ * Without full pay NAV pays the person, and the salary cost is 0. The cost goes
+ * into the overhead pool. Simplified: holiday pay owed on leave is not counted.
+ *
  * Bonus = max(0, result before bonus) × pool % × (1 + holiday pay %) × (1 + AGA).
  * Tax is an estimate: max(0, EBIT) × corporate tax % (EBIT is not the tax base).
  *
@@ -29,6 +35,7 @@ import { coerceNumber } from './sanitizePayload';
 import { sanitizeQuick, type CompanyQuick } from './companySetup';
 import { sanitizeAccounts, type CompanyAccounts } from './companyAccounts';
 import { isStyrkCode, type StyrkCode } from './marketWage';
+import { folketrygdParamsFor } from './folketrygd';
 
 export type CompanyGroupKind = 'delivery' | 'support';
 
@@ -77,6 +84,13 @@ export interface CompanyModel {
   market?: { styrk: StyrkCode };
   /** The company's public accounts from Brønnøysund, fetched on request; the model is compared with them. */
   accounts?: CompanyAccounts;
+  /** Parental leave (foreldrepermisjon). Missing: none. */
+  leave?: CompanyLeave;
+}
+
+export interface CompanyLeave {
+  count: number;    // FTE on leave over the year
+  fullPay: boolean; // the company pays full salary and gets NAV's refund (up to 6G)
 }
 
 export interface CompanySelf {
@@ -166,9 +180,18 @@ export interface CostLineResult extends CompanyCostLine {
   total: number;           // kr per year
 }
 
+export interface LeaveResult {
+  count: number;
+  gross: number;           // the salary used: your group's (else the first delivery group's), with the levers
+  refundPerFte: number;    // NAV's refund, min(gross, 6G); 0 without full pay
+  costPerFte: number;      // what the company pays per FTE on leave
+  cost: number;
+}
+
 export interface CompanyResult {
   hours: CompanyHours;
   groups: GroupResult[];
+  leave: LeaveResult;
   heads: number;
   deliveryFte: number;
   salaryTotal: number;
@@ -176,7 +199,7 @@ export interface CompanyResult {
   linesTotal: number;
   revenue: number;
   peopleCost: number;
-  supportNet: number;      // support cost − support revenue
+  supportNet: number;      // support cost − support revenue + leave cost
   pool: number;            // supportNet + linesTotal
   preBonus: number;
   bonus: number;
@@ -228,6 +251,9 @@ function personCost(gross: number, ctx: CompanyContext): number {
   return fin(calcEmployerCost(gross, ctx.otpPct, cfg, ctx.holidayPayInSalary, ctx.year, ctx.otpCap).totalEmployerCost);
 }
 
+/** 6G for the year: the most NAV pays in parental benefit per year. */
+export const leaveRefundCap = (year: number) => 6 * folketrygdParamsFor(year).grunnbelop;
+
 /** The groups with the levers applied (the "what if"), clamped to valid ranges. */
 function leveredGroup(g: CompanyGroup, l: CompanyLevers): CompanyGroup {
   return {
@@ -255,9 +281,21 @@ export function calcCompany(model: CompanyModel, ctx: CompanyContext, levers: Co
     return { ...g, count, billableHours, costPerFte, revenuePerFte, cost: costPerFte * count, revenue: revenuePerFte * count };
   });
   const delivery = groups.filter((g) => g.kind === 'delivery');
-  const heads = sum(groups, (g) => g.count);
+
+  const leaveCount = Math.max(0, fin(model.leave?.count ?? 0));
+  const fullPay = model.leave?.fullPay ?? true;
+  const leaveGroup = groups.find((g) => g.id === model.selfGroupId) ?? delivery[0];
+  const leaveGross = leaveGroup?.avgGross ?? 0;
+  const refundPerFte = fullPay ? Math.min(leaveGross, leaveRefundCap(ctx.year)) : 0;
+  const leaveCostPerFte = fullPay ? Math.max(0, personCost(leaveGross, ctx) - refundPerFte) : 0;
+  const leave: LeaveResult = {
+    count: leaveCount, gross: leaveGross, refundPerFte, costPerFte: leaveCostPerFte, cost: leaveCostPerFte * leaveCount,
+  };
+
+  const heads = sum(groups, (g) => g.count) + leaveCount;
   const deliveryFte = sum(delivery, (g) => g.count);
-  const salaryTotal = sum(groups, (g) => g.avgGross * g.count);
+  // Salary paid by the company: on leave with full pay it pays the salary, and NAV refunds part of it.
+  const salaryTotal = sum(groups, (g) => g.avgGross * g.count) + (fullPay ? leaveGross * leaveCount : 0);
 
   const lines: CostLineResult[] = model.costs.map((c) => {
     const amount = fin(c.amount);
@@ -267,8 +305,8 @@ export function calcCompany(model: CompanyModel, ctx: CompanyContext, levers: Co
   const linesTotal = sum(lines, (c) => c.total);
 
   const revenue = sum(groups, (g) => g.revenue);
-  const peopleCost = sum(groups, (g) => g.cost);
-  const supportNet = sum(groups.filter((g) => g.kind === 'support'), (g) => g.cost - g.revenue);
+  const peopleCost = sum(groups, (g) => g.cost) + leave.cost;
+  const supportNet = sum(groups.filter((g) => g.kind === 'support'), (g) => g.cost - g.revenue) + leave.cost;
   const pool = supportNet + linesTotal;
   const preBonus = revenue - peopleCost - linesTotal;
   const holidayPct = model.bonus.includesHolidayPay ? Math.max(0, fin(ctx.costConfig.feriepengesatsPct)) : 0;
@@ -297,7 +335,7 @@ export function calcCompany(model: CompanyModel, ctx: CompanyContext, levers: Co
   const marginGroup = self ?? delivery[0];
 
   return {
-    hours, groups, heads, deliveryFte, salaryTotal, lines, linesTotal,
+    hours, groups, leave, heads, deliveryFte, salaryTotal, lines, linesTotal,
     revenue, peopleCost, supportNet, pool, preBonus, bonus, ebit, tax, afterTax: ebit - tax,
     marginPct: div(ebit, revenue) * 100,
     meanUtilizationPct: div(sum(delivery, (g) => g.billablePct * g.count), deliveryFte),
@@ -332,7 +370,7 @@ export const isOfficeLine = (l: { id: string; label: string }) =>
 
 export interface YouBreakdownPart {
   key: string;
-  kind: 'salary' | 'onCosts' | 'bench' | 'support' | 'office' | 'other' | 'kept';
+  kind: 'salary' | 'onCosts' | 'bench' | 'support' | 'leave' | 'office' | 'other' | 'kept';
   label: string;          // a group's name for support parts, else empty (the UI names it)
   value: number;          // kr per year; may be below 0 (a group that bills more than it costs, or a loss)
 }
@@ -432,6 +470,7 @@ export function youEconomics(
     ...r.groups.filter((g) => g.kind === 'support').map((g): YouBreakdownPart => ({
       key: `group-${g.id}`, kind: isBenchGroup(g) ? 'bench' : 'support', label: g.name, value: perFte(g.cost - g.revenue),
     })),
+    ...(r.leave.cost > 0 ? [{ key: 'leave', kind: 'leave' as const, label: '', value: perFte(r.leave.cost) }] : []),
     { key: 'office', kind: 'office', label: '', value: perFte(sum(r.lines.filter(isOfficeLine), (l) => l.total)) },
     { key: 'other', kind: 'other', label: '', value: perFte(sum(r.lines.filter((l) => !isOfficeLine(l)), (l) => l.total)) },
   ];
@@ -663,6 +702,7 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
   };
   const quick = sanitizeQuick(v.quick);
   const accounts = sanitizeAccounts(v.accounts);
+  const lv = isObj(v.leave) ? v.leave : null;
   return {
     mode: v.mode === 'advanced' ? 'advanced' : 'simple',
     groups,
@@ -686,5 +726,6 @@ export function sanitizeCompanyModel(v: unknown): CompanyModel {
     ...(quick ? { quick } : {}),
     ...(isObj(v.market) && isStyrkCode(v.market.styrk) ? { market: { styrk: v.market.styrk } } : {}),
     ...(accounts ? { accounts } : {}),
+    ...(lv ? { leave: { count: num(lv.count, 0, 0, 100_000), fullPay: typeof lv.fullPay === 'boolean' ? lv.fullPay : true } } : {}),
   };
 }

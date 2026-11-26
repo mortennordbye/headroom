@@ -1,13 +1,14 @@
-import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { isBenchGroup, quickReplacesHandEdits, type CompanyModel } from '../lib/companyCost';
+import { calcCompany, isBenchGroup, leaveRefundCap, quickReplacesHandEdits, type CompanyContext, type CompanyModel } from '../lib/companyCost';
 import {
-  buildModelFromAnswers, quickMeanSalary, QUICK_DEFAULTS,
+  buildModelFromAnswers, quickMeanSalary, QUICK_DEFAULTS, QUICK_KR_PER_TRIP, QUICK_KR_EVENTS,
   type OfficeMode, type QuickAnswers, type QuickGuessKey,
 } from '../lib/companySetup';
-import { Card } from './ui/Card';
-import { SectionLabel } from './ui/SectionLabel';
+import { answersFromModel } from '../lib/companyQuickFromModel';
 import { NumberRow } from './ui/NumberRow';
+import { BlockChip, FoldBlock, Gives, GivesNum } from './CompanyBlocks';
+import { fill, useBlockNav } from './companyBlockNav';
 import { Button } from './ui/Button';
 import { SegmentedControl } from './ui/SegmentedControl';
 import ConfirmModal from './ConfirmModal';
@@ -38,48 +39,56 @@ const draftKey = (d: Draft) => JSON.stringify([
 ]);
 
 /**
- * "② Hurtigoppsett": ten plain questions that build the company model's groups
+ * "2 Hurtigoppsett": eleven plain questions that build the company model's groups
  * and cost lines (buildModelFromAnswers in src/lib/companySetup.ts). The form
  * edits a local draft; "Bruk svarene" writes the model. After a hand edit of
  * groups or cost lines it asks first, because the rebuild replaces them.
+ * Each question says its unit and what the answer gives, from the draft.
  */
-export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
+export function CompanyQuickSetup({ model, setModel, ctx, askResale = 0 }: {
   model: CompanyModel;
   setModel: Dispatch<SetStateAction<CompanyModel>>;
+  ctx: CompanyContext;
   /** A count that goes up each time the accounts card asks for the resale question. */
   askResale?: number;
 }) {
-  const { t, lang, billingConfig } = useFinance();
+  const { t, lang, billingConfig, formatCurrencyShort: kr } = useFinance();
+  const nav = useBlockNav();
   const c = t.companyModel;
   const locale = lang === 'nb' ? 'nb-NO' : 'en-US';
   const nf = (v: number) => v.toLocaleString(locale, { maximumFractionDigits: 1 });
 
   const saved = model.quick;
+  // No saved setup: the answers are read from the model the page uses, so the form and its "Gir" lines describe it.
+  // Your rate: your own in the model, else the calculator's billed rate when it is set, as before.
+  const derived = useMemo(() => {
+    if (saved) return null;
+    const a = answersFromModel(model);
+    return model.self?.hourlyRate == null && billingConfig.billedHourly != null ? { ...a, rateYou: billingConfig.billedHourly } : a;
+  }, [saved, model, billingConfig.billedHourly]);
   const fromModel = (): Draft => saved
     ? { answers: saved.answers, uncertain: saved.uncertain, dontKnow: saved.dontKnow }
-    : {
-      // A first visit: industry values, with your rate from the calculator when it is set.
-      answers: { ...QUICK_DEFAULTS, rateYou: billingConfig.billedHourly ?? QUICK_DEFAULTS.rateYou },
-      uncertain: [],
-      dontKnow: [],
-    };
+    : { answers: derived ?? QUICK_DEFAULTS, uncertain: [], dontKnow: [] };
   const [draft, setDraft] = useState<Draft>(fromModel);
-  // A change from outside (undo, chat) shows the stored answers again. A hand edit (`edited`) does not reset the form.
-  const savedKey = saved ? draftKey(saved) : null;
+  // A change from outside (undo, chat) shows the stored answers again. A hand edit (`edited`) does not reset the form,
+  // but without a saved setup the form follows the model.
+  const savedKey = saved ? draftKey(saved) : `model:${JSON.stringify(derived)}`;
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setDraft(fromModel()); }, [savedKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [folded, setFolded] = useState(saved != null);
   const [confirming, setConfirming] = useState(false);
   const dirty = !saved || draftKey(draft) !== savedKey;
-  // Open the form and bring the resale question into view when the accounts card asks for it.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (askResale > 0) setFolded(false); }, [askResale]);
+  // Open the block and bring the resale question into view when the accounts card asks for it.
+  const open = nav?.isOpen('quick') ?? true;
+  // The last ask that has been scrolled to, so a later open of the block does not scroll again.
+  const handledAsk = useRef(0);
+  useEffect(() => { if (askResale > 0) nav?.setOpen('quick', true); }, [askResale]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (askResale === 0 || folded) return;
+    if (askResale === 0 || !open || handledAsk.current === askResale) return;
+    handledAsk.current = askResale;
     const el = document.getElementById('quick-resale');
     el?.scrollIntoView({ block: 'center' });
     el?.querySelector('input')?.focus({ preventScroll: true });
-  }, [askResale, folded]);
+  }, [askResale, open]);
 
   const a = draft.answers;
   // The draft keeps what was typed; buildModelFromAnswers and the sanitizer clamp it.
@@ -115,17 +124,30 @@ export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
       labels: c.quickLabels,
     }));
     setConfirming(false);
-    setFolded(true);
+    nav?.setOpen('quick', false);
   };
+
+  // What the draft gives: the model it would build, run once per draft.
+  const preview = useMemo(() => calcCompany(buildModelFromAnswers(draft.answers, model), ctx), [draft.answers, model, ctx]);
+  const groupOf = (id: string) => preview.groups.find((g) => g.id === id);
 
   // The header shows the saved model, not the draft.
   const sumCount = (f: (g: CompanyModel['groups'][number]) => boolean) => model.groups.filter(f).reduce((s, g) => s + g.count, 0);
   const guesses = saved ? new Set([...saved.uncertain, ...saved.dontKnow]).size : 0;
   const run = c.quickRun
-    .replace('{fte}', nf(sumCount(() => true)))
+    .replace('{fte}', nf(sumCount(() => true) + (model.leave?.count ?? 0)))
     .replace('{delivery}', nf(sumCount((g) => g.kind === 'delivery')))
     .replace('{bench}', nf(sumCount((g) => g.kind === 'support' && isBenchGroup(g))))
-    .replace('{guesses}', String(guesses));
+    .replace('{leave}', nf(model.leave?.count ?? 0));
+  const gives = (text: string, values: Record<string, string>) => (
+    <Gives>
+      {c.givesPrefix}{' '}
+      {fill(text, Object.fromEntries(Object.entries(values).map(([k, v]) => [k, <GivesNum>{v}</GivesNum>])))}
+    </Gives>
+  );
+  const kons = groupOf('kons');
+  const benkCost = groupOf('benk')?.costPerFte ?? 0;
+  const led = groupOf('led');
 
   const flags = (k: QuickGuessKey, name: string) => (
     <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -141,19 +163,69 @@ export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
   );
 
   const questions: Array<{ q: string; body: ReactNode; id?: string }> = [
-    { q: c.q1, body: field(c.quickFte, 'totalFte', c.unitFte) },
-    { q: c.q2, body: field(c.quickFte, 'nonBilling', c.unitFte) },
-    { q: c.q3, body: field(c.quickPersons, 'onBench', c.unitPersons) },
+    {
+      q: c.q1,
+      body: (
+        <>
+          <Hint>{c.hintFte}</Hint>
+          {field(c.quickFte, 'totalFte', c.unitFte)}
+          {gives(c.givesFte, { fte: nf(preview.heads) })}
+        </>
+      ),
+    },
+    {
+      q: c.q2,
+      body: (
+        <>
+          <Hint>{c.hintNonBilling}</Hint>
+          {field(c.quickFte, 'nonBilling', c.unitFte)}
+          {gives(c.givesNonBilling, { n: nf(a.nonBilling), cost: kr(led?.costPerFte ?? 0), gross: kr(led?.avgGross ?? 0) })}
+        </>
+      ),
+    },
+    {
+      q: c.q3,
+      body: (
+        <>
+          <Hint>{c.hintBench}</Hint>
+          {field(c.quickFte, 'onBench', c.unitFte)}
+          {gives(c.givesBench, { n: nf(a.onBench), cost: kr(benkCost) })}
+        </>
+      ),
+    },
+    {
+      q: c.qLeave,
+      body: (
+        <>
+          <Hint>{c.leaveHint}</Hint>
+          {field(c.leaveCount, 'onLeave', c.unitFte)}
+          <label className="mt-3 inline-flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
+            <input
+              type="checkbox"
+              checked={a.leaveFullPay ?? true}
+              onChange={(e) => setAnswer('leaveFullPay', e.target.checked)}
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            {c.leaveFullPay}
+          </label>
+          {(a.leaveFullPay ?? true)
+            ? gives(c.leaveGivesFull, { cap: kr(leaveRefundCap(ctx.year)), cost: kr(preview.leave.costPerFte) })
+            : gives(c.leaveGivesNav, {})}
+        </>
+      ),
+    },
     {
       q: c.q4,
       body: (
         <>
+          <Hint>{c.hintSalary}</Hint>
           <div className="grid grid-cols-2 gap-3">
             {field(c.quickLow, 'salaryLow', t.common.krPerYear, 'salary')}
             {field(c.quickHigh, 'salaryHigh', t.common.krPerYear, 'salary')}
           </div>
           <div className="mt-2">{flags('salary', c.q4)}</div>
           <Hint>{c.quickSalaryHint.replace('{mean}', Math.round(quickMeanSalary(a)).toLocaleString(locale))}</Hint>
+          {gives(c.givesSalary, { cost: kr(kons?.costPerFte ?? 0) })}
         </>
       ),
     },
@@ -161,21 +233,30 @@ export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
       q: c.q5,
       body: (
         <>
+          <Hint>{c.hintRate}</Hint>
           <div className="grid grid-cols-2 gap-3">
             {field(c.quickAverage, 'rateAverage', `kr/${t.common.hourUnit}`, 'rateAverage')}
             {field(c.quickYours, 'rateYou', `kr/${t.common.hourUnit}`)}
           </div>
           <div className="mt-2">{flags('rateAverage', `${c.q5} (${c.quickAverage})`)}</div>
+          {gives(c.givesRate, { revenue: kr(kons?.revenuePerFte ?? 0) })}
         </>
       ),
     },
     {
       q: c.q6,
       body: (
-        <div className="grid grid-cols-2 gap-3">
-          <div>{field(c.quickYou, 'ownBillablePct', '%', 'ownBillablePct')}<div className="mt-2">{flags('ownBillablePct', `${c.q6} (${c.quickYou})`)}</div></div>
-          <div>{field(c.quickTypical, 'typicalBillablePct', '%', 'typicalBillablePct')}<div className="mt-2">{flags('typicalBillablePct', `${c.q6} (${c.quickTypical})`)}</div></div>
-        </div>
+        <>
+          <Hint>{c.hintBillable.replace('{available}', nf(Math.round(preview.hours.available)))}</Hint>
+          <div className="grid grid-cols-2 gap-3">
+            <div>{field(c.quickYou, 'ownBillablePct', '%', 'ownBillablePct')}<div className="mt-2">{flags('ownBillablePct', `${c.q6} (${c.quickYou})`)}</div></div>
+            <div>{field(c.quickTypical, 'typicalBillablePct', '%', 'typicalBillablePct')}<div className="mt-2">{flags('typicalBillablePct', `${c.q6} (${c.quickTypical})`)}</div></div>
+          </div>
+          {gives(c.givesBillable2, {
+            you: nf(Math.round(preview.hours.available * a.ownBillablePct / 100)),
+            typical: nf(Math.round(kons?.billableHours ?? 0)),
+          })}
+        </>
       ),
     },
     {
@@ -185,10 +266,20 @@ export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
           {field(c.quickRealization, 'realizationPct', '%', 'realizationPct')}
           <div className="mt-2">{flags('realizationPct', c.q7)}</div>
           <Hint>{c.quickRealizationHint}</Hint>
+          {gives(c.givesRealization, { pct: nf(a.realizationPct) })}
         </>
       ),
     },
-    { q: c.q8, body: field(c.quickBonus, 'bonusPct', '%') },
+    {
+      q: c.q8,
+      body: (
+        <>
+          <Hint>{c.hintBonus}</Hint>
+          {field(c.quickBonus, 'bonusPct', '%')}
+          {gives(c.givesBonus, { bonus: kr(preview.bonus) })}
+        </>
+      ),
+    },
     {
       q: c.q9,
       body: (
@@ -216,6 +307,10 @@ export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
             {field(c.quickTrips, 'tripsPerYear', c.unitPerYear)}
           </div>
           <div className="mt-2">{flags('office', c.q9)}</div>
+          {gives(c.givesOffice, {
+            office: kr(preview.lines.find((l) => l.id === 'office')?.total ?? 0),
+            trips: kr(a.tripsPerYear * QUICK_KR_PER_TRIP + QUICK_KR_EVENTS),
+          })}
         </>
       ),
     },
@@ -232,45 +327,39 @@ export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
   ];
 
   return (
-    <Card padding="lg">
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
-        <SectionLabel>② {c.quickTitle}</SectionLabel>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[12px] font-mono" style={{ color: 'var(--brass)' }}>{run}</span>
-          <Button size="sm" variant="secondary" aria-expanded={!folded} onClick={() => setFolded((f) => !f)}>
-            {folded ? c.quickUnfold : c.quickFold}
-          </Button>
+    <FoldBlock
+      id="quick"
+      n={2}
+      title={c.quickTitle}
+      chip={guesses > 0 ? <BlockChip tone="warning">{c.chipGuesses.replace('{n}', String(guesses))}</BlockChip> : undefined}
+      summary={run}
+    >
+      <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{c.quickIntro}</p>
+      {!saved && <p className="mt-2 text-[12px]" style={{ color: 'var(--text-2)' }}>{c.quickFromModel}</p>}
+      <ol className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+        {questions.map((q, i) => (
+          <li key={i} id={q.id} className="rounded-[8px] px-4 py-4 flex gap-3 min-w-0 scroll-mt-24" style={{ background: 'var(--surface-2)' }}>
+            <span
+              aria-hidden
+              className="shrink-0 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-mono"
+              style={{ background: 'var(--surface-5)', color: 'var(--text-2)' }}
+            >
+              {i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-semibold mb-3" style={{ color: 'var(--text-1)' }}>{q.q}</div>
+              {q.body}
+            </div>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{handEdited ? c.quickApplyEditedHint : c.quickApplyHint}</p>
+        <div className="flex items-center gap-3">
+          {dirty && <span className="text-[12px] font-semibold" style={{ color: 'var(--warning)' }}>{c.quickNotSaved}</span>}
+          <Button variant="primary" onClick={() => (handEdited ? setConfirming(true) : apply())}>{c.quickApply}</Button>
         </div>
       </div>
-      {!folded && (
-        <>
-          <p className="mt-4 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.quickIntro}</p>
-          <ol className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            {questions.map((q, i) => (
-              <li key={i} id={q.id} className="rounded-[8px] px-4 py-4 flex gap-3 min-w-0 scroll-mt-24" style={{ background: 'var(--surface-2)' }}>
-                <span
-                  aria-hidden
-                  className="shrink-0 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-mono"
-                  style={{ background: 'var(--surface-5)', color: 'var(--text-2)' }}
-                >
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold mb-3" style={{ color: 'var(--text-1)' }}>{q.q}</div>
-                  {q.body}
-                </div>
-              </li>
-            ))}
-          </ol>
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{handEdited ? c.quickApplyEditedHint : c.quickApplyHint}</p>
-            <div className="flex items-center gap-3">
-              {dirty && <span className="text-[12px] font-semibold" style={{ color: 'var(--warning)' }}>{c.quickNotSaved}</span>}
-              <Button variant="primary" onClick={() => (handEdited ? setConfirming(true) : apply())}>{c.quickApply}</Button>
-            </div>
-          </div>
-        </>
-      )}
       {confirming && (
         <ConfirmModal
           title={c.quickConfirmTitle}
@@ -281,7 +370,7 @@ export function CompanyQuickSetup({ model, setModel, askResale = 0 }: {
           onCancel={() => setConfirming(false)}
         />
       )}
-    </Card>
+    </FoldBlock>
   );
 }
 
@@ -303,5 +392,5 @@ function Chip({ on, onClick, label, children }: { on: boolean; onClick: () => vo
 }
 
 function Hint({ children }: { children: ReactNode }) {
-  return <p className="mt-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{children}</p>;
+  return <p className="mt-2 mb-3 first:mt-0 text-[12px]" style={{ color: 'var(--text-3)' }}>{children}</p>;
 }

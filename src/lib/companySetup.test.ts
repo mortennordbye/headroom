@@ -104,6 +104,26 @@ describe('buildModelFromAnswers', () => {
   });
 });
 
+describe('buildModelFromAnswers: parental leave', () => {
+  it('leave FTE come out of the consultants and go to model.leave', () => {
+    const m = buildModelFromAnswers(answers({ totalFte: 50, nonBilling: 6, onBench: 2, onLeave: 3, leaveFullPay: false }), base());
+    expect(m.groups.find((g) => g.kind === 'delivery')?.count).toBe(39);
+    expect(m.leave).toEqual({ count: 3, fullPay: false });
+    expect(calcCompany(m, ctx).heads).toBe(50);
+  });
+
+  it('missing leave answers give 0 FTE and full pay', () => {
+    expect(buildModelFromAnswers(answers(), base()).leave).toEqual({ count: 0, fullPay: true });
+  });
+
+  it('the sanitizer clamps leave to what is left after non-billing and bench, and keeps old saves without it', () => {
+    const a = sanitizeQuickAnswers({ ...QUICK_DEFAULTS, totalFte: 10, nonBilling: 4, onBench: 2, onLeave: 9, leaveFullPay: 'no' });
+    expect(a.onLeave).toBe(4);
+    expect(a.leaveFullPay).toBeUndefined();
+    expect('onLeave' in sanitizeQuickAnswers(QUICK_DEFAULTS)).toBe(false);
+  });
+});
+
 describe('quick sanitizer', () => {
   it('coerces numbers, clamps ranges and keeps known keys only', () => {
     const a = sanitizeQuickAnswers({ totalFte: '20', nonBilling: 30, onBench: 5, ownBillablePct: 140, bonusPct: 90, officeMode: 'x', extra: 1, salaryLow: 900_000, salaryHigh: 800_000 });

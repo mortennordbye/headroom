@@ -593,3 +593,74 @@ describe('your own billable share and rate (model.self)', () => {
     expect(sanitizeCompanyModel({ ...model(), self: { billablePct: 'x' } })).not.toHaveProperty('self');
   });
 });
+
+describe('calcCompany: parental leave', () => {
+  const base = calcCompany(model(), ctx);
+  const sixG = 6 * 136_549; // G from 1 May 2026
+  const person = (gross: number) => calcEmployerCost(gross, ctx.otpPct, { ...ctx.costConfig, overheadAnnual: 0, overheadPct: 0 }, ctx.holidayPayInSalary, ctx.year, ctx.otpCap).totalEmployerCost;
+
+  it('no leave, or a missing leave, gives the same result as before', () => {
+    expect(calcCompany(model({ leave: { count: 0, fullPay: true } }), ctx).ebit).toBeCloseTo(base.ebit, 6);
+    expect(base.leave.cost).toBe(0);
+  });
+
+  it('full pay: the company pays the person cost less NAV\'s refund of the salary (up to 6G)', () => {
+    const r = calcCompany(model({ leave: { count: 2, fullPay: true } }), ctx);
+    const gross = 820_000; // your group's salary (Konsulenter)
+    expect(r.leave.gross).toBe(gross);
+    expect(r.leave.refundPerFte).toBe(sixG); // 820 000 is above 6G
+    expect(r.leave.costPerFte).toBeCloseTo(person(gross) - sixG, 6);
+    expect(r.leave.cost).toBeCloseTo(2 * (person(gross) - sixG), 6);
+  });
+
+  it('a salary under 6G is refunded in full', () => {
+    const m = model({ leave: { count: 1, fullPay: true } });
+    m.groups[0].avgGross = 600_000;
+    const r = calcCompany(m, ctx);
+    expect(r.leave.refundPerFte).toBe(600_000);
+    expect(r.leave.costPerFte).toBeCloseTo(person(600_000) - 600_000, 6);
+  });
+
+  it('without full pay the salary cost is 0, but the FTE still count as heads', () => {
+    const r = calcCompany(model({ leave: { count: 2, fullPay: false } }), ctx);
+    expect(r.leave.cost).toBe(0);
+    expect(r.leave.refundPerFte).toBe(0);
+    expect(r.heads).toBe(base.heads + 2);
+    // Per-head cost lines grow with the extra heads; nothing else changes.
+    const perHead = model().costs.filter((c) => c.per === 'head').reduce((s, c) => s + c.amount, 0);
+    expect(r.linesTotal).toBeCloseTo(base.linesTotal + 2 * perHead, 6);
+  });
+
+  it('leave bills nothing, goes into the pool and lowers EBIT by its cost and per-head lines', () => {
+    const r = calcCompany(model({ leave: { count: 2, fullPay: true } }), ctx);
+    expect(r.revenue).toBeCloseTo(base.revenue, 6);
+    expect(r.deliveryFte).toBe(base.deliveryFte);
+    expect(r.pool - base.pool).toBeCloseTo(r.leave.cost + (r.linesTotal - base.linesTotal), 6);
+    expect(r.preBonus - base.preBonus).toBeCloseTo(-(r.leave.cost + r.linesTotal - base.linesTotal), 6);
+  });
+
+  it('your breakdown has a leave part, and the parts still sum to what you invoice', () => {
+    const m = model({ leave: { count: 2, fullPay: true } });
+    const r = calcCompany(m, ctx);
+    const y = youEconomics(m, ctx, r);
+    const leave = y.breakdown.find((p) => p.kind === 'leave');
+    expect(leave?.value).toBeCloseTo(r.leave.cost / r.deliveryFte, 6);
+    expect(y.breakdown.reduce((s, p) => s + p.value, 0)).toBeCloseTo(y.revenue, 6);
+  });
+
+  it('the salary lever moves the leave salary with your group', () => {
+    const m = model({ leave: { count: 1, fullPay: true } });
+    const r = calcCompany(m, ctx, { ...NEUTRAL_LEVERS, salaryPct: 10 });
+    expect(r.leave.gross).toBeCloseTo(902_000, 6);
+  });
+
+  it('stays finite with broken input, and the sanitizer repairs it', () => {
+    const m = sanitizeCompanyModel({ ...model(), leave: { count: 'x', fullPay: 'yes' } });
+    expect(m.leave).toEqual({ count: 0, fullPay: true });
+    expect(sanitizeCompanyModel({ ...model(), leave: { count: -3 } }).leave).toEqual({ count: 0, fullPay: true });
+    expect(sanitizeCompanyModel(model()).leave).toBeUndefined();
+    const noGroups = calcCompany(model({ groups: [], selfGroupId: null, leave: { count: 3, fullPay: true } }), ctx);
+    expect(allFinite(noGroups)).toBe(true);
+    expect(noGroups.leave.cost).toBe(0);
+  });
+});

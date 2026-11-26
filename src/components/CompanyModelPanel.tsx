@@ -5,12 +5,11 @@ import {
   calcCompany, hourWaterfall, breakEvenUtilization, utilizationCurve, applyLevers, ensureDeliverySelf,
   NEUTRAL_LEVERS, LEVER_RANGES, BONUS_POOL_MAX_PCT,
   type CompanyModel, type CompanyContext, type CompanyResult, type CompanyGroup, type CompanyCostLine,
-  type CompanyLevers, type CostLinePer,
+  type CompanyLevers, type CostLinePer, type CompanyLeave, leaveRefundCap,
 } from '../lib/companyCost';
 import { clearAccountsFit, markQuickEdited } from '../lib/companySetup';
 import { weekdayHolidays, corporateTaxPct } from '../lib/norwegianCalendar';
 import { parseLocaleNumber } from '../lib/validators';
-import { Card } from './ui/Card';
 import { SectionLabel } from './ui/SectionLabel';
 import { SummaryTile } from './ui/SummaryTile';
 import { SliderRow } from './ui/SliderRow';
@@ -19,9 +18,12 @@ import { Button } from './ui/Button';
 import { SegmentedControl } from './ui/SegmentedControl';
 import { FitText } from './ui/FitText';
 import { HourWaterfallChart, UtilizationCurveChart } from './CompanyModelCharts';
-import { CompanyMeCard, CompanyExplainers } from './CompanyMeCard';
+import { CompanyMeCard, CompanyExplainers, COMPANY_TOP_ANCHOR } from './CompanyMeCard';
+import { BlockChip, BlockIndex, BlockNavProvider, FoldBlock, Gives, GivesNum, Key, StageHeading, type IndexStage } from './CompanyBlocks';
+import { fill } from './companyBlockNav';
+import { accountsStatus } from '../lib/companyCalibrate';
 import { CompanyQuickSetup } from './CompanyQuickSetup';
-import { CompanyAccountsCard } from './CompanyAccountsCard';
+import { ACCOUNTS_CARD_ANCHOR, CompanyAccountsCard } from './CompanyAccountsCard';
 import { CompanyChatPill } from './CompanyChatPill';
 
 const LEVERS: Array<{ key: keyof CompanyLevers; unit: string }> = [
@@ -37,12 +39,15 @@ const LEVERS: Array<{ key: keyof CompanyLevers; unit: string }> = [
  * only lays them out and edits `companyModel`.
  */
 export function CompanyModelPanel({
-  model, setModel, ctx, result,
+  model, setModel, ctx, result, calculator, calculatorSummary,
 }: {
   model: CompanyModel;
   setModel: Dispatch<SetStateAction<CompanyModel>>;
   ctx: CompanyContext;
   result: CompanyResult;
+  /** The salary/rate/margin calculator, shown as block 9. */
+  calculator: ReactNode;
+  calculatorSummary: ReactNode;
 }) {
   const { t, lang, region, formatCurrencyShort } = useFinance();
   const c = t.companyModel;
@@ -106,48 +111,160 @@ export function CompanyModelPanel({
   ];
 
   const perLabel: Record<CostLinePer, string> = { company: c.perCompany, head: c.perHead, pctOfSalary: c.perPctOfSalary };
+  const unitLabel: Record<CostLinePer, string> = { company: c.unitPerCompany, head: c.unitPerHead, pctOfSalary: c.unitPctSalary };
+
+  // Index dots: a mismatch with the accounts, and guesses in the quick setup.
+  const status = useMemo(() => (region === 'no' ? accountsStatus(model, ctx) : null), [region, model, ctx]);
+  const guesses = model.quick ? new Set([...model.quick.uncertain, ...model.quick.dontKnow]).size : 0;
+  const fte = (v: number) => nf(v, 1).replace(/[,.]0$/, '');
+
+  const stages: IndexStage[] = [
+    {
+      id: 'check', label: c.stageCheck, items: [
+        ...(region === 'no' ? [{ id: ACCOUNTS_CARD_ANCHOR, n: 1, title: c.accountsTitle, dot: status?.match === 'mismatch' ? 'negative' as const : undefined }] : []),
+        { id: 'quick', n: 2, title: c.quickTitle, dot: guesses > 0 ? 'warning' as const : undefined },
+      ],
+    },
+    {
+      id: 'inputs', label: c.stageInputs, items: [
+        { id: 'people', n: 3, title: c.peopleTitle }, { id: 'hours', n: 4, title: c.hoursTitle }, { id: 'costs', n: 5, title: c.costsTitle },
+      ],
+    },
+    {
+      id: 'explore', label: c.stageExplore, items: [
+        { id: 'result', n: 6, title: c.resultTitle }, { id: 'yourHour', n: 7, title: c.youTimeTitle },
+        { id: 'whatIf', n: 8, title: c.whatIfTitle }, { id: 'calc', n: 9, title: c.calcFolded },
+      ],
+    },
+  ];
 
   return (
-    <div className="space-y-6 md:space-y-7">
+    <BlockNavProvider>
+    <div className="space-y-4 md:space-y-5">
+      <BlockIndex ariaLabel={c.indexAria} top={{ id: COMPANY_TOP_ANCHOR, label: c.indexTop }} stages={stages} extra={{ id: 'readMore', label: c.readMore }} />
       <CompanyChatPill model={model} />
       <CompanyMeCard model={model} setModel={setModel} ctx={ctx} result={r} />
-      <CompanyExplainers />
+
+      <StageHeading id="check" title={c.stageCheck} sub={c.stageCheckSub} />
       {/* Brønnøysund is Norwegian, so the accounts card is for region Norway only, as the market pay. */}
       {region === 'no' && <CompanyAccountsCard model={model} setModel={setModel} ctx={ctx} onAskResale={() => setAskResale((n) => n + 1)} />}
-      <CompanyQuickSetup model={model} setModel={setModel} askResale={askResale} />
+      <CompanyQuickSetup model={model} setModel={setModel} ctx={ctx} askResale={askResale} />
 
-      {/* Everything else, folded: tiles, waterfall, levers, curve, people, hours, costs, result. */}
-      <details className="group/details">
-        <summary
-          className="rounded-[8px] border p-6 md:p-8 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden"
-          style={{ background: 'var(--bg-2)', borderColor: 'var(--rule)' }}
-        >
-          <SectionLabel>
-            {c.detailsTitle} <span aria-hidden className="inline-block transition-transform group-open/details:rotate-90">▸</span>
-          </SectionLabel>
-        </summary>
-        <div className="mt-6 md:mt-7 space-y-6 md:space-y-7">
-      {/* Tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        <SummaryTile label={c.tileOwn} value={kr(y.ownCost)} sub={c.tileOwnSub} color="var(--teal)" />
-        <SummaryTile label={c.tileShare} value={`${y.share >= 0 ? '+' : '−'}${kr(Math.abs(y.share))}`} sub={c.tileShareSub.replace('{fte}', nf(r.deliveryFte, 1).replace(/[,.]0$/, ''))} />
-        <SummaryTile
-          label={c.tileReal}
-          value={kr(y.realCost)}
-          sub={c.tileRealSub.replace('{pct}', nf(y.gross > 0 ? (y.realCost / y.gross - 1) * 100 : 0))}
-        />
-        <SummaryTile
-          label={c.tileBreakEven}
-          value={perHour(y.breakEvenRate)}
-          sub={c.tileBreakEvenSub.replace('{hours}', nf(y.billableHours))}
-          color="var(--teal)"
-        />
-      </div>
-      <p className="-mt-3 md:-mt-4 text-[11px]" style={{ color: 'var(--text-3)' }}>{c.simpleSettingsHint}</p>
+      <StageHeading id="inputs" title={c.stageInputs} sub={c.stageInputsSub} />
+      <FoldBlock
+        id="people"
+        n={3}
+        title={c.peopleTitle}
+        summary={fill(c.peopleSummary, { heads: fte(r.heads), fte: <Key>{fte(r.deliveryFte)}</Key> })}
+      >
+        <p className="mb-4 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.peopleWhy}</p>
+        <PeopleEditor model={model} setModel={setModel} ctx={ctx} result={r} />
+      </FoldBlock>
 
-      {/* Waterfall */}
-      <Card padding="lg">
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+      <FoldBlock id="hours" n={4} title={c.hoursTitle} summary={fill(c.hoursSummary, { hours: <Key>{nf(y.billableHours)}</Key> })}>
+        <p className="mb-4 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.hoursWhy.replace('{paid}', nf(h.paid))}</p>
+        <FlexBar segs={hourSegs} fmt={(v) => `${nf(v)} ${t.common.hourUnit}`} />
+        <div className="mt-4">
+          <Row label={c.rowWeekdays.replace('{year}', String(ctx.year)).replace('{hpd}', nf(ctx.hoursPerDay, 1))} value={`${nf(h.paid, 1)} ${t.common.hourUnit}`} />
+          <Row
+            label={c.rowFree.replace('{holidays}', String(weekdayHolidays(ctx.year)))}
+            sub={<InlineNumber value={model.hours.holidayDays} onCommit={(v) => updateHours({ holidayDays: Math.min(366, Math.max(0, v)) })} suffix={c.rowHolidayDays} ariaLabel={c.rowHolidayDays} />}
+            value={`−${nf(free, 1)} ${t.common.hourUnit}`}
+          />
+          <Row
+            label={c.rowSick}
+            sub={<InlineNumber value={model.hours.sickPct} onCommit={(v) => updateHours({ sickPct: Math.min(100, Math.max(0, v)) })} suffix={c.unitPctWorkTime} ariaLabel={c.segSick} />}
+            value={`−${nf(h.sick)} ${t.common.hourUnit}`}
+          />
+          <Row
+            label={c.rowInternal}
+            sub={<InlineNumber value={model.hours.internalPct} onCommit={(v) => updateHours({ internalPct: Math.min(100, Math.max(0, v)) })} suffix={c.unitPctWorkTime} ariaLabel={c.segInternal} />}
+            value={`−${nf(h.internal)} ${t.common.hourUnit}`}
+          />
+          <Row label={c.rowAvailable} value={`${nf(h.available)} ${t.common.hourUnit}`} muted />
+          <Row label={c.rowShare} sub={self && h.available > 0 ? `${(y.billableHours / h.available * 100).toLocaleString(locale, { maximumFractionDigits: 1 })} %` : '–'} value="" />
+          {model.self && self && (
+            <Row
+              label={c.selfOwn}
+              sub={c.selfOwnSub
+                .replace('{pct}', (model.self.billablePct ?? self.billablePct).toLocaleString(locale, { maximumFractionDigits: 1 }))
+                .replace('{rate}', nf(model.self.hourlyRate ?? self.hourlyRate))}
+              value={<Button size="sm" variant="secondary" onClick={() => setModel((m) => { const { self: _self, ...rest } = m; return markQuickEdited(rest); })}>{c.selfClear}</Button>}
+            />
+          )}
+          <Row label={c.rowBillable} value={`${nf(y.billableHours)} ${t.common.hourUnit}`} emphasis />
+        </div>
+      </FoldBlock>
+
+      <FoldBlock
+        id="costs"
+        n={5}
+        title={c.costsTitle}
+        summary={fill(c.costsSum, { total: <Key>{kr(r.linesTotal)}</Key>, perHour: kr(r.overheadPerBillableHour) })}
+      >
+        <p className="mb-2 text-[12px]" style={{ color: 'var(--text-3)' }}>{c.costsWhy}</p>
+        <CostEditor model={model} setModel={setModel} perLabel={perLabel} unitLabel={unitLabel} result={r} />
+        <Row
+          label={c.bonusPool}
+          sub={c.bonusPoolSub}
+          value={<InlineNumber value={model.bonus.poolPct} onCommit={(v) => setModel((m) => {
+            const poolPct = Math.min(BONUS_POOL_MAX_PCT, Math.max(0, v));
+            // A changed pool is a hand edit: the quick setup's bonus answer no longer holds.
+            return poolPct === m.bonus.poolPct ? m : markQuickEdited({ ...m, bonus: { ...m.bonus, poolPct } });
+          })} suffix="%" ariaLabel={c.bonusPool} />}
+        />
+        <Gives>{c.givesPrefix} {fill(c.givesBonus, { bonus: <GivesNum>{kr(r.bonus)}</GivesNum> })}</Gives>
+        <div className="mt-2"><Row label={c.sumYear} sub={c.sumYearSub} value={kr(r.linesTotal)} emphasis /></div>
+      </FoldBlock>
+
+      <StageHeading id="explore" title={c.stageExplore} sub={c.stageExploreSub} />
+      <FoldBlock
+        id="result"
+        n={6}
+        title={c.resultTitle}
+        summary={fill(c.resultSum, { ebit: <Key>{kr(r.ebit)}</Key>, pct: nf(r.marginPct, 1) })}
+      >
+        <Row label={c.plRevenue} sub={c.plRevenueSub} value={kr(r.revenue)} />
+        <Row label={c.plPeople} sub={c.plPeopleSub} value={`− ${kr(r.peopleCost)}`} />
+        <Row label={c.plOther} value={`− ${kr(r.linesTotal)}`} />
+        <Row label={c.plBonus} sub={c.plBonusSub} value={`− ${kr(r.bonus)}`} />
+        <Row label={c.plEbit} value={<span style={{ color: r.ebit < 0 ? 'var(--negative)' : 'var(--positive)' }}>{kr(r.ebit)}</span>} emphasis />
+        <Row label={c.plTax.replace('{pct}', String(corporateTaxPct(ctx.year)))} value={kr(r.afterTax)} muted />
+        <div className="mt-5">
+          <SectionLabel className="mb-2">{c.hundredTitle}</SectionLabel>
+          <FlexBar segs={revenueSegs} fmt={(v) => `${nf(v, 1)} kr`} legendFmt={(v) => `${nf(v)} kr`} />
+        </div>
+        <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Stat label={c.kpiRevenuePerFte} value={kr(r.kpis.revenuePerFte)} />
+          <Stat label={c.kpiMargin} value={kr(r.kpis.grossMarginPerFte)} />
+          <Stat label={c.kpiDeliveryShare} value={`${nf(r.kpis.deliverySharePct)} %`} />
+          <Stat label={c.kpiUtilReal} value={`${nf(r.meanUtilizationPct)} % · ${nf(y.realizationPct)} %`} />
+        </div>
+      </FoldBlock>
+
+      <FoldBlock
+        id="yourHour"
+        n={7}
+        title={c.youTimeTitle}
+        summary={fill(c.youTimeSum, { rate: <Key>{perHour(y.breakEvenRate)}</Key>, cost: kr(y.realCost) })}
+      >
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          <SummaryTile label={c.tileOwn} value={kr(y.ownCost)} sub={c.tileOwnSub} color="var(--teal)" />
+          <SummaryTile label={c.tileShare} value={`${y.share >= 0 ? '+' : '−'}${kr(Math.abs(y.share))}`} sub={c.tileShareSub.replace('{fte}', fte(r.deliveryFte))} />
+          <SummaryTile
+            label={c.tileReal}
+            value={kr(y.realCost)}
+            sub={c.tileRealSub.replace('{pct}', nf(y.gross > 0 ? (y.realCost / y.gross - 1) * 100 : 0))}
+          />
+          <SummaryTile
+            label={c.tileBreakEven}
+            value={perHour(y.breakEvenRate)}
+            sub={c.tileBreakEvenSub.replace('{hours}', nf(y.billableHours))}
+            color="var(--teal)"
+          />
+        </div>
+        <p className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>{c.simpleSettingsHint}</p>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <SectionLabel icon={<BarChart3 />}>{c.wfTitle}</SectionLabel>
           <span className="text-[12px] font-mono" style={{ color: 'var(--brass)' }}>{c.wfTag}</span>
         </div>
@@ -160,10 +277,14 @@ export function CompanyModelPanel({
         <p className="mt-2 text-[12px] text-center" style={{ color: 'var(--text-2)' }}>
           {c.wfRealCost.replace('{rate}', kr(y.breakEvenRate))}
         </p>
-      </Card>
+      </FoldBlock>
 
-      {/* Levers + curve */}
-      <Card padding="lg">
+      <FoldBlock
+        id="whatIf"
+        n={8}
+        title={c.whatIfTitle}
+        summary={<>{leversMoved ? c.whatIfLeversMoved : c.whatIfLeversZero}{breakEven && <> · {fill(c.whatIfBreakEven, { pct: <Key>{nf(breakEven.utilizationPct)}</Key> })}</>}</>}
+      >
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <SectionLabel icon={<Settings2 />}>{c.leversTitle}</SectionLabel>
           <div className="flex flex-wrap gap-2">
@@ -222,99 +343,35 @@ export function CompanyModelPanel({
             </div>
           </div>
         </div>
-      </Card>
+      </FoldBlock>
 
-      {/* ①–④ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-start">
-        <div className="space-y-4 md:space-y-6">
-          <Section
-            title={`① ${c.peopleTitle}`}
-            summary={c.peopleSummary.replace('{heads}', nf(r.heads, 1).replace(/[,.]0$/, '')).replace('{fte}', nf(r.deliveryFte, 1).replace(/[,.]0$/, ''))}
-            why={c.peopleWhy}
-          >
-            <PeopleEditor model={model} setModel={setModel} />
-          </Section>
+      <FoldBlock
+        id="calc"
+        n={9}
+        title={c.calcFolded}
+        chip={<BlockChip tone="positive">{c.usesRealCost}</BlockChip>}
+        summary={calculatorSummary}
+      >
+        {calculator}
+      </FoldBlock>
 
-          <Section title={`② ${c.hoursTitle}`} summary={c.hoursSummary.replace('{hours}', nf(y.billableHours))} why={c.hoursWhy.replace('{paid}', nf(h.paid))}>
-            <FlexBar segs={hourSegs} fmt={(v) => `${nf(v)} ${t.common.hourUnit}`} />
-            <div className="mt-4">
-              <Row label={c.rowWeekdays.replace('{year}', String(ctx.year)).replace('{hpd}', nf(ctx.hoursPerDay, 1))} value={`${nf(h.paid, 1)} ${t.common.hourUnit}`} />
-              <Row
-                label={c.rowFree.replace('{holidays}', String(weekdayHolidays(ctx.year)))}
-                sub={<InlineNumber value={model.hours.holidayDays} onCommit={(v) => updateHours({ holidayDays: Math.min(366, Math.max(0, v)) })} suffix={c.rowHolidayDays} ariaLabel={c.rowHolidayDays} />}
-                value={`−${nf(free, 1)} ${t.common.hourUnit}`}
-              />
-              <Row
-                label={c.rowSick}
-                sub={<InlineNumber value={model.hours.sickPct} onCommit={(v) => updateHours({ sickPct: Math.min(100, Math.max(0, v)) })} suffix="%" ariaLabel={c.segSick} />}
-                value={`−${nf(h.sick)} ${t.common.hourUnit}`}
-              />
-              <Row
-                label={c.rowInternal}
-                sub={<InlineNumber value={model.hours.internalPct} onCommit={(v) => updateHours({ internalPct: Math.min(100, Math.max(0, v)) })} suffix="%" ariaLabel={c.segInternal} />}
-                value={`−${nf(h.internal)} ${t.common.hourUnit}`}
-              />
-              <Row label={c.rowAvailable} value={`${nf(h.available)} ${t.common.hourUnit}`} muted />
-              <Row label={c.rowShare} sub={self && h.available > 0 ? `${(y.billableHours / h.available * 100).toLocaleString(locale, { maximumFractionDigits: 1 })} %` : '–'} value="" />
-              {model.self && self && (
-                <Row
-                  label={c.selfOwn}
-                  sub={c.selfOwnSub
-                    .replace('{pct}', (model.self.billablePct ?? self.billablePct).toLocaleString(locale, { maximumFractionDigits: 1 }))
-                    .replace('{rate}', nf(model.self.hourlyRate ?? self.hourlyRate))}
-                  value={<Button size="sm" variant="secondary" onClick={() => setModel((m) => { const { self: _self, ...rest } = m; return markQuickEdited(rest); })}>{c.selfClear}</Button>}
-                />
-              )}
-              <Row label={c.rowBillable} value={`${nf(y.billableHours)} ${t.common.hourUnit}`} emphasis />
-            </div>
-          </Section>
-        </div>
-
-        <div className="space-y-4 md:space-y-6">
-          <Section title={`③ ${c.costsTitle}`} summary={c.costsSummary.replace('{perHour}', kr(r.overheadPerBillableHour))} why={c.costsWhy}>
-            <CostEditor model={model} setModel={setModel} perLabel={perLabel} />
-            <Row
-              label={c.bonusPool}
-              sub={c.bonusPoolSub}
-              value={<InlineNumber value={model.bonus.poolPct} onCommit={(v) => setModel((m) => {
-                const poolPct = Math.min(BONUS_POOL_MAX_PCT, Math.max(0, v));
-                // A changed pool is a hand edit: the quick setup's bonus answer no longer holds.
-                return poolPct === m.bonus.poolPct ? m : markQuickEdited({ ...m, bonus: { ...m.bonus, poolPct } });
-              })} suffix="%" ariaLabel={c.bonusPool} />}
-            />
-            <Row label={c.sumYear} sub={c.sumYearSub} value={kr(r.linesTotal)} emphasis />
-          </Section>
-
-          <Section title={`④ ${c.resultTitle}`} summary={c.resultSummary.replace('{pct}', nf(r.marginPct, 1))}>
-            <Row label={c.plRevenue} sub={c.plRevenueSub} value={kr(r.revenue)} />
-            <Row label={c.plPeople} sub={c.plPeopleSub} value={`− ${kr(r.peopleCost)}`} />
-            <Row label={c.plOther} value={`− ${kr(r.linesTotal)}`} />
-            <Row label={c.plBonus} sub={c.plBonusSub} value={`− ${kr(r.bonus)}`} />
-            <Row label={c.plEbit} value={<span style={{ color: r.ebit < 0 ? 'var(--negative)' : 'var(--positive)' }}>{kr(r.ebit)}</span>} emphasis />
-            <Row label={c.plTax.replace('{pct}', String(corporateTaxPct(ctx.year)))} value={kr(r.afterTax)} muted />
-            <div className="mt-5">
-              <SectionLabel className="mb-2">{c.hundredTitle}</SectionLabel>
-              <FlexBar segs={revenueSegs} fmt={(v) => `${nf(v, 1)} kr`} legendFmt={(v) => `${nf(v)} kr`} />
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <Stat label={c.kpiRevenuePerFte} value={kr(r.kpis.revenuePerFte)} />
-              <Stat label={c.kpiMargin} value={kr(r.kpis.grossMarginPerFte)} />
-              <Stat label={c.kpiDeliveryShare} value={`${nf(r.kpis.deliverySharePct)} %`} />
-              <Stat label={c.kpiUtilReal} value={`${nf(r.meanUtilizationPct)} % · ${nf(y.realizationPct)} %`} />
-            </div>
-          </Section>
-        </div>
-      </div>
-        </div>
-      </details>
+      <FoldBlock id="readMore" title={c.readMore} muted summary={`${c.explainMoneyTitle} · ${c.explainArgsTitle}`}>
+        <CompanyExplainers />
+      </FoldBlock>
     </div>
+    </BlockNavProvider>
   );
 }
 
-// ─── ① People ─────────────────────────────────────────────────────────
+// ─── 3 People ─────────────────────────────────────────────────────────
 
-function PeopleEditor({ model, setModel }: { model: CompanyModel; setModel: Dispatch<SetStateAction<CompanyModel>> }) {
-  const { t, lang } = useFinance();
+function PeopleEditor({ model, setModel, ctx, result }: {
+  model: CompanyModel;
+  setModel: Dispatch<SetStateAction<CompanyModel>>;
+  ctx: CompanyContext;
+  result: CompanyResult;
+}) {
+  const { t, lang, formatCurrencyShort: kr } = useFinance();
   const c = t.companyModel;
   const locale = lang === 'nb' ? 'nb-NO' : 'en-US';
   const nf = (v: number) => Math.round(v).toLocaleString(locale);
@@ -325,6 +382,11 @@ function PeopleEditor({ model, setModel }: { model: CompanyModel; setModel: Disp
   const patch = (id: string, p: Partial<CompanyGroup>) =>
     setModel((m) => markQuickEdited(ensureDeliverySelf({ ...m, groups: m.groups.map((g) => (g.id === id ? { ...g, ...p } : g)) })));
   const remove = (id: string) => setModel((m) => markQuickEdited(ensureDeliverySelf({ ...m, groups: m.groups.filter((g) => g.id !== id) })));
+  // Parental leave is a hand edit too: the quick setup's leave answer no longer holds.
+  const patchLeave = (p: Partial<CompanyLeave>) => setModel((m) => markQuickEdited({ ...m, leave: { count: 0, fullPay: true, ...m.leave, ...p } }));
+  const leave = result.leave;
+  const fullPay = model.leave?.fullPay ?? true;
+  const groupResult = (id: string) => result.groups.find((g) => g.id === id);
   const add = () => {
     const id = crypto.randomUUID();
     setModel((m) => markQuickEdited({
@@ -373,12 +435,21 @@ function PeopleEditor({ model, setModel }: { model: CompanyModel; setModel: Disp
                     </label>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                  <NumberRow label={c.fieldCount} value={g.count} onCommit={(v) => patch(g.id, { count: Math.max(0, v) })} />
-                  <NumberRow label={c.fieldGross} value={g.avgGross} onCommit={(v) => patch(g.id, { avgGross: Math.max(0, v) })} suffix={t.common.krPerYear} />
-                  <NumberRow label={c.fieldBillable} value={g.billablePct} onCommit={(v) => patch(g.id, { billablePct: Math.min(100, Math.max(0, v)) })} suffix="%" />
-                  <NumberRow label={c.fieldRate} value={g.hourlyRate} onCommit={(v) => patch(g.id, { hourlyRate: Math.max(0, v) })} suffix={`kr/${t.common.hourUnit}`} />
-                  <NumberRow label={c.fieldRealization} value={g.realizationPct} onCommit={(v) => patch(g.id, { realizationPct: Math.min(100, Math.max(0, v)) })} suffix="%" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                  <NumberRow label={c.fieldCount} value={g.count} onCommit={(v) => patch(g.id, { count: Math.max(0, v) })} suffix={c.unitFte} />
+                  <div>
+                    <NumberRow label={c.fieldGross} value={g.avgGross} onCommit={(v) => patch(g.id, { avgGross: Math.max(0, v) })} suffix={t.common.krPerYear} />
+                    <Gives>{c.givesPrefix} {fill(c.givesGroupCost, { cost: <GivesNum>{kr(groupResult(g.id)?.costPerFte ?? 0)}</GivesNum> })}</Gives>
+                  </div>
+                  <div>
+                    <NumberRow label={c.fieldBillable} value={g.billablePct} onCommit={(v) => patch(g.id, { billablePct: Math.min(100, Math.max(0, v)) })} suffix={c.unitPctAvailable} />
+                    <Gives>{c.givesPrefix} {fill(c.givesBillable, { hours: <GivesNum>{nf(groupResult(g.id)?.billableHours ?? 0)}</GivesNum> })}</Gives>
+                  </div>
+                  <NumberRow label={c.fieldRate} value={g.hourlyRate} onCommit={(v) => patch(g.id, { hourlyRate: Math.max(0, v) })} suffix={c.unitKrPerHourExVat} />
+                  <div>
+                    <NumberRow label={c.fieldRealization} value={g.realizationPct} onCommit={(v) => patch(g.id, { realizationPct: Math.min(100, Math.max(0, v)) })} suffix={c.unitPctBilled} />
+                    <Gives>{c.givesPrefix} {fill(c.givesRealization, { pct: <GivesNum>{g.realizationPct.toLocaleString(locale)}</GivesNum> })}</Gives>
+                  </div>
                 </div>
                 <div className="flex justify-between gap-2">
                   <Button size="sm" variant="danger" leadingIcon={<Trash2 />} onClick={() => { remove(g.id); setEditing(null); }}>{c.remove}</Button>
@@ -389,19 +460,59 @@ function PeopleEditor({ model, setModel }: { model: CompanyModel; setModel: Disp
           </div>
         );
       })}
+      {/* Parental leave: not a group, but people the company pays for who bill nothing. */}
+      <div className="rounded-[8px] px-3.5 py-3" style={{ background: 'var(--surface-2)' }}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex flex-wrap items-center gap-1.5">
+            <span className="text-[13px] font-semibold" style={{ color: 'var(--text-1)' }}>{c.leaveTitle}</span>
+            <Badge>{c.leaveChip}</Badge>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[13px] font-mono tabular-nums mr-1" style={{ color: 'var(--text-1)' }}>{leave.count.toLocaleString(locale)}</span>
+            <IconButton label={editing === LEAVE_ROW ? c.done : c.edit} onClick={() => setEditing(editing === LEAVE_ROW ? null : LEAVE_ROW)}><Pencil /></IconButton>
+          </div>
+        </div>
+        <div className="mt-1 text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>
+          {fullPay ? c.leaveMetaFull.replace('{gross}', nf(leave.gross)) : c.leaveMetaNav}
+        </div>
+        {editing === LEAVE_ROW && (
+          <div className="mt-4 pt-4 border-t space-y-3" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--text-3)' }}>{c.leaveHint} {c.leaveSalaryNote}</p>
+            <NumberRow label={c.leaveCount} value={model.leave?.count ?? 0} onCommit={(v) => patchLeave({ count: Math.max(0, v) })} suffix={c.unitFte} />
+            <label className="inline-flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
+              <input type="checkbox" checked={fullPay} onChange={(e) => patchLeave({ fullPay: e.target.checked })} style={{ accentColor: 'var(--accent)' }} />
+              {c.leaveFullPay}
+            </label>
+            <Gives>
+              {c.givesPrefix}{' '}
+              {fullPay
+                ? fill(c.leaveGivesFull, { cap: <GivesNum>{kr(leaveRefundCap(ctx.year))}</GivesNum>, cost: <GivesNum>{kr(leave.costPerFte)}</GivesNum> })
+                : c.leaveGivesNav}
+            </Gives>
+            <div className="flex justify-end">
+              <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>{c.done}</Button>
+            </div>
+          </div>
+        )}
+      </div>
       <AddButton onClick={add}>{c.addGroup}</AddButton>
     </div>
   );
 }
 
-// ─── ③ Cost lines ─────────────────────────────────────────────────────
+/** The editing key of the parental-leave row; group ids are UUIDs or short words, never this. */
+const LEAVE_ROW = '__leave__';
+
+// ─── 5 Cost lines ─────────────────────────────────────────────────────
 
 function CostEditor({
-  model, setModel, perLabel,
+  model, setModel, perLabel, unitLabel, result,
 }: {
   model: CompanyModel;
   setModel: Dispatch<SetStateAction<CompanyModel>>;
   perLabel: Record<CostLinePer, string>;
+  unitLabel: Record<CostLinePer, string>;
+  result: CompanyResult;
 }) {
   const { t, lang, formatCurrencyShort } = useFinance();
   const c = t.companyModel;
@@ -423,7 +534,7 @@ function CostEditor({
         <div key={l.id}>
           <Row
             label={l.label || '–'}
-            sub={perLabel[l.per]}
+            sub={unitLabel[l.per]}
             value={(
               <span className="inline-flex items-center gap-1">
                 {l.per === 'pctOfSalary' ? `${l.amount.toLocaleString(locale, { maximumFractionDigits: 2 })} %` : formatCurrencyShort(l.amount)}
@@ -450,8 +561,11 @@ function CostEditor({
                 label={c.fieldAmount}
                 value={l.amount}
                 onCommit={(v) => patch(l.id, { amount: Math.max(0, v) })}
-                suffix={l.per === 'pctOfSalary' ? '%' : 'kr'}
+                suffix={unitLabel[l.per]}
               />
+              {l.per !== 'company' && (
+                <Gives>{c.givesPrefix} {fill(c.givesLine, { total: <GivesNum>{formatCurrencyShort(result.lines.find((x) => x.id === l.id)?.total ?? 0)}</GivesNum> })}</Gives>
+              )}
               <div className="flex justify-between gap-2">
                 <Button size="sm" variant="danger" leadingIcon={<Trash2 />} onClick={() => { remove(l.id); setEditing(null); }}>{c.remove}</Button>
                 <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>{c.done}</Button>
@@ -466,23 +580,6 @@ function CostEditor({
 }
 
 // ─── Small pieces ─────────────────────────────────────────────────────
-
-function Section({ title, summary, why, children }: { title: string; summary: string; why?: string; children: ReactNode }) {
-  return (
-    <Card padding="lg">
-      <details open className="group">
-        <summary className="flex flex-wrap items-center justify-between gap-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
-          <SectionLabel>
-            {title} <span aria-hidden className="inline-block transition-transform group-open:rotate-0 -rotate-90">▾</span>
-          </SectionLabel>
-          <span className="text-[12px] font-mono" style={{ color: 'var(--brass)' }}>{summary}</span>
-        </summary>
-        {why && <p className="mt-3 text-[12px]" style={{ color: 'var(--text-3)' }}>{why}</p>}
-        <div className="mt-4">{children}</div>
-      </details>
-    </Card>
-  );
-}
 
 function Row({ label, sub, value, muted, emphasis }: { label: string; sub?: ReactNode; value: ReactNode; muted?: boolean; emphasis?: boolean }) {
   return (

@@ -21,6 +21,8 @@ import { TAX_YEAR } from '../lib/norwegianTax';
 import { parseLocaleNumber } from '../lib/validators';
 import { calcCompany, calculatorInputs, type CompanyContext } from '../lib/companyCost';
 import { CompanyModelPanel } from '../components/CompanyModelPanel';
+import { Key } from '../components/CompanyBlocks';
+import { fill } from '../components/companyBlockNav';
 
 const EmployerCostPage: React.FC = () => {
   const {
@@ -273,7 +275,16 @@ const EmployerCostPage: React.FC = () => {
         />
       </div>
 
-      {advanced && <CompanyModelPanel model={companyModel} setModel={setCompanyModel} ctx={companyCtx} result={company} />}
+      {advanced && (
+        <CompanyModelPanel
+          model={companyModel}
+          setModel={setCompanyModel}
+          ctx={companyCtx}
+          result={company}
+          calculator={calculator}
+          calculatorSummary={fill(cm.calcSum, { pct: <Key>{margin.toLocaleString(lang === 'nb' ? 'nb-NO' : 'en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</Key> })}
+        />
+      )}
 
       {/* Summary tiles */}
       {!advanced && <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -293,21 +304,8 @@ const EmployerCostPage: React.FC = () => {
         />
       </div>}
 
-      {/* Calculator: salary ↔ rate ↔ margin. Folded and last in Avansert. */}
-      {advanced ? (
-        <Card padding="lg">
-          <details>
-            <summary className="flex flex-wrap items-center gap-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
-              <Calculator size={14} strokeWidth={2} style={{ color: 'var(--text-2)' }} />
-              <SectionLabel>{cm.calcFolded}</SectionLabel>
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{cm.usesRealCost}</span>
-            </summary>
-            <div className="mt-5">{calculator}</div>
-          </details>
-        </Card>
-      ) : (
-        <Card padding="lg">{calculator}</Card>
-      )}
+      {/* Calculator: salary ↔ rate ↔ margin. In Avansert it is block 9 of the company panel. */}
+      {!advanced && <Card padding="lg">{calculator}</Card>}
 
       {!advanced && <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {/* Assumptions */}

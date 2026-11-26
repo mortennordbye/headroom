@@ -730,6 +730,7 @@ export function companyChanges(before: CompanyModel, after: CompanyModel): Field
   field('self.billablePct', before.self?.billablePct ?? null, after.self?.billablePct ?? null);
   field('self.hourlyRate', before.self?.hourlyRate ?? null, after.self?.hourlyRate ?? null);
   field('market.styrk', before.market?.styrk ?? null, after.market?.styrk ?? null);
+  field('leave', before.leave ?? null, after.leave ?? null);
   const bq = before.quick;
   const aq = after.quick;
   if (!bq || !aq) field('quick', bq ?? null, aq ?? null);
@@ -761,7 +762,7 @@ function writeCompany(blob: ExportPayload, edit: (m: CompanyModel) => CompanyMod
   const edited = sanitizeCompanyModel(ensureDeliverySelf(edit(structuredClone(before))));
   // A change to the groups, the cost lines, your group, your own share or the bonus pool is a hand edit: the quick setup
   // then asks before it builds the model again. A write that changes none of them leaves the flag alone.
-  const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId, m.self ?? null, m.bonus.poolPct]);
+  const shape = (m: CompanyModel) => JSON.stringify([m.groups, m.costs, m.selfGroupId, m.self ?? null, m.bonus.poolPct, m.leave ?? null]);
   // Hours and the bonus holiday-pay setting are not hand edits, but they move the numbers the fit matched: drop the fit.
   const numbers = (m: CompanyModel) => JSON.stringify([m.hours, m.bonus.includesHolidayPay]);
   const after = shape(edited) !== shape(before) ? markQuickEdited(edited)
@@ -859,6 +860,8 @@ export interface CompanySettingsFields {
   self?: { billablePct?: number; hourlyRate?: number } | null;
   /** Your STYRK-08 occupation for the SSB market pay; null = the default (2512). */
   market?: { styrk: StyrkCode } | null;
+  /** Parental leave: FTE on leave and whether the company pays full salary; null = none. */
+  leave?: { count?: number; fullPay?: boolean } | null;
   /** "Lagre som utgangspunkt": write the levers (after `levers` above) into the groups and set them to 0. */
   applyLevers?: boolean;
 }
@@ -869,9 +872,10 @@ const definedOnly = <T extends object>(patch: Partial<T> | undefined): Partial<T
 
 /** Change the model's settings. Only given fields change; levers are clamped to their slider range. */
 export function updateCompanySettings(blob: ExportPayload, args: CompanySettingsFields): FieldChange[] {
-  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, self, market, applyLevers: apply } = args;
+  const { mode, selfGroupId, hours, bonus, levers, targetMarginPct, self, market, leave, applyLevers: apply } = args;
   if (mode === undefined && selfGroupId === undefined && hours === undefined && bonus === undefined
-    && levers === undefined && targetMarginPct === undefined && self === undefined && market === undefined && !apply) {
+    && levers === undefined && targetMarginPct === undefined && self === undefined && market === undefined
+    && leave === undefined && !apply) {
     throw new Error('no company settings provided');
   }
   return writeCompany(blob, (m) => {
@@ -889,6 +893,7 @@ export function updateCompanySettings(blob: ExportPayload, args: CompanySettings
       levers: { ...m.levers, ...definedOnly(levers) },
       self: self === null ? undefined : { ...m.self, ...definedOnly(self ?? {}) },
       market: market === null ? undefined : market ?? m.market,
+      leave: leave === null ? undefined : leave === undefined ? m.leave : { count: 0, fullPay: true, ...m.leave, ...definedOnly(leave) },
     });
     return apply ? applyLevers(next) : next;
   });
