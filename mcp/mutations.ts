@@ -913,7 +913,7 @@ export interface CompanyQuickSetupArgs {
 /**
  * "Hurtigoppsett" from chat: build the groups, cost lines and your own share from
  * the answers, as the page's "Bruk svarene" does. A missing answer keeps the
- * stored one (or the industry default on a first setup). A "vet ikke" answer uses the
+ * stored one (or the industry default on a first setup; parental leave comes from the model). A "vet ikke" answer uses the
  * industry value (an unknown office: one desk per FTE). After a hand edit it
  * refuses unless confirmReplace is true, because the rebuild replaces those edits.
  * Touches only `companyModel`.
@@ -921,7 +921,7 @@ export interface CompanyQuickSetupArgs {
 export function setupCompanyQuick(blob: ExportPayload, args: CompanyQuickSetupArgs): FieldChange[] {
   const before = sanitizeCompanyModel(blob.companyModel);
   if (quickReplacesHandEdits(before) && args.confirmReplace !== true) {
-    throw new Error('the company groups, cost lines, your own share or the bonus pool were changed by hand (or set up without the quick setup); '
+    throw new Error('the company groups, cost lines, your own share, the bonus pool or parental leave were changed by hand (or set up without the quick setup); '
       + 'the setup replaces those edits. Ask the user, then call again with confirmReplace: true');
   }
   // An omitted list keeps the stored flags. A typed answer is no longer "vet ikke", as in the form.
@@ -932,10 +932,15 @@ export function setupCompanyQuick(blob: ExportPayload, args: CompanyQuickSetupAr
   };
   const dontKnow = [...new Set(args.dontKnow ?? (before.quick?.dontKnow ?? []).filter((k) => !answerKeys[k].some((f) => given.has(f))))];
   const uncertain = [...new Set(args.uncertain ?? before.quick?.uncertain ?? [])].filter((k) => !dontKnow.includes(k));
-  // A first setup takes your rate from the calculator when it is set, as the form does.
+  // A first setup starts from the industry values, with your rate from the calculator when it is set.
+  // Parental leave is not in those values, so the model's own leave is kept: the setup must not drop it.
   const answers: QuickAnswers = before.quick
     ? { ...before.quick.answers }
-    : { ...QUICK_DEFAULTS, rateYou: blob.billingConfig?.billedHourly ?? QUICK_DEFAULTS.rateYou };
+    : {
+      ...QUICK_DEFAULTS,
+      rateYou: blob.billingConfig?.billedHourly ?? QUICK_DEFAULTS.rateYou,
+      ...(before.leave ? { onLeave: before.leave.count, leaveFullPay: before.leave.fullPay } : {}),
+    };
   for (const [k, v] of Object.entries(args.answers ?? {})) if (v !== undefined) (answers as unknown as Record<string, unknown>)[k] = v;
   // "vet ikke" resets the answer to the industry value, as the form does.
   for (const k of dontKnow) {

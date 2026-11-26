@@ -20,7 +20,9 @@
  * the company pays the full person cost at your group's salary, and NAV refunds
  * the salary up to 6G, so the cost per FTE is person cost − min(salary, 6G).
  * Without full pay NAV pays the person, and the salary cost is 0. The cost goes
- * into the overhead pool. Simplified: holiday pay owed on leave is not counted.
+ * into the overhead pool. With full pay the person cost includes holiday pay on
+ * the full salary. Simplified: without full pay, the holiday pay the employer
+ * owes for the first 12 (or 15) weeks of leave is not counted.
  *
  * Bonus = max(0, result before bonus) × pool % × (1 + holiday pay %) × (1 + AGA).
  * Tax is an estimate: max(0, EBIT) × corporate tax % (EBIT is not the tax base).

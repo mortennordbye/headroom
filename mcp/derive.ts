@@ -1313,7 +1313,7 @@ function companyDelta(from: CompanyNumbers, to: CompanyNumbers) {
 function rangesWhy(model: CompanyModel): string | null {
   const why = rangesUnavailable(model);
   if (why === 'noQuickSetup') return 'no quick setup: use setup_company_quick';
-  if (why === 'handEdited') return 'groups, cost lines, your own share or the bonus pool were changed by hand after the quick setup, '
+  if (why === 'handEdited') return 'groups, cost lines, your own share, the bonus pool or parental leave were changed by hand after the quick setup, '
     + 'so its guesses no longer describe the model; run setup_company_quick again (confirmReplace: true) to get ranges back';
   return null;
 }

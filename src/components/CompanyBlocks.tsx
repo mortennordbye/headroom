@@ -18,7 +18,12 @@ export function BlockNavProvider({ children }: { children: ReactNode }) {
   const reveal = useCallback((id: string) => {
     setOpen(id, true);
     // After the block has opened, so the scroll lands on its real position.
-    requestAnimationFrame(() => document.getElementById(blockDomId(id))?.scrollIntoView({ block: 'start' }));
+    requestAnimationFrame(() => {
+      const el = document.getElementById(blockDomId(id));
+      el?.scrollIntoView({ block: 'start' });
+      // Keyboard users land on the block they asked for.
+      el?.querySelector('summary')?.focus({ preventScroll: true });
+    });
   }, [setOpen]);
   const value = useMemo<BlockNav>(() => ({ isOpen: (id) => open.has(id), setOpen, reveal }), [open, setOpen, reveal]);
   return <BlockNavContext.Provider value={value}>{children}</BlockNavContext.Provider>;

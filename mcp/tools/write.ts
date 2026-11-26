@@ -657,7 +657,7 @@ export function registerWriteTools(server: McpServer) {
       description:
         'The employer-cost page\'s quick setup ("Hurtigoppsett"): build the company model\'s role groups (consultants, bench, leadership/HR/marketing), '
         + 'cost lines and your own billable share and rate from a few plain answers, as the page\'s "Bruk svarene" button does. '
-        + 'Every answer is optional: a missing one keeps the stored answer (on a first setup: an industry default, and your rate from the billing settings). '
+        + 'Every answer is optional: a missing one keeps the stored answer (on a first setup: an industry default, your rate from the billing settings, and the parental leave already in the model). '
         + 'uncertain and dontKnow mark answers that are a guess; get_company_model and simulate_company then give ranges and the "what matters most" list. '
         + 'A dontKnow answer uses the industry value even when you pass a number for it. Hours, the target margin and the mode are kept; the levers go to 0. '
         + 'When quick.edited is true (get_company_model), groups or cost lines were changed by hand and this replaces them: ask the user first, then pass confirmReplace: true. '
