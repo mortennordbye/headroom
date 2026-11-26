@@ -568,6 +568,19 @@ const cases: {
     },
   },
   {
+    name: 'setup_company_quick (a first setup keeps the parental leave already in the model)',
+    touched: ['companyModel'],
+    mutate: (b) => {
+      updateCompanySettings(b, { leave: { count: 2, fullPay: false } });
+      return setupCompanyQuick(b, { answers: { rateAverage: 1500 }, confirmReplace: true });
+    },
+    assertChange: (b) => {
+      const m = b.companyModel!;
+      expect(m.leave).toEqual({ count: 2, fullPay: false });
+      expect(m.quick?.answers).toMatchObject({ onLeave: 2, leaveFullPay: false, rateAverage: 1500 });
+    },
+  },
+  {
     name: 'setup_company_quick (dontKnow uses the industry value)',
     touched: ['companyModel'],
     mutate: (b) => setupCompanyQuick(b, { answers: { realizationPct: 80 }, dontKnow: ['realizationPct'], confirmReplace: true }),
