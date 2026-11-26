@@ -49,7 +49,7 @@ interface DebtSectionProps {
 }
 
 export default function DebtSection({ debts: debtsProp, fixedExpenses: expensesProp, readOnly = false }: DebtSectionProps = {}) {
-  const { t, lang, debts: liveDebts, fixedExpenses: liveExpenses, savingsAllocations, setDebts, formatCurrency } = useFinance();
+  const { t, debts: liveDebts, fixedExpenses: liveExpenses, savingsAllocations, setDebts, formatCurrency } = useFinance();
   const debts = debtsProp ?? liveDebts;
   // What each debt is actually paid: its linked fixed expenses, never under the
   // minimum. The payoff figures use this; edits still write the stored debt.
@@ -191,7 +191,7 @@ export default function DebtSection({ debts: debtsProp, fixedExpenses: expensesP
                           {debt.rate.toFixed(1)}% · {formatCurrency(payment)}/{t.common.moAbbr}
                           {' · '}
                           {a.feasible
-                            ? `${d.payoffIn} ${formatMonths(a.months, lang)} · ${formatCurrency(Math.round(a.totalInterest))} ${d.interestLabel}`
+                            ? `${d.payoffIn} ${formatMonths(a.months, d.duration)} · ${formatCurrency(Math.round(a.totalInterest))} ${d.interestLabel}`
                             : d.never}
                         </>
                       )}
@@ -249,7 +249,7 @@ export default function DebtSection({ debts: debtsProp, fixedExpenses: expensesP
                   <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>kr/{t.common.moAbbr}</span>
                 </div>
               </label>
-              <Stat label={d.debtFree} value={formatMonths(plan.months, lang)} accent={plan.feasible ? 'var(--forest-light)' : 'var(--negative)'} />
+              <Stat label={d.debtFree} value={formatMonths(plan.months, d.duration)} accent={plan.feasible ? 'var(--forest-light)' : 'var(--negative)'} />
               <Stat label={d.totalInterest} value={plan.feasible ? formatCurrency(Math.round(plan.totalInterest)) : '—'} accent="var(--text-1)" />
               {extra > 0 && interestSaved > 0 && (
                 <Stat label={d.interestSaved} value={formatCurrency(Math.round(interestSaved))} sub={d.vsMinimum} accent="var(--forest-light)" />
